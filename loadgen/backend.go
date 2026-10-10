@@ -15,17 +15,24 @@ type sample struct {
 	ok          bool
 	cpu         float64 // process CPU seconds
 	rss         float64 // resident memory bytes
+	live        float64 // heap and stacks in use, bytes
 	connections float64
 }
 
-// scrape reads the backend's Prometheus text metrics. A runtime that does
-// not report resident memory (the JVM on macOS) is measured with ps instead,
-// found by the port it listens on.
+// scrape reads the backend's Prometheus text metrics. Live memory is what the
+// runtime reports after a collection: Go's allocated heap and stacks, the
+// JVM's memory pools. A runtime that does not report resident memory (the JVM on
+// macOS) is measured with ps instead, found by the port it listens on.
 func scrape(metricsURL string) sample {
 	if metricsURL == "" {
 		return sample{}
 	}
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
+	if gc, err := url.JoinPath(metricsURL, "..", "debug", "gc"); err == nil {
+		if r, err := client.Post(gc, "text/plain", nil); err == nil {
+			r.Body.Close()
+		}
+	}
 	resp, err := client.Get(metricsURL)
 	if err != nil {
 		return sample{}
@@ -55,6 +62,8 @@ func scrape(metricsURL string) sample {
 			s.cpu = v
 		case "process_resident_memory_bytes":
 			s.rss = v
+		case "go_memstats_heap_alloc_bytes", "go_memstats_stack_inuse_bytes", "jvm_memory_used_bytes":
+			s.live += v
 		case "wrinkle_connections":
 			s.connections += v
 		}

@@ -1,7 +1,8 @@
 #!/bin/bash
 # Runs the measurement protocol in docs/measuring.md against a backend.
 # Usage: loadgen/protocol.sh <results.jsonl> <backend command...>
-# The backend is restarted before every run. REPS repeats each series.
+# The backend is restarted before every run. REPS repeats each series;
+# SERIES=idle or SERIES=rates runs one of them.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -12,6 +13,7 @@ fi
 out=$1
 shift
 REPS=${REPS:-1}
+SERIES=${SERIES:-all}
 LABEL=${LABEL:-$(basename "$1")}
 commit=$(git rev-parse --short HEAD)
 
@@ -52,14 +54,18 @@ run() {
 }
 
 for rep in $(seq 1 "$REPS"); do
-  echo "== idle connections (rep $rep)"
-  for n in 500 1000 2000 4000; do
-    LOADGEN_ARGS=(--connections "$n" --rate 0 --warmup 10s --duration 30s --ramp 500)
-    run "$@"
-  done
-  echo "== latency at fixed rates (rep $rep)"
-  for rate in 100 500 1000 2000; do
-    LOADGEN_ARGS=(--connections 1000 --rate "$rate" --warmup 15s --duration 60s --ramp 500)
-    run "$@"
-  done
+  if [ "$SERIES" != rates ]; then
+    echo "== idle connections (rep $rep)"
+    for n in 500 1000 2000 4000; do
+      LOADGEN_ARGS=(--connections "$n" --rate 0 --warmup 10s --duration 30s --ramp 500)
+      run "$@"
+    done
+  fi
+  if [ "$SERIES" != idle ]; then
+    echo "== latency at fixed rates (rep $rep)"
+    for rate in 100 500 1000 2000; do
+      LOADGEN_ARGS=(--connections 1000 --rate "$rate" --warmup 15s --duration 60s --ramp 500)
+      run "$@"
+    done
+  fi
 done

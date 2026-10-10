@@ -97,6 +97,7 @@ type result struct {
 	BackendCPUS    float64 `json:"backend_cpu_s"`
 	CPUMsPer1000   float64 `json:"backend_cpu_ms_per_1000_msgs"`
 	BackendRSSB    float64 `json:"backend_rss_bytes"`
+	BackendLiveB   float64 `json:"backend_live_bytes"`
 	BackendConns   float64 `json:"backend_connections"`
 }
 
@@ -127,6 +128,7 @@ func (s *stats) result(cfg config, before, after sample) result {
 		P99Ms:          ms(percentile(lat, 0.99)),
 		MaxMs:          ms(percentile(lat, 1)),
 		BackendRSSB:    after.rss,
+		BackendLiveB:   after.live,
 		BackendConns:   after.connections,
 	}
 	if window > 0 {
@@ -155,8 +157,8 @@ func (r result) String() string {
 	return fmt.Sprintf(
 		"connections=%d devices/user=%d target=%.0f/s sent=%d (%.1f/s) errors=%d received=%d/%d\n"+
 			"end-to-end p50=%.1fms p90=%.1fms p99=%.1fms max=%.1fms; send rtt p50=%.1fms p99=%.1fms\n"+
-			"backend cpu=%.2fs (%.1f ms per 1000 msgs) rss=%.1f MiB connections=%.0f",
+			"backend cpu=%.2fs (%.1f ms per 1000 msgs) rss=%.1f MiB live=%.1f MiB connections=%.0f",
 		r.Connections, r.DevicesPerUser, r.TargetRate, r.Sent, r.SentRate, r.SendErrors, r.Received, r.Expected,
 		r.P50Ms, r.P90Ms, r.P99Ms, r.MaxMs, r.SendP50Ms, r.SendP99Ms,
-		r.BackendCPUS, r.CPUMsPer1000, r.BackendRSSB/(1<<20), r.BackendConns)
+		r.BackendCPUS, r.CPUMsPer1000, r.BackendRSSB/(1<<20), r.BackendLiveB/(1<<20), r.BackendConns)
 }
