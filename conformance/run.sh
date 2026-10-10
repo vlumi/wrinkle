@@ -15,6 +15,11 @@ log=$(mktemp -t wrinkle-backend.XXXXXX)
 backend=$!
 cleanup() {
   kill "$backend" 2>/dev/null || true
+  for _ in $(seq 1 10); do
+    if ! kill -0 "$backend" 2>/dev/null; then break; fi
+    sleep 1
+  done
+  kill -9 "$backend" 2>/dev/null || true
   wait "$backend" 2>/dev/null || true
 }
 trap cleanup EXIT

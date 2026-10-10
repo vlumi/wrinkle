@@ -44,7 +44,7 @@ smoke: infra-up
 # tests, and stops it.
 conformance-go: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-	conformance/run.sh bin/wrinkle
+	conformance/run.sh $(CURDIR)/bin/wrinkle
 
 tools:
 	go install github.com/bufbuild/buf/cmd/buf@latest
