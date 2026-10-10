@@ -18,6 +18,7 @@ import (
 )
 
 type Server struct {
+	ctx           context.Context
 	conversations *conversation.Service
 	users         *devicesync.Service
 	presence      *presence.Client
@@ -29,6 +30,7 @@ type Server struct {
 func New(ctx context.Context, conversations *conversation.Service, users *devicesync.Service, pres *presence.Client, log *slog.Logger) *Server {
 	sub := pres.Subscribe(ctx)
 	return &Server{
+		ctx:           ctx,
 		conversations: conversations,
 		users:         users,
 		presence:      pres,
@@ -80,14 +82,18 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	ws.SetReadLimit(maxFrameBytes)
 	metrics.Connections.Inc()
 	defer metrics.Connections.Dec()
+	// Own context rather than the request's, so the request and its headers
+	// are not kept alive for the life of the connection.
+	ctx, cancel := context.WithCancel(s.ctx)
 	c := &conn{
 		server: s,
 		ws:     ws,
 		log:    s.log.With("remote", r.RemoteAddr),
+		ctx:    ctx,
+		cancel: cancel,
 		out:    make(chan []byte, outboundQueue),
-		done:   make(chan struct{}),
 	}
-	c.serve(r.Context())
+	c.serve()
 	ws.Close(websocket.StatusNormalClosure, "")
 }
 

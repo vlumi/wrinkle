@@ -19,7 +19,14 @@ type Client struct {
 }
 
 func New(ctx context.Context, addr, node string) (*Client, error) {
-	rdb := redis.NewClient(&redis.Options{Addr: addr})
+	// The defaults (10 connections per CPU, 32 KiB buffers each) are a fixed
+	// cost of tens of megabytes that would be read as per-connection memory.
+	rdb := redis.NewClient(&redis.Options{
+		Addr:            addr,
+		PoolSize:        32,
+		ReadBufferSize:  4 * 1024,
+		WriteBufferSize: 4 * 1024,
+	})
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("valkey at %s: %w", addr, err)
 	}

@@ -44,4 +44,8 @@ var (
 	})
 )
 
-func Handler() http.Handler { return promhttp.Handler() }
+// Handler serves the metrics uncompressed: the scrapers are local, and the
+// gzip writers would otherwise show up in heap profiles.
+func Handler() http.Handler {
+	return promhttp.HandlerFor(prometheus.DefaultGatherer, promhttp.HandlerOpts{DisableCompression: true})
+}

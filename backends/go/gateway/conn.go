@@ -20,22 +20,26 @@ const (
 	requestTimeout = 10 * time.Second
 	writeTimeout   = 10 * time.Second
 	maxFrameBytes  = 64 * 1024
-	outboundQueue  = 256
+	outboundQueue  = 32
 )
 
-// conn is one device's WebSocket connection.
+// conn is one device's WebSocket connection. Idle, it is one goroutine (the
+// read loop) and a small queue: the writer runs only while there is
+// something to write.
 type conn struct {
 	server *Server
 	ws     *websocket.Conn
 	log    *slog.Logger
 
-	out  chan []byte
-	done chan struct{} // closed when the connection is going away
+	ctx    context.Context
+	cancel context.CancelFunc
+	out    chan []byte
 
 	mu        sync.Mutex
 	connected bool
 	userID    uint64
 	deviceID  uint64
+	writing   bool
 }
 
 func (c *conn) identity() (userID, deviceID uint64, ok bool) {
@@ -45,12 +49,10 @@ func (c *conn) identity() (userID, deviceID uint64, ok bool) {
 }
 
 // serve runs the read loop until the connection ends.
-func (c *conn) serve(ctx context.Context) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	go c.writeLoop(ctx)
+func (c *conn) serve() {
+	ctx := c.ctx
+	defer c.cancel()
 	defer func() {
-		close(c.done)
 		if _, _, ok := c.identity(); ok {
 			c.server.detach(c)
 		}
@@ -96,32 +98,54 @@ func (c *conn) serve(ctx context.Context) {
 	}
 }
 
-func (c *conn) writeLoop(ctx context.Context) {
+// writeLoop drains the queue and exits when it is empty; send starts it
+// again when needed.
+func (c *conn) writeLoop() {
 	for {
+		var data []byte
 		select {
-		case <-ctx.Done():
-			return
-		case data := <-c.out:
-			wctx, cancel := context.WithTimeout(ctx, writeTimeout)
-			err := c.ws.Write(wctx, websocket.MessageBinary, data)
-			cancel()
-			if err != nil {
-				c.ws.Close(websocket.StatusInternalError, "write failed")
+		case data = <-c.out:
+		default:
+			c.mu.Lock()
+			if len(c.out) == 0 {
+				c.writing = false
+				c.mu.Unlock()
 				return
 			}
+			c.mu.Unlock()
+			continue
+		}
+		wctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
+		err := c.ws.Write(wctx, websocket.MessageBinary, data)
+		cancel()
+		if err != nil {
+			c.ws.Close(websocket.StatusInternalError, "write failed")
+			c.mu.Lock()
+			c.writing = false
+			c.mu.Unlock()
+			return
 		}
 	}
 }
 
-// send queues bytes for the writer. A device that does not keep up is
-// disconnected; it syncs on reconnect.
+// send queues bytes for the writer, starting one if none is running. A
+// device that does not keep up is disconnected; it syncs on reconnect.
 func (c *conn) send(data []byte) {
 	select {
 	case c.out <- data:
-	case <-c.done:
+	case <-c.ctx.Done():
+		return
 	default:
 		c.log.Warn("outbound queue full, closing")
 		c.ws.Close(websocket.StatusTryAgainLater, "too slow")
+		return
+	}
+	c.mu.Lock()
+	start := !c.writing
+	c.writing = true
+	c.mu.Unlock()
+	if start {
+		go c.writeLoop()
 	}
 }
 

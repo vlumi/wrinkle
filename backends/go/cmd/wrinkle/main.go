@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
+	"runtime"
+	rtdebug "runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
@@ -99,6 +102,18 @@ func run() error {
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", metrics.Handler())
+	// Profiles for tuning; a prototype has no reason to hide them.
+	mux.HandleFunc("GET /debug/pprof/", pprof.Index)
+	mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
+	mux.Handle("GET /debug/pprof/heap", pprof.Handler("heap"))
+	mux.Handle("GET /debug/pprof/goroutine", pprof.Handler("goroutine"))
+	mux.Handle("GET /debug/pprof/allocs", pprof.Handler("allocs"))
+	// Lets a measurement collect garbage before sampling memory.
+	mux.HandleFunc("POST /debug/gc", func(w http.ResponseWriter, r *http.Request) {
+		runtime.GC()
+		rtdebug.FreeOSMemory()
+		fmt.Fprintln(w, "ok")
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
