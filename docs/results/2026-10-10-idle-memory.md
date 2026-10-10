@@ -36,6 +36,17 @@ With 2000 idle connections, the heap profile and runtime metrics put the morning
 
 What remains in Go's 29 KiB is mostly the two stacks and the two buffers, neither of which this code owns. Netty has no thread and no heap buffer per idle connection; its per-connection cost is a channel object and pooled direct memory, and the JVM's live figure does not even include the latter. Going lower on Go means a WebSocket library that reads from the poller without a goroutine per connection (gobwas/ws), which the design lists as the epoll-level option.
 
+## A different WebSocket library
+
+The same series with the gateway on [gws](https://github.com/lxzan/gws) instead of coder/websocket, one read goroutine per connection, 1 KiB buffers, and a 1 KiB reader handed in at hijack in place of the HTTP server's 4 KiB one. Raw runs: [go-gws](2026-10-10-idle-memory-go-gws.jsonl); the port is [2026-10-10-gws-gateway.patch](2026-10-10-gws-gateway.patch), which passes the conformance tests.
+
+| Per idle connection | coder/websocket | gws |
+|---|---|---|
+| Live slope | 29 KiB | 26 KiB |
+| RSS slope | 39 KiB | 23 KiB |
+
+At 2000 connections the goroutine count halves and the allocated heap mid-run halves too, but the library's single read goroutine carries a deeper stack (about 11.5 KiB against 8.7) and brings its own per-connection structures and buffers, so the live figure improves by a tenth. The gateway stays on coder/websocket, the mainstream and better-maintained choice; gobwas/ws, the design's epoll-level option, has been dormant since 2024. What would move the number is a gateway without a goroutine per connection, which is a design change rather than a library swap.
+
 ## Caveats
 
 - Java's live figure excludes Netty's direct buffers, which the JVM does not report in its memory pools; its RSS slope, 16 KiB, is the safer comparison against Go's 39.

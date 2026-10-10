@@ -1,0 +1,336 @@
+diff --git a/backends/go/gateway/conn.go b/backends/go/gateway/conn.go
+index adc1dd4..1bc3a76 100644
+--- a/backends/go/gateway/conn.go
++++ b/backends/go/gateway/conn.go
+@@ -2,12 +2,11 @@ package gateway
+ 
+ import (
+ 	"context"
+-	"errors"
+ 	"log/slog"
+ 	"sync"
+ 	"time"
+ 
+-	"github.com/coder/websocket"
++	"github.com/lxzan/gws"
+ 	"google.golang.org/protobuf/encoding/protowire"
+ 	"google.golang.org/protobuf/proto"
+ 
+@@ -28,7 +27,7 @@ const (
+ // something to write.
+ type conn struct {
+ 	server *Server
+-	ws     *websocket.Conn
++	ws     *gws.Conn
+ 	log    *slog.Logger
+ 
+ 	ctx    context.Context
+@@ -48,56 +47,53 @@ func (c *conn) identity() (userID, deviceID uint64, ok bool) {
+ 	return c.userID, c.deviceID, c.connected
+ }
+ 
+-// serve runs the read loop until the connection ends.
+-func (c *conn) serve() {
+-	ctx := c.ctx
+-	defer c.cancel()
+-	defer func() {
+-		if _, _, ok := c.identity(); ok {
+-			c.server.detach(c)
++// receive handles one frame from the device.
++func (c *conn) receive(ctx context.Context, data []byte) {
++	frame := &pb.Frame{}
++	if err := proto.Unmarshal(data, frame); err != nil {
++		c.closeWith(policyViolation, "malformed frame")
++		return
++	}
++	switch kind := frame.GetKind().(type) {
++	case *pb.Frame_Request:
++		go c.handleRequest(ctx, kind.Request)
++	case *pb.Frame_Ack:
++		if userID, deviceID, ok := c.identity(); ok {
++			go func() {
++				actx, cancel := context.WithTimeout(ctx, requestTimeout)
++				defer cancel()
++				if err := c.server.users.Ack(actx, userID, deviceID, kind.Ack.GetCursor()); err != nil {
++					c.log.Warn("ack failed", "err", err)
++				}
++			}()
+ 		}
+-	}()
++	case *pb.Frame_Ping:
++		c.sendFrame(&pb.Frame{Kind: &pb.Frame_Pong{Pong: &pb.Pong{}}})
++	case *pb.Frame_Pong:
++	default:
++		c.closeWith(policyViolation, "unexpected frame")
++	}
++}
+ 
+-	for {
+-		typ, data, err := c.ws.Read(ctx)
+-		if err != nil {
+-			if status := websocket.CloseStatus(err); status == -1 && ctx.Err() == nil && !errors.Is(err, context.Canceled) {
+-				c.log.Debug("read ended", "err", err)
+-			}
+-			return
+-		}
+-		if typ != websocket.MessageBinary {
+-			c.ws.Close(websocket.StatusUnsupportedData, "frames are binary protobuf")
+-			return
+-		}
+-		frame := &pb.Frame{}
+-		if err := proto.Unmarshal(data, frame); err != nil {
+-			c.ws.Close(websocket.StatusPolicyViolation, "malformed frame")
+-			return
+-		}
+-		switch kind := frame.GetKind().(type) {
+-		case *pb.Frame_Request:
+-			go c.handleRequest(ctx, kind.Request)
+-		case *pb.Frame_Ack:
+-			if userID, deviceID, ok := c.identity(); ok {
+-				go func() {
+-					actx, cancel := context.WithTimeout(ctx, requestTimeout)
+-					defer cancel()
+-					if err := c.server.users.Ack(actx, userID, deviceID, kind.Ack.GetCursor()); err != nil {
+-						c.log.Warn("ack failed", "err", err)
+-					}
+-				}()
+-			}
+-		case *pb.Frame_Ping:
+-			c.sendFrame(&pb.Frame{Kind: &pb.Frame_Pong{Pong: &pb.Pong{}}})
+-		case *pb.Frame_Pong:
+-		default:
+-			c.ws.Close(websocket.StatusPolicyViolation, "unexpected frame")
+-			return
+-		}
++// closed runs once the socket is gone, from the library's close callback.
++func (c *conn) closed() {
++	c.cancel()
++	if _, _, ok := c.identity(); ok {
++		c.server.detach(c)
+ 	}
+ }
+ 
++const (
++	policyViolation = 1008
++	unsupportedData = 1003
++	tryAgainLater   = 1013
++	internalError   = 1011
++)
++
++func (c *conn) closeWith(code uint16, reason string) {
++	_ = c.ws.WriteClose(code, []byte(reason))
++}
++
+ // writeLoop drains the queue and exits when it is empty; send starts it
+ // again when needed.
+ func (c *conn) writeLoop() {
+@@ -115,11 +111,9 @@ func (c *conn) writeLoop() {
+ 			c.mu.Unlock()
+ 			continue
+ 		}
+-		wctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
+-		err := c.ws.Write(wctx, websocket.MessageBinary, data)
+-		cancel()
+-		if err != nil {
+-			c.ws.Close(websocket.StatusInternalError, "write failed")
++		_ = c.ws.SetWriteDeadline(time.Now().Add(writeTimeout))
++		if err := c.ws.WriteMessage(gws.OpcodeBinary, data); err != nil {
++			c.closeWith(internalError, "write failed")
+ 			c.mu.Lock()
+ 			c.writing = false
+ 			c.mu.Unlock()
+@@ -137,7 +131,7 @@ func (c *conn) send(data []byte) {
+ 		return
+ 	default:
+ 		c.log.Warn("outbound queue full, closing")
+-		c.ws.Close(websocket.StatusTryAgainLater, "too slow")
++		c.closeWith(tryAgainLater, "too slow")
+ 		return
+ 	}
+ 	c.mu.Lock()
+diff --git a/backends/go/gateway/server.go b/backends/go/gateway/server.go
+index d04cebf..161c4a8 100644
+--- a/backends/go/gateway/server.go
++++ b/backends/go/gateway/server.go
+@@ -3,13 +3,14 @@
+ package gateway
+ 
+ import (
++	"bufio"
+ 	"context"
+ 	"fmt"
+ 	"log/slog"
+ 	"net/http"
+ 	"time"
+ 
+-	"github.com/coder/websocket"
++	"github.com/lxzan/gws"
+ 
+ 	"github.com/vlumi/wrinkle/backends/go/conversation"
+ 	"github.com/vlumi/wrinkle/backends/go/devicesync"
+@@ -19,6 +20,7 @@ import (
+ 
+ type Server struct {
+ 	ctx           context.Context
++	upgrader      *gws.Upgrader
+ 	conversations *conversation.Service
+ 	users         *devicesync.Service
+ 	presence      *presence.Client
+@@ -29,7 +31,7 @@ type Server struct {
+ 
+ func New(ctx context.Context, conversations *conversation.Service, users *devicesync.Service, pres *presence.Client, log *slog.Logger) *Server {
+ 	sub := pres.Subscribe(ctx)
+-	return &Server{
++	s := &Server{
+ 		ctx:           ctx,
+ 		conversations: conversations,
+ 		users:         users,
+@@ -38,6 +40,17 @@ func New(ctx context.Context, conversations *conversation.Service, users *device
+ 		registry:      newRegistry(sub),
+ 		log:           log,
+ 	}
++	s.upgrader = gws.NewUpgrader(s, &gws.ServerOption{
++		ReadMaxPayloadSize:  maxFrameBytes,
++		WriteMaxPayloadSize: maxFrameBytes,
++		// Frames are small; the buffers only need to hold a header and a
++		// typical request.
++		ReadBufferSize:  readBufferSize,
++		WriteBufferSize: readBufferSize,
++		// Any origin: the web client is served from elsewhere during development.
++		Authorize: func(r *http.Request, session gws.SessionStorage) bool { return true },
++	})
++	return s
+ }
+ 
+ // Register adds the WebSocket endpoint to a mux.
+@@ -69,17 +82,34 @@ func (s *Server) Run(ctx context.Context) error {
+ 	}
+ }
+ 
++const (
++	sessionKey     = "conn"
++	readBufferSize = 1024
++)
++
+ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
+-	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+-		CompressionMode: websocket.CompressionDisabled,
+-		// Any origin: the web client is served from elsewhere during development.
+-		OriginPatterns: []string{"*"},
+-	})
++	hj, ok := w.(http.Hijacker)
++	if !ok {
++		http.Error(w, "websocket not supported", http.StatusInternalServerError)
++		return
++	}
++	netConn, brw, err := hj.Hijack()
+ 	if err != nil {
+-		s.log.Debug("accept failed", "err", err)
++		s.log.Debug("hijack failed", "err", err)
++		return
++	}
++	// The HTTP server's 4 KiB reader would stay with the connection for its
++	// whole life; a small one does, unless the client already sent bytes.
++	br := brw.Reader
++	if br.Buffered() == 0 {
++		br = bufio.NewReaderSize(netConn, readBufferSize)
++	}
++	ws, err := s.upgrader.UpgradeFromConn(netConn, br, r)
++	if err != nil {
++		s.log.Debug("upgrade failed", "err", err)
++		_ = netConn.Close()
+ 		return
+ 	}
+-	ws.SetReadLimit(maxFrameBytes)
+ 	metrics.Connections.Inc()
+ 	defer metrics.Connections.Dec()
+ 	// Own context rather than the request's, so the request and its headers
+@@ -93,8 +123,50 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
+ 		cancel: cancel,
+ 		out:    make(chan []byte, outboundQueue),
+ 	}
+-	c.serve()
+-	ws.Close(websocket.StatusNormalClosure, "")
++	ws.Session().Store(sessionKey, c)
++	// The read loop runs on this goroutine until the connection ends.
++	ws.ReadLoop()
++}
++
++func connOf(ws *gws.Conn) *conn {
++	v, ok := ws.Session().Load(sessionKey)
++	if !ok {
++		return nil
++	}
++	return v.(*conn)
++}
++
++// The library's event interface.
++
++func (s *Server) OnOpen(ws *gws.Conn) {}
++
++func (s *Server) OnClose(ws *gws.Conn, err error) {
++	if c := connOf(ws); c != nil {
++		c.closed()
++	}
++}
++
++func (s *Server) OnPing(ws *gws.Conn, payload []byte) {
++	_ = ws.WritePong(payload)
++}
++
++func (s *Server) OnPong(ws *gws.Conn, payload []byte) {}
++
++func (s *Server) OnMessage(ws *gws.Conn, message *gws.Message) {
++	defer func() { _ = message.Close() }()
++	c := connOf(ws)
++	if c == nil {
++		return
++	}
++	if message.Opcode != gws.OpcodeBinary {
++		c.closeWith(unsupportedData, "frames are binary protobuf")
++		return
++	}
++	// The message buffer goes back to the library's pool; copy what the
++	// handlers keep.
++	data := make([]byte, len(message.Bytes()))
++	copy(data, message.Bytes())
++	c.receive(c.ctx, data)
+ }
+ 
+ func (s *Server) attach(ctx context.Context, c *conn) error {
+diff --git a/backends/go/go.mod b/backends/go/go.mod
+index 83e0ef8..8c5174a 100644
+--- a/backends/go/go.mod
++++ b/backends/go/go.mod
+@@ -4,8 +4,8 @@ go 1.27
+ 
+ require (
+ 	github.com/cespare/xxhash/v2 v2.3.0
+-	github.com/coder/websocket v1.8.15
+ 	github.com/go-sql-driver/mysql v1.10.1
++	github.com/lxzan/gws v1.10.2
+ 	github.com/prometheus/client_golang v1.25.0
+ 	github.com/redis/go-redis/v9 v9.23.0
+ 	github.com/twmb/franz-go v1.22.1
+diff --git a/backends/go/go.sum b/backends/go/go.sum
+index 78a6485..0ed2d58 100644
+--- a/backends/go/go.sum
++++ b/backends/go/go.sum
+@@ -8,8 +8,6 @@ github.com/bsm/gomega v1.27.10 h1:yeMWxP2pV2fG3FgAODIY8EiRE3dy0aeFYt4l7wh6yKA=
+ github.com/bsm/gomega v1.27.10/go.mod h1:JyEr/xRbxbtgWNi8tIEVPUYZ5Dzef52k01W3YH0H+O0=
+ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
+ github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
+-github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
+-github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
+ github.com/go-sql-driver/mysql v1.10.1 h1:arlSnNLq6a5yxGxV7qg9lF4j0C+KwD6NbQyKr9QL6ME=
+ github.com/go-sql-driver/mysql v1.10.1/go.mod h1:M+cqaI7+xxXGG9swrdeUIoPG3Y3KCkF0pZej+SK+nWk=
+ github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+@@ -20,6 +18,8 @@ github.com/klauspost/cpuid/v2 v2.4.0 h1:S6Hrbc7+ywsr0r+RLapfGBHfyefhCTwEh3A0tV91
+ github.com/klauspost/cpuid/v2 v2.4.0/go.mod h1:19jmZ9mjzoF//ddRSUsv0zfBTJWh3QJh9FNxZTMrGxU=
+ github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
+ github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
++github.com/lxzan/gws v1.10.2 h1:htReTvcY89iMk1ScVtUbk6J96kIZWaafj6r/lasK/NA=
++github.com/lxzan/gws v1.10.2/go.mod h1:gXHSCPmTGryWJ4icuqy8Yho32E4YIMHH0fkDRYJRbdc=
+ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
+ github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
+ github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=
