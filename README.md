@@ -100,3 +100,7 @@ loadgen/      load generator (Go)
 conformance/  backend-agnostic tests against the contract
 docs/         design notes and measurement results
 ```
+
+## License
+
+[MIT](LICENSE).

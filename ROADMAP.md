@@ -84,5 +84,5 @@ Notes:
 
 ## Before making the repository public
 
-- [ ] Choose a license.
+- [x] Choose a license: MIT.
 - [ ] Results write-up in `docs/`.
