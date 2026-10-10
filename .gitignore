@@ -18,3 +18,7 @@ node_modules/
 # Xcode
 xcuserdata/
 DerivedData/
+
+# Go binaries built in place
+loadgen/loadgen
+backends/go/wrinkle
