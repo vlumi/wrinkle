@@ -36,6 +36,13 @@ public final class Main {
     ServerBuilder sb = Server.builder().http(cfg.port());
     sb.service("/healthz", (ctx, req) -> HttpResponse.of("ok\n"));
     sb.service("/metrics", PrometheusExpositionService.of(PrometheusRegistry.defaultRegistry));
+    // Lets a measurement collect garbage before sampling memory.
+    sb.service(
+        "/debug/gc",
+        (ctx, req) -> {
+          System.gc();
+          return HttpResponse.of("ok\n");
+        });
 
     Gateway gateway = null;
     if (cfg.roles().contains("gateway")) {
