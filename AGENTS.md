@@ -11,7 +11,7 @@ Wrinkle is a prototype one-to-one messaging backend, implemented in several lang
 - SQL keywords and types in uppercase; table and column names in lowercase snake_case.
 - Comments: minimal, English, en-US spelling.
 - Measurement results always record the date, commit, machine, and configuration. Never compare numbers taken on different machines or infrastructure settings.
-- Run the full local CI, `make ci`, before every push to `main` and before opening a pull request, and only push when it passes. It runs formatting checks, linters and unit tests for every implementation, then the conformance tests against each backend on the local infrastructure. The repository is private, so hosted CI is limited; local CI is the gate.
+- Run the full local CI, `make ci`, before every push to `main`, and only push when it passes. It runs formatting checks, linters and unit tests for every implementation, then the conformance tests against each backend on the local infrastructure. The repository is private, so hosted CI is limited; local CI is the gate.
 - Commit and push to `main` directly when something works; frequent small commits, no pull requests.
 
 ## Toolchains
