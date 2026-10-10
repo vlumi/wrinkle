@@ -42,10 +42,17 @@ Notes:
 
 ## 4. Load generator and metrics
 
-- [ ] Load generator in Go: simulated devices, configurable connection count, message rate, devices per user.
-- [ ] Prometheus and Grafana in Compose; the same metric names in every backend.
-- [ ] Measurement protocol in `docs/`: warm-up, run length, repetitions, how results are recorded (date, commit, machine, configuration).
-- [ ] First results for the Go backend.
+- [x] Load generator in Go: simulated devices, configurable connection count, message rate, devices per user.
+- [x] Prometheus and Grafana in Compose; the same metric names in every backend.
+- [x] Measurement protocol in `docs/`: warm-up, run length, repetitions, how results are recorded (date, commit, machine, configuration).
+- [x] First results for the Go backend.
+
+Notes:
+
+- `docs/measuring.md` is the protocol, `loadgen/protocol.sh` runs it, `docs/results/` holds the write-ups with the raw JSON lines. Metric names are in `docs/metrics.md`.
+- The first run found the fan-out worker serial and the protocol leaking Kafka backlog between runs; both fixed the same day. The second run: 500/s sustained with 66 ms p50 end to end, about 46 KiB per idle connection.
+- The Vitess container saturates between 500 and 1000 messages per second on this machine, so backends can only be compared below that. Giving the stack more CPU, or splitting vtcombo into real vtgate and vttablet processes, would raise the ceiling; so would batching in the fan-out worker.
+- Idle memory scatters by about 20 MiB between runs; quote medians of repetitions (`REPS=3`).
 
 ## 5. Java backend
 

@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** the Go backend passes the conformance tests and the web client works against it; no measurements yet. See [ROADMAP.md](ROADMAP.md).
+**Status:** the Go backend passes the conformance tests, the web client works against it, and the first measurements are in `docs/results/`. See [ROADMAP.md](ROADMAP.md).
 
 ## How it works
 
@@ -44,7 +44,7 @@ All backends implement the same Protobuf contract and pass the same conformance 
 
 | Backend | Status |
 |---|---|
-| Go | passes conformance |
+| Go | measured |
 | Java | planned |
 | Elixir | later |
 | Rust | later |
@@ -60,7 +60,7 @@ The load generator simulates devices and reports, per backend on the same machin
 - the highest sustained message rate before p99 latency breaks;
 - CPU time per thousand messages.
 
-Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point.
+Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md).
 
 ## Running
 
@@ -72,11 +72,15 @@ make ci                # everything below, plus lint and unit tests
 make smoke             # the change-data path: an outbox insert reaches Kafka
 make conformance-go    # the conformance tests against the Go backend
 make web-test          # the web client in headless Chrome against the Go backend
+make measure-go        # the measurement protocol against the Go backend (about 10 minutes)
 make infra-down        # stop and discard all data
 
 go run ./backends/go/cmd/wrinkle   # the Go backend on ws://localhost:8080/v1/ws
 make web                           # the web client at http://localhost:8081/clients/web/
+go run ./loadgen -h                # the load generator
 ```
+
+Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090.
 
 From the host: MySQL protocol through vtgate at `127.0.0.1:15003` (keyspaces `conversation` and `user`, no password), Kafka at `localhost:19092`, Kafka Connect at `localhost:8083`, Valkey at `localhost:6379`.
 

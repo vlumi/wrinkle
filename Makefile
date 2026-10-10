@@ -7,7 +7,7 @@ GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 
-.PHONY: web web-lint web-test ci lint proto-lint go-lint go-test proto proto-check infra-up infra-down smoke conformance-go tools
+.PHONY: web web-lint web-test measure-go ci lint proto-lint go-lint go-test proto proto-check infra-up infra-down smoke conformance-go tools
 
 ci: lint proto-check go-test smoke conformance-go web-test
 
@@ -54,6 +54,11 @@ conformance-go: infra-up
 web-test: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	clients/web/test/run.sh $(CURDIR)/bin/wrinkle
+
+# The measurement protocol (docs/measuring.md) against the Go backend.
+measure-go: infra-up
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(CURDIR)/bin/wrinkle
 
 # Serves the repository root so the web client can load /proto/.
 web:
