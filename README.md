@@ -60,7 +60,7 @@ The load generator simulates devices and reports, per backend on the same machin
 - the highest sustained message rate before p99 latency breaks;
 - CPU time per thousand messages.
 
-Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md).
+Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md), and the capacity the design was sized for, with the measurements against it, in [docs/capacity.md](docs/capacity.md).
 
 ## Running
 
