@@ -8,6 +8,7 @@ Each phase leaves something that runs on its own.
 - [ ] SQL schemas and Vitess keyspaces: conversations by conversation id, users by user id, with vschemas.
 - [ ] Docker Compose: Vitess, Kafka (KRaft, single broker), Debezium on Kafka Connect, Valkey. Heaps capped so the whole stack fits in ~4 GB.
 - [ ] Smoke test of the change-data path: an outbox insert appears on the Kafka topic.
+- [ ] `make ci`: the local CI entry point. Each later phase adds its checks to it (format, lint, unit tests, conformance against every backend).
 
 Open questions:
 
