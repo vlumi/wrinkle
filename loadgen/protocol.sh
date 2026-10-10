@@ -2,7 +2,9 @@
 # Runs the measurement protocol in docs/measuring.md against a backend.
 # Usage: loadgen/protocol.sh <results.jsonl> <backend command...>
 # The backend is restarted before every run. REPS repeats each series;
-# SERIES=idle or SERIES=rates runs one of them.
+# SERIES=idle or SERIES=rates runs one of them. FRESH=1 recreates the
+# infrastructure first: latency degrades as the tables and the topic grow,
+# so backends are compared from the same empty stack.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -18,6 +20,11 @@ LABEL=${LABEL:-$(basename "$1")}
 commit=$(git rev-parse --short HEAD)
 
 go build -o bin/loadgen ./loadgen
+if [ "${FRESH:-0}" = 1 ]; then
+  echo "== fresh infrastructure"
+  make --no-print-directory infra-down >/dev/null 2>&1
+  make --no-print-directory infra-up >/dev/null
+fi
 
 backend=""
 start_backend() {

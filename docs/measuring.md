@@ -7,6 +7,7 @@ How backends are compared. Absolute numbers depend on the machine and say little
 - The shared infrastructure runs in Docker Desktop (`make infra-up`) with the memory caps in `infra/docker-compose.yml`. Record Docker's CPU and memory allocation.
 - The backend under test runs natively on the host as one process with all roles, listening on port 8080. It is restarted fresh before every run, so memory figures start from the same baseline.
 - The load generator runs natively on the host too. It shares the CPU with the backend; keep the load far from saturating the machine, and compare backends against each other rather than against the hardware.
+- Each backend's protocol run starts from a freshly created stack (`FRESH=1`, which `make measure-*` sets): end-to-end latency at 500 messages per second went from 66 ms on an empty database to 1.4 s after a day of runs, with a million rows in the user logs, so runs on a grown stack are not comparable with runs on a fresh one.
 - Nothing else of note runs on the machine.
 
 ## Runs

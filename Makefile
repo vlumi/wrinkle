@@ -144,18 +144,18 @@ ios-test: infra-up
 # The measurement protocol (docs/measuring.md) against the Go backend.
 measure-go: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-	LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(CURDIR)/bin/wrinkle
+	FRESH=1 LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(CURDIR)/bin/wrinkle
 
 measure-rust: infra-up rust-build
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-	LABEL=rust loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-rust.jsonl $(CURDIR)/backends/rust/run.sh
+	FRESH=1 LABEL=rust loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-rust.jsonl $(CURDIR)/backends/rust/run.sh
 
 measure-elixir: infra-up elixir-deps
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-	LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh
+	FRESH=1 LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh
 
 measure-java: infra-up java-build
-	LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
+	FRESH=1 LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
 
 # Serves the repository root so the web client can load /proto/.
 web:
