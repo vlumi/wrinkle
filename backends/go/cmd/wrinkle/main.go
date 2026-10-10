@@ -9,16 +9,19 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/fanout"
 	"github.com/vlumi/wrinkle/backends/go/gateway"
+	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 )
@@ -34,7 +37,7 @@ func run() error {
 	hostname, _ := os.Hostname()
 	var (
 		roles   = flag.String("roles", env("WRINKLE_ROLES", "gateway,fanout"), "comma-separated roles: gateway, fanout")
-		listen  = flag.String("listen", env("WRINKLE_LISTEN", ":8080"), "gateway listen address")
+		listen  = flag.String("listen", env("WRINKLE_LISTEN", ":8080"), "HTTP listen address: /v1/ws (gateway role), /metrics, /healthz")
 		mysql   = flag.String("mysql", env("WRINKLE_MYSQL", "127.0.0.1:15003"), "vtgate MySQL address")
 		brokers = flag.String("kafka", env("WRINKLE_KAFKA", "localhost:19092"), "comma-separated Kafka brokers")
 		valkey  = flag.String("valkey", env("WRINKLE_VALKEY", "localhost:6379"), "Valkey address")
@@ -94,13 +97,19 @@ func run() error {
 		}()
 	}
 
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", metrics.Handler())
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "ok")
+	})
 	if wantGateway {
 		conversations := conversation.New(conversationDB)
 		users := devicesync.New(userDB, conversations)
 		gw := gateway.New(ctx, conversations, users, pres, log.With("role", "gateway"))
+		gw.Register(mux)
 		start("gateway push", gw.Run)
-		start("gateway", func(ctx context.Context) error { return gw.ListenAndServe(ctx, *listen) })
 	}
+	start("http", func(ctx context.Context) error { return serveHTTP(ctx, *listen, mux, log) })
 	if wantFanout {
 		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", userDB, pres, log.With("role", "fanout"))
 		if err != nil {
@@ -120,6 +129,23 @@ func run() error {
 		log.Info("shutting down")
 		wg.Wait()
 		return nil
+	}
+}
+
+// serveHTTP serves until the context ends. WebSocket connections are
+// hijacked, so shutdown does not wait for them; the registry drains them.
+func serveHTTP(ctx context.Context, addr string, handler http.Handler, log *slog.Logger) error {
+	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.ListenAndServe() }()
+	log.Info("listening", "addr", addr)
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		return srv.Shutdown(shutdownCtx)
 	}
 }
 

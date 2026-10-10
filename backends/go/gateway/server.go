@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/coder/websocket"
 
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
+	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 )
 
@@ -38,13 +38,9 @@ func New(ctx context.Context, conversations *conversation.Service, users *device
 	}
 }
 
-func (s *Server) Handler() http.Handler {
-	mux := http.NewServeMux()
+// Register adds the WebSocket endpoint to a mux.
+func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/ws", s.serveWS)
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "ok connections=%d\n", s.registry.count())
-	})
-	return mux
 }
 
 // Run delivers pushes to local connections until the context ends.
@@ -82,6 +78,8 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(maxFrameBytes)
+	metrics.Connections.Inc()
+	defer metrics.Connections.Dec()
 	c := &conn{
 		server: s,
 		ws:     ws,
@@ -111,25 +109,5 @@ func (s *Server) detach(c *conn) {
 	}
 	if err := s.presence.DeviceDisconnected(ctx, c.userID, c.deviceID); err != nil {
 		s.log.Warn("presence update failed", "err", err)
-	}
-}
-
-// ListenAndServe serves until the context ends, then drains connections.
-func (s *Server) ListenAndServe(ctx context.Context, addr string) error {
-	srv := &http.Server{
-		Addr:              addr,
-		Handler:           s.Handler(),
-		ReadHeaderTimeout: 10 * time.Second,
-	}
-	errc := make(chan error, 1)
-	go func() { errc <- srv.ListenAndServe() }()
-	s.log.Info("gateway listening", "addr", addr, "connections", strconv.Itoa(s.registry.count()))
-	select {
-	case err := <-errc:
-		return err
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return srv.Shutdown(shutdownCtx)
 	}
 }

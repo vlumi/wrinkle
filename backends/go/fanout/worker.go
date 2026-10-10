@@ -16,6 +16,7 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -156,6 +157,7 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 	if len(rec.Value) == 0 {
 		return nil
 	}
+	metrics.FanoutRecords.Inc()
 	o, err := parse(rec.Value)
 	if err != nil {
 		// A malformed row never gets better; log it and move on.
@@ -274,6 +276,8 @@ func (w *Worker) deliver(ctx context.Context, userID uint64, o *outboxRow) error
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	metrics.FanoutDeliveries.Inc()
+	metrics.FanoutLag.Observe(time.Since(occurredAt).Seconds())
 	if err := w.pub.Publish(ctx, userID, payload); err != nil {
 		// The log has it; devices catch up on their next sync.
 		w.log.Warn("push failed", "user", userID, "err", err)

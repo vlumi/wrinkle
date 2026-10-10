@@ -59,13 +59,3 @@ func (r *registry) conns(userID uint64) []*conn {
 	}
 	return list
 }
-
-func (r *registry) count() int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	n := 0
-	for _, conns := range r.byUser {
-		n += len(conns)
-	}
-	return n
-}

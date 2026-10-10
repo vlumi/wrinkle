@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
+	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -140,19 +141,47 @@ func (c *conn) pushEvent(payload []byte) {
 	data = protowire.AppendTag(data, 3, protowire.BytesType)
 	data = protowire.AppendBytes(data, payload)
 	c.send(data)
+	metrics.EventsPushed.Inc()
 }
 
 func (c *conn) handleRequest(ctx context.Context, req *pb.Request) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
+	start := time.Now()
 	resp := &pb.Response{RequestId: req.GetId()}
+	code := "ok"
 	if err := c.dispatch(ctx, req, resp); err != nil {
 		if apierror.Code(err) == pb.ErrorCode_ERROR_CODE_INTERNAL {
 			c.log.Error("request failed", "request", req.GetId(), "err", err)
 		}
 		resp.Body = &pb.Response_Error{Error: apierror.Proto(err)}
+		code = apierror.Code(err).String()
 	}
 	c.sendFrame(&pb.Frame{Kind: &pb.Frame_Response{Response: resp}})
+	kind := requestType(req)
+	metrics.Requests.WithLabelValues(kind, code).Inc()
+	metrics.RequestDuration.WithLabelValues(kind).Observe(time.Since(start).Seconds())
+}
+
+func requestType(req *pb.Request) string {
+	switch req.GetBody().(type) {
+	case *pb.Request_Connect:
+		return "connect"
+	case *pb.Request_OpenConversation:
+		return "open_conversation"
+	case *pb.Request_SendMessage:
+		return "send_message"
+	case *pb.Request_MarkRead:
+		return "mark_read"
+	case *pb.Request_Sync:
+		return "sync"
+	case *pb.Request_ListConversations:
+		return "list_conversations"
+	case *pb.Request_GetMessages:
+		return "get_messages"
+	default:
+		return "unknown"
+	}
 }
 
 // dispatch handles one request, setting the response body on success.
