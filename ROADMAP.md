@@ -4,16 +4,20 @@ Each phase leaves something that runs on its own.
 
 ## 1. Contract and infrastructure
 
-- [ ] Protobuf contract: WebSocket frames (request, response, event, ack, ping), requests and responses, the event types.
-- [ ] SQL schemas and Vitess keyspaces: conversations by conversation id, users by user id, with vschemas.
-- [ ] Docker Compose: Vitess, Kafka (KRaft, single broker), Debezium on Kafka Connect, Valkey. Heaps capped so the whole stack fits in ~4 GB.
-- [ ] Smoke test of the change-data path: an outbox insert appears on the Kafka topic.
-- [ ] `make ci`: the local CI entry point. Each later phase adds its checks to it (format, lint, unit tests, conformance against every backend).
+- [x] Protobuf contract: WebSocket frames (request, response, event, ack, ping), requests and responses, the event types.
+- [x] SQL schemas and Vitess keyspaces: conversations by conversation id, users by user id, with vschemas.
+- [x] Docker Compose: Vitess, Kafka (KRaft, single broker), Debezium on Kafka Connect, Valkey. Heaps capped so the whole stack fits in ~4 GB.
+- [x] Smoke test of the change-data path: an outbox insert appears on the Kafka topic.
+- [x] `make ci`: the local CI entry point. Each later phase adds its checks to it (format, lint, unit tests, conformance against every backend).
 
-Open questions:
+Resolved:
 
-- Vitess publishes x86 images only (`vitess/vttestserver`, `vitess/lite`). It builds and runs on arm64 Linux and macOS, and its maintainers develop on arm64 Macs, but there are no official arm64 builds or images ([vitessio/vitess#17225](https://github.com/vitessio/vitess/issues/17225); the image request is [#15034](https://github.com/vitessio/vitess/issues/15034)). Plan: build an arm64 `vttestserver` image locally from the Dockerfiles in the Vitess repository, pinned to a release tag, so the stack runs natively. Fallback: the x86 image under emulation, acceptable since the database layer is the same for every backend.
-- Debezium's Vitess connector reads through vtgate's change stream; whether `vttestserver` supports it needs checking. Fallback: Debezium's MySQL connector on the single `mysqld` behind `vttestserver`, which captures all shard databases from one binlog.
+- Vitess publishes x86 images only ([vitessio/vitess#17225](https://github.com/vitessio/vitess/issues/17225), [#15034](https://github.com/vitessio/vitess/issues/15034)). `infra/vitess/` builds `vttestserver` natively from the v23.0.0 sources, with MySQL from the multi-arch `mysql` image since there are no arm64 MySQL packages for Debian. The first build takes a few minutes; Compose caches it.
+- Debezium's Vitess connector streams from `vttestserver` (vtcombo) over VStream. Its initial snapshot, a VStream copy, fails against vtcombo with duplicate BEGIN events, so the connector runs with `snapshot.mode=never`; the outbox only needs streaming. `BIGINT UNSIGNED` columns arrive as decimal strings in the JSON records.
+
+Left for later:
+
+- Outbox rows are never deleted. Prune them once the fan-out workers exist, or delete in the same transaction as Debezium's outbox pattern suggests.
 
 ## 2. Go backend
 

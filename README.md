@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** design only. See [ROADMAP.md](ROADMAP.md).
+**Status:** contract and infrastructure in place, no backend yet. See [ROADMAP.md](ROADMAP.md).
 
 ## How it works
 
@@ -62,9 +62,19 @@ The load generator simulates devices and reports, per backend on the same machin
 
 Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point.
 
-## Layout
+## Running
 
-Planned:
+Needs Docker Desktop with at least 8 GB of memory, Go, and `make tools` once for `buf`.
+
+```sh
+make infra-up    # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
+make ci          # lint, bring the stack up, smoke-test the change-data path
+make infra-down  # stop and discard all data
+```
+
+From the host: MySQL protocol through vtgate at `127.0.0.1:15003` (keyspaces `conversation` and `user`, no password), Kafka at `localhost:19092`, Kafka Connect at `localhost:8083`, Valkey at `localhost:6379`.
+
+## Layout
 
 ```text
 proto/        the contract: frames, requests, events
