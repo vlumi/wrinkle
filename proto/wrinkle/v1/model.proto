@@ -1,0 +1,44 @@
+// Types shared by requests, responses and events.
+
+syntax = "proto3";
+
+package wrinkle.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1";
+option java_multiple_files = true;
+option java_package = "wrinkle.v1";
+
+message User {
+  uint64 user_id = 1;
+  string name = 2;
+}
+
+// A message in a conversation. (conversation_id, seq) identifies it; seq is
+// assigned by the conversation when the message is stored, is dense (1, 2,
+// 3, ...), and orders the conversation for everyone.
+message Message {
+  uint64 conversation_id = 1;
+  uint64 seq = 2;
+  uint64 sender_user_id = 3;
+  // Chosen by the sending device, unique per sender and conversation. Resending
+  // with the same id returns the message already stored instead of a duplicate.
+  string client_message_id = 4;
+  string text = 5;
+  google.protobuf.Timestamp sent_at = 6;
+}
+
+// A conversation as seen by the requesting user.
+message Conversation {
+  uint64 conversation_id = 1;
+  User peer = 2;
+  // Highest message seq in the conversation; 0 when empty.
+  uint64 last_seq = 3;
+  // Unset when the conversation is empty.
+  Message last_message = 4;
+  // The requesting user's read position; messages with seq above it are unread.
+  uint64 read_seq = 5;
+  // The peer's read position.
+  uint64 peer_read_seq = 6;
+}

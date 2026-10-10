@@ -1,0 +1,95 @@
+// Requests, responses and the types they share.
+
+syntax = "proto3";
+
+package wrinkle.v1;
+
+import "wrinkle/v1/event.proto";
+import "wrinkle/v1/model.proto";
+
+option go_package = "github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1";
+option java_multiple_files = true;
+option java_package = "wrinkle.v1";
+
+// Signs in by name and registers the device. Users and devices are created on
+// first use; there are no passwords. Must be the first request on a connection.
+message ConnectRequest {
+  string user_name = 1;
+  // 0 registers a new device; otherwise the id this device was given before.
+  uint64 device_id = 2;
+  string device_name = 3;
+}
+
+message ConnectResponse {
+  User user = 1;
+  uint64 device_id = 2;
+  // The cursor this device last acked; 0 for a new device.
+  uint64 device_cursor = 3;
+  // The newest position in the user's log; 0 when the log is empty.
+  uint64 log_head = 4;
+}
+
+// Finds or creates the conversation between the requesting user and the peer.
+message OpenConversationRequest {
+  string peer_user_name = 1;
+}
+
+message OpenConversationResponse {
+  Conversation conversation = 1;
+}
+
+message SendMessageRequest {
+  uint64 conversation_id = 1;
+  string client_message_id = 2;
+  string text = 3;
+}
+
+message SendMessageResponse {
+  Message message = 1;
+}
+
+// Marks the conversation read up to seq for the requesting user. Lower than
+// the current read position is a no-op.
+message MarkReadRequest {
+  uint64 conversation_id = 1;
+  uint64 seq = 2;
+}
+
+message MarkReadResponse {}
+
+// Returns events from the user's log after the cursor, oldest first.
+message SyncRequest {
+  uint64 cursor = 1;
+  // Maximum number of events to return; the server may return fewer.
+  // 0 means the server's default.
+  uint32 limit = 2;
+}
+
+message SyncResponse {
+  repeated Event events = 1;
+  // The cursor to continue from: that of the last event returned, or the
+  // request's cursor when there were none.
+  uint64 cursor = 2;
+  // More events follow; call Sync again with the returned cursor.
+  bool has_more = 3;
+}
+
+message ListConversationsRequest {}
+
+// Conversations with the most recently active first.
+message ListConversationsResponse {
+  repeated Conversation conversations = 1;
+}
+
+// Returns messages of a conversation, newest first.
+message GetMessagesRequest {
+  uint64 conversation_id = 1;
+  // Return messages with seq below this; 0 starts from the newest.
+  uint64 before_seq = 2;
+  // 0 means the server's default.
+  uint32 limit = 3;
+}
+
+message GetMessagesResponse {
+  repeated Message messages = 1;
+}
