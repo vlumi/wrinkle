@@ -11,7 +11,7 @@ Each phase leaves something that runs on its own.
 
 Open questions:
 
-- Vitess publishes x86 images only (`vitess/vttestserver`, `vitess/lite`), so on Apple Silicon they run under emulation. Acceptable, since the database layer is the same for every backend; the alternative is building Vitess for arm64.
+- Vitess publishes x86 images only (`vitess/vttestserver`, `vitess/lite`). It builds and runs on arm64 Linux and macOS, and its maintainers develop on arm64 Macs, but there are no official arm64 builds or images ([vitessio/vitess#17225](https://github.com/vitessio/vitess/issues/17225); the image request is [#15034](https://github.com/vitessio/vitess/issues/15034)). Plan: build an arm64 `vttestserver` image locally from the Dockerfiles in the Vitess repository, pinned to a release tag, so the stack runs natively. Fallback: the x86 image under emulation, acceptable since the database layer is the same for every backend.
 - Debezium's Vitess connector reads through vtgate's change stream; whether `vttestserver` supports it needs checking. Fallback: Debezium's MySQL connector on the single `mysqld` behind `vttestserver`, which captures all shard databases from one binlog.
 
 ## 2. Go backend
