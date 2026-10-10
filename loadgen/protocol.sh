@@ -39,17 +39,10 @@ stop_backend() {
 }
 trap stop_backend EXIT
 
-# The consumer group's offsets outlive the backend; without a reset, a run
-# would start by draining what the previous one left in Kafka.
-reset_offsets() {
-  docker compose -f infra/docker-compose.yml exec -T kafka \
-    /opt/kafka/bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
-    --group wrinkle-fanout --topic wrinkle.conversation.outbox \
-    --reset-offsets --to-latest --execute >/dev/null
-}
-
 run() {
-  reset_offsets
+  # The consumer group's offsets outlive the backend; without a reset, a run
+  # would start by draining what the previous one left in Kafka.
+  infra/reset-fanout.sh
   start_backend "$@"
   # Let the fan-out worker join its consumer group before measuring.
   sleep 3

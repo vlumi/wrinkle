@@ -10,6 +10,10 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 
+# A load run may have left undelivered records behind; do not make the
+# backend drain them before the first test.
+../infra/reset-fanout.sh
+
 log=$(mktemp -t wrinkle-backend.XXXXXX)
 "$@" >"$log" 2>&1 &
 backend=$!
