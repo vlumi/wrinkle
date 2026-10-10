@@ -56,8 +56,15 @@ Notes:
 
 ## 5. Java backend
 
-- [ ] Same contract and conformance tests. Java 25 (virtual threads without pinning on `synchronized`), Netty and Armeria.
-- [ ] Go vs. Java comparison.
+- [x] Same contract and conformance tests. Java 25 (virtual threads without pinning on `synchronized`), Netty and Armeria.
+- [x] Go vs. Java comparison.
+
+Notes:
+
+- Armeria's WebSocket service over Netty; request handling and fan-out on virtual threads; HikariCP over Connector/J, the Kafka consumer, Lettuce for Valkey. Gradle with a JDK 25 toolchain, google-java-format through Spotless as the format check, `-Xlint:all -Werror`.
+- Ids are computed by an own xxhash64 that matches the Go backend bit for bit (a unit test holds Go's values), so both backends run on one database.
+- The JVM exporter reports no resident memory on macOS; the load generator reads it with `ps` instead.
+- First comparison in `docs/results/2026-10-10-go-vs-java.md`: both sustain 500/s, Go's tail is tighter, baselines differ by 200 MiB, CPU per message within 10 %. The per-connection memory figures need repetitions and a fixed JVM heap before they mean anything.
 
 ## 6. iOS client
 

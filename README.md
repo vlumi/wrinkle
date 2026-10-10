@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** the Go backend passes the conformance tests, the web client works against it, and the first measurements are in `docs/results/`. See [ROADMAP.md](ROADMAP.md).
+**Status:** the Go and Java backends pass the conformance tests, the web client works against them, and the first comparison is in `docs/results/`. See [ROADMAP.md](ROADMAP.md).
 
 ## How it works
 
@@ -45,7 +45,7 @@ All backends implement the same Protobuf contract and pass the same conformance 
 | Backend | Status |
 |---|---|
 | Go | measured |
-| Java | planned |
+| Java | measured |
 | Elixir | later |
 | Rust | later |
 
@@ -64,18 +64,19 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, and `make tools` once for `buf`, `protoc-gen-go` and `golangci-lint`.
+Needs Docker Desktop with at least 8 GB of memory, Go, JDK 25 (found through `java_home`), and `make tools` once for `buf`, `protoc-gen-go` and `golangci-lint`.
 
 ```sh
 make infra-up          # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
 make ci                # everything below, plus lint and unit tests
 make smoke             # the change-data path: an outbox insert reaches Kafka
-make conformance-go    # the conformance tests against the Go backend
+make conformance-go    # the conformance tests against the Go backend; conformance-java likewise
 make web-test          # the web client in headless Chrome against the Go backend
-make measure-go        # the measurement protocol against the Go backend (about 10 minutes)
+make measure-go        # the measurement protocol against the Go backend (about 10 minutes); measure-java likewise
 make infra-down        # stop and discard all data
 
 go run ./backends/go/cmd/wrinkle   # the Go backend on ws://localhost:8080/v1/ws
+make java-build && backends/java/build/install/wrinkle/bin/wrinkle   # the Java backend, same address
 make web                           # the web client at http://localhost:8081/clients/web/
 go run ./loadgen -h                # the load generator
 ```
