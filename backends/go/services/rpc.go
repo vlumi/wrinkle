@@ -42,7 +42,10 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 	if err != nil {
 		return err
 	}
-	srv := grpc.NewServer()
+	// Every connected device may have a request in flight; the default of
+	// 100 concurrent streams per connection made gateways fail under a
+	// connect storm.
+	srv := grpc.NewServer(grpc.MaxConcurrentStreams(1 << 20))
 	backendv1.RegisterBackendServiceServer(srv, s)
 	go func() {
 		<-ctx.Done()
