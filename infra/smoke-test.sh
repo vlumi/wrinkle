@@ -20,21 +20,29 @@ if [ "${state:-}" != "RUNNING" ]; then
   exit 1
 fi
 
-# The connector streams from the position it reached when it started, so give
-# it a few tries in case it is still catching up.
+# Subscribe before inserting, so only new records matter however large the
+# topic has grown. The connector may still be catching up, so a few tries.
 for attempt in 1 2 3; do
+  captured=$(mktemp -t wrinkle-smoke.XXXXXX)
+  compose exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh \
+    --bootstrap-server localhost:9092 --topic "$TOPIC" --timeout-ms 30000 \
+    >"$captured" 2>/dev/null &
+  consumer=$!
+  sleep 3
   id=$(date +%s%N)
   echo "inserting outbox row $id (attempt $attempt)"
   compose exec -T vitess mysql -h 127.0.0.1 -P 15003 conversation -e "
     INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload, created_at)
     VALUES (42, $id, 1, 2, 'smoke', X'00', NOW(6))"
-  if compose exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh \
-      --bootstrap-server localhost:9092 --topic "$TOPIC" \
-      --from-beginning --timeout-ms 20000 2>/dev/null \
-      | grep -q "\"outbox_id\":\"$id\""; then
-    echo "smoke test passed: outbox row $id reached $TOPIC"
-    exit 0
-  fi
+  for _ in $(seq 1 20); do
+    if grep -q "\"outbox_id\":\"$id\"" "$captured"; then
+      kill "$consumer" 2>/dev/null || true
+      echo "smoke test passed: outbox row $id reached $TOPIC"
+      exit 0
+    fi
+    sleep 1
+  done
+  kill "$consumer" 2>/dev/null || true
 done
 echo "smoke test failed: no outbox row reached $TOPIC" >&2
 exit 1
