@@ -1,0 +1,33 @@
+version: "2"
+linters:
+  default: standard
+  enable:
+    - errorlint
+    - misspell
+    - unconvert
+    - unparam
+  settings:
+    errcheck:
+      # Close and Rollback in defers, and closes on the way out, have
+      # nothing useful to do with their errors.
+      exclude-functions:
+        - (*database/sql.Rows).Close
+        - (*database/sql.Tx).Rollback
+        - (*database/sql.DB).Close
+        - (*github.com/coder/websocket.Conn).Close
+        - (*github.com/redis/go-redis/v9.PubSub).Close
+        - (*github.com/vlumi/wrinkle/backends/go/presence.Subscription).Close
+        - (*github.com/vlumi/wrinkle/backends/go/presence.Client).Close
+        - (*github.com/vlumi/wrinkle/clients/go.Client).Close
+        - fmt.Fprintf
+        - fmt.Fprintln
+    misspell:
+      locale: US
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/vlumi/wrinkle
