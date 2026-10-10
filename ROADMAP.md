@@ -33,7 +33,12 @@ Notes:
 
 ## 3. Web client
 
-- [ ] One page of plain JavaScript: sign in by name, conversation list, conversation view, read marks, connection state.
+- [x] One page of plain JavaScript: sign in by name, conversation list, conversation view, read marks, connection state.
+
+Notes:
+
+- No build step: protobuf.js loads the `.proto` files at runtime from `/proto/`, so `make web` serves the repository root. 64-bit ids travel as strings.
+- `make web-test` drives the page in headless Chrome over the DevTools protocol, two users in two pages; it is part of `make ci`. The only JavaScript check beyond that is `node --check`.
 
 ## 4. Load generator and metrics
 
