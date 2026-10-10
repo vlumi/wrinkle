@@ -1,7 +1,7 @@
 # Local CI. `make ci` is the gate before every push to main.
 
 COMPOSE := docker compose -f infra/docker-compose.yml
-export PATH := $(shell go env GOPATH)/bin:$(PATH)
+export PATH := $(shell go env GOPATH)/bin:$(HOME)/.mix/escripts:/opt/homebrew/opt/rustup/bin:$(PATH)
 # The Java backend needs JDK 25; Gradle and its launcher find it here.
 export JAVA_HOME := $(shell /usr/libexec/java_home -v 25 2>/dev/null)
 GRADLE := cd backends/java && ./gradlew --quiet --console=plain
@@ -57,13 +57,17 @@ proto-lint:
 	buf lint
 	buf format --diff --exit-code
 
-# Generated code (Go module, Swift contract) is committed; proto-check fails
-# when it is stale.
+# Generated code (Go module, Swift contract, Elixir contract) is committed;
+# proto-check fails when it is stale.
+GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto
+
 proto:
 	buf generate
+	# The iOS client speaks the device contract only.
+	rm -f clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract/services.pb.swift
 
 proto-check: proto
-	@git status --porcelain -- proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract | grep . && { echo "generated code is stale, commit the output of make proto"; exit 1; } || true
+	@git status --porcelain -- $(GENERATED) | grep . && { echo "generated code is stale, commit the output of make proto"; exit 1; } || true
 
 infra-up:
 	$(COMPOSE) up -d --build --wait
@@ -111,4 +115,6 @@ tools:
 	brew install xcodegen swift-protobuf swiftlint
 	go install github.com/bufbuild/buf/cmd/buf@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	mix local.hex --force && mix escript.install hex protobuf --force
 	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
