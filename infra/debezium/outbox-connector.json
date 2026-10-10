@@ -7,6 +7,7 @@
   "vitess.keyspace": "conversation",
   "vitess.tablet.type": "MASTER",
   "snapshot.mode": "never",
+  "poll.interval.ms": "20",
   "vitess.vgtid": "current",
   "table.include.list": "conversation.outbox",
   "message.key.columns": "conversation.outbox:conversation_id",
