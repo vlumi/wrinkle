@@ -65,6 +65,7 @@ application {
             "-Dorg.slf4j.simpleLogger.showDateTime=true",
             "-Dorg.slf4j.simpleLogger.log.org.apache.kafka=warn",
             "-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn",
+            "--enable-native-access=ALL-UNNAMED",
         )
 }
 

@@ -34,6 +34,7 @@ public final class Metrics {
       Histogram.builder()
           .name("wrinkle_request_duration_seconds")
           .help("Time from reading a request to queueing its response.")
+          .labelNames("type")
           .classicExponentialUpperBounds(0.0005, 2, 16)
           .register();
 
