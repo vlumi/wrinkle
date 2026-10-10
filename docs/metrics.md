@@ -12,4 +12,4 @@ Every backend exposes Prometheus metrics at `/metrics` on its HTTP port, with th
 | `wrinkle_fanout_deliveries_total` | counter | | Events appended to a user's log. |
 | `wrinkle_fanout_lag_seconds` | histogram | | From an event being stored to its append to a user's log: the change-data path plus the worker. |
 
-Process metrics come from each runtime's client library and differ in name: `process_resident_memory_bytes` and `process_cpu_seconds_total` on Go; the JVM exporter's equivalents on Java. The load generator reads both forms.
+Process metrics come from each runtime's client library: `process_cpu_seconds_total` on both, `process_resident_memory_bytes` on Go. The JVM exporter reports resident memory only on Linux, so on macOS the load generator measures the process listening on the metrics port with `ps` instead.

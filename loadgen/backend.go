@@ -3,6 +3,8 @@ package main
 import (
 	"bufio"
 	"net/http"
+	"net/url"
+	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -16,14 +18,15 @@ type sample struct {
 	connections float64
 }
 
-// scrape reads the backend's Prometheus text metrics. Names for CPU and
-// memory differ between runtimes (docs/metrics.md); both are recognized.
-func scrape(url string) sample {
-	if url == "" {
+// scrape reads the backend's Prometheus text metrics. A runtime that does
+// not report resident memory (the JVM on macOS) is measured with ps instead,
+// found by the port it listens on.
+func scrape(metricsURL string) sample {
+	if metricsURL == "" {
 		return sample{}
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Get(url)
+	resp, err := client.Get(metricsURL)
 	if err != nil {
 		return sample{}
 	}
@@ -56,5 +59,31 @@ func scrape(url string) sample {
 			s.connections += v
 		}
 	}
+	if s.rss == 0 {
+		s.rss = rssOfListener(metricsURL)
+	}
 	return s
+}
+
+// rssOfListener returns the resident memory of the process listening on the
+// URL's port, in bytes, or 0.
+func rssOfListener(metricsURL string) float64 {
+	u, err := url.Parse(metricsURL)
+	if err != nil || u.Port() == "" {
+		return 0
+	}
+	pid, err := exec.Command("lsof", "-ti", "tcp:"+u.Port(), "-sTCP:LISTEN").Output()
+	if err != nil {
+		return 0
+	}
+	first, _, _ := strings.Cut(strings.TrimSpace(string(pid)), "\n")
+	rss, err := exec.Command("ps", "-o", "rss=", "-p", first).Output()
+	if err != nil {
+		return 0
+	}
+	kib, err := strconv.ParseFloat(strings.TrimSpace(string(rss)), 64)
+	if err != nil {
+		return 0
+	}
+	return kib * 1024
 }
