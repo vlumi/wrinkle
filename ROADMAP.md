@@ -82,6 +82,10 @@ Notes:
 - [ ] Gateway first in each, since connection handling is where they differ most; then the full backend if worthwhile.
 - [ ] Four-way comparison.
 
+## Later
+
+- [ ] A second Go gateway beside the current one, without a goroutine per connection (a poller-driven WebSocket library), to see how far the idle memory per connection falls when the model changes; see `docs/results/2026-10-10-idle-memory.md`.
+
 ## Before making the repository public
 
 - [x] Choose a license: MIT.
