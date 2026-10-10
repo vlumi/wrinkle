@@ -21,7 +21,7 @@ type sample struct {
 
 // scrape reads the backend's Prometheus text metrics. Live memory is what the
 // runtime reports after a collection: Go's allocated heap and stacks, the
-// JVM's memory pools. A runtime that does not report resident memory (the JVM on
+// JVM's memory pools, the BEAM's process and system memory. A runtime that does not report resident memory (the JVM on
 // macOS) is measured with ps instead, found by the port it listens on.
 func scrape(metricsURL string) sample {
 	if metricsURL == "" {
@@ -62,7 +62,7 @@ func scrape(metricsURL string) sample {
 			s.cpu = v
 		case "process_resident_memory_bytes":
 			s.rss = v
-		case "go_memstats_heap_alloc_bytes", "go_memstats_stack_inuse_bytes", "jvm_memory_used_bytes":
+		case "go_memstats_heap_alloc_bytes", "go_memstats_stack_inuse_bytes", "jvm_memory_used_bytes", "erlang_vm_memory_bytes_total":
 			s.live += v
 		case "wrinkle_connections":
 			s.connections += v

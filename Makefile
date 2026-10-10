@@ -1,5 +1,7 @@
 # Local CI. `make ci` is the gate before every push to main.
 
+SHELL := /bin/bash
+
 COMPOSE := docker compose -f infra/docker-compose.yml
 export PATH := $(shell go env GOPATH)/bin:$(HOME)/.mix/escripts:/opt/homebrew/opt/rustup/bin:$(PATH)
 # The Java backend needs JDK 25; Gradle and its launcher find it here.
@@ -11,11 +13,11 @@ GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 
-.PHONY: web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
+.PHONY: elixir-deps elixir-lint elixir-test conformance-elixir measure-elixir web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
 
-ci: lint proto-check go-test java-test ios-build smoke conformance-go conformance-go-split conformance-java web-test ios-test
+ci: lint proto-check go-test java-test elixir-test ios-build smoke conformance-go conformance-go-split conformance-java conformance-elixir web-test ios-test
 
-lint: proto-lint go-lint java-lint web-lint ios-lint
+lint: proto-lint go-lint java-lint elixir-lint web-lint ios-lint
 
 web-lint:
 	node --check clients/web/app.js
@@ -46,6 +48,20 @@ java-test:
 
 java-build:
 	$(GRADLE) installDist
+
+# The Elixir gateway: a gateway only, run beside the Go services (run.sh).
+MIX := cd backends/elixir && mix
+
+elixir-deps:
+	$(MIX) deps.get --quiet 2>/dev/null
+
+elixir-lint: elixir-deps
+	$(MIX) format --check-formatted
+	$(MIX) compile --warnings-as-errors --quiet 2>/dev/null
+
+# The unit tests need no services, so the application is not started.
+elixir-test: elixir-deps
+	$(MIX) test --no-start 2>&1 | grep -E "^(Result|\*\*|  [0-9]+\))"; test $${PIPESTATUS[0]} -eq 0
 
 go-lint:
 	@for m in $(GO_MODULES); do echo "== $$m"; (cd $$m && golangci-lint run ./...) || exit 1; done
@@ -94,6 +110,10 @@ conformance-go-split: infra-up
 conformance-java: infra-up java-build
 	conformance/run.sh $(JAVA_BACKEND)
 
+conformance-elixir: infra-up elixir-deps
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	conformance/run.sh $(CURDIR)/backends/elixir/run.sh
+
 # The web client in headless Chrome against the Go backend.
 web-test: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
@@ -108,6 +128,10 @@ ios-test: infra-up
 measure-go: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(CURDIR)/bin/wrinkle
+
+measure-elixir: infra-up elixir-deps
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh
 
 measure-java: infra-up java-build
 	LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
