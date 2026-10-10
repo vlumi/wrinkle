@@ -11,8 +11,10 @@ import (
 	"log/slog"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"google.golang.org/protobuf/proto"
 
@@ -21,6 +23,9 @@ import (
 )
 
 const Topic = "wrinkle.conversation.outbox"
+
+// MySQL error for a unique key violation.
+const duplicateKey = 1062
 
 type Publisher interface {
 	Publish(ctx context.Context, userID uint64, payload []byte) error
@@ -75,18 +80,29 @@ func (w *Worker) Run(ctx context.Context) error {
 		fetches.EachError(func(topic string, partition int32, err error) {
 			w.log.Warn("fetch error", "topic", topic, "partition", partition, "err", err)
 		})
-		var failed bool
-		fetches.EachRecord(func(rec *kgo.Record) {
-			if failed {
-				return
-			}
-			if err := w.handleWithRetry(ctx, rec); err != nil {
-				failed = true
-				w.log.Error("giving up on record", "partition", rec.Partition, "offset", rec.Offset, "err", err)
-			}
+		// Partitions in parallel, records within a partition in order: a
+		// conversation's events stay in one partition.
+		var failed atomic.Bool
+		var wg sync.WaitGroup
+		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for _, rec := range p.Records {
+					if failed.Load() {
+						return
+					}
+					if err := w.handleWithRetry(ctx, rec); err != nil {
+						failed.Store(true)
+						w.log.Error("giving up on record", "partition", rec.Partition, "offset", rec.Offset, "err", err)
+						return
+					}
+				}
+			}()
 		})
+		wg.Wait()
 		w.kafka.AllowRebalance()
-		if failed {
+		if failed.Load() {
 			// Leave the offsets where they are and poll again.
 			time.Sleep(time.Second)
 			continue
@@ -168,12 +184,21 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		w.log.Error("skipping outbox record without a body", "kind", o.kind, "offset", rec.Offset)
 		return nil
 	}
+	errs := make(chan error, 2)
 	for _, userID := range []uint64{o.userA, o.userB} {
-		if err := w.deliver(ctx, userID, o); err != nil {
-			return fmt.Errorf("deliver to user %d: %w", userID, err)
-		}
+		go func() {
+			if err := w.deliver(ctx, userID, o); err != nil {
+				errs <- fmt.Errorf("deliver to user %d: %w", userID, err)
+				return
+			}
+			errs <- nil
+		}()
 	}
-	return nil
+	var joined error
+	for range 2 {
+		joined = errors.Join(joined, <-errs)
+	}
+	return joined
 }
 
 // deliver appends the event to one user's log, in one transaction with the
@@ -206,17 +231,6 @@ func (w *Worker) deliver(ctx context.Context, userID uint64, o *outboxRow) error
 	if err != nil {
 		return err
 	}
-	var existing uint64
-	err = tx.QueryRowContext(ctx, `
-		SELECT position FROM user_event WHERE user_id = ? AND conversation_id = ? AND outbox_id = ?`,
-		userID, o.conversationID, o.outboxID).Scan(&existing)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-
 	event := proto.Clone(o.event).(*pb.Event)
 	event.Cursor = head + 1
 	payload, err := proto.Marshal(event)
@@ -224,13 +238,18 @@ func (w *Worker) deliver(ctx context.Context, userID uint64, o *outboxRow) error
 		return err
 	}
 	occurredAt := event.GetOccurredAt().AsTime()
-	if _, err := tx.ExecContext(ctx, `UPDATE user SET log_head = ? WHERE user_id = ?`, event.Cursor, userID); err != nil {
-		return err
-	}
+	// The unique key on the source outbox row makes a redelivery fail here.
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO user_event (user_id, position, conversation_id, outbox_id, payload, occurred_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
 		userID, event.Cursor, o.conversationID, o.outboxID, payload, occurredAt); err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey {
+			return nil
+		}
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE user SET log_head = ? WHERE user_id = ?`, event.Cursor, userID); err != nil {
 		return err
 	}
 
