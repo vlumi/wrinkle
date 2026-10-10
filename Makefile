@@ -13,11 +13,11 @@ GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 
-.PHONY: elixir-deps elixir-lint elixir-test conformance-elixir measure-elixir web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
+.PHONY: rust-lint rust-test rust-build conformance-rust measure-rust elixir-deps elixir-lint elixir-test conformance-elixir measure-elixir web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
 
-ci: lint proto-check go-test java-test elixir-test ios-build smoke conformance-go conformance-go-split conformance-java conformance-elixir web-test ios-test
+ci: lint proto-check go-test java-test elixir-test rust-test ios-build smoke conformance-go conformance-go-split conformance-java conformance-elixir conformance-rust web-test ios-test
 
-lint: proto-lint go-lint java-lint elixir-lint web-lint ios-lint
+lint: proto-lint go-lint java-lint elixir-lint rust-lint web-lint ios-lint
 
 web-lint:
 	node --check clients/web/app.js
@@ -48,6 +48,19 @@ java-test:
 
 java-build:
 	$(GRADLE) installDist
+
+# The Rust gateway: a gateway only, run beside the Go services (run.sh).
+CARGO := cd backends/rust && cargo
+
+rust-lint:
+	$(CARGO) fmt --check
+	$(CARGO) clippy --release --quiet -- -D warnings
+
+rust-test:
+	$(CARGO) test --release --quiet 2>&1 | grep -E "^test result|FAILED|panicked"
+
+rust-build:
+	$(CARGO) build --release --quiet
 
 # The Elixir gateway: a gateway only, run beside the Go services (run.sh).
 MIX := cd backends/elixir && mix
@@ -110,6 +123,10 @@ conformance-go-split: infra-up
 conformance-java: infra-up java-build
 	conformance/run.sh $(JAVA_BACKEND)
 
+conformance-rust: infra-up rust-build
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	conformance/run.sh $(CURDIR)/backends/rust/run.sh
+
 conformance-elixir: infra-up elixir-deps
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	conformance/run.sh $(CURDIR)/backends/elixir/run.sh
@@ -129,6 +146,10 @@ measure-go: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(CURDIR)/bin/wrinkle
 
+measure-rust: infra-up rust-build
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	LABEL=rust loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-rust.jsonl $(CURDIR)/backends/rust/run.sh
+
 measure-elixir: infra-up elixir-deps
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh
@@ -142,7 +163,7 @@ web:
 	python3 -m http.server 8081 --directory . --bind 127.0.0.1
 
 tools:
-	brew install xcodegen swift-protobuf swiftlint
+	brew install xcodegen swift-protobuf swiftlint elixir rustup
 	go install github.com/bufbuild/buf/cmd/buf@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
