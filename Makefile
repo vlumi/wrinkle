@@ -7,11 +7,15 @@ GO_MODULES := backends/go clients/go conformance proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go proto/go
 
-.PHONY: ci lint proto-lint go-lint go-test proto proto-check infra-up infra-down smoke conformance-go tools
+.PHONY: web web-lint web-test ci lint proto-lint go-lint go-test proto proto-check infra-up infra-down smoke conformance-go tools
 
-ci: lint proto-check go-test smoke conformance-go
+ci: lint proto-check go-test smoke conformance-go web-test
 
-lint: proto-lint go-lint
+lint: proto-lint go-lint web-lint
+
+web-lint:
+	node --check clients/web/app.js
+	node --check clients/web/test/browser_test.mjs
 
 go-lint:
 	@for m in $(GO_MODULES); do echo "== $$m"; (cd $$m && golangci-lint run ./...) || exit 1; done
@@ -45,6 +49,16 @@ smoke: infra-up
 conformance-go: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	conformance/run.sh $(CURDIR)/bin/wrinkle
+
+# The web client in headless Chrome against the Go backend.
+web-test: infra-up
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	clients/web/test/run.sh $(CURDIR)/bin/wrinkle
+
+# Serves the repository root so the web client can load /proto/.
+web:
+	@echo "web client at http://localhost:8081/clients/web/"
+	python3 -m http.server 8081 --directory . --bind 127.0.0.1
 
 tools:
 	go install github.com/bufbuild/buf/cmd/buf@latest
