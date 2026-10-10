@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wrinkle</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Wrinkle</h1>
+    <span id="status" class="status" data-state="offline">offline</span>
+    <span id="me"></span>
+    <button id="signout" hidden>Sign out</button>
+  </header>
+
+  <section id="signin">
+    <form id="signin-form">
+      <label>Name <input id="name" required maxlength="64" autocomplete="username"></label>
+      <label>Gateway <input id="url" value="ws://localhost:8080/v1/ws" required></label>
+      <button type="submit">Sign in</button>
+    </form>
+  </section>
+
+  <main id="app" hidden>
+    <aside>
+      <form id="open-form">
+        <input id="peer" placeholder="Start a conversation with…" maxlength="64" required>
+        <button type="submit">Open</button>
+      </form>
+      <ul id="conversations"></ul>
+    </aside>
+    <section id="conversation" hidden>
+      <h2 id="peer-name"></h2>
+      <button id="earlier" hidden>Load earlier</button>
+      <ol id="messages"></ol>
+      <form id="send-form">
+        <input id="text" placeholder="Message" maxlength="4000" autocomplete="off" required>
+        <button type="submit">Send</button>
+      </form>
+    </section>
+    <p id="empty">Pick a conversation or start one.</p>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/long@5.3.2/umd/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/protobufjs@7.5.4/dist/protobuf.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
