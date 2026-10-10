@@ -1,0 +1,54 @@
+# xcodegen spec; Scripts/generate.sh writes Wrinkle.xcodeproj, which is not
+# committed. The logic lives in Packages/WrinkleCore; this is the shell.
+name: Wrinkle
+
+options:
+  bundleIdPrefix: fi.misaki
+  # iOS 26 is the floor: no version fallbacks in the views.
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+  developmentLanguage: en
+
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: fi.misaki.wrinkle
+    PRODUCT_NAME: Wrinkle
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "0"
+    GENERATE_INFOPLIST_FILE: NO
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: "YES"
+    # A prototype that runs in the simulator; nothing is signed.
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGN_IDENTITY: ""
+
+packages:
+  WrinkleCore:
+    path: Packages/WrinkleCore
+
+targets:
+  Wrinkle-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/iOS
+    info:
+      path: Sources/iOS/Info.plist
+      properties:
+        CFBundleDisplayName: Wrinkle
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+        # A development client talking to a local backend over plain ws://.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    dependencies:
+      - package: WrinkleCore
+        product: WrinkleKit
+    # Explicit scheme so xcodegen writes a shared one; `xcodebuild -scheme
+    # Wrinkle-iOS` then works on a fresh checkout.
+    scheme:
+      configVariants: []

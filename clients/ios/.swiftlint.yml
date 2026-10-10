@@ -1,0 +1,38 @@
+included:
+  - Packages/WrinkleCore/Sources
+  - Packages/WrinkleCore/Tests
+  - Sources
+
+excluded:
+  - Packages/WrinkleCore/.build
+  # Generated from the contract.
+  - Packages/WrinkleCore/Sources/WrinkleCore/Contract
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - first_where
+  - contains_over_first_not_nil
+  - redundant_nil_coalescing
+  - closure_spacing
+  - explicit_init
+  - sorted_first_last
+
+analyzer_rules:
+  - unused_import
+
+disabled_rules:
+  # SwiftUI idiom: Button(action:) { label } uses a trailing closure beside the action.
+  - multiple_closures_with_trailing_closure
+  # swift-format owns brace placement and punctuation.
+  - opening_brace
+  - trailing_comma
+
+line_length:
+  warning: 110
+  error: 140
+  ignores_comments: true
+
+identifier_name:
+  min_length: 1
+  excluded: [a, b, c, e, m, r, s, t, id]

@@ -1,0 +1,210 @@
+import Foundation
+import SwiftProtobuf
+
+/// An error response from the backend.
+public struct BackendError: Error, Equatable, Sendable {
+    public let code: Wrinkle_V1_ErrorCode
+    public let message: String
+}
+
+public enum ConnectionState: Sendable {
+    case offline, connecting, connected
+}
+
+/// One device's WebSocket connection: binary Frames in and out, requests matched to
+/// responses by id, events delivered as a stream.
+public actor Connection {
+    private let url: URL
+    private let session: URLSession
+    private var task: URLSessionWebSocketTask?
+    private var nextID: UInt64 = 0
+    private var pending: [UInt64: CheckedContinuation<Wrinkle_V1_Response, Error>] = [:]
+    private let eventsContinuation: AsyncStream<Wrinkle_V1_Event>.Continuation
+    private let stateContinuation: AsyncStream<ConnectionState>.Continuation
+
+    /// Pushed events, in order.
+    public nonisolated let events: AsyncStream<Wrinkle_V1_Event>
+    /// Connection state changes.
+    public nonisolated let states: AsyncStream<ConnectionState>
+
+    public init(url: URL) {
+        self.url = url
+        self.session = URLSession(configuration: .ephemeral)
+        (events, eventsContinuation) = AsyncStream.makeStream()
+        (states, stateContinuation) = AsyncStream.makeStream()
+    }
+
+    /// Opens the socket and starts reading. Returns once the socket is open.
+    public func open() async throws {
+        stateContinuation.yield(.connecting)
+        let task = session.webSocketTask(with: url)
+        self.task = task
+        task.resume()
+        // URLSession reports a failure to open on the first receive, so probe with a
+        // ping before considering the connection up.
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+            task.sendPing { error in
+                if let error { c.resume(throwing: error) } else { c.resume() }
+            }
+        }
+        stateContinuation.yield(.connected)
+        Task { await self.readLoop(task) }
+    }
+
+    public func close() {
+        task?.cancel(with: .normalClosure, reason: nil)
+        task = nil
+        failPending(URLError(.cancelled))
+        stateContinuation.yield(.offline)
+    }
+
+    private func readLoop(_ task: URLSessionWebSocketTask) async {
+        while true {
+            do {
+                let message = try await task.receive()
+                guard case .data(let data) = message else { continue }
+                let frame = try Wrinkle_V1_Frame(serializedBytes: data)
+                dispatch(frame)
+            } catch {
+                if self.task === task {
+                    self.task = nil
+                    failPending(error)
+                    stateContinuation.yield(.offline)
+                }
+                return
+            }
+        }
+    }
+
+    private func dispatch(_ frame: Wrinkle_V1_Frame) {
+        switch frame.kind {
+        case .response(let response):
+            if let c = pending.removeValue(forKey: response.requestID) {
+                if case .error(let e) = response.body {
+                    c.resume(throwing: BackendError(code: e.code, message: e.message))
+                } else {
+                    c.resume(returning: response)
+                }
+            }
+        case .event(let event):
+            eventsContinuation.yield(event)
+        case .ping:
+            var pong = Wrinkle_V1_Frame()
+            pong.pong = Wrinkle_V1_Pong()
+            Task { try? await self.send(pong) }
+        default:
+            break
+        }
+    }
+
+    private func failPending(_ error: Error) {
+        for (_, c) in pending { c.resume(throwing: error) }
+        pending.removeAll()
+    }
+
+    private func failRequest(_ id: UInt64, _ error: Error) {
+        pending.removeValue(forKey: id)?.resume(throwing: error)
+    }
+
+    public func send(_ frame: Wrinkle_V1_Frame) async throws {
+        guard let task else { throw URLError(.notConnectedToInternet) }
+        try await task.send(.data(try frame.serializedBytes()))
+    }
+
+    /// Sends a request and waits for its response.
+    public func call(_ body: Wrinkle_V1_Request.OneOf_Body) async throws -> Wrinkle_V1_Response {
+        nextID += 1
+        let id = nextID
+        var frame = Wrinkle_V1_Frame()
+        frame.request = Wrinkle_V1_Request.with {
+            $0.id = id
+            $0.body = body
+        }
+        return try await withCheckedThrowingContinuation { c in
+            pending[id] = c
+            Task {
+                do {
+                    try await self.send(frame)
+                } catch {
+                    self.failRequest(id, error)
+                }
+            }
+        }
+    }
+
+    public func ack(cursor: UInt64) async throws {
+        var frame = Wrinkle_V1_Frame()
+        frame.ack = Wrinkle_V1_Ack.with { $0.cursor = cursor }
+        try await send(frame)
+    }
+
+    // MARK: Requests
+
+    public func connect(userName: String, deviceID: UInt64, deviceName: String) async throws
+        -> Wrinkle_V1_ConnectResponse
+    {
+        let r = try await call(
+            .connect(
+                .with {
+                    $0.userName = userName
+                    $0.deviceID = deviceID
+                    $0.deviceName = deviceName
+                }))
+        return r.connect
+    }
+
+    public func openConversation(peerUserName: String) async throws -> Wrinkle_V1_Conversation {
+        try await call(.openConversation(.with { $0.peerUserName = peerUserName }))
+            .openConversation.conversation
+    }
+
+    public func sendMessage(conversationID: UInt64, clientMessageID: String, text: String)
+        async throws -> Wrinkle_V1_Message
+    {
+        try await call(
+            .sendMessage(
+                .with {
+                    $0.conversationID = conversationID
+                    $0.clientMessageID = clientMessageID
+                    $0.text = text
+                })
+        ).sendMessage.message
+    }
+
+    public func markRead(conversationID: UInt64, seq: UInt64) async throws {
+        _ = try await call(
+            .markRead(
+                .with {
+                    $0.conversationID = conversationID
+                    $0.seq = seq
+                }))
+    }
+
+    public func sync(cursor: UInt64, limit: UInt32) async throws -> Wrinkle_V1_SyncResponse {
+        try await call(
+            .sync(
+                .with {
+                    $0.cursor = cursor
+                    $0.limit = limit
+                })
+        ).sync
+    }
+
+    public func listConversations() async throws -> [Wrinkle_V1_Conversation] {
+        try await call(.listConversations(Wrinkle_V1_ListConversationsRequest()))
+            .listConversations.conversations
+    }
+
+    public func getMessages(conversationID: UInt64, beforeSeq: UInt64, limit: UInt32)
+        async throws -> [Wrinkle_V1_Message]
+    {
+        try await call(
+            .getMessages(
+                .with {
+                    $0.conversationID = conversationID
+                    $0.beforeSeq = beforeSeq
+                    $0.limit = limit
+                })
+        ).getMessages.messages
+    }
+}
