@@ -1,0 +1,241 @@
+// Package wrinkleclient is a Go client for the contract, used by the
+// conformance tests and the load generator. One Client is one device.
+package wrinkleclient
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"sync/atomic"
+
+	"github.com/coder/websocket"
+	"google.golang.org/protobuf/proto"
+
+	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
+)
+
+// Error is an error response from the backend.
+type Error struct {
+	Code    pb.ErrorCode
+	Message string
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("%s: %s", e.Code, e.Message)
+}
+
+// Code returns the error code of a backend error, or UNSPECIFIED.
+func Code(err error) pb.ErrorCode {
+	var e *Error
+	if errors.As(err, &e) {
+		return e.Code
+	}
+	return pb.ErrorCode_ERROR_CODE_UNSPECIFIED
+}
+
+type Client struct {
+	ws     *websocket.Conn
+	nextID atomic.Uint64
+
+	// Events receives pushed events; Pongs receives pongs. Both are
+	// unbuffered beyond EventBuffer, and the reader blocks when full.
+	Events chan *pb.Event
+	Pongs  chan struct{}
+
+	mu      sync.Mutex
+	pending map[uint64]chan *pb.Response
+	closed  chan struct{}
+	err     error
+}
+
+const EventBuffer = 1024
+
+// Dial opens a connection; the caller still has to Connect.
+func Dial(ctx context.Context, url string) (*Client, error) {
+	ws, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{
+		CompressionMode: websocket.CompressionDisabled,
+	})
+	if err != nil {
+		return nil, err
+	}
+	ws.SetReadLimit(1 << 20)
+	c := &Client{
+		ws:      ws,
+		Events:  make(chan *pb.Event, EventBuffer),
+		Pongs:   make(chan struct{}, 16),
+		pending: map[uint64]chan *pb.Response{},
+		closed:  make(chan struct{}),
+	}
+	go c.readLoop()
+	return c, nil
+}
+
+func (c *Client) Close() error {
+	return c.ws.Close(websocket.StatusNormalClosure, "")
+}
+
+// Err reports why the connection ended, once it has.
+func (c *Client) Err() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.err
+}
+
+func (c *Client) readLoop() {
+	ctx := context.Background()
+	var err error
+	defer func() {
+		c.mu.Lock()
+		c.err = err
+		close(c.closed)
+		for id, ch := range c.pending {
+			close(ch)
+			delete(c.pending, id)
+		}
+		c.mu.Unlock()
+		close(c.Events)
+	}()
+	for {
+		typ, data, rerr := c.ws.Read(ctx)
+		if rerr != nil {
+			err = rerr
+			return
+		}
+		if typ != websocket.MessageBinary {
+			err = fmt.Errorf("unexpected %v message", typ)
+			return
+		}
+		frame := &pb.Frame{}
+		if uerr := proto.Unmarshal(data, frame); uerr != nil {
+			err = fmt.Errorf("malformed frame: %w", uerr)
+			return
+		}
+		switch kind := frame.GetKind().(type) {
+		case *pb.Frame_Response:
+			c.mu.Lock()
+			ch, ok := c.pending[kind.Response.GetRequestId()]
+			delete(c.pending, kind.Response.GetRequestId())
+			c.mu.Unlock()
+			if ok {
+				ch <- kind.Response
+			}
+		case *pb.Frame_Event:
+			c.Events <- kind.Event
+		case *pb.Frame_Pong:
+			select {
+			case c.Pongs <- struct{}{}:
+			default:
+			}
+		case *pb.Frame_Ping:
+			_ = c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Pong{Pong: &pb.Pong{}}})
+		}
+	}
+}
+
+// Send writes one frame.
+func (c *Client) Send(ctx context.Context, frame *pb.Frame) error {
+	data, err := proto.Marshal(frame)
+	if err != nil {
+		return err
+	}
+	return c.ws.Write(ctx, websocket.MessageBinary, data)
+}
+
+// Call sends a request and waits for its response. Error responses are
+// returned as *Error.
+func (c *Client) Call(ctx context.Context, req *pb.Request) (*pb.Response, error) {
+	req.Id = c.nextID.Add(1)
+	ch := make(chan *pb.Response, 1)
+	c.mu.Lock()
+	c.pending[req.Id] = ch
+	c.mu.Unlock()
+	if err := c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Request{Request: req}}); err != nil {
+		c.mu.Lock()
+		delete(c.pending, req.Id)
+		c.mu.Unlock()
+		return nil, err
+	}
+	select {
+	case <-ctx.Done():
+		c.mu.Lock()
+		delete(c.pending, req.Id)
+		c.mu.Unlock()
+		return nil, ctx.Err()
+	case resp, ok := <-ch:
+		if !ok {
+			return nil, fmt.Errorf("connection closed: %w", c.Err())
+		}
+		if e := resp.GetError(); e != nil {
+			return resp, &Error{Code: e.GetCode(), Message: e.GetMessage()}
+		}
+		return resp, nil
+	}
+}
+
+func (c *Client) Connect(ctx context.Context, req *pb.ConnectRequest) (*pb.ConnectResponse, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_Connect{Connect: req}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetConnect(), nil
+}
+
+func (c *Client) OpenConversation(ctx context.Context, peerUserName string) (*pb.Conversation, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_OpenConversation{
+		OpenConversation: &pb.OpenConversationRequest{PeerUserName: peerUserName}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetOpenConversation().GetConversation(), nil
+}
+
+func (c *Client) SendMessage(ctx context.Context, conversationID uint64, clientMessageID, text string) (*pb.Message, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SendMessage{
+		SendMessage: &pb.SendMessageRequest{ConversationId: conversationID, ClientMessageId: clientMessageID, Text: text}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetSendMessage().GetMessage(), nil
+}
+
+func (c *Client) MarkRead(ctx context.Context, conversationID, seq uint64) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_MarkRead{
+		MarkRead: &pb.MarkReadRequest{ConversationId: conversationID, Seq: seq}}})
+	return err
+}
+
+func (c *Client) Sync(ctx context.Context, cursor uint64, limit uint32) (*pb.SyncResponse, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_Sync{
+		Sync: &pb.SyncRequest{Cursor: cursor, Limit: limit}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetSync(), nil
+}
+
+func (c *Client) ListConversations(ctx context.Context) ([]*pb.Conversation, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_ListConversations{
+		ListConversations: &pb.ListConversationsRequest{}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetListConversations().GetConversations(), nil
+}
+
+func (c *Client) GetMessages(ctx context.Context, conversationID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetMessages{
+		GetMessages: &pb.GetMessagesRequest{ConversationId: conversationID, BeforeSeq: beforeSeq, Limit: limit}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetGetMessages().GetMessages(), nil
+}
+
+func (c *Client) Ack(ctx context.Context, cursor uint64) error {
+	return c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Ack{Ack: &pb.Ack{Cursor: cursor}}})
+}
+
+func (c *Client) Ping(ctx context.Context) error {
+	return c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Ping{Ping: &pb.Ping{}}})
+}
