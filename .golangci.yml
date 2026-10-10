@@ -21,6 +21,8 @@ linters:
         - (*github.com/vlumi/wrinkle/clients/go.Client).Close
         - fmt.Fprintf
         - fmt.Fprintln
+        - (io.ReadCloser).Close
+        - (*os.File).Close
     misspell:
       locale: US
 formatters:

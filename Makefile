@@ -3,9 +3,9 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 export PATH := $(shell go env GOPATH)/bin:$(PATH)
 
-GO_MODULES := backends/go clients/go conformance proto/go
+GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
-GO_UNIT_MODULES := backends/go clients/go proto/go
+GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 
 .PHONY: web web-lint web-test ci lint proto-lint go-lint go-test proto proto-check infra-up infra-down smoke conformance-go tools
 

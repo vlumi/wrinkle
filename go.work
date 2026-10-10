@@ -4,5 +4,6 @@ use (
 	./backends/go
 	./clients/go
 	./conformance
+	./loadgen
 	./proto/go
 )
