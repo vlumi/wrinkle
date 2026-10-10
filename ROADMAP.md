@@ -21,8 +21,15 @@ Left for later:
 
 ## 2. Go backend
 
-- [ ] One binary, roles chosen by configuration: gateway, conversation service, sync service, fan-out worker.
-- [ ] Conformance tests in `conformance/`, run against any backend through the contract.
+- [x] One binary, roles chosen by configuration: gateway, conversation service, sync service, fan-out worker.
+- [x] Conformance tests in `conformance/`, run against any backend through the contract.
+
+Notes:
+
+- The roles are `gateway` and `fanout`. The gateway runs the conversation and sync services in-process; running them as separate processes, with the gateway calling them remotely, is left until a measurement needs it.
+- Push goes from fan-out workers to gateways through Valkey pub/sub, one channel per user; a gateway subscribes to a user's channel while it holds one of that user's connections. The presence hash (device to node) is maintained but nothing reads it yet.
+- Ids are derived, not allocated: user id from the name, conversation id from the user pair, both within 63 bits. Sign-in and opening a conversation need no lookup table.
+- `MessageFailedEvent` is in the contract but nothing produces it yet; the synchronous path has no asynchronous failure to report.
 
 ## 3. Web client
 

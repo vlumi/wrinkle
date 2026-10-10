@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** contract and infrastructure in place, no backend yet. See [ROADMAP.md](ROADMAP.md).
+**Status:** the Go backend passes the conformance tests; no clients or measurements yet. See [ROADMAP.md](ROADMAP.md).
 
 ## How it works
 
@@ -44,7 +44,7 @@ All backends implement the same Protobuf contract and pass the same conformance 
 
 | Backend | Status |
 |---|---|
-| Go | planned |
+| Go | passes conformance |
 | Java | planned |
 | Elixir | later |
 | Rust | later |
@@ -64,12 +64,16 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, and `make tools` once for `buf`.
+Needs Docker Desktop with at least 8 GB of memory, Go, and `make tools` once for `buf`, `protoc-gen-go` and `golangci-lint`.
 
 ```sh
-make infra-up    # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
-make ci          # lint, bring the stack up, smoke-test the change-data path
-make infra-down  # stop and discard all data
+make infra-up          # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
+make ci                # everything below, plus lint and unit tests
+make smoke             # the change-data path: an outbox insert reaches Kafka
+make conformance-go    # the conformance tests against the Go backend
+make infra-down        # stop and discard all data
+
+go run ./backends/go/cmd/wrinkle   # the Go backend on ws://localhost:8080/v1/ws
 ```
 
 From the host: MySQL protocol through vtgate at `127.0.0.1:15003` (keyspaces `conversation` and `user`, no password), Kafka at `localhost:19092`, Kafka Connect at `localhost:8083`, Valkey at `localhost:6379`.
