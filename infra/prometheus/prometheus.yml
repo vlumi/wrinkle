@@ -1,0 +1,9 @@
+# Scrapes the backend under test on the host. Every backend exposes the same
+# metric names (docs/metrics.md), so one job and one dashboard serve all.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: backend
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
