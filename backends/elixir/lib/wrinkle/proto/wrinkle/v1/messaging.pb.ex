@@ -6,9 +6,9 @@ defmodule Wrinkle.V1.ConnectRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:user_name, 1, type: :string, json_name: "userName")
-  field(:device_id, 2, type: :uint64, json_name: "deviceId")
-  field(:device_name, 3, type: :string, json_name: "deviceName")
+  field :user_name, 1, type: :string, json_name: "userName"
+  field :device_id, 2, type: :uint64, json_name: "deviceId"
+  field :device_name, 3, type: :string, json_name: "deviceName"
 end
 
 defmodule Wrinkle.V1.ConnectResponse do
@@ -19,10 +19,10 @@ defmodule Wrinkle.V1.ConnectResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:user, 1, type: Wrinkle.V1.User)
-  field(:device_id, 2, type: :uint64, json_name: "deviceId")
-  field(:device_cursor, 3, type: :uint64, json_name: "deviceCursor")
-  field(:log_head, 4, type: :uint64, json_name: "logHead")
+  field :user, 1, type: Wrinkle.V1.User
+  field :device_id, 2, type: :uint64, json_name: "deviceId"
+  field :device_cursor, 3, type: :uint64, json_name: "deviceCursor"
+  field :log_head, 4, type: :uint64, json_name: "logHead"
 end
 
 defmodule Wrinkle.V1.OpenConversationRequest do
@@ -33,7 +33,7 @@ defmodule Wrinkle.V1.OpenConversationRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:peer_user_name, 1, type: :string, json_name: "peerUserName")
+  field :peer_user_name, 1, type: :string, json_name: "peerUserName"
 end
 
 defmodule Wrinkle.V1.OpenConversationResponse do
@@ -44,7 +44,7 @@ defmodule Wrinkle.V1.OpenConversationResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:conversation, 1, type: Wrinkle.V1.Conversation)
+  field :conversation, 1, type: Wrinkle.V1.Conversation
 end
 
 defmodule Wrinkle.V1.SendMessageRequest do
@@ -55,9 +55,9 @@ defmodule Wrinkle.V1.SendMessageRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:conversation_id, 1, type: :uint64, json_name: "conversationId")
-  field(:client_message_id, 2, type: :string, json_name: "clientMessageId")
-  field(:text, 3, type: :string)
+  field :conversation_id, 1, type: :uint64, json_name: "conversationId"
+  field :client_message_id, 2, type: :string, json_name: "clientMessageId"
+  field :text, 3, type: :string
 end
 
 defmodule Wrinkle.V1.SendMessageResponse do
@@ -68,7 +68,7 @@ defmodule Wrinkle.V1.SendMessageResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:message, 1, type: Wrinkle.V1.Message)
+  field :message, 1, type: Wrinkle.V1.Message
 end
 
 defmodule Wrinkle.V1.MarkReadRequest do
@@ -79,8 +79,8 @@ defmodule Wrinkle.V1.MarkReadRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:conversation_id, 1, type: :uint64, json_name: "conversationId")
-  field(:seq, 2, type: :uint64)
+  field :conversation_id, 1, type: :uint64, json_name: "conversationId"
+  field :seq, 2, type: :uint64
 end
 
 defmodule Wrinkle.V1.MarkReadResponse do
@@ -100,8 +100,8 @@ defmodule Wrinkle.V1.SyncRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:cursor, 1, type: :uint64)
-  field(:limit, 2, type: :uint32)
+  field :cursor, 1, type: :uint64
+  field :limit, 2, type: :uint32
 end
 
 defmodule Wrinkle.V1.SyncResponse do
@@ -112,9 +112,9 @@ defmodule Wrinkle.V1.SyncResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:events, 1, repeated: true, type: Wrinkle.V1.Event)
-  field(:cursor, 2, type: :uint64)
-  field(:has_more, 3, type: :bool, json_name: "hasMore")
+  field :events, 1, repeated: true, type: Wrinkle.V1.Event
+  field :cursor, 2, type: :uint64
+  field :has_more, 3, type: :bool, json_name: "hasMore"
 end
 
 defmodule Wrinkle.V1.ListConversationsRequest do
@@ -134,7 +134,7 @@ defmodule Wrinkle.V1.ListConversationsResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:conversations, 1, repeated: true, type: Wrinkle.V1.Conversation)
+  field :conversations, 1, repeated: true, type: Wrinkle.V1.Conversation
 end
 
 defmodule Wrinkle.V1.GetMessagesRequest do
@@ -145,9 +145,9 @@ defmodule Wrinkle.V1.GetMessagesRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:conversation_id, 1, type: :uint64, json_name: "conversationId")
-  field(:before_seq, 2, type: :uint64, json_name: "beforeSeq")
-  field(:limit, 3, type: :uint32)
+  field :conversation_id, 1, type: :uint64, json_name: "conversationId"
+  field :before_seq, 2, type: :uint64, json_name: "beforeSeq"
+  field :limit, 3, type: :uint32
 end
 
 defmodule Wrinkle.V1.GetMessagesResponse do
@@ -158,5 +158,5 @@ defmodule Wrinkle.V1.GetMessagesResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field(:messages, 1, repeated: true, type: Wrinkle.V1.Message)
+  field :messages, 1, repeated: true, type: Wrinkle.V1.Message
 end
