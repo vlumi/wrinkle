@@ -22,7 +22,7 @@ From [results/2026-10-10-go-vs-java.md](results/2026-10-10-go-vs-java.md), scale
 
 | Estimate | Measured |
 |---|---|
-| ~100k connections per gateway node | Go: 46 KiB per idle connection, about 4.6 GB for 100k on a 38 MiB baseline. Java: 13 KiB (unreliable from single runs), about 1.3 GB plus a 246 MiB baseline. Both fit a 16 GB node. Go's per-connection cost is two to three times the usual expectation for the runtime; it comes from two goroutines, the library's buffers and a 256-slot outbound queue per connection, all tunable. |
+| ~100k connections per gateway node | After tuning ([idle memory](results/2026-10-10-idle-memory.md)): Go 29 KiB live per idle connection, about 2.9 GB for 100k; Java 12 KiB live plus a 104 MiB baseline, about 1.2 GB, not counting Netty's direct buffers. Both fit a 16 GB node. Go's remaining cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps; going lower needs a poller-driven library. |
 | ~1.5k writes/s per shard | The single `mysqld` saturated near 1000 messages/s, about 3000 transactions/s: one send plus two fan-out appends per message. Twice the per-shard assumption, on one process; a real shard has its own `mysqld` and disk. |
 | ~3k user-log appends/s per shard | 1000/s sustained alongside the sends on the same `mysqld`. Same order. |
 | ~230 pushes/s per gateway node | 1000/s from one process acting as gateway and fan-out worker, far from any limit. |

@@ -13,7 +13,7 @@ How backends are compared. Absolute numbers depend on the machine and say little
 
 `loadgen/protocol.sh <backend command>` performs these, appending one JSON line per run to the results file:
 
-1. **Idle connections.** 500, 1000, 2000 and 4000 devices, one per user, no messages. Warm-up 10 s, then 30 s. Memory per connection is the slope of the backend's resident memory over the connection count, from a least-squares fit across the four points, which cancels the process baseline. Report the baseline too.
+1. **Idle connections.** 500, 1000, 2000 and 4000 devices, one per user, no messages. Warm-up 10 s, then 30 s. Memory per connection is the slope over the connection count, from a least-squares fit across the four points, which cancels the process baseline; report the baseline too. The load generator samples both resident memory and the runtime's live memory after asking the backend to collect garbage (`POST /debug/gc`); quote the live slope, with the RSS slope beside it.
 2. **Latency at fixed rates.** 1000 devices, one per user, at 100, 500, 1000 and 2000 messages per second. Warm-up 15 s, then 60 s. Report end-to-end p50 and p99 (send on one device to receipt on the peer's device), the send round trip p50, CPU time per thousand messages, and the share of messages received within the 10 s grace after the window.
 3. **Highest sustained rate.** The highest step of run 2 whose end-to-end p99 stays under 1 s with no losses, refined with extra runs between the steps when the write-up needs it.
 
