@@ -83,7 +83,7 @@ func (c *conn) serve() {
 				go func() {
 					actx, cancel := context.WithTimeout(ctx, requestTimeout)
 					defer cancel()
-					if err := c.server.users.Ack(actx, userID, deviceID, kind.Ack.GetCursor()); err != nil {
+					if err := c.server.backend.Ack(actx, userID, deviceID, kind.Ack.GetCursor()); err != nil {
 						c.log.Warn("ack failed", "err", err)
 					}
 				}()
@@ -172,19 +172,63 @@ func (c *conn) handleRequest(ctx context.Context, req *pb.Request) {
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
 	start := time.Now()
-	resp := &pb.Response{RequestId: req.GetId()}
-	code := "ok"
-	if err := c.dispatch(ctx, req, resp); err != nil {
-		if apierror.Code(err) == pb.ErrorCode_ERROR_CODE_INTERNAL {
-			c.log.Error("request failed", "request", req.GetId(), "err", err)
-		}
-		resp.Body = &pb.Response_Error{Error: apierror.Proto(err)}
-		code = apierror.Code(err).String()
-	}
+	resp := c.dispatch(ctx, req)
 	c.sendFrame(&pb.Frame{Kind: &pb.Frame_Response{Response: resp}})
 	kind := requestType(req)
+	code := "ok"
+	if e := resp.GetError(); e != nil {
+		code = e.GetCode().String()
+	}
 	metrics.Requests.WithLabelValues(kind, code).Inc()
 	metrics.RequestDuration.WithLabelValues(kind).Observe(time.Since(start).Seconds())
+}
+
+// dispatch applies the connection's state rules, then hands the request to
+// the backend.
+func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
+	userID, deviceID, connected := c.identity()
+	var err error
+	switch {
+	case req.GetConnect() != nil && connected:
+		err = apierror.FailedPrecondition("already connected")
+	case req.GetConnect() == nil && !connected:
+		err = apierror.Unauthenticated("connect first")
+	}
+	if err != nil {
+		return &pb.Response{RequestId: req.GetId(), Body: &pb.Response_Error{Error: apierror.Proto(err)}}
+	}
+	resp, err := c.server.backend.Call(ctx, userID, deviceID, req)
+	if err != nil {
+		c.log.Error("backend call failed", "request", req.GetId(), "err", err)
+		return &pb.Response{RequestId: req.GetId(), Body: &pb.Response_Error{Error: &pb.Error{
+			Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, Message: "services unavailable",
+		}}}
+	}
+	if connectResp := resp.GetConnect(); connectResp != nil {
+		if err := c.attached(ctx, connectResp); err != nil {
+			return &pb.Response{RequestId: req.GetId(), Body: &pb.Response_Error{Error: apierror.Proto(err)}}
+		}
+	}
+	return resp
+}
+
+// connected_ records the identity Connect established and attaches the
+// connection to its user.
+func (c *conn) attached(ctx context.Context, resp *pb.ConnectResponse) error {
+	c.mu.Lock()
+	if c.connected {
+		c.mu.Unlock()
+		return apierror.FailedPrecondition("already connected")
+	}
+	c.connected = true
+	c.userID = resp.GetUser().GetUserId()
+	c.deviceID = resp.GetDeviceId()
+	c.mu.Unlock()
+	if err := c.server.attach(ctx, c); err != nil {
+		return err
+	}
+	c.log = c.log.With("user", c.userID, "device", c.deviceID)
+	return nil
 }
 
 func requestType(req *pb.Request) string {
@@ -206,83 +250,4 @@ func requestType(req *pb.Request) string {
 	default:
 		return "unknown"
 	}
-}
-
-// dispatch handles one request, setting the response body on success.
-func (c *conn) dispatch(ctx context.Context, req *pb.Request, resp *pb.Response) error {
-	if connect := req.GetConnect(); connect != nil {
-		return c.connect(ctx, connect, resp)
-	}
-	userID, _, ok := c.identity()
-	if !ok {
-		return apierror.Unauthenticated("connect first")
-	}
-	s := c.server
-	switch r := req.GetBody().(type) {
-	case *pb.Request_OpenConversation:
-		conv, err := s.users.Open(ctx, userID, r.OpenConversation.GetPeerUserName())
-		if err != nil {
-			return err
-		}
-		resp.Body = &pb.Response_OpenConversation{OpenConversation: &pb.OpenConversationResponse{Conversation: conv}}
-	case *pb.Request_SendMessage:
-		msg, err := s.conversations.Send(ctx, userID, r.SendMessage.GetConversationId(),
-			r.SendMessage.GetClientMessageId(), r.SendMessage.GetText())
-		if err != nil {
-			return err
-		}
-		resp.Body = &pb.Response_SendMessage{SendMessage: &pb.SendMessageResponse{Message: msg}}
-	case *pb.Request_MarkRead:
-		if err := s.conversations.MarkRead(ctx, userID, r.MarkRead.GetConversationId(), r.MarkRead.GetSeq()); err != nil {
-			return err
-		}
-		resp.Body = &pb.Response_MarkRead{MarkRead: &pb.MarkReadResponse{}}
-	case *pb.Request_Sync:
-		sync, err := s.users.Sync(ctx, userID, r.Sync.GetCursor(), r.Sync.GetLimit())
-		if err != nil {
-			return err
-		}
-		resp.Body = &pb.Response_Sync{Sync: sync}
-	case *pb.Request_ListConversations:
-		list, err := s.users.ListConversations(ctx, userID)
-		if err != nil {
-			return err
-		}
-		resp.Body = &pb.Response_ListConversations{ListConversations: &pb.ListConversationsResponse{Conversations: list}}
-	case *pb.Request_GetMessages:
-		msgs, err := s.conversations.Messages(ctx, userID, r.GetMessages.GetConversationId(),
-			r.GetMessages.GetBeforeSeq(), r.GetMessages.GetLimit())
-		if err != nil {
-			return err
-		}
-		resp.Body = &pb.Response_GetMessages{GetMessages: &pb.GetMessagesResponse{Messages: msgs}}
-	default:
-		return apierror.InvalidArgument("request has no body")
-	}
-	return nil
-}
-
-func (c *conn) connect(ctx context.Context, req *pb.ConnectRequest, resp *pb.Response) error {
-	if _, _, ok := c.identity(); ok {
-		return apierror.FailedPrecondition("already connected")
-	}
-	connected, err := c.server.users.Connect(ctx, req)
-	if err != nil {
-		return err
-	}
-	c.mu.Lock()
-	if c.connected {
-		c.mu.Unlock()
-		return apierror.FailedPrecondition("already connected")
-	}
-	c.connected = true
-	c.userID = connected.GetUser().GetUserId()
-	c.deviceID = connected.GetDeviceId()
-	c.mu.Unlock()
-	if err := c.server.attach(ctx, c); err != nil {
-		return err
-	}
-	c.log = c.log.With("user", c.userID, "device", c.deviceID)
-	resp.Body = &pb.Response_Connect{Connect: connected}
-	return nil
 }

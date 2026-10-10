@@ -11,9 +11,9 @@ GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 
-.PHONY: web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-java tools
+.PHONY: web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
 
-ci: lint proto-check go-test java-test ios-build smoke conformance-go conformance-java web-test ios-test
+ci: lint proto-check go-test java-test ios-build smoke conformance-go conformance-go-split conformance-java web-test ios-test
 
 lint: proto-lint go-lint java-lint web-lint ios-lint
 
@@ -84,6 +84,12 @@ smoke: infra-up
 conformance-go: infra-up
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	conformance/run.sh $(CURDIR)/bin/wrinkle
+
+# The Go backend split into a gateway and a services process over the
+# internal RPC, the shape the gateways in other languages use.
+conformance-go-split: infra-up
+	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
+	conformance/run.sh $(CURDIR)/backends/go/split.sh
 
 conformance-java: infra-up java-build
 	conformance/run.sh $(JAVA_BACKEND)

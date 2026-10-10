@@ -6,6 +6,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -27,6 +28,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	"github.com/vlumi/wrinkle/backends/go/presence"
+	"github.com/vlumi/wrinkle/backends/go/services"
 )
 
 func main() {
@@ -39,11 +41,13 @@ func main() {
 func run() error {
 	hostname, _ := os.Hostname()
 	var (
-		roles   = flag.String("roles", env("WRINKLE_ROLES", "gateway,fanout"), "comma-separated roles: gateway, fanout")
+		roles   = flag.String("roles", env("WRINKLE_ROLES", "gateway,fanout"), "comma-separated roles: gateway, fanout, services")
 		listen  = flag.String("listen", env("WRINKLE_LISTEN", ":8080"), "HTTP listen address: /v1/ws (gateway role), /metrics, /healthz")
 		mysql   = flag.String("mysql", env("WRINKLE_MYSQL", "127.0.0.1:15003"), "vtgate MySQL address")
 		brokers = flag.String("kafka", env("WRINKLE_KAFKA", "localhost:19092"), "comma-separated Kafka brokers")
 		valkey  = flag.String("valkey", env("WRINKLE_VALKEY", "localhost:6379"), "Valkey address")
+		svcAddr = flag.String("services", env("WRINKLE_SERVICES", ""), "gateway: forward requests to a services process at this address instead of running the services in-process")
+		svcLsn  = flag.String("services-listen", env("WRINKLE_SERVICES_LISTEN", ":9000"), "services role: gRPC listen address")
 		node    = flag.String("node", env("WRINKLE_NODE", hostname), "this node's name in presence")
 		dbConns = flag.Int("db-conns", 32, "connections per keyspace")
 		debug   = flag.Bool("debug", false, "debug logging")
@@ -60,28 +64,39 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	wantGateway, wantFanout := false, false
+	wantGateway, wantFanout, wantServices := false, false, false
 	for _, role := range strings.Split(*roles, ",") {
 		switch strings.TrimSpace(role) {
 		case "gateway":
 			wantGateway = true
 		case "fanout":
 			wantFanout = true
+		case "services":
+			wantServices = true
 		default:
 			return fmt.Errorf("unknown role %q", role)
 		}
 	}
 
-	conversationDB, err := vtdb.Open(ctx, *mysql, "conversation", *dbConns)
-	if err != nil {
-		return err
+	// The database is needed by the services (in-process or as a role) and
+	// by fan-out; a gateway forwarding to a services process does without.
+	var local *services.Local
+	var userDB *sql.DB
+	if wantServices || wantFanout || (wantGateway && *svcAddr == "") {
+		conversationDB, err := vtdb.Open(ctx, *mysql, "conversation", *dbConns)
+		if err != nil {
+			return err
+		}
+		defer conversationDB.Close()
+		userDB, err = vtdb.Open(ctx, *mysql, "user", *dbConns)
+		if err != nil {
+			return err
+		}
+		defer userDB.Close()
+		conversations := conversation.New(conversationDB)
+		users := devicesync.New(userDB, conversations)
+		local = services.NewLocal(conversations, users, log.With("role", "services"))
 	}
-	defer conversationDB.Close()
-	userDB, err := vtdb.Open(ctx, *mysql, "user", *dbConns)
-	if err != nil {
-		return err
-	}
-	defer userDB.Close()
 	pres, err := presence.New(ctx, *valkey, *node)
 	if err != nil {
 		return err
@@ -117,10 +132,23 @@ func run() error {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "ok")
 	})
+	if wantServices {
+		srv := services.NewServer(local)
+		log.Info("services listening", "addr", *svcLsn)
+		start("services", func(ctx context.Context) error { return srv.Serve(ctx, *svcLsn) })
+	}
 	if wantGateway {
-		conversations := conversation.New(conversationDB)
-		users := devicesync.New(userDB, conversations)
-		gw := gateway.New(ctx, conversations, users, pres, log.With("role", "gateway"))
+		var backend services.Backend = local
+		if *svcAddr != "" {
+			client, err := services.Dial(*svcAddr)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = client.Close() }()
+			backend = client
+			log.Info("gateway forwarding to services", "addr", *svcAddr)
+		}
+		gw := gateway.New(ctx, backend, pres, log.With("role", "gateway"))
 		gw.Register(mux)
 		start("gateway push", gw.Run)
 	}

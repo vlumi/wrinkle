@@ -11,32 +11,29 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/vlumi/wrinkle/backends/go/conversation"
-	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/presence"
+	"github.com/vlumi/wrinkle/backends/go/services"
 )
 
 type Server struct {
-	ctx           context.Context
-	conversations *conversation.Service
-	users         *devicesync.Service
-	presence      *presence.Client
-	sub           *presence.Subscription
-	registry      *registry
-	log           *slog.Logger
+	ctx      context.Context
+	backend  services.Backend
+	presence *presence.Client
+	sub      *presence.Subscription
+	registry *registry
+	log      *slog.Logger
 }
 
-func New(ctx context.Context, conversations *conversation.Service, users *devicesync.Service, pres *presence.Client, log *slog.Logger) *Server {
+func New(ctx context.Context, backend services.Backend, pres *presence.Client, log *slog.Logger) *Server {
 	sub := pres.Subscribe(ctx)
 	return &Server{
-		ctx:           ctx,
-		conversations: conversations,
-		users:         users,
-		presence:      pres,
-		sub:           sub,
-		registry:      newRegistry(sub),
-		log:           log,
+		ctx:      ctx,
+		backend:  backend,
+		presence: pres,
+		sub:      sub,
+		registry: newRegistry(sub),
+		log:      log,
 	}
 }
 
