@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** the Go and Java backends pass the conformance tests, the web client works against them, and the first comparison is in `docs/results/`. See [ROADMAP.md](ROADMAP.md).
+**Status:** the Go and Java backends pass the conformance tests, the web and iOS clients work against them, and the first comparison is in `docs/results/`. See [ROADMAP.md](ROADMAP.md).
 
 ## How it works
 
@@ -49,7 +49,7 @@ All backends implement the same Protobuf contract and pass the same conformance 
 | Elixir | later |
 | Rust | later |
 
-Clients: a web client (plain JavaScript, done) and an iOS client (SwiftUI, planned).
+Clients: a web client (plain JavaScript) and an iOS client (SwiftUI), both working against either backend.
 
 ## Measuring
 
@@ -64,7 +64,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, JDK 25 (found through `java_home`), and `make tools` once for `buf`, `protoc-gen-go` and `golangci-lint`.
+Needs Docker Desktop with at least 8 GB of memory, Go, JDK 25 (found through `java_home`), Xcode 26, and `make tools` once for `buf`, `protoc-gen-go`, `golangci-lint`, `xcodegen`, `swift-protobuf` and `swiftlint`.
 
 ```sh
 make infra-up          # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
@@ -72,12 +72,15 @@ make ci                # everything below, plus lint and unit tests
 make smoke             # the change-data path: an outbox insert reaches Kafka
 make conformance-go    # the conformance tests against the Go backend; conformance-java likewise
 make web-test          # the web client in headless Chrome against the Go backend
+make ios-test          # the iOS client's package tests, headless, against the Go backend
+make ios-build         # the iOS app for the simulator, unsigned
 make measure-go        # the measurement protocol against the Go backend (about 10 minutes); measure-java likewise
 make infra-down        # stop and discard all data
 
 go run ./backends/go/cmd/wrinkle   # the Go backend on ws://localhost:8080/v1/ws
 make java-build && backends/java/build/install/wrinkle/bin/wrinkle   # the Java backend, same address
 make web                           # the web client at http://localhost:8081/clients/web/
+clients/ios/Scripts/run-ios.sh     # the iOS client in an iPhone simulator
 go run ./loadgen -h                # the load generator
 ```
 
