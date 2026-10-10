@@ -1,0 +1,20 @@
+.DS_Store
+.env
+*.local
+
+# Build output
+bin/
+build/
+target/
+_build/
+deps/
+node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Xcode
+xcuserdata/
+DerivedData/
