@@ -6,7 +6,7 @@ name: wrinkle
 services:
   vitess:
     build: ./vitess
-    image: wrinkle/vttestserver:v23.0.0
+    image: wrinkle/vttestserver:v24.0.4
     environment:
       KEYSPACES: conversation,user
       NUM_SHARDS: 2,2
@@ -28,7 +28,7 @@ services:
           memory: 1536M
 
   kafka:
-    image: apache/kafka:4.1.0
+    image: apache/kafka:4.3.1
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -58,7 +58,7 @@ services:
           memory: 1024M
 
   connect:
-    image: quay.io/debezium/connect:3.3.0.Final
+    image: quay.io/debezium/connect:3.7.0.Final
     depends_on:
       kafka:
         condition: service_healthy
@@ -86,7 +86,7 @@ services:
           memory: 1280M
 
   prometheus:
-    image: prom/prometheus:v3.6.0
+    image: prom/prometheus:v3.15.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.retention.time=7d
@@ -103,7 +103,7 @@ services:
           memory: 256M
 
   grafana:
-    image: grafana/grafana:12.2.0
+    image: grafana/grafana:13.2.3
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
@@ -123,7 +123,7 @@ services:
           memory: 256M
 
   valkey:
-    image: valkey/valkey:8.1-alpine
+    image: valkey/valkey:9.1.2-alpine
     command: ["valkey-server", "--maxmemory", "128mb", "--save", ""]
     ports:
       - "6379:6379"

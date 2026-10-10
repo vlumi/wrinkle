@@ -3,10 +3,10 @@
 # docker/vttestserver image, with MySQL coming from the multi-arch mysql
 # image because there are no arm64 MySQL packages for Debian.
 
-ARG VITESS_VERSION=v23.0.0
-ARG MYSQL_VERSION=8.0.43
+ARG VITESS_VERSION=v24.0.4
+ARG MYSQL_VERSION=8.4.9
 
-FROM golang:1.25-bookworm AS builder
+FROM golang:1.26-bookworm AS builder
 ARG VITESS_VERSION
 WORKDIR /vt/src/vitess.io/vitess
 RUN git clone --depth 1 --branch "${VITESS_VERSION}" https://github.com/vitessio/vitess.git . \
@@ -29,4 +29,4 @@ COPY --chown=vitess:vitess run.sh /vt/run.sh
 VOLUME /vt/vtdataroot
 USER vitess
 ENTRYPOINT ["/vt/run.sh"]
-CMD ["8.0.43-Vitess"]
+CMD ["8.4.9-Vitess"]
