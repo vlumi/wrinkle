@@ -9,3 +9,8 @@ plugins:
     out: proto/go
     opt: paths=source_relative
     strategy: all
+  - local: protoc-gen-swift
+    out: clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract
+    opt:
+      - Visibility=Public
+      - FileNaming=DropPath
