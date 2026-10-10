@@ -58,7 +58,9 @@ func New(ctx context.Context, brokers []string, group string, db *sql.DB, pub Pu
 	return &Worker{db: db, kafka: client, pub: pub, log: log, names: map[uint64]string{}}, nil
 }
 
-func (w *Worker) Close() { w.kafka.Close() }
+// Close leaves the consumer group. Polling blocks rebalances until the
+// fetched records are handled, so closing has to allow one.
+func (w *Worker) Close() { w.kafka.CloseAllowingRebalance() }
 
 // Run consumes until the context ends. A record is committed only after
 // every recipient's log has it; a failing record is retried, not skipped.
@@ -66,6 +68,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	for {
 		fetches := w.kafka.PollFetches(ctx)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
+			w.kafka.AllowRebalance()
 			return ctx.Err()
 		}
 		fetches.EachError(func(topic string, partition int32, err error) {
