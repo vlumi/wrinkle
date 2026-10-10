@@ -1,0 +1,101 @@
+# Shared infrastructure for every backend. Memory is capped so the whole
+# stack fits in about 4 GB; backends run beside it.
+
+name: wrinkle
+
+services:
+  vitess:
+    build: ./vitess
+    image: wrinkle/vttestserver:v23.0.0
+    environment:
+      KEYSPACES: conversation,user
+      NUM_SHARDS: 2,2
+      PORT: "15000"
+    ports:
+      - "15000:15000" # vtcombo HTTP
+      - "15001:15001" # vtcombo gRPC (VStream for Debezium)
+      - "15003:15003" # MySQL protocol through vtgate
+    volumes:
+      - ../schema:/vt/schema:ro
+    healthcheck:
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-P", "15003", "-e", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  kafka:
+    image: apache/kafka:4.1.0
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:19092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 4
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
+    ports:
+      - "19092:19092" # from the host; inside the network use kafka:9092
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+
+  connect:
+    image: quay.io/debezium/connect:3.3.0.Final
+    depends_on:
+      kafka:
+        condition: service_healthy
+      vitess:
+        condition: service_healthy
+    environment:
+      BOOTSTRAP_SERVERS: kafka:9092
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: connect_configs
+      OFFSET_STORAGE_TOPIC: connect_offsets
+      STATUS_STORAGE_TOPIC: connect_statuses
+      KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
+      HEAP_OPTS: -Xms256m -Xmx768m
+    ports:
+      - "8083:8083"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8083/connectors"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    deploy:
+      resources:
+        limits:
+          memory: 1280M
+
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    command: ["valkey-server", "--maxmemory", "128mb", "--save", ""]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 256M

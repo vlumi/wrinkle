@@ -1,0 +1,20 @@
+{
+  "connector.class": "io.debezium.connector.vitess.VitessConnector",
+  "tasks.max": "1",
+  "topic.prefix": "wrinkle",
+  "database.hostname": "vitess",
+  "database.port": "15001",
+  "vitess.keyspace": "conversation",
+  "vitess.tablet.type": "MASTER",
+  "snapshot.mode": "never",
+  "vitess.vgtid": "current",
+  "table.include.list": "conversation.outbox",
+  "message.key.columns": "conversation.outbox:conversation_id",
+  "transforms": "unwrap",
+  "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
+  "transforms.unwrap.drop.tombstones": "true",
+  "key.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "key.converter.schemas.enable": "false",
+  "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+  "value.converter.schemas.enable": "false"
+}
