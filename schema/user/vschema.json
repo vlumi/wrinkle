@@ -1,0 +1,22 @@
+{
+  "sharded": true,
+  "vindexes": {
+    "xxhash": {
+      "type": "xxhash"
+    }
+  },
+  "tables": {
+    "user": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "device": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "user_event": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "user_conversation": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    }
+  }
+}

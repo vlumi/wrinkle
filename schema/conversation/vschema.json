@@ -1,0 +1,22 @@
+{
+  "sharded": true,
+  "vindexes": {
+    "xxhash": {
+      "type": "xxhash"
+    }
+  },
+  "tables": {
+    "conversation": {
+      "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
+    },
+    "message": {
+      "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
+    },
+    "read_mark": {
+      "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
+    },
+    "outbox": {
+      "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
+    }
+  }
+}
