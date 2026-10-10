@@ -79,8 +79,16 @@ Notes:
 
 ## 7. Elixir and Rust
 
-- [ ] Gateway first in each, since connection handling is where they differ most; then the full backend if worthwhile.
-- [ ] Four-way comparison.
+- [x] Gateway first in each, since connection handling is where they differ most; then the full backend if worthwhile.
+- [x] Four-way comparison.
+
+Notes:
+
+- An internal RPC between gateway and services (`proto/wrinkle/backend/v1`): the gateway forwards a device's request with its identity and gets back the response as it goes to the device; pushes keep going through Valkey. The Go backend gained a `services` role and a forwarding mode for its gateway; `backends/go/split.sh` runs the two. The Elixir and Rust implementations are gateways only, run beside the Go services (`run.sh` in each).
+- Elixir: Bandit, a process per connection, requests in a task each, elixir-grpc over Mint. Rust: axum over tokio, a task per connection, tonic. Both pass the conformance tests.
+- Comparison in `docs/results/2026-10-11-gateways.md`: all three gateways within 15 ms at p50; Rust a fifth of Go's memory at 4000 connections and 60 % of its CPU per message, with the tightest tail; Elixir's per-connection memory the highest, its baseline above 100 MiB.
+- Two protocol flaws found: the stack degrades as it grows (1.4 s against 94 ms p50 at 500/s), so each backend now runs from a fresh stack; and grpc-go's default of 100 concurrent streams per connection broke the Elixir client under a connect storm.
+- Full Elixir and Rust backends were not worthwhile for the question asked: the services are SQL and a Kafka consumer, where the languages differ least.
 
 ## Later
 

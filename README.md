@@ -40,14 +40,14 @@ Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by 
 
 ## Implementations
 
-All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them.
+All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them. A backend can also be split into a gateway and a services process over an internal RPC; the Elixir and Rust implementations are gateways in that shape, run beside the Go services, since connection handling is where the languages differ most.
 
 | Backend | Status |
 |---|---|
-| Go | measured |
+| Go | measured; also as a gateway and a services process |
 | Java | measured |
-| Elixir | later |
-| Rust | later |
+| Elixir | gateway, measured |
+| Rust | gateway, measured |
 
 Clients: a web client (plain JavaScript) and an iOS client (SwiftUI), both working against either backend.
 
@@ -64,21 +64,24 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, JDK 25 (found through `java_home`), Xcode 26, and `make tools` once for `buf`, `protoc-gen-go`, `golangci-lint`, `xcodegen`, `swift-protobuf` and `swiftlint`.
+Needs Docker Desktop with at least 8 GB of memory, Go, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters.
 
 ```sh
 make infra-up          # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
 make ci                # everything below, plus lint and unit tests
 make smoke             # the change-data path: an outbox insert reaches Kafka
-make conformance-go    # the conformance tests against the Go backend; conformance-java likewise
+make conformance-go    # the conformance tests against the Go backend; -go-split, -java, -elixir, -rust likewise
 make web-test          # the web client in headless Chrome against the Go backend
 make ios-test          # the iOS client's package tests, headless, against the Go backend
 make ios-build         # the iOS app for the simulator, unsigned
-make measure-go        # the measurement protocol against the Go backend (about 10 minutes); measure-java likewise
+make measure-go        # the measurement protocol against the Go backend (about 10 minutes); -java, -elixir, -rust likewise
 make infra-down        # stop and discard all data
 
 go run ./backends/go/cmd/wrinkle   # the Go backend on ws://localhost:8080/v1/ws
 make java-build && backends/java/build/install/wrinkle/bin/wrinkle   # the Java backend, same address
+backends/go/split.sh               # the Go backend as a gateway and a services process
+backends/elixir/run.sh             # the Elixir gateway with the Go services beside it
+backends/rust/run.sh               # the Rust gateway likewise (make rust-build first)
 make web                           # the web client at http://localhost:8081/clients/web/
 clients/ios/Scripts/run-ios.sh     # the iOS client in an iPhone simulator
 go run ./loadgen -h                # the load generator

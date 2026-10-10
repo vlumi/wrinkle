@@ -22,11 +22,11 @@ From [results/2026-10-10-go-vs-java.md](results/2026-10-10-go-vs-java.md), scale
 
 | Estimate | Measured |
 |---|---|
-| ~100k connections per gateway node | After tuning ([idle memory](results/2026-10-10-idle-memory.md)): Go 29 KiB live per idle connection, about 2.9 GB for 100k; Java 12 KiB live plus a 104 MiB baseline, about 1.2 GB, not counting Netty's direct buffers. Both fit a 16 GB node. Go's remaining cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps; going lower needs a poller-driven library. |
+| ~100k connections per gateway node | Resident memory at 4000 idle connections ([gateways](results/2026-10-11-gateways.md)): Rust 78 MiB, Go about 150, Elixir about 180, Java about 400. By slope, 20 to 35 KiB per connection for all four, which is 2 to 3.5 GB for 100k: every one fits a 16 GB node. Go's cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps ([idle memory](results/2026-10-10-idle-memory.md)); going lower needs a poller-driven library. |
 | ~1.5k writes/s per shard | The single `mysqld` saturated near 1000 messages/s, about 3000 transactions/s: one send plus two fan-out appends per message. Twice the per-shard assumption, on one process; a real shard has its own `mysqld` and disk. |
 | ~3k user-log appends/s per shard | 1000/s sustained alongside the sends on the same `mysqld`. Same order. |
 | ~230 pushes/s per gateway node | 1000/s from one process acting as gateway and fan-out worker, far from any limit. |
-| 100 to 300 ms end to end | 66 ms on Go, 97 ms on Java at 500/s (p99 173 and 491 ms), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
+| 100 to 300 ms end to end | 85 to 110 ms p50 at 500/s across all five implementations from a fresh stack, p99 230 to 574 ms ([gateways](results/2026-10-11-gateways.md)), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
 | JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap, which is also why its per-connection memory needs a fixed heap or a live-set measurement before it is quoted. |
 
 Where the prototype departs from the design, and what it means for extrapolating:
