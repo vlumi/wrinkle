@@ -4,6 +4,8 @@
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { attachmentsText } from "../attachments/model";
+import type { Attachments } from "../gen/wrinkle/v1/content_pb";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import type { Conversation, Member, Message, User } from "../gen/wrinkle/v1/model_pb";
 import { displayName } from "../account/icons";
@@ -33,11 +35,14 @@ export interface Data {
   texts: Texts;
   /** Opened messages that are stickers, by textKey: the sticker's id in hex. Their text is STICKER. */
   stickers: Stickers;
+  /** Opened messages with attachments, by textKey. Their text is the caption, or what they hold. */
+  attachments: AttachmentsByMessage;
   reactions: Reactions;
 }
 
 export type Texts = Record<string, string | null>;
 export type Stickers = Record<string, string>;
+export type AttachmentsByMessage = Record<string, Attachments>;
 
 export const emptyData = (): Data => ({
   conversations: {},
@@ -46,6 +51,7 @@ export const emptyData = (): Data => ({
   users: {},
   texts: {},
   stickers: {},
+  attachments: {},
   reactions: {},
 });
 
@@ -87,6 +93,19 @@ export function withStickers(data: Data, stickers: Stickers): Data {
   return { ...withTexts(data, texts), stickers: { ...data.stickers, ...stickers } };
 }
 
+/** The attachments a message shows; undefined for a message without them. */
+export function attachmentsOf(m: Message, attachments: AttachmentsByMessage): Attachments | undefined {
+  if (m.content.case !== "sealed" || isDeleted(m)) return undefined;
+  return attachments[textKey(m)];
+}
+
+/** Records opened messages with attachments, by textKey, with their text. */
+export function withAttachments(data: Data, attachments: AttachmentsByMessage): Data {
+  if (Object.keys(attachments).length === 0) return data;
+  const texts = Object.fromEntries(Object.entries(attachments).map(([k, a]) => [k, attachmentsText(a)]));
+  return { ...withTexts(data, texts), attachments: { ...data.attachments, ...attachments } };
+}
+
 /** What a deleted message shows in its place. */
 export const REMOVED = "Message removed";
 
@@ -96,6 +115,7 @@ export const isDeleted = (m: Message): boolean => m.deletedAt !== undefined;
 export const tombstone = (m: Message, deletedAt: Timestamp | undefined): Message => ({
   ...m,
   content: { case: undefined },
+  blobIds: [],
   deletedAt: deletedAt ?? create(TimestampSchema),
 });
 

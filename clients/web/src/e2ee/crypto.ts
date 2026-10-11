@@ -1,6 +1,6 @@
 // The end-to-end cryptography of content.proto with WebCrypto: device key
 // pairs, wrapping epoch keys, sealing content and reactions, fingerprints
-// and safety numbers. Nonces are parameters so the shared test vectors can fix them.
+// and safety numbers, and attachment blobs. Nonces are parameters so the shared test vectors can fix them.
 
 /** A byte array WebCrypto accepts. */
 export type Bytes = Uint8Array<ArrayBuffer>;
@@ -9,6 +9,7 @@ const encoder = new TextEncoder();
 const WRAP_INFO = encoder.encode("wrinkle wrap v1");
 const CONTENT_AAD = encoder.encode("wrinkle content v1");
 const REACTION_AAD = encoder.encode("wrinkle reaction v1");
+const BLOB_AAD = encoder.encode("wrinkle blob v1");
 const FINGERPRINT = encoder.encode("wrinkle fingerprint v1");
 // The DER prefix of a PKCS #8 X25519 private key; the 32-byte scalar follows.
 const PKCS8_X25519 = Uint8Array.of(
@@ -214,6 +215,27 @@ export async function openReactions(
   p: ReactionParams,
 ): Promise<Bytes> {
   return decrypt(key, nonce, ciphertext, reactionAad(p));
+}
+
+/** SHA-256 of the bytes. */
+export async function sha256(data: Uint8Array): Promise<Bytes> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", concat(data)));
+}
+
+/** An attachment's file encrypted with its own key: nonce || AES-GCM, as uploaded. */
+export async function encryptBlob(
+  key: Uint8Array,
+  file: Uint8Array,
+  nonce: Uint8Array = randomBytes(NONCE_BYTES),
+): Promise<Bytes> {
+  return concat(nonce, await encrypt(await aesKey(key), nonce, file, BLOB_AAD));
+}
+
+/** The file of a blob as uploaded, after checking its digest; rejects if either does not match. */
+export async function decryptBlob(key: Uint8Array, digest: Uint8Array, blob: Uint8Array): Promise<Bytes> {
+  if (compareBytes(await sha256(blob), digest) !== 0) throw new Error("the attachment does not match its digest");
+  if (blob.length < NONCE_BYTES + 16) throw new Error("the attachment is too short");
+  return decrypt(await aesKey(key), blob.subarray(0, NONCE_BYTES), blob.subarray(NONCE_BYTES), BLOB_AAD);
 }
 
 export interface DeviceKey {

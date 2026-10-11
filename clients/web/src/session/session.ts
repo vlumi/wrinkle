@@ -3,15 +3,21 @@
 // state; the screens read the store.
 
 import { create as createMessage } from "@bufbuild/protobuf";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import { timestampNow } from "@bufbuild/protobuf/wkt";
 import { create } from "zustand";
+import { AttachmentsSchema } from "../gen/wrinkle/v1/content_pb";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { BlobPurpose } from "../gen/wrinkle/v1/messaging_pb";
 import type { DeviceCredentials } from "../gen/wrinkle/v1/messaging_pb";
 import { SealedSchema } from "../gen/wrinkle/v1/model_pb";
 import type { Conversation, Device, Message, User } from "../gen/wrinkle/v1/model_pb";
-import { blobAddress } from "../blobs/blobs";
+import { keep } from "../attachments/files";
+import { cleanName, isValid, MAX_ATTACHMENTS, MAX_FILE_BYTES, thumbnailBudget } from "../attachments/model";
+import { jpegName, prepare } from "../attachments/picture";
+import type { Prepared } from "../attachments/picture";
+import { blobAddress, put } from "../blobs/blobs";
 import { BackendError, Connection } from "../connection/connection";
 import type { ConnectionState } from "../connection/connection";
 import {
@@ -26,6 +32,7 @@ import {
   textKey,
   unread,
   upsertConversation,
+  withAttachments,
   withDeleted,
   withMembers,
   withStickers,
@@ -33,10 +40,18 @@ import {
   withUsers,
 } from "../conversations/model";
 import type { Data } from "../conversations/model";
-import { addPending, confirmPending, failPending, newMessageId } from "../conversations/pending";
+import {
+  addPending,
+  confirmPending,
+  failPending,
+  newMessageId,
+  retryPending,
+  withProgress,
+} from "../conversations/pending";
 import type { PendingByConversation } from "../conversations/pending";
 import { deviceLabel, sortDevices, withDevice } from "../devices/model";
-import { available } from "../e2ee/crypto";
+import { available, encryptBlob, KEY_BYTES, randomBytes, sha256 } from "../e2ee/crypto";
+import type { Bytes } from "../e2ee/crypto";
 import { Keys } from "../e2ee/keys";
 import type { BodyInit, Call } from "../e2ee/keys";
 import { deleteStore, openStore, storeName } from "../e2ee/store";
@@ -117,6 +132,10 @@ export interface Session extends Data {
   showSettings(open: boolean): void;
   loadEarlier(): Promise<void>;
   send(text: string): Promise<void>;
+  /** Sends files, up to 10, with an optional caption, to the current conversation. */
+  sendAttachments(files: File[], caption: string): Promise<void>;
+  /** Sends a message that failed again, as the same message. */
+  retrySend(clientMessageId: string): Promise<void>;
   /** Sends a sticker, by its id in hex, to the current conversation. */
   sendSticker(stickerId: string): Promise<void>;
   /** Uploads a prepared picture as a new sticker, which the backend saves to the palette. */
@@ -165,6 +184,8 @@ let keysReady: Promise<boolean> = Promise.resolve(false);
 let newDevices: NewDevice[] = [];
 /** Messages being opened, by textKey. */
 const opening = new Set<string>();
+/** Sends that failed, to try again, by client message id. */
+const retries = new Map<string, { conversationId: string; run: () => Promise<void> }>();
 /** Reactions being opened, by textKey, user and nonce. */
 const openingReactions = new Set<string>();
 
@@ -271,6 +292,8 @@ export const useSession = create<Session>((set, get) => {
         .then((body) => {
           if (keys !== k || (body === null && get().texts[t] != null)) return;
           if (body?.case === "sticker") set(withStickers(get(), { [t]: hex(body.value.stickerId) }));
+          else if (body?.case === "attachments" && isValid(body.value))
+            set(withAttachments(get(), { [t]: body.value }));
           else set(withTexts(get(), { [t]: body?.case === "text" ? body.value : null }));
         })
         .catch(() => {
@@ -365,6 +388,7 @@ export const useSession = create<Session>((set, get) => {
     keyStore = null;
     keysReady = Promise.resolve(false);
     newDevices = [];
+    retries.clear();
     opening.clear();
     openingReactions.clear();
     saved.forget();
@@ -452,8 +476,8 @@ export const useSession = create<Session>((set, get) => {
     set({ palette: resp.stickers.map((st) => hex(st.stickerId)) });
   }
 
-  /** Uploads a blob for the purpose; resolves with its id. */
-  async function upload(purpose: BlobPurpose, blob: Blob): Promise<Uint8Array> {
+  /** Uploads a blob for the purpose, telling the share sent; resolves with its id. */
+  async function upload(purpose: BlobPurpose, blob: Blob, onProgress?: (share: number) => void): Promise<Uint8Array> {
     const c = conn;
     const address = c && blobAddress(c.url);
     if (!c || !address) throw new Error("not connected");
@@ -461,6 +485,10 @@ export const useSession = create<Session>((set, get) => {
       case: "createUpload",
       value: { purpose, mediaType: blob.type, size: BigInt(blob.size) },
     });
+    if (onProgress) {
+      await put(address + u.uploadPath, blob, onProgress);
+      return u.blobId;
+    }
     // The browser sets Content-Length from the body, which is the size asked for.
     const resp = await fetch(address + u.uploadPath, {
       method: "PUT",
@@ -471,40 +499,136 @@ export const useSession = create<Session>((set, get) => {
     return u.blobId;
   }
 
+  /** Seals a message body and sends it, with the blobs it refers to; resolves with the backend's copy. */
+  async function deliver(
+    conversationId: Uint8Array,
+    clientMessageId: string,
+    body: BodyInit,
+    blobIds: Uint8Array[] = [],
+  ): Promise<Message | undefined> {
+    for (let attempt = 1; ; attempt++) {
+      if (!keys?.ready) throw new Error(available() ? "Encryption is not ready yet." : NO_CRYPTO);
+      const sealed = await keys.seal(conversationId, clientMessageId, body);
+      try {
+        const resp = await call("sendMessage", {
+          case: "sendMessage",
+          value: { conversationId, clientMessageId, sealed, blobIds },
+        });
+        return resp.message;
+      } catch (err) {
+        // Another device made a newer epoch, or the members changed: look again, once.
+        if (attempt > 1 || !(err instanceof BackendError) || err.code !== ErrorCode.FAILED_PRECONDITION) throw err;
+        keys.invalidate(key(conversationId));
+      }
+    }
+  }
+
+  /** Records a sent message as confirmed, with what it says. */
+  function sent(m: Message, opened: (data: Data, t: string) => Data) {
+    const data = opened(noteLatest(addMessages(get(), m.conversationId, [m]), m, true), textKey(m));
+    set({ ...data, pending: confirmPending(get().pending, m.conversationId, m.clientMessageId) });
+  }
+
+  /** Runs a send shown pending; a failure leaves it marked failed, to try again. */
+  async function attempt(conversationId: string, clientMessageId: string, run: () => Promise<void>) {
+    retries.delete(clientMessageId);
+    try {
+      await run();
+    } catch (err) {
+      retries.set(clientMessageId, { conversationId, run });
+      set({ pending: failPending(get().pending, conversationId, clientMessageId) });
+      throw err;
+    }
+  }
+
   /** Seals and sends a message to the current conversation, shown pending until confirmed. */
   async function sendBody(body: BodyInit, text: string, sticker?: string) {
     const id = get().current;
     if (!id || !conn) return;
     const clientMessageId = newMessageId();
     set({ pending: addPending(get().pending, id, { clientMessageId, text, sticker }) });
-    try {
-      const conversationId = fromHex(id);
-      let resp;
-      for (let attempt = 1; ; attempt++) {
-        if (!keys?.ready) throw new Error(available() ? "Encryption is not ready yet." : NO_CRYPTO);
-        const sealed = await keys.seal(conversationId, clientMessageId, body);
-        try {
-          resp = await call("sendMessage", {
-            case: "sendMessage",
-            value: { conversationId, clientMessageId, sealed },
-          });
-          break;
-        } catch (err) {
-          // Another device made a newer epoch, or the members changed: look again, once.
-          if (attempt > 1 || !(err instanceof BackendError) || err.code !== ErrorCode.FAILED_PRECONDITION) throw err;
-          keys.invalidate(id);
-        }
+    await attempt(id, clientMessageId, async () => {
+      const m = await deliver(fromHex(id), clientMessageId, body);
+      if (m) sent(m, (data, t) => (sticker ? withStickers(data, { [t]: sticker }) : withTexts(data, { [t]: text })));
+    });
+  }
+
+  /** A chosen file encrypted, ready to upload. */
+  interface Encrypted extends Prepared {
+    name: string;
+    key: Uint8Array;
+    digest: Uint8Array;
+    /** The blob to upload; dropped once uploaded. */
+    stored: Bytes | null;
+    blobId: Uint8Array | null;
+  }
+
+  async function encrypted(file: File, budget: number): Promise<Encrypted> {
+    const p = await prepare(file, budget);
+    const name = cleanName(p.mediaType !== file.type ? jpegName(file.name) : file.name);
+    if (p.bytes.length > MAX_FILE_BYTES) throw new Error(`${name} is larger than 25 MB.`);
+    const fileKey = randomBytes(KEY_BYTES);
+    const stored = await encryptBlob(fileKey, p.bytes);
+    return { ...p, name, key: fileKey, digest: await sha256(stored), stored, blobId: null };
+  }
+
+  /** Encrypts, uploads and sends files to the current conversation, shown pending with their progress. */
+  async function sendFiles(files: File[], caption: string) {
+    const id = get().current;
+    if (!id || !conn) return;
+    if (files.length === 0 || files.length > MAX_ATTACHMENTS) throw new Error("Send 1 to 10 files at a time.");
+    const clientMessageId = newMessageId();
+    const previews = files.map((f) => (f.type.startsWith("image/") ? URL.createObjectURL(f) : ""));
+    set({
+      pending: addPending(get().pending, id, {
+        clientMessageId,
+        text: caption,
+        attachments: files.map((f, i) => ({ name: f.name, preview: previews[i], progress: 0 })),
+      }),
+    });
+    let ready: Encrypted[] | null = null;
+    await attempt(id, clientMessageId, async () => {
+      if (!ready) {
+        const items = files.map((f) => ({ name: cleanName(f.name), mediaType: f.type }));
+        const images = files.filter((f) => f.type.startsWith("image/")).length;
+        const budget = thumbnailBudget(caption, items, images);
+        ready = [];
+        for (const f of files) ready.push(await encrypted(f, budget));
       }
-      const m = resp.message;
-      if (!m) return;
-      const t = textKey(m);
-      const sent = noteLatest(addMessages(get(), m.conversationId, [m]), m, true);
-      const data = sticker ? withStickers(sent, { [t]: sticker }) : withTexts(sent, { [t]: text });
-      set({ ...data, pending: confirmPending(get().pending, m.conversationId, m.clientMessageId) });
-    } catch (err) {
-      set({ pending: failPending(get().pending, id, clientMessageId) });
-      throw err;
-    }
+      const all = ready;
+      for (const [i, e] of all.entries()) {
+        if (e.blobId) continue;
+        const progress = (share: number) =>
+          set({ pending: withProgress(get().pending, id, clientMessageId, i, share) });
+        e.blobId = await upload(
+          BlobPurpose.ATTACHMENT,
+          new Blob([e.stored!], { type: "application/octet-stream" }),
+          progress,
+        );
+        e.stored = null;
+        progress(1);
+      }
+      const value: MessageInitShape<typeof AttachmentsSchema> = {
+        caption,
+        items: all.map((e) => ({
+          blobId: e.blobId!,
+          key: e.key,
+          digest: e.digest,
+          mediaType: e.mediaType,
+          size: BigInt(e.bytes.length),
+          name: e.name,
+          width: e.width,
+          height: e.height,
+          thumbnail: e.thumbnail,
+        })),
+      };
+      const blobIds = all.map((e) => e.blobId!);
+      const m = await deliver(fromHex(id), clientMessageId, { case: "attachments", value }, blobIds);
+      // The sender has the files already: showing them needs no download.
+      for (const e of all) keep(e.blobId!, new Blob([e.bytes], { type: e.mediaType }));
+      if (m) sent(m, (data, t) => withAttachments(data, { [t]: createMessage(AttachmentsSchema, value) }));
+      for (const url of previews) if (url) URL.revokeObjectURL(url);
+    });
   }
 
   /** Groups listing members right now, so each is asked once at a time. */
@@ -812,6 +936,15 @@ export const useSession = create<Session>((set, get) => {
 
     send(text) {
       return sendBody({ case: "text", value: text }, text);
+    },
+
+    sendAttachments: sendFiles,
+
+    async retrySend(clientMessageId) {
+      const r = retries.get(clientMessageId);
+      if (!r) return;
+      set({ pending: retryPending(get().pending, r.conversationId, clientMessageId) });
+      await attempt(r.conversationId, clientMessageId, r.run);
     },
 
     sendSticker(stickerId) {

@@ -767,6 +767,200 @@ button:disabled {
   font-size: 20px;
 }
 
+.composer .attach-button {
+  padding: 0 14px;
+  font-size: 20px;
+}
+
+/* Attachments: images as thumbnails, a grid for several, and files as rows. */
+
+.attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 -6px 4px;
+  white-space: normal;
+}
+
+.attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 4px;
+  width: min(320px, 70vw);
+}
+
+.attachment-grid.single {
+  display: block;
+  width: auto;
+}
+
+.attachment-image,
+.attachment-pending,
+.chosen-file {
+  position: relative;
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--line);
+}
+
+.attachment-grid:not(.single) .attachment-image,
+.attachment-pending,
+.chosen-file {
+  aspect-ratio: 1;
+}
+
+.attachment-image img,
+.attachment-pending img,
+.chosen-file img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.attachment-grid.single .attachment-image {
+  max-width: 100%;
+}
+
+.attachment-placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.attachment-file {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.attachment-icon {
+  grid-row: span 2;
+  font-size: 22px;
+}
+
+.attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-size {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.attachment-pending .attachment-name,
+.chosen-file .attachment-name {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 4px;
+  font-size: 12px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.attachment-pending progress {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc(100% - 12px);
+  height: 6px;
+}
+
+.message-retry {
+  padding: 0;
+  font-size: 11px;
+  color: var(--accent);
+  background: transparent;
+}
+
+.message.pending.failed {
+  opacity: 1;
+}
+
+.chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px calc(env(safe-area-inset-right) + 12px) 0 calc(env(safe-area-inset-left) + 12px);
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.chosen-file {
+  width: 64px;
+  height: 64px;
+}
+
+.chosen-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #fff;
+  border-radius: 50%;
+  background: rgb(0 0 0 / 0.6);
+}
+
+.chosen-problem {
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
+  background: rgb(0 0 0 / 0.88);
+}
+
+.viewer img {
+  max-width: 100%;
+  max-height: calc(100dvh - 96px);
+  object-fit: contain;
+}
+
+.viewer-preview {
+  filter: blur(6px);
+}
+
+.viewer-status {
+  margin: 0;
+  color: #fff;
+}
+
+.viewer-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .palette-list {
   display: grid;
   margin: 0;

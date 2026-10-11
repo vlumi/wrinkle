@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "../account/Avatar";
+import { AttachmentsView, PendingFiles } from "../attachments/AttachmentsView";
+import { formatSize, MAX_ATTACHMENTS, MAX_CAPTION, MAX_FILE_BYTES } from "../attachments/model";
 import { displayName } from "../account/icons";
 import type { Message, User } from "../gen/wrinkle/v1/model_pb";
 import { GroupAvatar } from "../groups/GroupAvatar";
@@ -13,8 +15,8 @@ import { chips, isEmoji, MAX_OWN, ownEmoji, QUICK, toggled } from "../reactions/
 import type { Entry } from "../reactions/model";
 import { StickerImage } from "../stickers/StickerImage";
 import { StickerPicker } from "../stickers/StickerPicker";
-import { inOrder, isDeleted, isUndecryptable, REMOVED, stickerOf, textKey, textOf } from "./model";
-import type { Stickers, Texts } from "./model";
+import { attachmentsOf, inOrder, isDeleted, isUndecryptable, REMOVED, stickerOf, textKey, textOf } from "./model";
+import type { AttachmentsByMessage, Stickers, Texts } from "./model";
 import type { Pending } from "./pending";
 
 /** How close to the end still counts as scrolled to the bottom, in pixels. */
@@ -30,6 +32,7 @@ export function ConversationView({ id }: { id: string }) {
   const users = useSession((s) => s.users);
   const texts = useSession((s) => s.texts);
   const stickers = useSession((s) => s.stickers);
+  const attachments = useSession((s) => s.attachments);
   const palette = useSession((s) => s.palette);
   const reactions = useSession((s) => s.reactions);
   const complete = useSession((s) => s.complete[id]);
@@ -37,6 +40,8 @@ export function ConversationView({ id }: { id: string }) {
   const show = useSession((s) => s.show);
   const send = useSession((s) => s.send);
   const sendSticker = useSession((s) => s.sendSticker);
+  const sendAttachments = useSession((s) => s.sendAttachments);
+  const retrySend = useSession((s) => s.retrySend);
   const saveSticker = useSession((s) => s.saveSticker);
   const deleteMessage = useSession((s) => s.deleteMessage);
   const react = useSession((s) => s.react);
@@ -165,6 +170,7 @@ export function ConversationView({ id }: { id: string }) {
               message={m}
               texts={texts}
               stickers={stickers}
+              attachments={attachments}
               saved={sticker && !mine && palette ? palette.includes(sticker) : undefined}
               onSave={sticker && !mine && palette ? () => saveSticker(sticker) : undefined}
               mine={mine}
@@ -179,7 +185,11 @@ export function ConversationView({ id }: { id: string }) {
           );
         })}
         {pending?.map((p) => (
-          <PendingItem key={p.clientMessageId} pending={p} />
+          <PendingItem
+            key={p.clientMessageId}
+            pending={p}
+            onRetry={() => retrySend(p.clientMessageId).catch(() => {})}
+          />
         ))}
       </ol>
       {former ? (
@@ -198,6 +208,10 @@ export function ConversationView({ id }: { id: string }) {
             atBottom.current = true;
             sendSticker(sticker).catch(() => {});
           }}
+          onAttach={(files, caption) => {
+            atBottom.current = true;
+            sendAttachments(files, caption).catch(() => {});
+          }}
         />
       )}
     </section>
@@ -208,6 +222,7 @@ function MessageItem({
   message: m,
   texts,
   stickers,
+  attachments,
   saved,
   onSave,
   mine,
@@ -222,6 +237,7 @@ function MessageItem({
   message: Message;
   texts: Texts;
   stickers: Stickers;
+  attachments: AttachmentsByMessage;
   /** For others' stickers: whether the sticker is in the user's palette. */
   saved?: boolean;
   onSave?: () => Promise<void>;
@@ -254,10 +270,12 @@ function MessageItem({
   const removed = isDeleted(m);
   const undecryptable = isUndecryptable(m, texts);
   const sticker = stickerOf(m, stickers);
+  const files = attachmentsOf(m, attachments);
   const classes = [
     "message",
     mine && "mine",
     sticker && "sticker",
+    files && "with-attachments",
     removed && "removed",
     undecryptable && "undecryptable",
     open && "open",
@@ -281,6 +299,11 @@ function MessageItem({
         <span className="text">
           <StickerImage id={sticker} size={STICKER_SIZE} />
         </span>
+      ) : files ? (
+        <>
+          <AttachmentsView attachments={files} />
+          {files.caption && <span className="text">{files.caption}</span>}
+        </>
       ) : (
         <span className="text">{removed ? REMOVED : textOf(m, texts)}</span>
       )}
@@ -444,19 +467,85 @@ function ReactionPicker({ own, onPick }: { own: string[]; onPick(emoji: string):
   );
 }
 
-function PendingItem({ pending: p }: { pending: Pending }) {
+function PendingItem({ pending: p, onRetry }: { pending: Pending; onRetry(): void }) {
+  const classes = ["message", "mine", "pending", p.sticker && "sticker", p.failed && "failed"]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <li className={p.sticker ? "message mine sticker pending" : "message mine pending"} data-testid="pending">
-      <span className="text">{p.sticker ? <StickerImage id={p.sticker} size={STICKER_SIZE} /> : p.text}</span>
-      <span className="meta">{p.failed ? "failed" : "sending…"}</span>
+    <li className={classes} data-testid="pending">
+      {p.attachments && <PendingFiles files={p.attachments} />}
+      {p.sticker ? (
+        <span className="text">
+          <StickerImage id={p.sticker} size={STICKER_SIZE} />
+        </span>
+      ) : (
+        p.text && <span className="text">{p.text}</span>
+      )}
+      <span className="meta">
+        {p.failed ? (
+          <>
+            failed ·{" "}
+            <button type="button" className="message-retry" data-testid="retry" onClick={onRetry}>
+              Retry
+            </button>
+          </>
+        ) : (
+          "sending…"
+        )}
+      </span>
     </li>
   );
 }
 
-function Composer({ onSend, onSticker }: { onSend(text: string): void; onSticker(id: string): void }) {
+/** A file chosen to send, with its preview while chosen. */
+interface Chosen {
+  file: File;
+  preview: string;
+}
+
+function Composer({
+  onSend,
+  onSticker,
+  onAttach,
+}: {
+  onSend(text: string): void;
+  onSticker(id: string): void;
+  onAttach(files: File[], caption: string): void;
+}) {
   const [text, setText] = useState("");
   const [picking, setPicking] = useState(false);
+  const [chosen, setChosen] = useState<Chosen[]>([]);
+  const [problem, setProblem] = useState("");
+  const input = useRef<HTMLInputElement>(null);
 
+  function choose(files: FileList | null) {
+    if (!files) return;
+    const list = [...files];
+    // Images are scaled down before sending; other files go as they are.
+    const large = list.filter((f) => !f.type.startsWith("image/") && f.size > MAX_FILE_BYTES);
+    const fitting = list.filter((f) => !large.includes(f));
+    const room = MAX_ATTACHMENTS - chosen.length;
+    const added = fitting.slice(0, room).map((file) => ({
+      file,
+      preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : "",
+    }));
+    setChosen([...chosen, ...added]);
+    setProblem(
+      large.length > 0
+        ? `${large[0].name} is larger than ${formatSize(MAX_FILE_BYTES)}.`
+        : fitting.length > room
+          ? `Up to ${MAX_ATTACHMENTS} files at a time.`
+          : "",
+    );
+  }
+
+  function remove(c: Chosen) {
+    if (c.preview) URL.revokeObjectURL(c.preview);
+    setChosen(chosen.filter((x) => x !== c));
+    setProblem("");
+  }
+
+  const ready = chosen.length > 0 || !!text.trim();
   return (
     <>
       {picking && (
@@ -468,11 +557,44 @@ function Composer({ onSend, onSticker }: { onSend(text: string): void; onSticker
           onClose={() => setPicking(false)}
         />
       )}
+      {(chosen.length > 0 || problem) && (
+        <div className="chosen" data-testid="chosen">
+          {chosen.map((c, i) => (
+            <span key={i} className="chosen-file" data-testid="chosen-file" title={c.file.name}>
+              {c.preview ? (
+                <img src={c.preview} alt={c.file.name} />
+              ) : (
+                <span className="attachment-name">{c.file.name}</span>
+              )}
+              <button
+                type="button"
+                className="chosen-remove"
+                data-testid="remove-chosen"
+                aria-label={`Remove ${c.file.name}`}
+                onClick={() => remove(c)}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+          {problem && <span className="chosen-problem">{problem}</span>}
+        </div>
+      )}
       <form
         className="composer"
         onSubmit={(e) => {
           e.preventDefault();
           const t = text.trim();
+          if (chosen.length > 0) {
+            // The previews go to the pending message, which makes its own.
+            for (const c of chosen) if (c.preview) URL.revokeObjectURL(c.preview);
+            const files = chosen.map((c) => c.file);
+            setChosen([]);
+            setProblem("");
+            setText("");
+            onAttach(files, t);
+            return;
+          }
           if (!t) return;
           setText("");
           onSend(t);
@@ -488,16 +610,37 @@ function Composer({ onSend, onSticker }: { onSend(text: string): void; onSticker
         >
           ☺
         </button>
+        <button
+          type="button"
+          className="attach-button secondary"
+          data-testid="attach"
+          aria-label="Attach files"
+          disabled={chosen.length >= MAX_ATTACHMENTS}
+          onClick={() => input.current?.click()}
+        >
+          +
+        </button>
+        <input
+          ref={input}
+          type="file"
+          multiple
+          hidden
+          data-testid="attach-input"
+          onChange={(e) => {
+            choose(e.currentTarget.files);
+            e.currentTarget.value = "";
+          }}
+        />
         <input
           data-testid="text"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Message"
-          maxLength={4000}
+          placeholder={chosen.length > 0 ? "Caption" : "Message"}
+          maxLength={chosen.length > 0 ? MAX_CAPTION : 4000}
           autoComplete="off"
           enterKeyHint="send"
         />
-        <button type="submit" disabled={!text.trim()}>
+        <button type="submit" disabled={!ready}>
           Send
         </button>
       </form>

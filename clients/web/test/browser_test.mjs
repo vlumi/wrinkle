@@ -6,7 +6,9 @@
 // then three users in a group: members added, messages, a topic change,
 // read counts and a removal, after which the group has a new key epoch.
 // Reactions in both, toggled on and off; a sticker made, sent, saved, and
-// the palette reordered. Every message and reaction is end-to-end encrypted.
+// the palette reordered; two pictures and a file sent with a caption,
+// viewed, downloaded and deleted. Every message, reaction and attachment is
+// end-to-end encrypted.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -848,6 +850,97 @@ await hank.waitFor(
     ` && !!${stickerMessage(ginaSticker)}?.querySelector('[data-testid="save-sticker"]')`,
 );
 check(true, "after a reload the palette is as hank left it, and gina's sticker can be saved again");
+// Attachments: Gina sends two pictures and a file with a caption; Hank sees
+// the thumbnails and the caption, opens the larger picture, downloads the
+// file, and sees them go when Gina deletes the message.
+const FILE_TEXT = "attached text " + suffix;
+/** Chooses a large and a small picture and a text file in the attach input. */
+const chooseAttachments = `Promise.all([[2400, 1800, "#39c"], [400, 300, "#c93"]].map(([w, h, color]) => new Promise((resolve) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = color;
+  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(w / 4, h / 4, w / 2, h / 2);
+  canvas.toBlob((blob) => resolve(new File([blob], "picture-" + w + ".png", { type: "image/png" })), "image/png");
+}))).then((pictures) => {
+  const input = ${q("attach-input")};
+  const files = new DataTransfer();
+  for (const f of pictures) files.items.add(f);
+  files.items.add(new File([${JSON.stringify(FILE_TEXT)}], "notes.txt", { type: "text/plain" }));
+  input.files = files.files;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+})`;
+const CAPTION = "three things";
+const attachmentMessage = `${qa("message")}.find(li => li.querySelector(".text")?.textContent === ${JSON.stringify(CAPTION)})`;
+/** The message's thumbnails, each loaded, and its file row. */
+const attachmentsShown = `(() => { const li = ${attachmentMessage}; if (!li) return false;
+  const images = [...li.querySelectorAll('[data-testid="attachment-image"] img')];
+  const files = [...li.querySelectorAll('[data-testid="attachment-file"]')];
+  return images.length === 2 && images.every(img => img.complete && img.naturalWidth > 0) && files.length === 1 && files[0].textContent.includes("notes.txt"); })()`;
+
+await gina.eval(chooseAttachments);
+await gina.waitFor(`${qa("chosen-file")}.length === 3`);
+await gina.eval(`(${qa("remove-chosen")}[2].click(), true)`);
+await gina.waitFor(`${qa("chosen-file")}.length === 2`);
+check(true, "gina chose two pictures and a file, and can remove one before sending");
+await gina.eval(chooseAttachments);
+await gina.waitFor(`${qa("chosen-file")}.length === 5`);
+// The second choice's pictures go, its file stays.
+for (const n of [4, 3]) {
+  await gina.eval(`(${qa("remove-chosen")}[2].click(), true)`);
+  await gina.waitFor(`${qa("chosen-file")}.length === ${n}`);
+}
+await fill(gina, "text", CAPTION);
+await gina.waitFor(`${attachmentsShown} && ${qa("pending")}.length === 0 && !${q("chosen")}`, 30000);
+check(true, "gina sent them with a caption; her copy shows the thumbnails and the file");
+await hank.waitFor(attachmentsShown, 30000);
+check(
+  await hank.eval(
+    `[...${attachmentMessage}.querySelectorAll('[data-testid="attachment-image"] img')].every(img => Math.max(img.naturalWidth, img.naturalHeight) <= 320)`,
+  ),
+  "hank sees the caption and the pictures' thumbnails, at most 320 pixels a side",
+);
+await hank.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".last").textContent === ${JSON.stringify(`${ginaName}: ${CAPTION}`)})`,
+);
+check(true, "hank's list previews the caption");
+await hank.eval(`(${attachmentMessage}.querySelector('[data-testid="attachment-image"]').click(), true)`);
+await hank.waitFor(
+  `(() => { const img = ${q("viewer-image")}; return !!img && img.complete && img.naturalWidth === 2048 && img.naturalHeight === 1536; })()`,
+  30000,
+);
+check(true, "hank opens the larger picture: it downloads, decrypts and shows at 2048 × 1536");
+await hank.eval(click('[data-testid="close-viewer"]'));
+await hank.waitFor(`!${q("viewer")}`);
+// Downloads go through a link to an object URL; the test reads it instead.
+await hank.eval(`(() => {
+  window.saved = [];
+  const click = HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click = function () {
+    if (!this.download) return click.call(this);
+    const name = this.download;
+    fetch(this.href).then((r) => r.text()).then((text) => window.saved.push({ name, text }));
+  };
+  return true;
+})()`);
+await hank.eval(`(${attachmentMessage}.querySelector('[data-testid="attachment-file"]').click(), true)`);
+await hank.waitFor(`window.saved.length === 1`, 30000);
+check(
+  await hank.eval(`window.saved[0].name === "notes.txt" && window.saved[0].text === ${JSON.stringify(FILE_TEXT)}`),
+  "hank downloads the file: it decrypts to the bytes gina sent",
+);
+await gina.eval(`(${attachmentMessage}.querySelector('[data-testid="delete-message"]').click(), true)`);
+await gina.waitFor(`!!${q("confirm-delete")}`);
+await gina.eval(click('[data-testid="confirm-delete"]'));
+for (const p of [gina, hank]) {
+  await p.waitFor(`!${attachmentMessage} && !document.querySelector('.messages [data-testid="attachment-image"]')`);
+}
+check(true, "gina deleted the message; the attachments are gone for both");
+
 for (const p of [gina, hank, ivy]) {
   check(await p.eval(`!${q("error")}`), `${p.name} saw no error banner`);
 }

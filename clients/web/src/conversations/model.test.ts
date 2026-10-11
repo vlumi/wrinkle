@@ -1,4 +1,5 @@
 import { create } from "@bufbuild/protobuf";
+import { AttachmentsSchema } from "../gen/wrinkle/v1/content_pb";
 import { EventSchema } from "../gen/wrinkle/v1/event_pb";
 import {
   ConversationKind,
@@ -13,6 +14,7 @@ import { hex } from "../ids";
 import {
   addHistory,
   applyEvent,
+  attachmentsOf,
   byActivity,
   emptyData,
   inOrder,
@@ -25,6 +27,7 @@ import {
   UNDECRYPTABLE,
   unread,
   upsertConversation,
+  withAttachments,
   withDeleted,
   withMembers,
   withStickers,
@@ -324,6 +327,23 @@ test("a sticker message shows its sticker, and reads as a sticker in the list", 
   expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe(STICKER);
   const deleted = withDeleted(next, c7, 1n);
   expect(stickerOf(deleted.messages[k7]["1"], deleted.stickers)).toBeUndefined();
+});
+
+test("a message with attachments shows them, and reads as its caption or what it holds", () => {
+  const data = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
+  const m = data.messages[k7]["1"];
+  const photo = { blobId: id(9), mediaType: "image/jpeg", width: 4, height: 3, name: "a.jpg" };
+  const a = create(AttachmentsSchema, { items: [photo, photo] });
+  const next = withAttachments(data, { [textKey(m)]: a });
+  expect(attachmentsOf(m, next.attachments)).toBe(a);
+  expect(textOf(m, next.texts)).toBe("2 photos");
+  expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe("2 photos");
+  const captioned = withAttachments(data, {
+    [textKey(m)]: create(AttachmentsSchema, { items: [photo], caption: "hi" }),
+  });
+  expect(textOf(m, captioned.texts)).toBe("hi");
+  const deleted = withDeleted(next, c7, 1n);
+  expect(attachmentsOf(deleted.messages[k7]["1"], deleted.attachments)).toBeUndefined();
 });
 
 test("reaction events, history and a deletion", () => {

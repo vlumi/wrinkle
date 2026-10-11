@@ -6,10 +6,21 @@ import { key } from "./model";
 
 export interface Pending {
   clientMessageId: string;
+  /** The text, or the caption of attachments. */
   text: string;
   /** A sticker's id in hex, for a sticker message. */
   sticker?: string;
+  attachments?: PendingFile[];
   failed?: boolean;
+}
+
+/** A file being sent. */
+export interface PendingFile {
+  name: string;
+  /** An object URL of the chosen image, empty for other files. */
+  preview: string;
+  /** The share uploaded, 0 to 1. */
+  progress: number;
 }
 
 export type PendingByConversation = Record<string, Pending[]>;
@@ -38,13 +49,44 @@ export function confirmPending(
   return { ...pending, [id]: list.filter((p) => p.clientMessageId !== clientMessageId) };
 }
 
+function changed(
+  pending: PendingByConversation,
+  conversationId: string,
+  clientMessageId: string,
+  change: (p: Pending) => Pending,
+): PendingByConversation {
+  const list = pending[conversationId];
+  if (!list?.some((p) => p.clientMessageId === clientMessageId)) return pending;
+  return { ...pending, [conversationId]: list.map((p) => (p.clientMessageId === clientMessageId ? change(p) : p)) };
+}
+
 export function failPending(
   pending: PendingByConversation,
   conversationId: string,
   clientMessageId: string,
 ): PendingByConversation {
-  const list = (pending[conversationId] ?? []).map((p) =>
-    p.clientMessageId === clientMessageId ? { ...p, failed: true } : p,
-  );
-  return { ...pending, [conversationId]: list };
+  return changed(pending, conversationId, clientMessageId, (p) => ({ ...p, failed: true }));
+}
+
+/** Shows a failed message as sending again. */
+export function retryPending(
+  pending: PendingByConversation,
+  conversationId: string,
+  clientMessageId: string,
+): PendingByConversation {
+  return changed(pending, conversationId, clientMessageId, (p) => ({ ...p, failed: false }));
+}
+
+/** Records the share of a pending message's file uploaded. */
+export function withProgress(
+  pending: PendingByConversation,
+  conversationId: string,
+  clientMessageId: string,
+  index: number,
+  progress: number,
+): PendingByConversation {
+  return changed(pending, conversationId, clientMessageId, (p) => ({
+    ...p,
+    attachments: p.attachments?.map((f, i) => (i === index ? { ...f, progress } : f)),
+  }));
 }
