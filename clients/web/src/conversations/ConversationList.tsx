@@ -9,7 +9,7 @@ import { isGroup } from "../groups/model";
 import type { Users } from "../groups/model";
 import { NewGroup } from "../groups/NewGroup";
 import { useSession } from "../session/session";
-import { byActivity, key, preview, unread } from "./model";
+import { byActivity, isDeleted, key, preview, unread } from "./model";
 
 export function ConversationList() {
   const conversations = useSession((s) => s.conversations);
@@ -123,7 +123,9 @@ function ConversationRow({
           </span>
         )}
       </span>
-      <span className="last">{preview(c, me, users)}</span>
+      <span className={c.lastMessage && isDeleted(c.lastMessage) ? "last removed" : "last"}>
+        {preview(c, me, users)}
+      </span>
     </button>
   );
 }

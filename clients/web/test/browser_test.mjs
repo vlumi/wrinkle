@@ -1,6 +1,6 @@
 // Drives the web client in headless Chrome over the DevTools protocol:
 // two users register in two pages, send a message each way, see a read
-// receipt, a rename and a picture, sign a second device in and out from the
+// receipt, a deleted message, a rename and a picture, sign a second device in and out from the
 // first, delete an account, reload, sign out and in again; then three
 // users in a group: members added, messages, a topic change, read counts
 // and a removal.
@@ -262,10 +262,51 @@ await bob.waitFor(
 );
 check(true, "alice marked the reply read while viewing");
 
+// Alice deletes a message of her own: an in-page confirmation, then both
+// sides show it removed, in the conversation and in the list.
+const ownWith = (body) =>
+  `${qa("message")}.find(li => li.classList.contains("mine") && li.querySelector(".text").textContent === ${JSON.stringify(body)})`;
+await fill(alice, "text", "oops wrong chat");
+await bob.waitFor(`${qa("message")}.some(li => li.querySelector(".text").textContent === "oops wrong chat")`);
+await alice.waitFor(`!!${ownWith("oops wrong chat")}`);
+check(
+  await alice.eval(
+    `${qa("message")}.filter(li => !li.classList.contains("mine")).every(li => !li.querySelector('[data-testid="delete-message"]'))`,
+  ),
+  "others' messages have no delete action",
+);
+await alice.eval(`(${ownWith("oops wrong chat")}.click(), true)`);
+await alice.waitFor(
+  `(() => { const b = ${ownWith("oops wrong chat")}?.querySelector('[data-testid="delete-message"]'); return !!b && b.getClientRects().length > 0 && getComputedStyle(b).visibility === "visible"; })()`,
+);
+await alice.eval(`(${ownWith("oops wrong chat")}.querySelector('[data-testid="delete-message"]').click(), true)`);
+await alice.waitFor(`!!${q("confirm-delete")}`);
+await alice.eval(click('[data-testid="cancel-delete"]'));
+await alice.waitFor(`!${q("confirm-delete")} && !!${ownWith("oops wrong chat")}`);
+check(true, "a tap shows the delete action on her own message; cancelling keeps it");
+await alice.eval(`(${ownWith("oops wrong chat")}.querySelector('[data-testid="delete-message"]').click(), true)`);
+await alice.waitFor(`!!${q("confirm-delete")}`);
+await alice.eval(click('[data-testid="confirm-delete"]'));
+const removedShown = `${qa("message")}.some(li => li.classList.contains("removed") && li.querySelector(".text").textContent === "Message removed") && !${qa("message")}.some(li => li.textContent.includes("oops wrong chat"))`;
+await alice.waitFor(removedShown);
+check(
+  await alice.eval(`!document.querySelector('.message.removed [data-testid="delete-message"]')`),
+  "alice deleted her message after confirming in the page; it shows as removed, without a delete action",
+);
+await bob.waitFor(removedShown);
+await bob.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".last").textContent === "Message removed")`,
+);
+check(true, "bob sees the message removed, in the conversation and the list's preview");
+
 // Back to the list on the phone.
 await alice.eval(click(".back"));
 await alice.waitFor(visible(".list"));
 check(await alice.eval(`!${q("peer-name")}`), "the back button returns to the list");
+check(
+  await alice.eval(`document.querySelector(".row .last").textContent === "Message removed"`),
+  "alice's list previews the removed message",
+);
 
 // Bob renames himself and picks an icon; Alice sees both.
 await bob.eval(click('[data-testid="open-settings"]'));
@@ -385,8 +426,9 @@ await alice.send("Page.reload");
 await sleep(1500);
 await alice.waitFor(`${text("status")} === "online"`);
 await alice.eval(click(".row"));
-await alice.waitFor(`${qa("message")}.length === 2`);
-check((await alice.eval(text("me"))) === aliceName, "alice reloaded as herself and sees both messages from history");
+await alice.waitFor(`${qa("message")}.length === 3`);
+check((await alice.eval(text("me"))) === aliceName, "alice reloaded as herself and sees the messages from history");
+check(await alice.eval(removedShown), "the removed message stays removed in history");
 const revoked = await alice.eval(`localStorage.getItem("wrinkle.credentials")`);
 
 // Signed out, Alice can pick the gateway she used with one click.
@@ -516,6 +558,12 @@ await fill(ivy, "text", "ivy here");
 await gina.waitFor(fromSender(hankName, "hi from hank") + " && " + fromSender(ivyName, "ivy here"));
 await hank.waitFor(fromSender(ivyName, "ivy here"));
 check(true, "messages from several members arrive with their senders' names");
+check(
+  await gina.eval(
+    `${qa("notice")}.every(li => !li.querySelector('[data-testid="delete-message"]')) && ${qa("message")}.every(li => !!li.querySelector('[data-testid="delete-message"]') === li.classList.contains("mine"))`,
+  ),
+  "in the group, only gina's own messages have a delete action; notices and others' messages none",
+);
 await hank.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.querySelector(".last").textContent === ${JSON.stringify(`${ivyName}: ivy here`)})`,
 );

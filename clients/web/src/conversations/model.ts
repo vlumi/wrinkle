@@ -1,6 +1,9 @@
 // The device's view of its conversations, and how events change it. Pure
 // functions over plain data, so they are tested without a connection.
 
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import type { Conversation, Member, Message, User } from "../gen/wrinkle/v1/model_pb";
 import { displayName } from "../account/icons";
@@ -30,6 +33,22 @@ export const emptyData = (): Data => ({ conversations: {}, messages: {}, members
 
 /** A message's text; empty for a notice. */
 export const textOf = (m: Message): string => (m.content.case === "text" ? m.content.value : "");
+
+/** What a deleted message shows in its place. */
+export const REMOVED = "Message removed";
+
+export const isDeleted = (m: Message): boolean => m.deletedAt !== undefined;
+
+/** The message as deleted: its content gone. */
+export const tombstone = (m: Message, deletedAt: Timestamp | undefined): Message => ({
+  ...m,
+  content: { case: undefined },
+  deletedAt: deletedAt ?? create(TimestampSchema),
+});
+
+/** Keeps a known deletion over a copy of the message from before it. */
+const newer = (old: Message | undefined, m: Message): Message =>
+  old && isDeleted(old) && !isDeleted(m) && old.seq === m.seq ? tombstone(m, old.deletedAt) : m;
 
 /** The key of a conversation, or of a message by its seq. */
 export const key = (id: Uint8Array | bigint): string => (typeof id === "bigint" ? id.toString() : hex(id));
@@ -90,7 +109,7 @@ export function addMessages(data: Data, conversationId: Uint8Array, messages: Me
   if (messages.length === 0) return data;
   const id = key(conversationId);
   const known = { ...(data.messages[id] ?? {}) };
-  for (const m of messages) known[key(m.seq)] = m;
+  for (const m of messages) known[key(m.seq)] = newer(known[key(m.seq)], m);
   return { ...data, messages: { ...data.messages, [id]: known } };
 }
 
@@ -101,9 +120,28 @@ export function noteLatest(data: Data, m: Message, readByMe: boolean): Data {
   return withConversation(data, {
     ...c,
     lastSeq: m.seq,
-    lastMessage: m,
+    lastMessage: c.lastMessage ? newer(c.lastMessage, m) : m,
     readSeq: readByMe ? max(m.seq, c.readSeq) : c.readSeq,
   });
+}
+
+/** Marks a message deleted, in the conversation and in the list's preview. */
+export function withDeleted(data: Data, conversationId: Uint8Array, seq: bigint, deletedAt?: Timestamp): Data {
+  const id = key(conversationId);
+  let next = data;
+  const m = data.messages[id]?.[key(seq)];
+  if (m && !isDeleted(m)) {
+    next = {
+      ...next,
+      messages: { ...next.messages, [id]: { ...next.messages[id], [key(seq)]: tombstone(m, deletedAt) } },
+    };
+  }
+  const c = next.conversations[id];
+  const last = c?.lastMessage;
+  if (c && last && last.seq === seq && !isDeleted(last)) {
+    next = withConversation(next, { ...c, lastMessage: tombstone(last, deletedAt) });
+  }
+  return next;
 }
 
 export interface Applied {
@@ -157,6 +195,11 @@ export function applyEvent(data: Data, event: Event, me: Uint8Array): Applied {
         unknownConversation: false,
       };
     }
+    case "messageDeleted": {
+      const d = event.body.value;
+      const known = !!data.conversations[key(d.conversationId)];
+      return { data: withDeleted(data, d.conversationId, d.seq, d.deletedAt), unknownConversation: !known };
+    }
     case "profile": {
       const u = event.body.value.user;
       return { data: u ? withPeer(data, u) : data, unknownConversation: false };
@@ -192,6 +235,7 @@ export function preview(c: Conversation, me: Uint8Array | undefined, users: User
   if (!m) return "No messages yet";
   const notice = noticeOf(m);
   if (notice) return noticeText(notice, m.senderUserId, me, users);
+  if (isDeleted(m)) return REMOVED;
   const text = textOf(m);
   if (sameId(m.senderUserId, me)) return `You: ${text}`;
   const sender = isGroup(c) ? users[hex(m.senderUserId)] : undefined;

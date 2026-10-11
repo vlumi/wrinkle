@@ -7,7 +7,7 @@ import { GroupInfo } from "../groups/GroupInfo";
 import { isFormer, isGroup, noticeOf, noticeText, readBy } from "../groups/model";
 import { hex, sameId } from "../ids";
 import { useSession } from "../session/session";
-import { inOrder, textOf } from "./model";
+import { inOrder, isDeleted, REMOVED, textOf } from "./model";
 import type { Pending } from "./pending";
 
 /** How close to the end still counts as scrolled to the bottom, in pixels. */
@@ -23,6 +23,7 @@ export function ConversationView({ id }: { id: string }) {
   const me = useSession((s) => s.me);
   const show = useSession((s) => s.show);
   const send = useSession((s) => s.send);
+  const deleteMessage = useSession((s) => s.deleteMessage);
   const loadEarlier = useSession((s) => s.loadEarlier);
   const scroller = useRef<HTMLOListElement>(null);
   // Whether to follow new messages: not while the user reads further up.
@@ -45,10 +46,13 @@ export function ConversationView({ id }: { id: string }) {
   if (group && info) return <GroupInfo id={id} onClose={() => setInfo(false)} />;
   const oldest = messages[0];
   const peerName = displayName(conversation.peer);
-  const lastMine = [...messages].reverse().find((m) => !noticeOf(m) && sameId(m.senderUserId, me?.userId));
+  const lastMine = [...messages]
+    .reverse()
+    .find((m) => !noticeOf(m) && !isDeleted(m) && sameId(m.senderUserId, me?.userId));
 
   /** What the user's own message shows about who read it. */
   function receipt(m: Message): string {
+    if (isDeleted(m)) return "";
     if (!group) return conversation.peerReadSeq >= m.seq ? "read" : "";
     if (m !== lastMine) return "";
     const n = readBy(members, me?.userId, m.seq);
@@ -122,6 +126,7 @@ export function ConversationView({ id }: { id: string }) {
               mine={mine}
               sender={group && !mine ? (users[hex(m.senderUserId)] ?? null) : undefined}
               receipt={mine ? receipt(m) : ""}
+              onDelete={mine && !isDeleted(m) ? () => deleteMessage(m.seq) : undefined}
             />
           );
         })}
@@ -152,26 +157,73 @@ function MessageItem({
   mine,
   sender,
   receipt,
+  onDelete,
 }: {
   message: Message;
   mine: boolean;
   /** In groups, others' messages show who sent them; null for a sender not known yet. */
   sender?: User | null;
   receipt: string;
+  /** Present for the user's own messages that can still be deleted. */
+  onDelete?: () => Promise<void>;
 }) {
+  // Actions show on hover, or after a tap on touch screens.
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const removed = isDeleted(m);
+  const classes = ["message", mine && "mine", removed && "removed", open && "open"].filter(Boolean).join(" ");
   return (
-    <li className={mine ? "message mine" : "message"} data-testid="message">
+    <li className={classes} data-testid="message" onClick={onDelete ? () => setOpen(!open) : undefined}>
       {sender !== undefined && (
         <span className="sender" data-testid="sender">
           <Avatar user={sender} />
           <span className="sender-name">{sender ? displayName(sender) : "…"}</span>
         </span>
       )}
-      <span className="text">{textOf(m)}</span>
+      <span className="text">{removed ? REMOVED : textOf(m)}</span>
       <span className="meta">
+        {onDelete && !confirming && (
+          <button
+            className="message-delete"
+            data-testid="delete-message"
+            aria-label="Delete message"
+            onClick={(e) => {
+              e.stopPropagation();
+              setFailed(false);
+              setConfirming(true);
+            }}
+          >
+            Delete
+          </button>
+        )}
         {sentTime(m)}
         {receipt ? ` · ${receipt}` : ""}
       </span>
+      {onDelete && confirming && (
+        <span
+          className="message-confirm"
+          role="alertdialog"
+          aria-label="Delete the message for everyone?"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span>{failed ? "Could not delete. Try again?" : "Delete for everyone?"}</span>
+          <button
+            className="danger"
+            data-testid="confirm-delete"
+            onClick={() =>
+              onDelete().catch(() => {
+                setFailed(true);
+              })
+            }
+          >
+            Delete
+          </button>
+          <button className="secondary" data-testid="cancel-delete" onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </span>
+      )}
     </li>
   );
 }

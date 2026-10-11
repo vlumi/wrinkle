@@ -2,6 +2,7 @@
 // flow of events into the model. Connection details live outside React
 // state; the screens read the store.
 
+import { timestampNow } from "@bufbuild/protobuf/wkt";
 import { create } from "zustand";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
@@ -19,6 +20,7 @@ import {
   noteLatest,
   unread,
   upsertConversation,
+  withDeleted,
   withMembers,
   withUsers,
 } from "../conversations/model";
@@ -81,6 +83,8 @@ export interface Session extends Data {
   showSettings(open: boolean): void;
   loadEarlier(): Promise<void>;
   send(text: string): Promise<void>;
+  /** Deletes one of the user's own messages in the current conversation, for everyone. */
+  deleteMessage(seq: bigint): Promise<void>;
   markReadIfVisible(): void;
   clearError(): void;
 }
@@ -537,6 +541,14 @@ export const useSession = create<Session>((set, get) => {
         set({ pending: failPending(get().pending, id, clientMessageId) });
         throw err;
       }
+    },
+
+    async deleteMessage(seq) {
+      const c = current();
+      await conn!.call("deleteMessage", { case: "deleteMessage", value: { conversationId: c.conversationId, seq } });
+      // The event follows; showing it now does not wait for it.
+      const data = withDeleted(get(), c.conversationId, seq, timestampNow());
+      set({ conversations: data.conversations, messages: data.messages });
     },
 
     markReadIfVisible() {

@@ -14,6 +14,7 @@ import {
   byActivity,
   emptyData,
   inOrder,
+  isDeleted,
   preview,
   textOf,
   unread,
@@ -115,6 +116,72 @@ test("another user's profile event changes nothing", () => {
     body: { case: "profile", value: { user: { userId: id(3), name: "carol" } } },
   });
   expect(applyEvent(data, profile, me).data).toBe(data);
+});
+
+describe("deleted messages", () => {
+  const deleted = (seq: bigint, conversationId = c7) =>
+    create(EventSchema, {
+      body: { case: "messageDeleted", value: { conversationId, seq, deletedAt: { seconds: 50n } } },
+    });
+
+  test("a deletion tombstones the message and the latest preview", () => {
+    let data = oneConversation();
+    for (const seq of [1n, 2n]) data = applyEvent(data, messageEvent(seq, me), me).data;
+    const { data: next, unknownConversation } = applyEvent(data, deleted(2n), me);
+    expect(unknownConversation).toBe(false);
+    const m = next.messages[k7]["2"];
+    expect(isDeleted(m)).toBe(true);
+    expect(m.deletedAt?.seconds).toBe(50n);
+    expect(textOf(m)).toBe("");
+    expect(textOf(next.messages[k7]["1"])).toBe("m1");
+    expect(preview(next.conversations[k7], me, next.users)).toBe("Message removed");
+  });
+
+  test("deleting an earlier message leaves the preview", () => {
+    let data = oneConversation();
+    for (const seq of [1n, 2n]) data = applyEvent(data, messageEvent(seq, peer), me).data;
+    data = applyEvent(data, deleted(1n), me).data;
+    expect(isDeleted(data.messages[k7]["1"])).toBe(true);
+    expect(preview(data.conversations[k7], me, data.users)).toBe("m2");
+  });
+
+  test("a later message replaces the removed preview", () => {
+    let data = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
+    data = applyEvent(data, deleted(1n), me).data;
+    data = applyEvent(data, messageEvent(2n, peer), me).data;
+    expect(preview(data.conversations[k7], me, data.users)).toBe("m2");
+  });
+
+  test("an older copy of a deleted message does not bring its text back", () => {
+    let data = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
+    data = applyEvent(data, deleted(1n), me).data;
+    data = applyEvent(data, messageEvent(1n, peer), me).data;
+    expect(isDeleted(data.messages[k7]["1"])).toBe(true);
+    expect(preview(data.conversations[k7], me, data.users)).toBe("Message removed");
+  });
+
+  test("a deletion in an unknown conversation asks for the list", () => {
+    expect(applyEvent(emptyData(), deleted(1n), me).unknownConversation).toBe(true);
+  });
+
+  test("a message synced with deleted_at reads as removed", () => {
+    const tomb = create(EventSchema, {
+      cursor: 1n,
+      body: {
+        case: "message",
+        value: {
+          message: create(MessageSchema, {
+            conversationId: c7,
+            seq: 1n,
+            senderUserId: peer,
+            deletedAt: { seconds: 5n },
+          }),
+        },
+      },
+    });
+    const data = applyEvent(oneConversation(), tomb, me).data;
+    expect(preview(data.conversations[k7], me, data.users)).toBe("Message removed");
+  });
 });
 
 describe("groups", () => {
