@@ -15,26 +15,24 @@ import org.reactivestreams.Subscription;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
-import wrinkle.conversation.ConversationService;
-import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.presence.Presence;
+import wrinkle.services.Backend;
 
 /**
- * Holds the WebSocket connections: dispatches requests to the services and pushes events to
- * connected devices. One push subscription per user with a connection on this node.
+ * Holds the WebSocket connections: hands requests to the services, in-process or in a services
+ * process, and pushes events to connected devices. One push subscription per user with a connection
+ * on this node.
  */
 public final class Gateway implements WebSocketServiceHandler {
   private static final Logger log = LoggerFactory.getLogger(Gateway.class);
   static final int MAX_FRAME_BYTES = 64 * 1024;
 
-  final ConversationService conversations;
-  final DeviceSyncService users;
+  final Backend backend;
   final Presence presence;
   private final Map<Long, Set<Conn>> byUser = new ConcurrentHashMap<>();
 
-  public Gateway(ConversationService conversations, DeviceSyncService users, Presence presence) {
-    this.conversations = conversations;
-    this.users = users;
+  public Gateway(Backend backend, Presence presence) {
+    this.backend = backend;
     this.presence = presence;
     presence.listen(this::push);
   }

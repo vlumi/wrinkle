@@ -11,19 +11,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.ApiError;
 import wrinkle.Metrics;
-import wrinkle.v1.ConnectRequest;
 import wrinkle.v1.ConnectResponse;
 import wrinkle.v1.ErrorCode;
 import wrinkle.v1.Frame;
-import wrinkle.v1.GetMessagesResponse;
-import wrinkle.v1.ListConversationsResponse;
-import wrinkle.v1.MarkReadResponse;
-import wrinkle.v1.OpenConversationResponse;
 import wrinkle.v1.Pong;
-import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
-import wrinkle.v1.SendMessageResponse;
 
 /** One device's WebSocket connection. */
 final class Conn {
@@ -77,7 +70,7 @@ final class Conn {
               .execute(
                   () -> {
                     try {
-                      gateway.users.ack(userId, deviceId, cursor);
+                      gateway.backend.ack(userId, deviceId, cursor);
                     } catch (Exception e) {
                       log.warn("ack failed", e);
                     }
@@ -127,19 +120,10 @@ final class Conn {
 
   private void handleRequest(Request req) {
     long start = System.nanoTime();
-    Response.Builder resp = Response.newBuilder().setRequestId(req.getId());
-    String code = "ok";
-    try {
-      dispatch(req, resp);
-    } catch (Exception e) {
-      if (!(e instanceof ApiError)) {
-        log.error("request {} failed", req.getId(), e);
-      }
-      resp.setError(ApiError.toProto(e));
-      code = resp.getError().getCode().name();
-    }
+    Response resp = dispatch(req);
     send(Frame.newBuilder().setResponse(resp).build().toByteArray());
     String type = requestType(req);
+    String code = resp.hasError() ? resp.getError().getCode().name() : "ok";
     Metrics.REQUESTS.labelValues(type, code).inc();
     Metrics.REQUEST_DURATION.labelValues(type).observe((System.nanoTime() - start) / 1e9);
   }
@@ -158,72 +142,49 @@ final class Conn {
     };
   }
 
-  private void dispatch(Request req, Response.Builder resp) throws Exception {
-    if (req.hasConnect()) {
-      connect(req.getConnect(), resp);
-      return;
+  /** Applies the connection's state rules, then hands the request to the backend. */
+  private Response dispatch(Request req) {
+    if (req.hasConnect() && connected) {
+      return error(req, ApiError.failedPrecondition("already connected"));
     }
-    if (!connected) {
-      throw ApiError.unauthenticated("connect first");
+    if (!req.hasConnect() && !connected) {
+      return error(req, ApiError.unauthenticated("connect first"));
     }
-    switch (req.getBodyCase()) {
-      case OPEN_CONVERSATION ->
-          resp.setOpenConversation(
-              OpenConversationResponse.newBuilder()
-                  .setConversation(
-                      gateway.users.open(userId, req.getOpenConversation().getPeerUserName())));
-      case SEND_MESSAGE -> {
-        var r = req.getSendMessage();
-        resp.setSendMessage(
-            SendMessageResponse.newBuilder()
-                .setMessage(
-                    gateway.conversations.send(
-                        userId, r.getConversationId(), r.getClientMessageId(), r.getText())));
-      }
-      case MARK_READ -> {
-        var r = req.getMarkRead();
-        gateway.conversations.markRead(userId, r.getConversationId(), r.getSeq());
-        resp.setMarkRead(MarkReadResponse.getDefaultInstance());
-      }
-      case SYNC ->
-          resp.setSync(
-              gateway.users.sync(userId, req.getSync().getCursor(), req.getSync().getLimit()));
-      case LIST_CONVERSATIONS ->
-          resp.setListConversations(
-              ListConversationsResponse.newBuilder()
-                  .addAllConversations(gateway.users.listConversations(userId)));
-      case GET_MESSAGES -> {
-        var r = req.getGetMessages();
-        resp.setGetMessages(
-            GetMessagesResponse.newBuilder()
-                .addAllMessages(
-                    gateway.conversations.messages(
-                        userId, r.getConversationId(), r.getBeforeSeq(), r.getLimit())));
-      }
-      case REGISTER_PUSH_TOKEN -> {
-        var r = req.getRegisterPushToken();
-        gateway.users.registerPushToken(userId, deviceId, r.getService(), r.getToken());
-        resp.setRegisterPushToken(RegisterPushTokenResponse.getDefaultInstance());
-      }
-      default -> throw ApiError.invalidArgument("request has no body");
+    Response resp;
+    try {
+      resp = gateway.backend.call(userId, deviceId, req);
+    } catch (Exception e) {
+      log.error("backend call for request {} failed", req.getId(), e);
+      return Response.newBuilder()
+          .setRequestId(req.getId())
+          .setError(
+              wrinkle.v1.Error.newBuilder()
+                  .setCode(ErrorCode.ERROR_CODE_UNAVAILABLE)
+                  .setMessage("services unavailable"))
+          .build();
     }
+    if (resp.hasConnect() && !attached(resp.getConnect())) {
+      return error(req, ApiError.failedPrecondition("already connected"));
+    }
+    return resp;
   }
 
-  private void connect(ConnectRequest req, Response.Builder resp) throws Exception {
-    if (connected) {
-      throw ApiError.failedPrecondition("already connected");
-    }
-    ConnectResponse connectResponse = gateway.users.connect(req);
+  private static Response error(Request req, ApiError e) {
+    return Response.newBuilder().setRequestId(req.getId()).setError(ApiError.toProto(e)).build();
+  }
+
+  /** Records the identity Connect established; false if another Connect got there first. */
+  private boolean attached(ConnectResponse resp) {
     synchronized (this) {
       if (connected) {
-        throw ApiError.failedPrecondition("already connected");
+        return false;
       }
-      userId = connectResponse.getUser().getUserId();
-      deviceId = connectResponse.getDeviceId();
+      userId = resp.getUser().getUserId();
+      deviceId = resp.getDeviceId();
       connected = true;
     }
     gateway.attach(this);
-    resp.setConnect(connectResponse);
+    return true;
   }
 
   @Override

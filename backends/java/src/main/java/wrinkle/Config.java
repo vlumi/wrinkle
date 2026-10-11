@@ -1,5 +1,6 @@
 package wrinkle;
 
+import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -7,12 +8,16 @@ import java.util.Set;
 /** Flags with the same names and defaults as the Go backend, overridable by environment. */
 public record Config(
     Set<String> roles,
-    int port,
+    InetSocketAddress listen,
     String mysql,
     String kafka,
     String valkey,
+    String services,
+    InetSocketAddress servicesListen,
     String node,
     int dbConns) {
+
+  private static final Set<String> ROLES = Set.of("gateway", "fanout", "services");
 
   public static Config parse(String[] args) {
     String roles = env("WRINKLE_ROLES", "gateway,fanout");
@@ -20,6 +25,10 @@ public record Config(
     String mysql = env("WRINKLE_MYSQL", "127.0.0.1:15003");
     String kafka = env("WRINKLE_KAFKA", "localhost:19092");
     String valkey = env("WRINKLE_VALKEY", "localhost:6379");
+    // A gateway forwards to a services process at this address instead of running the services
+    // in-process.
+    String services = env("WRINKLE_SERVICES", "");
+    String servicesListen = env("WRINKLE_SERVICES_LISTEN", ":9000");
     String node = env("WRINKLE_NODE", hostname());
     int dbConns = 64;
     for (int i = 0; i < args.length; i++) {
@@ -41,6 +50,8 @@ public record Config(
         case "mysql" -> mysql = value;
         case "kafka" -> kafka = value;
         case "valkey" -> valkey = value;
+        case "services" -> services = value;
+        case "services-listen" -> servicesListen = value;
         case "node" -> node = value;
         case "db-conns" -> dbConns = Integer.parseInt(value);
         default -> throw new IllegalArgumentException("unknown flag " + a);
@@ -48,12 +59,28 @@ public record Config(
     }
     Set<String> roleSet = new HashSet<>(Arrays.asList(roles.split(",")));
     for (String r : roleSet) {
-      if (!r.equals("gateway") && !r.equals("fanout")) {
+      if (!ROLES.contains(r)) {
         throw new IllegalArgumentException("unknown role " + r);
       }
     }
-    int port = Integer.parseInt(listen.substring(listen.lastIndexOf(':') + 1));
-    return new Config(roleSet, port, mysql, kafka, valkey, node, dbConns);
+    return new Config(
+        roleSet,
+        address(listen),
+        mysql,
+        kafka,
+        valkey,
+        services,
+        address(servicesListen),
+        node,
+        dbConns);
+  }
+
+  /** host:port, or :port for every interface. */
+  static InetSocketAddress address(String hostPort) {
+    int colon = hostPort.lastIndexOf(':');
+    int port = Integer.parseInt(hostPort.substring(colon + 1));
+    String host = hostPort.substring(0, Math.max(colon, 0));
+    return host.isEmpty() ? new InetSocketAddress(port) : new InetSocketAddress(host, port);
   }
 
   private static String env(String key, String fallback) {

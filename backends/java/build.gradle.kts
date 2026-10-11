@@ -22,10 +22,13 @@ repositories {
 val armeriaVersion = "1.42.0"
 val protobufVersion = "4.36.2"
 val prometheusVersion = "1.9.0"
+// The version Armeria builds on, for the generated service stubs.
+val grpcVersion = "1.84.0"
 
 dependencies {
     implementation("com.linecorp.armeria:armeria:$armeriaVersion")
     implementation("com.linecorp.armeria:armeria-prometheus1:$armeriaVersion")
+    implementation("com.linecorp.armeria:armeria-grpc:$armeriaVersion")
     implementation("com.google.protobuf:protobuf-java:$protobufVersion")
     implementation("com.mysql:mysql-connector-j:26.7.0")
     implementation("com.zaxxer:HikariCP:7.1.0")
@@ -54,6 +57,18 @@ sourceSets {
 protobuf {
     protoc {
         artifact = "com.google.protobuf:protoc:$protobufVersion"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:$grpcVersion"
+        }
+    }
+    generateProtoTasks {
+        all().configureEach {
+            plugins {
+                create("grpc")
+            }
+        }
     }
 }
 
