@@ -704,6 +704,7 @@ impl request::Body {
             Self::GetDeviceKeys(_) => "get_device_keys",
             Self::PublishKeys(_) => "publish_keys",
             Self::GetConversationKeys(_) => "get_conversation_keys",
+            Self::SetReaction(_) => "set_reaction",
         }
     }
 }
