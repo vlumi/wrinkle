@@ -19,8 +19,11 @@ type result struct {
 	DurationS      float64 `json:"duration_s"`
 	WarmupS        float64 `json:"warmup_s"`
 	MarkRead       bool    `json:"mark_read"`
+	GroupSize      int     `json:"group_size,omitempty"`
+	GroupShare     float64 `json:"group_share,omitempty"`
 	ConnectErrors  int64   `json:"connect_errors"`
 	Sent           int64   `json:"sent"`
+	GroupSent      int64   `json:"group_sent,omitempty"`
 	SendErrors     int64   `json:"send_errors"`
 	Received       int64   `json:"received"`
 	Expected       int64   `json:"expected"`
@@ -58,11 +61,12 @@ func (s *stats) result(cfg config, before, after sample) result {
 		DurationS:      window,
 		WarmupS:        cfg.warmup.Seconds(),
 		MarkRead:       cfg.markRead,
+		GroupSent:      s.groupSent.Load(),
 		ConnectErrors:  s.connectErrors.Load(),
 		Sent:           s.sentInWindow.Load(),
 		SendErrors:     s.sendErrors.Load(),
 		Received:       s.received.Load(),
-		Expected:       s.expectedReceipts(cfg.devicesPerUser),
+		Expected:       s.expectedReceipts(),
 		SendP50Ms:      ms(percentile(rtt, 0.50)),
 		SendP99Ms:      ms(percentile(rtt, 0.99)),
 		P50Ms:          ms(percentile(lat, 0.50)),
@@ -72,6 +76,9 @@ func (s *stats) result(cfg config, before, after sample) result {
 		BackendRSSB:    after.rss,
 		BackendLiveB:   after.live,
 		BackendConns:   after.connections,
+	}
+	if cfg.groupShare > 0 {
+		r.GroupSize, r.GroupShare = cfg.groupSize, cfg.groupShare
 	}
 	if window > 0 {
 		r.SentRate = float64(r.Sent) / window
@@ -96,11 +103,15 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
 
 func (r result) String() string {
+	groups := ""
+	if r.GroupShare > 0 {
+		groups = fmt.Sprintf(" groups of %d: %.0f%% of sends (%d)", r.GroupSize, 100*r.GroupShare, r.GroupSent)
+	}
 	return fmt.Sprintf(
-		"connections=%d devices/user=%d target=%.0f/s sent=%d (%.1f/s) errors=%d received=%d/%d\n"+
+		"connections=%d devices/user=%d target=%.0f/s sent=%d (%.1f/s) errors=%d received=%d/%d%s\n"+
 			"end-to-end p50=%.1fms p90=%.1fms p99=%.1fms max=%.1fms; send rtt p50=%.1fms p99=%.1fms\n"+
 			"backend cpu=%.2fs (%.1f ms per 1000 msgs) rss=%.1f MiB live=%.1f MiB connections=%.0f",
-		r.Connections, r.DevicesPerUser, r.TargetRate, r.Sent, r.SentRate, r.SendErrors, r.Received, r.Expected,
+		r.Connections, r.DevicesPerUser, r.TargetRate, r.Sent, r.SentRate, r.SendErrors, r.Received, r.Expected, groups,
 		r.P50Ms, r.P90Ms, r.P99Ms, r.MaxMs, r.SendP50Ms, r.SendP99Ms,
 		r.BackendCPUS, r.CPUMsPer1000, r.BackendRSSB/(1<<20), r.BackendLiveB/(1<<20), r.BackendConns)
 }

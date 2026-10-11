@@ -1,9 +1,9 @@
 // Command loadgen simulates devices against a backend and reports latency,
 // throughput and the backend's resource use. Devices belong to users, users
-// are paired into conversations, and messages flow at a fixed rate; see
-// docs/measuring.md for how runs are combined into results. Users are
-// lg-0, lg-1, ... with a fixed password: registered on first use, signed in
-// to on later runs, before anything is measured.
+// are paired into conversations and optionally put in groups, and messages
+// flow at a fixed rate; see docs/measuring.md for how runs are combined
+// into results. Users are lg-0, lg-1, ... with a fixed password: registered
+// on first use, signed in to on later runs, before anything is measured.
 package main
 
 import (
@@ -27,6 +27,8 @@ type config struct {
 	warmup         time.Duration
 	ramp           int
 	markRead       bool
+	groupSize      int
+	groupShare     float64
 	label          string
 	commit         string
 	out            string
@@ -43,6 +45,8 @@ func main() {
 	flag.DurationVar(&cfg.warmup, "warmup", 10*time.Second, "warm-up before measuring")
 	flag.IntVar(&cfg.ramp, "ramp", 200, "connections opened per second")
 	flag.BoolVar(&cfg.markRead, "mark-read", false, "receivers mark every message read")
+	flag.IntVar(&cfg.groupSize, "group-size", 8, "users per group, with --group-share")
+	flag.Float64Var(&cfg.groupShare, "group-share", 0, "share of sends that go to the sender's group, 0 to 1; 0 forms no groups")
 	flag.StringVar(&cfg.label, "label", "", "free text recorded with the result, such as the backend")
 	flag.StringVar(&cfg.commit, "commit", "", "commit recorded with the result")
 	flag.StringVar(&cfg.out, "out", "", "append the result as a JSON line to this file")
@@ -56,6 +60,12 @@ func main() {
 func run(cfg config) error {
 	if cfg.connections%cfg.devicesPerUser != 0 || (cfg.connections/cfg.devicesPerUser)%2 != 0 {
 		return fmt.Errorf("connections must be a multiple of devices-per-user giving an even number of users")
+	}
+	if cfg.groupShare < 0 || cfg.groupShare > 1 {
+		return fmt.Errorf("group-share must be between 0 and 1")
+	}
+	if cfg.groupShare > 0 && (cfg.groupSize < 2 || cfg.groupSize > 256 || cfg.groupSize > cfg.connections/cfg.devicesPerUser) {
+		return fmt.Errorf("group-size must be 2 to 256 and at most the number of users")
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -74,6 +84,11 @@ func run(cfg config) error {
 	if len(ready) == 0 {
 		return fmt.Errorf("no device is ready")
 	}
+	if cfg.groupShare > 0 {
+		start = time.Now()
+		formGroups(ctx, ready, cfg.groupSize, cfg.devicesPerUser, stats)
+		fmt.Fprintf(os.Stderr, "formed groups of %d in %s\n", cfg.groupSize, time.Since(start).Round(time.Millisecond))
+	}
 	for _, d := range ready {
 		go d.receive(ctx)
 	}
@@ -90,7 +105,7 @@ func run(cfg config) error {
 	stopSending()
 	senders.Wait()
 
-	waitForReceipts(ctx, stats, cfg.devicesPerUser, 10*time.Second)
+	waitForReceipts(ctx, stats, 10*time.Second)
 	for _, d := range ready {
 		d.client.Close()
 	}
@@ -110,10 +125,13 @@ func newDevices(cfg config, stats *stats) []*device {
 	for i := range cfg.connections {
 		user := i / cfg.devicesPerUser
 		devices = append(devices, &device{
-			userName: fmt.Sprintf("lg-%d", user),
-			peerName: fmt.Sprintf("lg-%d", user^1),
-			stats:    stats,
-			markRead: cfg.markRead,
+			user:            user,
+			userName:        fmt.Sprintf("lg-%d", user),
+			peerName:        fmt.Sprintf("lg-%d", user^1),
+			stats:           stats,
+			markRead:        cfg.markRead,
+			directReceivers: int64(cfg.devicesPerUser),
+			groupShare:      cfg.groupShare,
 		})
 	}
 	return devices
@@ -170,9 +188,9 @@ func openAll(ctx context.Context, devices []*device, stats *stats) []*device {
 }
 
 // waitForReceipts lets messages sent at the end of the window arrive.
-func waitForReceipts(ctx context.Context, stats *stats, devicesPerUser int, grace time.Duration) {
+func waitForReceipts(ctx context.Context, stats *stats, grace time.Duration) {
 	deadline := time.Now().Add(grace)
-	for time.Now().Before(deadline) && stats.received.Load() < stats.expectedReceipts(devicesPerUser) {
+	for time.Now().Before(deadline) && stats.received.Load() < stats.expectedReceipts() {
 		sleepCtx(ctx, 200*time.Millisecond)
 	}
 }

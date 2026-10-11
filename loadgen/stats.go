@@ -13,6 +13,8 @@ type stats struct {
 	sendErrors    atomic.Int64
 	received      atomic.Int64 // receipts of messages sent in the window
 	sentInWindow  atomic.Int64
+	groupSent     atomic.Int64 // of sentInWindow, to groups
+	expected      atomic.Int64 // receipts due for sentInWindow
 
 	mu          sync.Mutex
 	windowStart time.Time
@@ -39,9 +41,15 @@ func (s *stats) inWindow(t time.Time) bool {
 	return !s.windowStart.IsZero() && !t.Before(s.windowStart) && (s.windowEnd.IsZero() || t.Before(s.windowEnd))
 }
 
-func (s *stats) recordSent(at time.Time) {
-	if s.inWindow(at) {
-		s.sentInWindow.Add(1)
+// recordSent counts a send due to reach the given number of devices.
+func (s *stats) recordSent(at time.Time, receivers int64, group bool) {
+	if !s.inWindow(at) {
+		return
+	}
+	s.sentInWindow.Add(1)
+	s.expected.Add(receivers)
+	if group {
+		s.groupSent.Add(1)
 	}
 }
 
@@ -64,6 +72,6 @@ func (s *stats) recordReceipt(sentAt time.Time, latency time.Duration) {
 	s.mu.Unlock()
 }
 
-func (s *stats) expectedReceipts(devicesPerUser int) int64 {
-	return s.sentInWindow.Load() * int64(devicesPerUser)
+func (s *stats) expectedReceipts() int64 {
+	return s.expected.Load()
 }

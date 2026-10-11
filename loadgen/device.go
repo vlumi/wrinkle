@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"strconv"
 	"strings"
@@ -20,14 +21,20 @@ const callTimeout = 10 * time.Second
 var sendSeq atomic.Uint64
 
 type device struct {
-	userName       string
-	peerName       string
-	stats          *stats
-	markRead       bool
-	client         *wrinkleclient.Client
-	token          string
-	userID         []byte
-	conversationID []byte
+	user            int
+	userName        string
+	peerName        string
+	stats           *stats
+	markRead        bool
+	client          *wrinkleclient.Client
+	token           string
+	userID          []byte
+	conversationID  []byte
+	directReceivers int64
+	// The device's group, if any, and the share of sends that go there.
+	groupID        []byte
+	groupReceivers int64
+	groupShare     float64
 }
 
 // connect connects the device with the token it signed in with.
@@ -60,15 +67,20 @@ func (d *device) open(ctx context.Context) error {
 	return nil
 }
 
-// send sends one message whose client id carries the send time, so any
-// receiving device can compute the end-to-end latency.
+// send sends one message, to the device's group for its share of the sends
+// and to its direct conversation otherwise, whose client id carries the
+// send time, so any receiving device can compute the end-to-end latency.
 func (d *device) send(ctx context.Context) {
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	now := time.Now()
 	id := fmt.Sprintf("%d-%d", now.UnixNano(), sendSeq.Add(1))
-	d.stats.recordSent(now)
-	if _, err := d.client.SendMessage(cctx, d.conversationID, id, "load"); err != nil {
+	conversationID, receivers, group := d.conversationID, d.directReceivers, false
+	if d.groupID != nil && rand.Float64() < d.groupShare {
+		conversationID, receivers, group = d.groupID, d.groupReceivers, true
+	}
+	d.stats.recordSent(now, receivers, group)
+	if _, err := d.client.SendMessage(cctx, conversationID, id, "load"); err != nil {
 		if d.stats.sendErrors.Add(1) <= 3 {
 			fmt.Fprintf(os.Stderr, "send from %s: %v\n", d.userName, err)
 		}
@@ -110,7 +122,9 @@ func (d *device) receive(ctx context.Context) {
 					cctx, cancel := context.WithTimeout(ctx, callTimeout)
 					defer cancel()
 					if err := d.client.MarkRead(cctx, msg.GetConversationId(), msg.GetSeq()); err != nil {
-						d.stats.sendErrors.Add(1)
+						if d.stats.sendErrors.Add(1) <= 3 {
+							fmt.Fprintf(os.Stderr, "mark read by %s: %v\n", d.userName, err)
+						}
 					}
 				}()
 			}
