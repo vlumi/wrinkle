@@ -1,0 +1,81 @@
+{
+  "description": "Test vectors for content.proto's cryptography. Ids and keys are hex, device ids decimal u64 strings; device private keys are X25519 scalars as RFC 7748 takes them.",
+  "rfc7748": {
+    "alice_private": "77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a",
+    "alice_public": "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a",
+    "bob_private": "5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb",
+    "bob_public": "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f",
+    "shared": "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+  },
+  "rfc5869_case1": {
+    "ikm": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+    "salt": "000102030405060708090a0b0c",
+    "info": "f0f1f2f3f4f5f6f7f8f9",
+    "length": 42,
+    "okm": "3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865"
+  },
+  "devices": {
+    "a1": {
+      "user_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "device_id": "9223372036854775809",
+      "private_key": "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20",
+      "public_key": "07a37cbc142093c8b755dc1b10e86cb426374ad16aa853ed0bdfc0b2b86d1c7c"
+    },
+    "a2": {
+      "user_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+      "device_id": "81985529216486895",
+      "private_key": "2122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40",
+      "public_key": "5869aff450549732cbaaed5e5df9b30a6da31cb0e5742bad5ad4a1a768f1a67b"
+    },
+    "b1": {
+      "user_id": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+      "device_id": "18364758544493064720",
+      "private_key": "4142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f60",
+      "public_key": "64b101b1d0be5a8704bd078f9895001fc03e8e9f9522f188dd128d9846d48466"
+    }
+  },
+  "wrap": {
+    "sender": "a1",
+    "recipient": "b1",
+    "conversation_id": "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+    "epoch": 1,
+    "key": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+    "nonce": "101112131415161718191a1b",
+    "shared_secret": "26c2c17fdb82161cb21ad16e721315355b64d1763119b10bfc962530dc7cc163",
+    "info": "7772696e6b6c652077726170207631c0c1c2c3c4c5c6c7c8c9cacbcccdcecf00000001a0a1a2a3a4a5a6a7a8a9aaabacadaeaf8000000000000001b0b1b2b3b4b5b6b7b8b9babbbcbdbebffedcba9876543210",
+    "wrapping_key": "ecf693d772f86f77a207dace9faf5549d85f6dffa478399ae033420b0698ee05",
+    "wrapped": "101112131415161718191a1be91061dfe93edfe08a2cde959f649d2ffa77902986e697f3f900b36a477dc26a8f89b1c261700531425d918ccf7a73ac"
+  },
+  "seal": {
+    "key": "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+    "nonce": "303132333435363738393a3b",
+    "conversation_id": "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+    "epoch": 1,
+    "sender_user_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+    "client_message_id": "client-message-1",
+    "text": "hello",
+    "plaintext": "0a0568656c6c6f",
+    "aad": "7772696e6b6c6520636f6e74656e74207631c0c1c2c3c4c5c6c7c8c9cacbcccdcecf00000001a0a1a2a3a4a5a6a7a8a9aaabacadaeaf636c69656e742d6d6573736167652d31",
+    "ciphertext": "1fff712ff7e3e70fa783c1fc72407a404036b0a88eaf15"
+  },
+  "fingerprints": {
+    "users": [
+      {
+        "user_id": "a0a1a2a3a4a5a6a7a8a9aaabacadaeaf",
+        "devices": [
+          "a1",
+          "a2"
+        ],
+        "fingerprint": "83f8d669a171e66fe9f42fa06af663015c895d9e6b63b6a577514567ca391efc"
+      },
+      {
+        "user_id": "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+        "devices": [
+          "b1"
+        ],
+        "fingerprint": "b091119e7a6e849daf44d9740e1f4b585658facb81c69611fa0290457d0b4ff5"
+      }
+    ],
+    "safety_number": "50618 81616 18083 62639 81203 54787"
+  }
+}
