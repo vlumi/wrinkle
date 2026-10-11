@@ -14,6 +14,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::conn::Link;
 use crate::metrics::Metrics;
+use crate::user_id::{self, UserId};
 
 const CHANNEL_PREFIX: &str = "push:";
 /// How long a SUBSCRIBE or UNSUBSCRIBE may take before the connection is
@@ -27,13 +28,13 @@ const MAX_BACKOFF: Duration = Duration::from_secs(5);
 type Outbound = Arc<Link>;
 /// The users with a connection here, which is the set of channels this
 /// node should be subscribed to.
-type Registry = Arc<Mutex<HashMap<u64, Vec<Outbound>>>>;
-type Waiters = HashMap<u64, Vec<oneshot::Sender<()>>>;
+type Registry = Arc<Mutex<HashMap<UserId, Vec<Outbound>>>>;
+type Waiters = HashMap<UserId, Vec<oneshot::Sender<()>>>;
 
 /// Asks the pub/sub task to bring a user's subscription in line with the
 /// registry, and to tell `subscribed` once the channel is subscribed.
 struct Reconcile {
-    user_id: u64,
+    user_id: UserId,
     subscribed: Option<oneshot::Sender<()>>,
 }
 
@@ -53,7 +54,7 @@ impl Push {
 
     /// Delivers the user's pushes to `out`; true once the user's channel is
     /// subscribed, false if that did not happen in time.
-    pub async fn attach(&self, user_id: u64, out: Outbound) -> bool {
+    pub async fn attach(&self, user_id: UserId, out: Outbound) -> bool {
         self.registry
             .lock()
             .unwrap()
@@ -72,7 +73,7 @@ impl Push {
     }
 
     /// Stops delivering to `out`, unsubscribing after the user's last.
-    pub fn detach(&self, user_id: u64, out: &Outbound) {
+    pub fn detach(&self, user_id: UserId, out: &Outbound) {
         {
             let mut registry = self.registry.lock().unwrap();
             let Some(conns) = registry.get_mut(&user_id) else {
@@ -163,7 +164,7 @@ async fn session(
 ) -> End {
     let (mut sink, mut stream) = pubsub.split();
     let mut applied = HashSet::new();
-    let wanted: HashSet<u64> = registry
+    let wanted: HashSet<UserId> = registry
         .lock()
         .unwrap()
         .keys()
@@ -210,10 +211,10 @@ fn wait_for(waiters: &mut Waiters, request: Reconcile) {
 /// registry has a connection of theirs, then answers the user's waiters.
 async fn reconcile(
     sink: &mut PubSubSink,
-    applied: &mut HashSet<u64>,
+    applied: &mut HashSet<UserId>,
     waiters: &mut Waiters,
     registry: &Registry,
-    user_id: u64,
+    user_id: UserId,
 ) -> redis::RedisResult<()> {
     let wanted = registry.lock().unwrap().contains_key(&user_id);
     if wanted != applied.contains(&user_id) {
@@ -252,7 +253,7 @@ fn deliver(registry: &Registry, metrics: &Metrics, message: &Msg) {
     let Some(user_id) = message
         .get_channel_name()
         .strip_prefix(CHANNEL_PREFIX)
-        .and_then(|id| id.parse::<u64>().ok())
+        .and_then(user_id::parse_hex)
     else {
         return;
     };
@@ -271,8 +272,8 @@ fn deliver(registry: &Registry, metrics: &Metrics, message: &Msg) {
     }
 }
 
-fn channel(user_id: u64) -> String {
-    format!("{CHANNEL_PREFIX}{user_id}")
+fn channel(user_id: UserId) -> String {
+    format!("{CHANNEL_PREFIX}{}", user_id::hex(&user_id))
 }
 
 /// Wraps an already serialized Event in a Frame without decoding it:
@@ -306,7 +307,7 @@ mod tests {
                 cursor: len as u64,
                 occurred_at: None,
                 body: Some(event::Body::MessageFailed(MessageFailedEvent {
-                    conversation_id: 7,
+                    conversation_id: vec![7; 16],
                     client_message_id: "x".repeat(len),
                     reason: String::new(),
                 })),
@@ -317,8 +318,8 @@ mod tests {
             cursor: 1,
             occurred_at: None,
             body: Some(event::Body::Read(ReadEvent {
-                conversation_id: 1,
-                user_id: 2,
+                conversation_id: vec![1; 16],
+                user_id: vec![2; 16],
                 seq: 3,
             })),
         };

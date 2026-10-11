@@ -22,6 +22,7 @@ use crate::pb::backend::v1::{AckRequest, CallRequest};
 use crate::pb::v1::{
     self as pb, ErrorCode, Frame, Request, Response as WireResponse, frame, request, response,
 };
+use crate::user_id::UserId;
 use crate::{App, BackendClient};
 
 const MAX_FRAME_BYTES: usize = 64 * 1024;
@@ -196,7 +197,7 @@ impl Conns {
 /// The device a connection belongs to, known once Connect succeeds.
 #[derive(Clone, Copy, Default)]
 struct Device {
-    user_id: u64,
+    user_id: UserId,
     device_id: u64,
 }
 
@@ -218,8 +219,9 @@ pub struct Conn {
     app: Arc<App>,
     link: Arc<Link>,
     binding: Mutex<Binding>,
-    /// Signaled when a Connect is undone, so a retry gets a fresh deadline.
-    unbound: Notify,
+    /// Signaled when a Connect is undone, or a Register or SignIn answered,
+    /// so the Connect that follows gets a fresh deadline.
+    restart_deadline: Notify,
     in_flight: AtomicUsize,
     acks: Mutex<Acks>,
 }
@@ -244,7 +246,7 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
         app: app.clone(),
         link: link.clone(),
         binding: Mutex::new(Binding::Pending),
-        unbound: Notify::new(),
+        restart_deadline: Notify::new(),
         in_flight: AtomicUsize::default(),
         acks: Mutex::default(),
     });
@@ -285,7 +287,7 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
                     break;
                 }
             }
-            () = conn.unbound.notified() => {
+            () = conn.restart_deadline.notified() => {
                 connect_deadline
                     .as_mut()
                     .reset(tokio::time::Instant::now() + CONNECT_TIMEOUT);
@@ -408,7 +410,15 @@ impl Conn {
     async fn handle_request(self: Arc<Self>, request: Request) {
         let started = Instant::now();
         let kind = request_name(&request);
+        let signs_in = matches!(
+            request.body,
+            Some(request::Body::Register(_) | request::Body::SignIn(_))
+        );
         let response = self.dispatch(request).await;
+        if signs_in {
+            // Hashing the password may have taken a while; Connect gets a fresh deadline.
+            self.restart_deadline.notify_one();
+        }
         self.reply(kind, started, response).await;
         self.in_flight.fetch_sub(1, Ordering::SeqCst);
         self.app.conns.in_flight.fetch_sub(1, Ordering::SeqCst);
@@ -428,16 +438,18 @@ impl Conn {
         let request_id = request.id;
         let kind = request_name(&request);
         let device = self.device();
-        let is_connect = matches!(request.body, Some(request::Body::Connect(_)));
-        match (is_connect, device) {
+        let identifies = matches!(
+            request.body,
+            Some(request::Body::Register(_) | request::Body::SignIn(_) | request::Body::Connect(_))
+        );
+        match (identifies, device) {
             (true, Some(_)) => return already_connected(request_id),
             (false, None) => return error(request_id, ErrorCode::Unauthenticated, "connect first"),
             _ => {}
         }
-        let device = device.unwrap_or_default();
         let call = CallRequest {
-            user_id: device.user_id,
-            device_id: device.device_id,
+            user_id: device.map(|d| d.user_id.to_vec()).unwrap_or_default(),
+            device_id: device.map_or(0, |d| d.device_id),
             request: Some(request),
         };
         let mut backend = self.app.backend.clone();
@@ -453,8 +465,16 @@ impl Conn {
             }
         };
         if let Some(response::Body::Connect(c)) = &response.body {
+            let user_id = c.user.as_ref().map(|u| u.user_id.as_slice());
+            let Some(Ok(user_id)) = user_id.map(UserId::try_from) else {
+                return error(
+                    request_id,
+                    ErrorCode::Internal,
+                    "connect returned no user id",
+                );
+            };
             let device = Device {
-                user_id: c.user.as_ref().map(|u| u.user_id).unwrap_or_default(),
+                user_id,
                 device_id: c.device_id,
             };
             match self.attach(device).await {
@@ -492,7 +512,7 @@ impl Conn {
             let mut binding = self.binding.lock().unwrap();
             if matches!(*binding, Binding::Bound(_)) {
                 *binding = Binding::Pending;
-                self.unbound.notify_one();
+                self.restart_deadline.notify_one();
             }
             drop(binding);
             self.app.push.detach(device.user_id, &self.link);
@@ -552,7 +572,7 @@ impl Conn {
 
 async fn ack_cursor(mut backend: BackendClient, device: Device, cursor: u64) {
     let ack = AckRequest {
-        user_id: device.user_id,
+        user_id: device.user_id.to_vec(),
         device_id: device.device_id,
         cursor,
     };
@@ -656,6 +676,11 @@ impl request::Body {
             Self::ListConversations(_) => "list_conversations",
             Self::GetMessages(_) => "get_messages",
             Self::RegisterPushToken(_) => "register_push_token",
+            Self::Register(_) => "register",
+            Self::SignIn(_) => "sign_in",
+            Self::ChangePassword(_) => "change_password",
+            Self::UpdateProfile(_) => "update_profile",
+            Self::SignOut(_) => "sign_out",
         }
     }
 }

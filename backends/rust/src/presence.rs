@@ -9,6 +9,8 @@ use std::time::Duration;
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Script};
 
+use crate::user_id::{self, UserId};
+
 const INSTANCE_TTL: Duration = Duration::from_secs(90);
 const HEARTBEAT: Duration = Duration::from_secs(30);
 
@@ -39,7 +41,7 @@ impl Presence {
         &self.instance
     }
 
-    pub async fn set(&self, user_id: u64, device_id: u64) {
+    pub async fn set(&self, user_id: UserId, device_id: u64) {
         let result: redis::RedisResult<()> = self
             .retrying(|mut valkey| {
                 let instance = self.instance.clone();
@@ -51,11 +53,11 @@ impl Presence {
             })
             .await;
         if let Err(e) = result {
-            tracing::warn!(error = %e, user_id, device_id, "presence set failed");
+            tracing::warn!(error = %e, user = user_id::hex(&user_id), device_id, "presence set failed");
         }
     }
 
-    pub async fn remove(&self, user_id: u64, device_id: u64) {
+    pub async fn remove(&self, user_id: UserId, device_id: u64) {
         let result: redis::RedisResult<i64> = self
             .retrying(|mut valkey| {
                 let mut invocation = self.remove_if_ours.key(key(user_id));
@@ -64,7 +66,7 @@ impl Presence {
             })
             .await;
         if let Err(e) = result {
-            tracing::warn!(error = %e, user_id, device_id, "presence remove failed");
+            tracing::warn!(error = %e, user = user_id::hex(&user_id), device_id, "presence remove failed");
         }
     }
 
@@ -115,8 +117,8 @@ fn instance_id(node: &str) -> String {
     format!("{node}/{random:016x}")
 }
 
-fn key(user_id: u64) -> String {
-    format!("presence:{user_id}")
+fn key(user_id: UserId) -> String {
+    format!("presence:{}", user_id::hex(&user_id))
 }
 
 fn instance_key(instance: &str) -> String {

@@ -6,6 +6,7 @@ mod conn;
 mod metrics;
 mod presence;
 mod push;
+mod user_id;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
