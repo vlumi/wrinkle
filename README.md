@@ -16,20 +16,37 @@ Three ideas carry the design:
 - **Per-user event log.** Everything a user's devices need to know (messages in any of their conversations, read receipts, delivery failures) is appended to that user's log. A device keeps one cursor into it, and sync returns what came after.
 - **Push is an optimization, sync is the guarantee.** Connected devices get events over WebSocket as they happen. A device that misses a push gets the same events from its log on the next sync.
 
-```text
- clients ── WebSocket ──► gateway ──► conversation service ──► conversation DB
-    ▲                        ▲                                  (sharded by conversation)
-    │ push                   │ push                                   │ CDC
-    │                        │                                        ▼
-    │                   fan-out workers ◄────────────────────────── Kafka
-    │                        │
-    │ sync                   ▼
-    └──────── sync service ─► user DB (sharded by user):
-                              event logs, conversation lists, devices
+```mermaid
+flowchart LR
+  devices["Devices<br/><small>web · iOS</small>"]
+  lb["Load balancer"]
+  gw["Gateways<br/><small>WebSocket connections</small>"]
+  subgraph services ["Services"]
+    conv["Conversation service<br/><small>send · read marks</small>"]
+    sync["Sync service<br/><small>sign-in · sync · lists</small>"]
+  end
+  convdb[("Conversation DB<br/><small>messages + outbox<br/>sharded by conversation</small>")]
+  userdb[("User DB<br/><small>event logs · lists · devices<br/>sharded by user</small>")]
+  kafka[["Kafka"]]
+  fanout["Fan-out workers"]
+  valkey[("Valkey<br/><small>presence ·<br/>a channel per user</small>")]
+  apns["APNs"]
+
+  devices <-- "WebSocket" --> lb <--> gw
+  gw -- "gRPC or<br/>in-process" --> conv & sync
+  conv -- "message + outbox,<br/>one transaction" --> convdb
+  sync -- "sync" --> userdb
+  convdb -- "CDC (Debezium)" --> kafka --> fanout
+  fanout -- "append" --> userdb
+  fanout -- "publish" --> valkey
+  valkey -- "push" --> gw
+  fanout -- "not connected" --> apns
+  apns -.-> devices
 ```
 
 Components:
 
+- **Load balancer:** spreads devices' connections over the gateways and moves them off one that stops; HAProxy, for gateways run side by side.
 - **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`).
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
 - **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
