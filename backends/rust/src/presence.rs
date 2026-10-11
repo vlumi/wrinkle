@@ -6,7 +6,7 @@
 use std::hash::{BuildHasher, Hasher, RandomState};
 use std::time::Duration;
 
-use redis::aio::MultiplexedConnection;
+use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, Script};
 
 const INSTANCE_TTL: Duration = Duration::from_secs(90);
@@ -18,14 +18,14 @@ const REMOVE_IF_OURS: &str = "if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2]
      return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0";
 
 pub struct Presence {
-    valkey: MultiplexedConnection,
+    valkey: ConnectionManager,
     instance: String,
     remove_if_ours: Script,
 }
 
 impl Presence {
     pub async fn connect(client: &redis::Client, node: &str) -> redis::RedisResult<Self> {
-        let valkey = client.get_multiplexed_async_connection().await?;
+        let valkey = ConnectionManager::new(client.clone()).await?;
         let presence = Self {
             valkey,
             instance: instance_id(node),
@@ -40,21 +40,32 @@ impl Presence {
     }
 
     pub async fn set(&self, user_id: u64, device_id: u64) {
-        let mut valkey = self.valkey.clone();
-        let _: redis::RedisResult<()> = valkey
-            .hset(key(user_id), device_id.to_string(), &self.instance)
+        let result: redis::RedisResult<()> = self
+            .retrying(|mut valkey| {
+                let instance = self.instance.clone();
+                async move {
+                    valkey
+                        .hset(key(user_id), device_id.to_string(), instance)
+                        .await
+                }
+            })
             .await;
+        if let Err(e) = result {
+            tracing::warn!(error = %e, user_id, device_id, "presence set failed");
+        }
     }
 
     pub async fn remove(&self, user_id: u64, device_id: u64) {
-        let mut valkey = self.valkey.clone();
-        let _: redis::RedisResult<i64> = self
-            .remove_if_ours
-            .key(key(user_id))
-            .arg(device_id.to_string())
-            .arg(&self.instance)
-            .invoke_async(&mut valkey)
+        let result: redis::RedisResult<i64> = self
+            .retrying(|mut valkey| {
+                let mut invocation = self.remove_if_ours.key(key(user_id));
+                invocation.arg(device_id.to_string()).arg(&self.instance);
+                async move { invocation.invoke_async(&mut valkey).await }
+            })
             .await;
+        if let Err(e) = result {
+            tracing::warn!(error = %e, user_id, device_id, "presence remove failed");
+        }
     }
 
     /// Refreshes the instance key until the task is aborted.
@@ -76,10 +87,24 @@ impl Presence {
     }
 
     async fn beat(&self) -> redis::RedisResult<()> {
-        let mut valkey = self.valkey.clone();
-        valkey
-            .set_ex(instance_key(&self.instance), 1, INSTANCE_TTL.as_secs())
-            .await
+        self.retrying(|mut valkey| {
+            let key = instance_key(&self.instance);
+            async move { valkey.set_ex(key, 1, INSTANCE_TTL.as_secs()).await }
+        })
+        .await
+    }
+
+    /// Runs `op` once more if the connection had dropped; the manager
+    /// reconnects after the first failure.
+    async fn retrying<T, F, Fut>(&self, op: F) -> redis::RedisResult<T>
+    where
+        F: Fn(ConnectionManager) -> Fut,
+        Fut: Future<Output = redis::RedisResult<T>>,
+    {
+        match op(self.valkey.clone()).await {
+            Err(e) if e.is_connection_dropped() || e.is_io_error() => op(self.valkey.clone()).await,
+            result => result,
+        }
     }
 }
 

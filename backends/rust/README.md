@@ -20,21 +20,21 @@ The generated code is not committed; [build.rs](build.rs) compiles `wrinkle/v1/f
 
 ## Roles and startup
 
-There are no roles to choose: the binary is always a gateway. [main.rs](src/main.rs) reads its configuration from the environment, connects to the services and to Valkey, and then listens.
+There are no roles to choose: the binary is always a gateway. [main.rs](src/main.rs) reads its configuration from the environment, connects to Valkey, and then listens; the services are reached on first use.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `WRINKLE_LISTEN` | `:8080` | Only the port is used; the gateway binds `0.0.0.0` |
+| `WRINKLE_LISTEN` | `:8080` | `host:port` to listen on; `:port` means every interface |
 | `WRINKLE_SERVICES` | `localhost:9000` | The services RPC, or the services balancer |
 | `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
 | `WRINKLE_NODE` | output of `hostname` | The node part of the instance id |
-| `RUST_LOG` | | Extra `tracing` filter directives; `info` is always added |
+| `RUST_LOG` | `info` | The `tracing` filter, used as given when set |
 
 Startup, in order:
 
-1. One tonic `Channel` to the services. It connects eagerly, so the gateway exits if the services are not up yet; [beside-services.sh](../beside-services.sh) waits for their health check first. Every request clones the channel, which multiplexes them over one HTTP/2 connection.
-2. A presence handle on a multiplexed Valkey connection, which writes the instance key once before going on (see Presence below).
-3. A push handle on a dedicated pub/sub connection, with its task.
+1. One tonic `Channel` to the services, made with `connect_lazy`: it connects on the first request and again after losing the connection, each attempt bounded at 3 seconds, so the gateway starts and serves while the services are not up yet, and requests answer `UNAVAILABLE` until they are. Every request clones the channel, which multiplexes them over one HTTP/2 connection.
+2. A presence handle on a Valkey `ConnectionManager`, which writes the instance key once before going on, so Valkey has to be up at startup (see Presence below).
+3. A push handle and its task, which makes the dedicated pub/sub connection itself.
 4. Two background tasks: the keepalive sweep and the presence heartbeat.
 5. The axum server, with graceful shutdown wired to the drain.
 
@@ -69,8 +69,8 @@ The pieces, all in [conn.rs](src/conn.rs):
 
 - `Link` is what other tasks hold: the sender of the bounded outbound queue (32 entries), a one-shot close signal, the connection id and when it last received anything. `Conns` keeps every `Link` by id for the sweep and the drain, and counts requests in flight across the gateway.
 - The read loop is a `select!` over the next WebSocket message, the Connect deadline and the writer ending. Any message refreshes the last-seen time. Binary messages are decoded as `Frame`; text closes with 1003, a frame over the limit (tungstenite's capacity error) with 1009, a malformed frame or a server-side frame kind with 1008.
-- The writer task drains the queue to the socket. When the close signal fires it stops writing and sends the close frame, giving it 3 seconds; the first close wins, later ones are ignored. When the read loop ends without a close, `Link::finish` drops the signal so the writer stops without a frame.
-- Each request runs in its own `tokio::spawn`ed task. `dispatch` applies the state rules (a second Connect is `FAILED_PRECONDITION`, anything before Connect is `UNAUTHENTICATED`), then calls `BackendService.Call` with the bound user and device. A call taking over 10 seconds, or failing, answers `UNAVAILABLE` with the request's id. A successful Connect response binds the connection; if another Connect bound it first, this one gets `FAILED_PRECONDITION` instead.
+- The writer task drains the queue to the socket. When the close signal fires it stops writing and sends the close frame, giving it 3 seconds; the first close wins, later ones are ignored. A failed socket write ends it with a 1011 close frame, given the same 3 seconds. When the read loop ends without a close, `Link::finish` drops the signal so the writer stops without a frame.
+- Each request runs in its own `tokio::spawn`ed task. `dispatch` applies the state rules (a second Connect is `FAILED_PRECONDITION`, anything before Connect is `UNAUTHENTICATED`), then calls `BackendService.Call` with the bound user and device. A call taking over 10 seconds, or failing, answers `UNAVAILABLE` with the request's id. A successful Connect response binds the connection and is sent once the user's push channel is subscribed; if another Connect bound it first, this one gets `FAILED_PRECONDITION` instead, and if the subscription is not in place within 5 seconds, the binding is undone and the Connect answers `UNAVAILABLE`.
 - Responses wait for room in the queue, which holds back the device's own requests; pushes do not wait (see Push delivery).
 
 Limits, as the contract in `proto/wrinkle/v1/frame.proto` sets them:
@@ -89,11 +89,13 @@ Application-level `Ping` frames get a `Pong`; client `Pong` frames are ignored. 
 
 ### Push delivery
 
-[push.rs](src/push.rs) holds a registry from user id to the `Link`s of that user's connections on this gateway, and one Valkey pub/sub connection owned by a single task. The first connection of a user subscribes to `push:<user_id>`, the last one to leave unsubscribes; the commands reach the task over an unbounded channel, so they stay in order. Each message is wrapped as a `Frame` without decoding the `Event`: the payload is prefixed with the tag of `Frame.event` (field 3) and its length. The frame goes to every connection of the user with `try_send`; a full queue closes that connection with 1013, and the device syncs on reconnect.
+[push.rs](src/push.rs) holds a registry from user id to the `Link`s of that user's connections on this gateway, and one Valkey pub/sub connection owned by a single task. The registry is the desired state: a user with a connection here should have `push:<user_id>` subscribed. Attach and detach change it under a short lock, never held across a Valkey call, and send the user id to the task over an unbounded channel; the task compares the registry with the channels it has subscribed and issues `SUBSCRIBE` or `UNSUBSCRIBE` until they match, so an attach racing the user's last detach cannot leave the user unsubscribed. An attach also hands the task a one-shot that it answers once the channel is subscribed, which the Connect response waits for.
+
+If the pub/sub connection drops (the message stream ends, or a command fails or takes over 5 seconds), the task makes a new one with backoff from 100 ms doubling to 5 seconds, and subscribes every user in the registry; attaches arriving meanwhile wait for that. Each message is wrapped as a `Frame` without decoding the `Event`: the payload is prefixed with the tag of `Frame.event` (field 3) and its length. The frame goes to every connection of the user with `try_send`, and `wrinkle_events_pushed_total` counts only those it queues; a full queue closes that connection with 1013, and the device syncs on reconnect.
 
 ### Presence
 
-[presence.rs](src/presence.rs) keeps the hash `presence:<user_id>`, device id to instance id. The instance id is `<node>/<16 random hex digits>`, so a restarted process is a new instance. The key `gateway:<instance>` is set with a 90 second expiry at startup and refreshed every 30 seconds; the services treat entries whose instance key is gone as not connected. A bound connection sets its field; on detach a Lua script deletes the field only if it still names this instance, so a device that has reconnected elsewhere keeps its entry. Binding and the end of a connection can race; `Binding` (`Pending`, `Bound`, `Gone`) makes sure that whichever comes second undoes the push registration and the presence entry.
+[presence.rs](src/presence.rs) keeps the hash `presence:<user_id>`, device id to instance id. The instance id is `<node>/<16 random hex digits>`, so a restarted process is a new instance. The key `gateway:<instance>` is set with a 90 second expiry at startup and refreshed every 30 seconds; the services treat entries whose instance key is gone as not connected. A bound connection sets its field; on detach a Lua script deletes the field only if it still names this instance, so a device that has reconnected elsewhere keeps its entry. The `ConnectionManager` reconnects after a dropped connection; a write that fails on one is retried once, and a write that still fails is logged as a warning. Binding and the end of a connection can race; `Binding` (`Pending`, `Bound`, `Gone`) makes sure that whichever comes second undoes the push registration and the presence entry.
 
 ### Drain
 
@@ -124,7 +126,7 @@ There is no live-memory metric and no profiling endpoint.
 
 [run.sh](run.sh) hands the release binary to [beside-services.sh](../beside-services.sh), which starts Go services and fan-out on 127.0.0.1:9000 and 8090, waits for them, and runs the gateway on :8080; on exit it stops the gateway first so it drains while the services still answer.
 
-The unit tests are small: the token bucket's burst and refill, ack coalescing, the instance id format, and the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`. Everything that involves a connection is left to the conformance tests.
+The unit tests are small: the listen address, the token bucket's burst and refill, ack coalescing, the instance id format, and the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`. Everything that involves a connection is left to the conformance tests.
 
 ## Measured
 
@@ -134,8 +136,5 @@ On 2026-10-11, at commit 0b06d92, before the limits and drain were added ([2026-
 
 - Gateway only: services and fan-out in Rust are open in ROADMAP.md. Pushes to devices that are not connected depend on the services beside it, which only the Go ones send.
 - No live-memory figure and no profiling endpoints; `/debug/gc` exists only so the load generator can call it.
-- It never closes with 1011, the contract's code for an internal error; a failed socket write ends the writer without a close frame, where the Go gateway closes with 1011.
-- `WRINKLE_LISTEN` takes only a port, as in the Elixir gateway; the Go and Java gateways take an address.
-- Errors writing presence entries are ignored without a log line.
 - Acks are forwarded as they come, one write at a time; coalescing them over time, as the design intends, is open in ROADMAP.md for every gateway.
-- The pub/sub task does not reconnect or resubscribe if its Valkey connection drops.
+- A Valkey restart loses the presence entries of devices that stay connected; they are written again only when each device reconnects. The instance key comes back with the next heartbeat.

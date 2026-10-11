@@ -41,6 +41,7 @@ const GOING_AWAY: u16 = 1001;
 const UNSUPPORTED_DATA: u16 = 1003;
 const POLICY_VIOLATION: u16 = 1008;
 const MESSAGE_TOO_BIG: u16 = 1009;
+const INTERNAL_ERROR: u16 = 1011;
 const TRY_AGAIN_LATER: u16 = 1013;
 
 /// What the writer sends.
@@ -199,6 +200,14 @@ struct Device {
     device_id: u64,
 }
 
+enum Attach {
+    Bound,
+    /// Another Connect bound the connection first, or it has ended.
+    Taken,
+    /// The user's push channel could not be subscribed in time.
+    Unsubscribed,
+}
+
 enum Binding {
     Pending,
     Bound(Device),
@@ -288,8 +297,8 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
     app.metrics.connection(-1);
 }
 
-/// Writes the queue to the socket until the connection is closed, then
-/// sends the close frame if there is one.
+/// Writes the queue to the socket until the connection is closed or a write
+/// fails, then sends the close frame if there is one.
 async fn write(
     mut sink: SplitSink<WebSocket, Message>,
     mut outbound: mpsc::Receiver<Out>,
@@ -302,15 +311,20 @@ async fn write(
                     Out::Frame(data) => Message::Binary(data),
                     Out::Ping => Message::Ping(Bytes::new()),
                 };
-                if sink.send(message).await.is_err() {
-                    return;
+                if let Err(e) = sink.send(message).await {
+                    tracing::warn!(error = %e, "socket write failed");
+                    return Some(Close {
+                        code: INTERNAL_ERROR,
+                        reason: "write failed",
+                    });
                 }
             }
+            None
         };
         tokio::select! {
             biased;
             close = closed => close.ok(),
-            () = pump => None,
+            close = pump => close,
         }
     };
     if let Some(Close { code, reason }) = close {
@@ -384,14 +398,8 @@ impl Conn {
 
     async fn handle_request(self: Arc<Self>, request: Request) {
         let started = Instant::now();
-        let request_id = request.id;
         let kind = request_name(&request);
-        let response = tokio::time::timeout(REQUEST_TIMEOUT, self.dispatch(request))
-            .await
-            .unwrap_or_else(|_| {
-                tracing::warn!(kind, "services call timed out");
-                services_unavailable(request_id)
-            });
+        let response = self.dispatch(request).await;
         self.reply(kind, started, response).await;
         self.in_flight.fetch_sub(1, Ordering::SeqCst);
         self.app.conns.in_flight.fetch_sub(1, Ordering::SeqCst);
@@ -409,6 +417,7 @@ impl Conn {
     /// Applies the connection's state rules, then forwards to the services.
     async fn dispatch(&self, request: Request) -> WireResponse {
         let request_id = request.id;
+        let kind = request_name(&request);
         let device = self.device();
         let is_connect = matches!(request.body, Some(request::Body::Connect(_)));
         match (is_connect, device) {
@@ -423,10 +432,14 @@ impl Conn {
             request: Some(request),
         };
         let mut backend = self.app.backend.clone();
-        let response = match backend.call(call).await {
-            Ok(r) => r.into_inner().response.unwrap_or_default(),
-            Err(e) => {
-                tracing::error!(error = %e, "backend call failed");
+        let response = match tokio::time::timeout(REQUEST_TIMEOUT, backend.call(call)).await {
+            Ok(Ok(r)) => r.into_inner().response.unwrap_or_default(),
+            Ok(Err(e)) => {
+                tracing::error!(error = %e, kind, "backend call failed");
+                return services_unavailable(request_id);
+            }
+            Err(_) => {
+                tracing::warn!(kind, "services call timed out");
                 return services_unavailable(request_id);
             }
         };
@@ -435,27 +448,40 @@ impl Conn {
                 user_id: c.user.as_ref().map(|u| u.user_id).unwrap_or_default(),
                 device_id: c.device_id,
             };
-            if !self.attach(device).await {
-                return already_connected(request_id);
+            match self.attach(device).await {
+                Attach::Bound => {}
+                Attach::Taken => return already_connected(request_id),
+                Attach::Unsubscribed => return services_unavailable(request_id),
             }
         }
         response
     }
 
-    /// Binds the connection to its device; false if a concurrent Connect
-    /// already did or the connection has ended.
-    async fn attach(&self, device: Device) -> bool {
+    /// Binds the connection to its device once its pushes are subscribed,
+    /// unless a concurrent Connect already did or the connection has ended.
+    async fn attach(&self, device: Device) -> Attach {
         {
             let mut binding = self.binding.lock().unwrap();
             if !matches!(*binding, Binding::Pending) {
-                return false;
+                return Attach::Taken;
             }
             *binding = Binding::Bound(device);
         }
-        self.app
+        if !self
+            .app
             .push
             .attach(device.user_id, self.link.clone())
-            .await;
+            .await
+        {
+            tracing::warn!("push subscription not ready, connect refused");
+            let mut binding = self.binding.lock().unwrap();
+            if matches!(*binding, Binding::Bound(_)) {
+                *binding = Binding::Pending;
+            }
+            drop(binding);
+            self.app.push.detach(device.user_id, &self.link);
+            return Attach::Unsubscribed;
+        }
         self.app
             .presence
             .set(device.user_id, device.device_id)
@@ -465,7 +491,7 @@ impl Conn {
         if matches!(*self.binding.lock().unwrap(), Binding::Gone) {
             self.unbind(device).await;
         }
-        true
+        Attach::Bound
     }
 
     async fn detach(&self) {
@@ -476,7 +502,7 @@ impl Conn {
     }
 
     async fn unbind(&self, device: Device) {
-        self.app.push.detach(device.user_id, &self.link).await;
+        self.app.push.detach(device.user_id, &self.link);
         self.app
             .presence
             .remove(device.user_id, device.device_id)

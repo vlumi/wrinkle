@@ -19,12 +19,15 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::Notify;
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
+use tracing_subscriber::EnvFilter;
 
 /// How long in-flight requests and closing connections get on shutdown.
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 /// How long the HTTP server then gets to stop.
 const SERVER_STOP_TIMEOUT: Duration = Duration::from_secs(3);
+/// How long one attempt to reach the services may take.
+const SERVICES_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 
 // Nested as the packages are, so the generated cross-references resolve.
 pub mod pb {
@@ -50,23 +53,27 @@ pub struct App {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env().add_directive("info".parse()?),
-        )
-        .init();
+    let filter = match std::env::var("RUST_LOG") {
+        Ok(directives) if !directives.is_empty() => EnvFilter::try_new(directives)?,
+        _ => EnvFilter::new("info"),
+    };
+    tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    let listen = env("WRINKLE_LISTEN", ":8080");
-    let port: u16 = listen.rsplit(':').next().unwrap_or("8080").parse()?;
+    let listen = listen_address(&env("WRINKLE_LISTEN", ":8080"));
     let services = env("WRINKLE_SERVICES", "localhost:9000");
     let valkey = env("WRINKLE_VALKEY", "localhost:6379");
     let node = env("WRINKLE_NODE", &hostname());
 
-    let backend = BackendClient::connect(format!("http://{services}")).await?;
+    // Connected on first use, so the gateway serves before the services are
+    // up; requests answer UNAVAILABLE until they are.
+    let channel = Endpoint::from_shared(format!("http://{services}"))?
+        .connect_timeout(SERVICES_CONNECT_TIMEOUT)
+        .connect_lazy();
+    let backend = BackendClient::new(channel);
     let valkey = redis::Client::open(format!("redis://{valkey}/"))?;
     let metrics = Arc::new(metrics::Metrics::default());
     let presence = presence::Presence::connect(&valkey, &node).await?;
-    let push = push::Push::connect(&valkey, metrics.clone()).await?;
+    let push = push::Push::start(valkey, metrics.clone());
     let app = Arc::new(App {
         backend,
         push,
@@ -83,9 +90,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         async move { app.presence.heartbeat().await }
     });
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = tokio::net::TcpListener::bind(&listen).await?;
+    let addr = listener.local_addr()?;
     tracing::info!(%addr, services, instance = app.presence.instance(), "gateway listening");
-    let listener = tokio::net::TcpListener::bind(addr).await?;
     let stop = Arc::new(Notify::new());
     let mut server = tokio::spawn({
         let stop = stop.clone();
@@ -177,6 +184,14 @@ async fn loopback_only(
     }
 }
 
+/// `host:port`, or `:port` for every interface.
+fn listen_address(listen: &str) -> String {
+    match listen.strip_prefix(':') {
+        Some(port) => format!("0.0.0.0:{port}"),
+        None => listen.to_string(),
+    }
+}
+
 fn env(key: &str, fallback: &str) -> String {
     std::env::var(key)
         .ok()
@@ -191,4 +206,16 @@ fn hostname() -> String {
         .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "localhost".to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn listen_address_takes_a_host_or_every_interface() {
+        assert_eq!(listen_address(":8080"), "0.0.0.0:8080");
+        assert_eq!(listen_address("127.0.0.1:8182"), "127.0.0.1:8182");
+        assert_eq!(listen_address("[::1]:8080"), "[::1]:8080");
+    }
 }
