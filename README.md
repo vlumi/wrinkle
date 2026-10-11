@@ -47,7 +47,7 @@ flowchart TB
   class devices user
 ```
 
-The diagram shows the split shape, which scales by adding gateways and services instances. A monolith runs the gateway, the services and the fan-out in one process, without the balancers.
+The diagram shows the split shape, which scales by adding gateways and services instances. A monolith runs the gateway, the services and the fan-out in one process, without the balancers. The full picture, with the data model, the flows, the guarantees and what happens when a part fails, is in [docs/architecture.md](docs/architecture.md).
 
 Components:
 
@@ -67,10 +67,10 @@ All backends implement the same Protobuf contract and pass the same conformance 
 
 | Backend | Shape | Push |
 |---|---|---|
-| Go | all roles in one process, or gateways and services instances | yes |
-| Java | all roles in one process, or gateways and services instances | stores tokens, does not send yet |
-| Elixir | gateways, beside Go or Java services | through the Go services |
-| Rust | gateways, beside Go or Java services | through the Go services |
+| [Go](backends/go/README.md) | all roles in one process, or gateways and services instances | yes |
+| [Java](backends/java/README.md) | all roles in one process, or gateways and services instances | stores tokens, does not send yet |
+| [Elixir](backends/elixir/README.md) | gateways, beside Go or Java services | through the Go services |
+| [Rust](backends/rust/README.md) | gateways, beside Go or Java services | through the Go services |
 
 Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
 
@@ -112,11 +112,11 @@ To run it on one Mac and connect from phones and other computers on the same net
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
 infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Prometheus and Grafana, HAProxy for the side-by-side setup, and the cluster; the arm64 Vitess image
-backends/     go/, java/, elixir/ and rust/ (gateways), each with a Dockerfile for the cluster
+backends/     go/, java/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)
 conformance/  backend-agnostic tests against the contract
-docs/         measuring, metrics, capacity, running on a local network, toward production, and results
+docs/         architecture, measuring, metrics, capacity, running on a local network, toward production, and results
 ```
 
 Local settings that are not committed, the Apple team and the APNs key, go in `.env` at the root; see `.env.example`.

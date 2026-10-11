@@ -1,0 +1,141 @@
+# Rust gateway
+
+The Rust implementation is a gateway only: it holds the devices' WebSocket connections, enforces the contract's per-connection limits, forwards every request to a Go or Java services process over the internal RPC (`proto/wrinkle/backend/v1`), and delivers pushes that the fan-out publishes to Valkey. It runs beside a services process, never alone. It is built on tokio, with axum for HTTP and WebSocket, tonic and prost for the RPC and the contract, and redis-rs for Valkey. ROADMAP.md explains why Elixir and Rust implement only the gateway: connection handling is where the languages differ most, while the services are SQL and a Kafka consumer. The overall architecture, its flows and its guarantees are in [docs/architecture.md](../../docs/architecture.md); this page covers how this code realizes them.
+
+## Layout
+
+```text
+Cargo.toml        dependencies; release builds keep line-level debug info
+build.rs          generates the contract from ../../proto with a vendored protoc
+src/main.rs       configuration, startup, routes, health, drain on shutdown
+src/conn.rs       one connection: read loop, writer, requests, limits, keepalive sweep
+src/push.rs       Valkey pub/sub: one channel per user, delivery to its connections
+src/presence.rs   the presence hash and this instance's expiring key
+src/metrics.rs    the shared metric names in the Prometheus text format
+run.sh            this gateway beside a Go services process
+Dockerfile        the image for the cluster
+```
+
+The generated code is not committed; [build.rs](build.rs) compiles `wrinkle/v1/frame.proto` and `wrinkle/backend/v1/services.proto` (client side only) at build time, and [main.rs](src/main.rs) includes it as `pb::v1` and `pb::backend::v1`.
+
+## Roles and startup
+
+There are no roles to choose: the binary is always a gateway. [main.rs](src/main.rs) reads its configuration from the environment, connects to the services and to Valkey, and then listens.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `WRINKLE_LISTEN` | `:8080` | Only the port is used; the gateway binds `0.0.0.0` |
+| `WRINKLE_SERVICES` | `localhost:9000` | The services RPC, or the services balancer |
+| `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
+| `WRINKLE_NODE` | output of `hostname` | The node part of the instance id |
+| `RUST_LOG` | | Extra `tracing` filter directives; `info` is always added |
+
+Startup, in order:
+
+1. One tonic `Channel` to the services. It connects eagerly, so the gateway exits if the services are not up yet; [beside-services.sh](../beside-services.sh) waits for their health check first. Every request clones the channel, which multiplexes them over one HTTP/2 connection.
+2. A presence handle on a multiplexed Valkey connection, which writes the instance key once before going on (see Presence below).
+3. A push handle on a dedicated pub/sub connection, with its task.
+4. Two background tasks: the keepalive sweep and the presence heartbeat.
+5. The axum server, with graceful shutdown wired to the drain.
+
+## Connections
+
+Each connection is served on the task axum gives its upgrade handler, plus a writer task and a task per request. The upgrade sets the size limits (64 KiB per message and frame), a 1 KiB read buffer and no write buffering, and refuses new connections with 503 while draining.
+
+```mermaid
+flowchart TB
+  ws(["WebSocket"])
+  read["Read loop (handler task)"]
+  req["Request tasks"]
+  ack["Ack task"]
+  svc["Services RPC"]
+  q[["Outbound queue (32)"]]
+  write["Writer task"]
+  push["Push task (Valkey)"]
+  sweep["Keepalive sweep"]
+
+  ws --> read
+  read -- "request" --> req
+  read -- "ack" --> ack
+  req --> svc
+  ack --> svc
+  req -- "response" --> q
+  push -- "event" --> q
+  sweep -- "ping" --> q
+  q --> write --> ws
+```
+
+The pieces, all in [conn.rs](src/conn.rs):
+
+- `Link` is what other tasks hold: the sender of the bounded outbound queue (32 entries), a one-shot close signal, the connection id and when it last received anything. `Conns` keeps every `Link` by id for the sweep and the drain, and counts requests in flight across the gateway.
+- The read loop is a `select!` over the next WebSocket message, the Connect deadline and the writer ending. Any message refreshes the last-seen time. Binary messages are decoded as `Frame`; text closes with 1003, a frame over the limit (tungstenite's capacity error) with 1009, a malformed frame or a server-side frame kind with 1008.
+- The writer task drains the queue to the socket. When the close signal fires it stops writing and sends the close frame, giving it 3 seconds; the first close wins, later ones are ignored. When the read loop ends without a close, `Link::finish` drops the signal so the writer stops without a frame.
+- Each request runs in its own `tokio::spawn`ed task. `dispatch` applies the state rules (a second Connect is `FAILED_PRECONDITION`, anything before Connect is `UNAUTHENTICATED`), then calls `BackendService.Call` with the bound user and device. A call taking over 10 seconds, or failing, answers `UNAVAILABLE` with the request's id. A successful Connect response binds the connection; if another Connect bound it first, this one gets `FAILED_PRECONDITION` instead.
+- Responses wait for room in the queue, which holds back the device's own requests; pushes do not wait (see Push delivery).
+
+Limits, as the contract in `proto/wrinkle/v1/frame.proto` sets them:
+
+| Limit | How |
+|---|---|
+| 64 KiB per frame | axum's `max_message_size` and `max_frame_size`; close 1009 |
+| 50 frames/s, bursts of 100 | a `TokenBucket` per connection, owned by the read loop; every decoded frame takes a token. A request without one fails with `RESOURCE_EXHAUSTED`; an ack or ping without one is dropped |
+| 32 requests in flight | an atomic counter per connection; beyond it, `RESOURCE_EXHAUSTED` |
+| Connect within 5 s | a timer in the read loop; if the connection is not bound when it fires, close 1008 |
+| One ack write at a time | `Acks`: one task writes `BackendService.Ack`; acks arriving meanwhile collapse into the highest cursor, written next |
+| Pings every 30 s, idle after 90 s | the gateway-wide sweep runs every 10 s, closes connections idle for 90 s with 1001, and every third sweep queues a WebSocket ping (skipped if the queue is full) |
+| Keeping up with events | a full queue on push closes with 1013 |
+
+Application-level `Ping` frames get a `Pong`; client `Pong` frames are ignored. Rejected requests are still counted in the request metrics.
+
+### Push delivery
+
+[push.rs](src/push.rs) holds a registry from user id to the `Link`s of that user's connections on this gateway, and one Valkey pub/sub connection owned by a single task. The first connection of a user subscribes to `push:<user_id>`, the last one to leave unsubscribes; the commands reach the task over an unbounded channel, so they stay in order. Each message is wrapped as a `Frame` without decoding the `Event`: the payload is prefixed with the tag of `Frame.event` (field 3) and its length. The frame goes to every connection of the user with `try_send`; a full queue closes that connection with 1013, and the device syncs on reconnect.
+
+### Presence
+
+[presence.rs](src/presence.rs) keeps the hash `presence:<user_id>`, device id to instance id. The instance id is `<node>/<16 random hex digits>`, so a restarted process is a new instance. The key `gateway:<instance>` is set with a 90 second expiry at startup and refreshed every 30 seconds; the services treat entries whose instance key is gone as not connected. A bound connection sets its field; on detach a Lua script deletes the field only if it still names this instance, so a device that has reconnected elsewhere keeps its entry. Binding and the end of a connection can race; `Binding` (`Pending`, `Bound`, `Gone`) makes sure that whichever comes second undoes the push registration and the presence entry.
+
+### Drain
+
+On SIGTERM or SIGINT [main.rs](src/main.rs) stops the sweep and the heartbeat, then `Conns::drain` marks the gateway draining (health check and upgrades answer 503) and closes every connection with 1001. It waits up to 5 seconds for every connection to detach and every request in flight to finish, deletes the instance key, and gives the HTTP server 3 seconds to stop.
+
+## Metrics and debug endpoints
+
+On the listening port:
+
+- `GET /v1/ws`: the WebSocket endpoint.
+- `GET /healthz`: `ok`, or 503 `draining`.
+- `GET /metrics`: written by hand in [metrics.rs](src/metrics.rs): `wrinkle_connections`, `wrinkle_events_pushed_total`, `wrinkle_requests_total` and `wrinkle_request_duration_seconds` by request type, plus `process_cpu_seconds_total` from `getrusage` and `process_resident_memory_bytes` from the `memory-stats` crate. Names and meanings are in [docs/metrics.md](../../docs/metrics.md).
+- `POST /debug/gc`: answers `ok` and does nothing, since there is no collector; the load generator calls it on every backend before reading memory. Only loopback peers reach it; others get 403.
+
+There is no live-memory metric and no profiling endpoint.
+
+## Building, running, testing
+
+| Target | What |
+|---|---|
+| `make build-rust` | `cargo build --release` |
+| `make run-rust-gw` | the gateway on :8182 for the side-by-side setup, through [gateway.sh](../gateway.sh); needs `make lb-up` and a services instance |
+| `make conformance-rust-gw` | the conformance tests against [run.sh](run.sh), this gateway beside a Go services process |
+| `make measure-rust-gw` | the measurement protocol, from a fresh stack; results labeled `rust` |
+| `make rust-lint` | `cargo fmt --check` and `cargo clippy --release -- -D warnings` |
+| `make rust-test` | the unit tests |
+| `make cluster-up RUST_GW=n` | n gateways in containers, from the [Dockerfile](Dockerfile) |
+
+[run.sh](run.sh) hands the release binary to [beside-services.sh](../beside-services.sh), which starts Go services and fan-out on 127.0.0.1:9000 and 8090, waits for them, and runs the gateway on :8080; on exit it stops the gateway first so it drains while the services still answer.
+
+The unit tests are small: the token bucket's burst and refill, ack coalescing, the instance id format, and the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`. Everything that involves a connection is left to the conformance tests.
+
+## Measured
+
+On 2026-10-11, at commit 0b06d92, before the limits and drain were added ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), raw runs in [2026-10-11-rust.jsonl](../../docs/results/2026-10-11-rust.jsonl)): 4000 idle connections in 78 MiB resident, against about 167 MiB for the Go gateway; at 500 messages per second over 1000 connections, 84 ms p50 and 246 ms p99 end to end, and 277 ms of gateway CPU per 1000 messages. The current code has not been measured.
+
+## Gaps
+
+- Gateway only: services and fan-out in Rust are open in ROADMAP.md. Pushes to devices that are not connected depend on the services beside it, which only the Go ones send.
+- No live-memory figure and no profiling endpoints; `/debug/gc` exists only so the load generator can call it.
+- It never closes with 1011, the contract's code for an internal error; a failed socket write ends the writer without a close frame, where the Go gateway closes with 1011.
+- `WRINKLE_LISTEN` takes only a port, as in the Elixir gateway; the Go and Java gateways take an address.
+- Errors writing presence entries are ignored without a log line.
+- Acks are forwarded as they come, one write at a time; coalescing them over time, as the design intends, is open in ROADMAP.md for every gateway.
+- The pub/sub task does not reconnect or resubscribe if its Valkey connection drops.
