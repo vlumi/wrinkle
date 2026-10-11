@@ -126,6 +126,10 @@ Options, cheapest first:
 - [ ] A plain MySQL profile of the infrastructure, same schema, no sharding, to measure Vitess's share and give the backends headroom.
 - [ ] A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes.
 
+## Features
+
+Tracked as issues: user accounts and profiles (#1), group conversations (#2), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6). What a public deployment would need, and its cost, is in `docs/production.md`.
+
 ## Later
 
 - [ ] The change-data path does not survive a restart of the Vitess container on its existing data: vtcombo comes back without a primary tablet for streaming, and Debezium retries forever. `make infra-reset` recovers. Rebuilding the image (a change under `infra/vitess/`) restarts it; so does Docker Desktop restarting.
