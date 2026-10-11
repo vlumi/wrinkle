@@ -11,9 +11,12 @@ use redis::Msg;
 use redis::aio::PubSub;
 use tokio::sync::{Mutex, mpsc};
 
+use crate::conn::Link;
+use crate::metrics::Metrics;
+
 const CHANNEL_PREFIX: &str = "push:";
 
-type Outbound = mpsc::Sender<Bytes>;
+type Outbound = Arc<Link>;
 type Registry = Arc<Mutex<HashMap<u64, Vec<Outbound>>>>;
 
 enum Command {
@@ -27,11 +30,14 @@ pub struct Push {
 }
 
 impl Push {
-    pub async fn connect(client: &redis::Client) -> redis::RedisResult<Self> {
+    pub async fn connect(
+        client: &redis::Client,
+        metrics: Arc<Metrics>,
+    ) -> redis::RedisResult<Self> {
         let pubsub = client.get_async_pubsub().await?;
         let registry = Registry::default();
         let (commands, receiver) = mpsc::unbounded_channel();
-        tokio::spawn(run(pubsub, receiver, registry.clone()));
+        tokio::spawn(run(pubsub, receiver, registry.clone(), metrics));
         Ok(Self { registry, commands })
     }
 
@@ -55,7 +61,7 @@ impl Push {
             let Some(conns) = registry.get_mut(&user_id) else {
                 return;
             };
-            conns.retain(|c| !c.same_channel(out));
+            conns.retain(|c| !Arc::ptr_eq(c, out));
             let last = conns.is_empty();
             if last {
                 registry.remove(&user_id);
@@ -68,7 +74,12 @@ impl Push {
     }
 }
 
-async fn run(pubsub: PubSub, mut commands: mpsc::UnboundedReceiver<Command>, registry: Registry) {
+async fn run(
+    pubsub: PubSub,
+    mut commands: mpsc::UnboundedReceiver<Command>,
+    registry: Registry,
+    metrics: Arc<Metrics>,
+) {
     let (mut sink, mut stream) = pubsub.split();
     loop {
         tokio::select! {
@@ -85,14 +96,14 @@ async fn run(pubsub: PubSub, mut commands: mpsc::UnboundedReceiver<Command>, reg
             },
             message = stream.next() => {
                 if let Some(message) = message {
-                    deliver(&registry, &message).await;
+                    deliver(&registry, &metrics, &message).await;
                 }
             }
         }
     }
 }
 
-async fn deliver(registry: &Registry, message: &Msg) {
+async fn deliver(registry: &Registry, metrics: &Metrics, message: &Msg) {
     let Some(user_id) = message
         .get_channel_name()
         .strip_prefix(CHANNEL_PREFIX)
@@ -108,8 +119,10 @@ async fn deliver(registry: &Registry, message: &Msg) {
         .cloned()
         .unwrap_or_default();
     for out in targets {
-        // A device that does not keep up misses the push; it gets the event on its next sync.
-        let _ = out.try_send(frame.clone());
+        // A device that does not keep up is disconnected; it syncs on reconnect.
+        if out.push(frame.clone()) {
+            metrics.pushed();
+        }
     }
 }
 

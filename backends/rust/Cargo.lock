@@ -1791,6 +1791,7 @@ dependencies = [
  "tonic-prost-build",
  "tracing",
  "tracing-subscriber",
+ "tungstenite",
 ]
 
 [[package]]
