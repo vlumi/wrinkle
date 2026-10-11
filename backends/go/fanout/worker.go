@@ -1,14 +1,13 @@
 // Package fanout turns committed outbox rows, read from Kafka, into entries
 // in the event logs of everyone concerned, and pushes them to connected
-// devices: a conversation's events to both participants, a user's profile
-// changes to the user and every conversation partner, a user's device
-// changes to the user.
+// devices: a conversation's events to the recipients its row names, a
+// user's profile changes to the user and every direct conversation partner,
+// a user's device changes to the user.
 package fanout
 
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kgo"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
@@ -28,6 +28,10 @@ const (
 	ConversationTopic = "wrinkle.conversation.outbox"
 	UserTopic         = "wrinkle.user.user_outbox"
 )
+
+// recipientConcurrency is how many recipients of one row are delivered to
+// at a time.
+const recipientConcurrency = 16
 
 // Topics are the topics the worker consumes.
 var Topics = []string{ConversationTopic, UserTopic}
@@ -211,21 +215,17 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		w.log.Error("skipping outbox record without a body", "kind", o.kind, "offset", rec.Offset)
 		return nil
 	}
-	errs := make(chan error, 2)
-	for _, userID := range []ids.UUID{o.userA, o.userB} {
-		go func() {
-			if err := w.deliver(ctx, userID, o); err != nil {
-				errs <- fmt.Errorf("deliver to user %s: %w", userID, err)
-				return
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(recipientConcurrency)
+	for _, userID := range o.recipients {
+		g.Go(func() error {
+			if err := w.deliver(gctx, userID, o); err != nil {
+				return fmt.Errorf("deliver to user %s: %w", userID, err)
 			}
-			errs <- nil
-		}()
+			return nil
+		})
 	}
-	var joined error
-	for range 2 {
-		joined = errors.Join(joined, <-errs)
-	}
-	return joined
+	return g.Wait()
 }
 
 func (w *Worker) handleUserRecord(ctx context.Context, rec *kgo.Record) error {

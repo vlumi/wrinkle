@@ -94,8 +94,8 @@ func run() error {
 			return err
 		}
 		defer userDB.Close()
-		conversations := conversation.New(conversationDB)
 		accts := accounts.New(userDB, store)
+		conversations := conversation.New(conversationDB, accts)
 		users := devicesync.New(userDB, accts, conversations)
 		local = services.NewLocal(accts, conversations, users, uploads.New(userDB, store), log.With("role", "services"))
 	}

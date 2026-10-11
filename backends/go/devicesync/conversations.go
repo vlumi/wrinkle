@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"fmt"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/vlumi/wrinkle/backends/go/accounts"
+	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
@@ -44,13 +46,18 @@ func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*
 	}
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT IGNORE INTO user_conversation
-			(user_id, conversation_id, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted,
-			 last_seq, read_seq, peer_read_seq, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`,
+			(user_id, conversation_id, kind, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted,
+			 member, last_seq, read_seq, peer_read_seq, updated_at)
+		VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, TRUE, 0, 0, 0, ?)`,
 		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(),
 		s.now()); err != nil {
 		return nil, err
 	}
+	return s.listed(ctx, userID, conversationID)
+}
+
+// listed returns the user's list entry of the conversation.
+func (s *Service) listed(ctx context.Context, userID, conversationID ids.UUID) (*pb.Conversation, error) {
 	rows, err := s.db.QueryContext(ctx, conversationColumns+`
 		FROM user_conversation WHERE user_id = ? AND conversation_id = ?`, userID, conversationID)
 	if err != nil {
@@ -80,36 +87,48 @@ func (s *Service) ListConversations(ctx context.Context, userID ids.UUID) ([]*pb
 }
 
 const conversationColumns = `
-	SELECT conversation_id, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted, last_seq,
+	SELECT conversation_id, kind, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted,
+		topic, member_count, member, admin, last_seq,
 		last_sender_user_id, last_client_message_id, last_body, last_sent_at,
 		read_seq, peer_read_seq`
 
 func scanConversations(rows *sql.Rows) ([]*pb.Conversation, error) {
 	var list []*pb.Conversation
 	for rows.Next() {
-		c := &pb.Conversation{Peer: &pb.User{}}
+		c := &pb.Conversation{}
+		peer := &pb.User{}
 		var (
-			conversationID, peerID ids.UUID
-			sender                 []byte
-			clientID               sql.NullString
-			body                   sql.NullString
-			sentAt                 sql.NullTime
+			conversationID ids.UUID
+			kind           string
+			peerID, sender []byte
+			clientID       sql.NullString
+			body           []byte
+			sentAt         sql.NullTime
 		)
-		if err := rows.Scan(&conversationID, &peerID, &c.Peer.Name, &c.Peer.Icon, &c.Peer.Avatar, &c.Peer.Deleted, &c.LastSeq,
+		if err := rows.Scan(&conversationID, &kind, &peerID, &peer.Name, &peer.Icon, &peer.Avatar, &peer.Deleted,
+			&c.Topic, &c.MemberCount, &c.Member, &c.Admin, &c.LastSeq,
 			&sender, &clientID, &body, &sentAt, &c.ReadSeq, &c.PeerReadSeq); err != nil {
 			return nil, err
 		}
 		c.ConversationId = conversationID.Bytes()
-		c.Peer.UserId = peerID.Bytes()
+		c.Kind = conversation.Kind(kind)
+		if peerID != nil {
+			peer.UserId = peerID
+			c.Peer = peer
+		}
 		if c.LastSeq > 0 && sender != nil {
 			c.LastMessage = &pb.Message{
 				ConversationId:  c.ConversationId,
 				Seq:             c.LastSeq,
 				SenderUserId:    sender,
 				ClientMessageId: clientID.String,
-				Text:            body.String,
 				SentAt:          timestamppb.New(sentAt.Time),
 			}
+			content := &pb.Message{}
+			if err := proto.Unmarshal(body, content); err != nil {
+				return nil, fmt.Errorf("last message of conversation %s: %w", conversationID, err)
+			}
+			c.LastMessage.Content = content.Content
 		}
 		list = append(list, c)
 	}

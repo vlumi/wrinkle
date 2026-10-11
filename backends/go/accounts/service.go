@@ -8,13 +8,14 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/blobs"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/label"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -41,17 +42,7 @@ func New(db *sql.DB, blobs *blobs.Store) *Service {
 // ValidName reports whether a user name is acceptable: valid UTF-8 of 1 to
 // 64 bytes, no control characters, no white space at either end.
 func ValidName(name string) bool {
-	if name == "" || len(name) > maxNameBytes || !utf8.ValidString(name) {
-		return false
-	}
-	for _, r := range name {
-		if unicode.Is(unicode.Cc, r) {
-			return false
-		}
-	}
-	first, _ := utf8.DecodeRuneInString(name)
-	last, _ := utf8.DecodeLastRuneInString(name)
-	return !unicode.Is(unicode.White_Space, first) && !unicode.Is(unicode.White_Space, last)
+	return label.Valid(name, maxNameBytes)
 }
 
 func validPassword(password string) bool {
@@ -97,4 +88,44 @@ func (s *Service) Profile(ctx context.Context, userID ids.UUID) (*pb.User, bool,
 	}
 	user.Deleted = deletedAt.Valid
 	return user, true, nil
+}
+
+// Profiles reads the profiles of several users in one query. A user that
+// does not exist has only its id.
+func (s *Service) Profiles(ctx context.Context, userIDs []ids.UUID) (map[ids.UUID]*pb.User, error) {
+	profiles := make(map[ids.UUID]*pb.User, len(userIDs))
+	if len(userIDs) == 0 {
+		return profiles, nil
+	}
+	args := make([]any, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT user_id, name, icon, avatar, deleted_at FROM user
+		WHERE user_id IN (?`+strings.Repeat(", ?", len(userIDs)-1)+`)`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var userID ids.UUID
+		user := &pb.User{}
+		var deletedAt sql.NullTime
+		if err := rows.Scan(&userID, &user.Name, &user.Icon, &user.Avatar, &deletedAt); err != nil {
+			return nil, err
+		}
+		user.UserId = userID.Bytes()
+		user.Deleted = deletedAt.Valid
+		profiles[userID] = user
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, id := range userIDs {
+		if profiles[id] == nil {
+			profiles[id] = &pb.User{UserId: id.Bytes()}
+		}
+	}
+	return profiles, nil
 }

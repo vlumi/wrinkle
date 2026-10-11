@@ -23,19 +23,22 @@ const duplicateKey = 1062
 // appends the event.
 type listUpdate func(ctx context.Context, tx *sql.Tx, event *pb.Event) error
 
-// deliver appends a conversation's event to one participant's log, then
+// deliver appends a conversation's event to one recipient's log, then
 // pushes it.
 func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) error {
-	peerID := o.peerOf(userID)
+	var peerID ids.UUID
 	var peer *pb.User
-	if o.event.GetMessage() != nil {
-		var err error
-		if peer, err = w.peerForNewEntry(ctx, userID, o.conversationID, peerID); err != nil {
-			return err
+	if o.direct() {
+		peerID = o.peerOf(userID)
+		if o.event.GetMessage() != nil {
+			var err error
+			if peer, err = w.peerForNewEntry(ctx, userID, o.conversationID, peerID); err != nil {
+				return err
+			}
 		}
 	}
 	update := func(ctx context.Context, tx *sql.Tx, event *pb.Event) error {
-		return updateConversationList(ctx, tx, userID, peerID, peer, o.conversationID, event)
+		return updateConversationList(ctx, tx, userID, peerID, peer, o, event)
 	}
 	event, err := w.append(ctx, userID, o.conversationID, o.outboxID, o.event, update)
 	if err != nil || event == nil {
@@ -166,63 +169,124 @@ func appendEvent(ctx context.Context, tx *sql.Tx, userID, sourceID ids.UUID, out
 	return true, nil
 }
 
-func updateConversationList(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, peer *pb.User, conversationID ids.UUID, event *pb.Event) error {
+func updateConversationList(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, peer *pb.User, o *outboxRow, event *pb.Event) error {
 	switch body := event.GetBody().(type) {
 	case *pb.Event_Message:
-		return recordMessage(ctx, tx, userID, peerID, peer, conversationID, body.Message.GetMessage(), event.GetOccurredAt().AsTime())
+		return recordMessage(ctx, tx, userID, peerID, peer, o, body.Message.GetMessage(), event.GetOccurredAt().AsTime())
 	case *pb.Event_Read:
-		return recordRead(ctx, tx, userID, conversationID, body.Read)
+		return recordRead(ctx, tx, userID, o, body.Read)
 	}
 	return nil
 }
 
+// flag is a change to a membership flag of a list entry, when set.
+type flag struct{ set, value bool }
+
+// membership is what a group's notice changes about the recipient's place
+// in it.
+func membership(userID ids.UUID, msg *pb.Message) (member, admin flag) {
+	is := func(u *pb.User) bool { return u != nil && bytes.Equal(u.GetUserId(), userID[:]) }
+	sender := bytes.Equal(msg.GetSenderUserId(), userID[:])
+	switch n := msg.GetNotice().GetKind().(type) {
+	case *pb.Notice_GroupCreated:
+		return flag{true, true}, flag{true, sender}
+	case *pb.Notice_MembersAdded:
+		for _, u := range n.MembersAdded.GetUsers() {
+			if is(u) {
+				return flag{true, true}, flag{true, false}
+			}
+		}
+	case *pb.Notice_MemberRemoved:
+		if is(n.MemberRemoved.GetUser()) {
+			return flag{true, false}, flag{true, false}
+		}
+	case *pb.Notice_MemberLeft:
+		if sender {
+			return flag{true, false}, flag{true, false}
+		}
+		if is(n.MemberLeft.GetPromoted()) {
+			return flag{}, flag{true, true}
+		}
+	case *pb.Notice_AdminChanged:
+		if is(n.AdminChanged.GetUser()) {
+			return flag{}, flag{true, n.AdminChanged.GetAdmin()}
+		}
+	}
+	return flag{}, flag{}
+}
+
 // recordMessage adds the conversation to the user's list, or makes the
-// message its last unless a later one is already there. The sender's own
-// read position moves to the message. A new entry takes the peer's
-// profile; an existing one keeps what profile changes put there.
-func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, peer *pb.User, conversationID ids.UUID, msg *pb.Message, occurredAt time.Time) error {
+// message its last unless a later one is already there; the group's topic,
+// size and the user's membership follow the latest message the same way.
+// The sender's own read position moves to the message. A new direct entry
+// takes the peer's profile; an existing one keeps what profile changes put
+// there.
+func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, peer *pb.User, o *outboxRow, msg *pb.Message, occurredAt time.Time) error {
 	var ownSeq uint64
 	if bytes.Equal(msg.GetSenderUserId(), userID[:]) {
 		ownSeq = msg.GetSeq()
 	}
-	_, err := tx.ExecContext(ctx, `
+	var peerColumn any
+	if o.direct() {
+		peerColumn = peerID
+	}
+	body, err := proto.Marshal(&pb.Message{Content: msg.GetContent()})
+	if err != nil {
+		return err
+	}
+	member, admin := membership(userID, msg)
+	seq := msg.GetSeq()
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO user_conversation
-			(user_id, conversation_id, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted, last_seq,
+			(user_id, conversation_id, kind, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted,
+			 topic, member_count, member, admin, last_seq,
 			 last_sender_user_id, last_client_message_id, last_body, last_sent_at,
 			 read_seq, peer_read_seq, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
 		ON DUPLICATE KEY UPDATE
 			last_seq = GREATEST(last_seq, ?),
+			topic = IF(? >= last_seq, ?, topic),
+			member_count = IF(? >= last_seq, ?, member_count),
+			member = IF(? AND ? >= last_seq, ?, member),
+			admin = IF(? AND ? >= last_seq, ?, admin),
 			last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),
 			last_client_message_id = IF(? >= last_seq, ?, last_client_message_id),
 			last_body = IF(? >= last_seq, ?, last_body),
 			last_sent_at = IF(? >= last_seq, ?, last_sent_at),
 			read_seq = GREATEST(read_seq, ?),
 			updated_at = GREATEST(updated_at, ?)`,
-		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(), msg.GetSeq(),
-		msg.GetSenderUserId(), msg.GetClientMessageId(), msg.GetText(), msg.GetSentAt().AsTime(),
+		userID, o.conversationID, o.conversationKind, peerColumn, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(),
+		o.topic, o.memberCount, !member.set || member.value, admin.value, seq,
+		msg.GetSenderUserId(), msg.GetClientMessageId(), body, msg.GetSentAt().AsTime(),
 		ownSeq, occurredAt,
-		msg.GetSeq(),
-		msg.GetSeq(), msg.GetSenderUserId(),
-		msg.GetSeq(), msg.GetClientMessageId(),
-		msg.GetSeq(), msg.GetText(),
-		msg.GetSeq(), msg.GetSentAt().AsTime(),
+		seq,
+		seq, o.topic,
+		seq, o.memberCount,
+		member.set, seq, member.value,
+		admin.set, seq, admin.value,
+		seq, msg.GetSenderUserId(),
+		seq, msg.GetClientMessageId(),
+		seq, body,
+		seq, msg.GetSentAt().AsTime(),
 		ownSeq,
 		occurredAt)
 	return err
 }
 
-// recordRead moves the user's own read position or the peer's, whichever
-// the event is about.
-func recordRead(ctx context.Context, tx *sql.Tx, userID, conversationID ids.UUID, read *pb.ReadEvent) error {
+// recordRead moves the user's own read position or, in a direct
+// conversation, the peer's, whichever the event is about.
+func recordRead(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxRow, read *pb.ReadEvent) error {
 	column := "peer_read_seq"
-	if bytes.Equal(read.GetUserId(), userID[:]) {
+	switch {
+	case bytes.Equal(read.GetUserId(), userID[:]):
 		column = "read_seq"
+	case !o.direct():
+		return nil
 	}
 	_, err := tx.ExecContext(ctx, `
 		UPDATE user_conversation SET `+column+` = GREATEST(`+column+`, ?)
 		WHERE user_id = ? AND conversation_id = ?`,
-		read.GetSeq(), userID, conversationID)
+		read.GetSeq(), userID, o.conversationID)
 	return err
 }
 

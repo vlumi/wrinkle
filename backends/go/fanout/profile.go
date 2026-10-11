@@ -21,8 +21,8 @@ const (
 )
 
 // deliverProfile appends a profile change to the user's own log, then to
-// each conversation partner's, with the partner's list entry updated in
-// the same transaction. A deleted user's log gets nothing.
+// each direct conversation partner's, with the partner's list entry
+// updated in the same transaction. A deleted user's log gets nothing.
 func (w *Worker) deliverProfile(ctx context.Context, o *userOutboxRow) error {
 	user := o.event.GetProfile().GetUser()
 	if _, err := w.append(ctx, o.userID, o.userID, o.outboxID, o.event, nil); err != nil {
@@ -63,12 +63,13 @@ func (w *Worker) deliverProfile(ctx context.Context, o *userOutboxRow) error {
 
 type partner struct{ conversationID, peerID ids.UUID }
 
-// partners returns a page of the user's conversations after the given one,
-// in id order.
+// partners returns a page of the user's direct conversations after the
+// given one, in id order.
 func (w *Worker) partners(ctx context.Context, userID, after ids.UUID) ([]partner, error) {
 	rows, err := w.db.QueryContext(ctx, `
 		SELECT conversation_id, peer_user_id FROM user_conversation
-		WHERE user_id = ? AND conversation_id > ? ORDER BY conversation_id LIMIT ?`,
+		WHERE user_id = ? AND conversation_id > ? AND peer_user_id IS NOT NULL
+		ORDER BY conversation_id LIMIT ?`,
 		userID, after, profilePage)
 	if err != nil {
 		return nil, err

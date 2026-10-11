@@ -103,7 +103,8 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 		}
 		resp.Body = &pb.Response_SignOutDevice{SignOutDevice: &pb.SignOutDeviceResponse{}}
 	case *pb.Request_DeleteAccount:
-		if err := l.accounts.DeleteAccount(ctx, userID, r.DeleteAccount); err != nil {
+		leave := func(ctx context.Context) error { return l.users.LeaveGroups(ctx, userID) }
+		if err := l.accounts.DeleteAccount(ctx, userID, r.DeleteAccount, leave); err != nil {
 			return err
 		}
 		resp.Body = &pb.Response_DeleteAccount{DeleteAccount: &pb.DeleteAccountResponse{}}
@@ -119,6 +120,63 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_OpenConversation{OpenConversation: &pb.OpenConversationResponse{Conversation: conv}}
+	case *pb.Request_CreateGroup:
+		conv, err := l.users.CreateGroup(ctx, userID, r.CreateGroup)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_CreateGroup{CreateGroup: &pb.CreateGroupResponse{Conversation: conv}}
+	case *pb.Request_AddMembers:
+		if err := l.users.AddMembers(ctx, userID, r.AddMembers); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_AddMembers{AddMembers: &pb.AddMembersResponse{}}
+	case *pb.Request_RemoveMember:
+		conversationID, targetID, err := parseMemberIDs(r.RemoveMember.GetConversationId(), r.RemoveMember.GetUserId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.RemoveMember(ctx, userID, conversationID, targetID); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_RemoveMember{RemoveMember: &pb.RemoveMemberResponse{}}
+	case *pb.Request_LeaveGroup:
+		conversationID, err := parseConversationID(r.LeaveGroup.GetConversationId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.Leave(ctx, userID, conversationID); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_LeaveGroup{LeaveGroup: &pb.LeaveGroupResponse{}}
+	case *pb.Request_SetTopic:
+		conversationID, err := parseConversationID(r.SetTopic.GetConversationId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.SetTopic(ctx, userID, conversationID, r.SetTopic.GetTopic()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SetTopic{SetTopic: &pb.SetTopicResponse{}}
+	case *pb.Request_SetAdmin:
+		conversationID, targetID, err := parseMemberIDs(r.SetAdmin.GetConversationId(), r.SetAdmin.GetUserId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.SetAdmin(ctx, userID, conversationID, targetID, r.SetAdmin.GetAdmin()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SetAdmin{SetAdmin: &pb.SetAdminResponse{}}
+	case *pb.Request_GetMembers:
+		conversationID, err := parseConversationID(r.GetMembers.GetConversationId())
+		if err != nil {
+			return err
+		}
+		members, err := l.conversations.Members(ctx, userID, conversationID)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_GetMembers{GetMembers: &pb.GetMembersResponse{Members: members}}
 	case *pb.Request_SendMessage:
 		conversationID, err := parseConversationID(r.SendMessage.GetConversationId())
 		if err != nil {
@@ -205,4 +263,16 @@ func parseConversationID(b []byte) (ids.UUID, error) {
 		return id, apierror.InvalidArgument("conversation_id must be 16 bytes")
 	}
 	return id, nil
+}
+
+func parseMemberIDs(conversation, user []byte) (ids.UUID, ids.UUID, error) {
+	conversationID, err := parseConversationID(conversation)
+	if err != nil {
+		return conversationID, ids.UUID{}, err
+	}
+	userID, ok := ids.Parse(user)
+	if !ok {
+		return conversationID, userID, apierror.InvalidArgument("user_id must be 16 bytes")
+	}
+	return conversationID, userID, nil
 }

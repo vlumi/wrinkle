@@ -1,7 +1,7 @@
-// Package conversation is the conversation service: sending, read marks and
-// history, against the conversation keyspace. Every change writes an
-// outbox row in the same transaction, which change data capture carries to
-// the fan-out.
+// Package conversation is the conversation service: direct conversations
+// and groups, sending, read marks and history, against the conversation
+// keyspace. Every change writes an outbox row in the same transaction,
+// which change data capture carries to the fan-out.
 package conversation
 
 import (
@@ -14,7 +14,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-sql-driver/mysql"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
@@ -27,19 +26,29 @@ const (
 	maxTextLength      = 4000
 	defaultPageSize    = 50
 	maxPageSize        = 500
+	// readSendersWindow bounds the messages a group read event looks at
+	// for the senders to tell.
+	readSendersWindow = 1000
 )
 
+// Profiles reads users' current profiles from the user keyspace, for the
+// snapshots in notices and member lists.
+type Profiles interface {
+	Profiles(ctx context.Context, userIDs []ids.UUID) (map[ids.UUID]*pb.User, error)
+}
+
 type Service struct {
-	db  *sql.DB
-	now func() time.Time
+	db       *sql.DB
+	profiles Profiles
+	now      func() time.Time
 }
 
-func New(db *sql.DB) *Service {
-	return &Service{db: db, now: func() time.Time { return time.Now().UTC() }}
+func New(db *sql.DB, profiles Profiles) *Service {
+	return &Service{db: db, profiles: profiles, now: func() time.Time { return time.Now().UTC() }}
 }
 
-// Open finds or creates the conversation between two users, user_a <
-// user_b. The pair row, on user_a's shard, decides between two opening at
+// Open finds or creates the direct conversation between two users, user_a
+// < user_b. The pair row, on user_a's shard, decides between two opening at
 // once; a pair whose conversation row is missing gets it here.
 func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, error) {
 	conversationID, found, err := s.pair(ctx, userA, userB)
@@ -63,10 +72,17 @@ func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, er
 			}
 		}
 	}
+	now := s.now()
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT IGNORE INTO conversation (conversation_id, kind, topic, members, last_seq, created_at)
+		VALUES (?, ?, '', ?, 0, ?)`,
+		conversationID, kindDirect, encodeMembers([]ids.UUID{userA, userB}), now); err != nil {
+		return conversationID, err
+	}
 	_, err = s.db.ExecContext(ctx, `
-		INSERT IGNORE INTO conversation (conversation_id, user_a, user_b, last_seq, created_at)
-		VALUES (?, ?, ?, 0, ?)`,
-		conversationID, userA, userB, s.now())
+		INSERT IGNORE INTO conversation_member (conversation_id, user_id, admin, joined_seq, left_seq, joined_at)
+		VALUES (?, ?, FALSE, 1, NULL, ?), (?, ?, FALSE, 1, NULL, ?)`,
+		conversationID, userA, now, conversationID, userB, now)
 	return conversationID, err
 }
 
@@ -89,41 +105,6 @@ func isDuplicate(err error) bool {
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey
 }
 
-type header struct {
-	userA, userB ids.UUID
-	lastSeq      uint64
-}
-
-func (h header) has(userID ids.UUID) bool {
-	return userID == h.userA || userID == h.userB
-}
-
-const (
-	selectHeader          = `SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ?`
-	selectHeaderForUpdate = selectHeader + ` FOR UPDATE`
-)
-
-type rowQuerier interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
-// member reads the conversation's header with the given query and checks
-// that the user is a participant.
-func member(ctx context.Context, q rowQuerier, query string, conversationID, userID ids.UUID) (header, error) {
-	var h header
-	err := q.QueryRowContext(ctx, query, conversationID).Scan(&h.userA, &h.userB, &h.lastSeq)
-	if errors.Is(err, sql.ErrNoRows) {
-		return h, apierror.NotFound("conversation %s does not exist", conversationID)
-	}
-	if err != nil {
-		return h, err
-	}
-	if !h.has(userID) {
-		return h, apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
-	}
-	return h, nil
-}
-
 // Send stores a message, assigning the next sequence number. Resending with
 // the same client message id returns the message stored the first time.
 func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID, text string) (*pb.Message, error) {
@@ -139,7 +120,7 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	}
 	defer tx.Rollback()
 
-	h, err := member(ctx, tx, selectHeaderForUpdate, conversationID, userID)
+	st, err := member(ctx, tx, selectStateForUpdate, conversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -147,40 +128,23 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 		ConversationId:  conversationID.Bytes(),
 		SenderUserId:    userID.Bytes(),
 		ClientMessageId: clientMessageID,
-		Text:            text,
 	}
+	var body []byte
 	var sentAt time.Time
 	err = tx.QueryRowContext(ctx, `
 		SELECT seq, body, sent_at FROM message
 		WHERE conversation_id = ? AND sender_user_id = ? AND client_message_id = ?`,
-		conversationID, userID, clientMessageID).Scan(&msg.Seq, &msg.Text, &sentAt)
+		conversationID, userID, clientMessageID).Scan(&msg.Seq, &body, &sentAt)
 	if err == nil {
 		msg.SentAt = timestamppb.New(sentAt)
-		return msg, nil
+		return msg, decodeBody(body, msg)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-
-	sentAt = s.now()
-	msg.Seq = h.lastSeq + 1
-	msg.SentAt = timestamppb.New(sentAt)
-	if _, err := tx.ExecContext(ctx, `
-		UPDATE conversation SET last_seq = ? WHERE conversation_id = ?`,
-		msg.Seq, conversationID); err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id, body, sent_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		conversationID, msg.Seq, userID, clientMessageID, text, sentAt); err != nil {
-		return nil, err
-	}
-	event := &pb.Event{
-		OccurredAt: msg.SentAt,
-		Body:       &pb.Event_Message{Message: &pb.MessageEvent{Message: msg}},
-	}
-	if err := insertOutbox(ctx, tx, h, conversationID, "message", event, sentAt); err != nil {
+	msg.Content = &pb.Message_Text{Text: text}
+	st.lastSeq++
+	if err := s.store(ctx, tx, conversationID, st, msg, st.members, false); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -190,7 +154,8 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 }
 
 // MarkRead moves the user's read position forward. Moving it backwards or
-// to where it is does nothing.
+// to where it is does nothing. In a group, the read event goes to the
+// reader and to the senders of the messages it covers.
 func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID, seq uint64) error {
 	if seq == 0 {
 		return apierror.InvalidArgument("seq must be positive")
@@ -201,12 +166,12 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 	}
 	defer tx.Rollback()
 
-	h, err := member(ctx, tx, selectHeaderForUpdate, conversationID, userID)
+	st, err := member(ctx, tx, selectStateForUpdate, conversationID, userID)
 	if err != nil {
 		return err
 	}
-	if seq > h.lastSeq {
-		return apierror.InvalidArgument("seq %d is beyond the last message %d", seq, h.lastSeq)
+	if seq > st.lastSeq {
+		return apierror.InvalidArgument("seq %d is beyond the last message %d", seq, st.lastSeq)
 	}
 	var current uint64
 	err = tx.QueryRowContext(ctx, `
@@ -225,22 +190,70 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 		conversationID, userID, seq, now, seq, now); err != nil {
 		return err
 	}
+	recipients := st.members
+	if st.kind == kindGroup {
+		if recipients, err = readRecipients(ctx, tx, st, conversationID, userID, current, seq); err != nil {
+			return err
+		}
+	}
 	event := &pb.Event{
 		OccurredAt: timestamppb.New(now),
 		Body: &pb.Event_Read{Read: &pb.ReadEvent{
 			ConversationId: conversationID.Bytes(), UserId: userID.Bytes(), Seq: seq,
 		}},
 	}
-	if err := insertOutbox(ctx, tx, h, conversationID, "read", event, now); err != nil {
+	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), recipients, st, "read", event, now); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-// Messages returns messages with seq below beforeSeq, newest first.
-func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
-	if _, err := member(ctx, s.db, selectHeader, conversationID, userID); err != nil {
+// readRecipients is the reader and the current members among the senders
+// of the newest messages in (from, to].
+func readRecipients(ctx context.Context, tx *sql.Tx, st state, conversationID, readerID ids.UUID, from, to uint64) ([]ids.UUID, error) {
+	rows, err := tx.QueryContext(ctx, `
+		SELECT DISTINCT sender_user_id FROM (
+			SELECT sender_user_id FROM message
+			WHERE conversation_id = ? AND seq > ? AND seq <= ? ORDER BY seq DESC LIMIT ?) AS m`,
+		conversationID, from, to, readSendersWindow)
+	if err != nil {
 		return nil, err
+	}
+	defer rows.Close()
+	recipients := []ids.UUID{readerID}
+	for rows.Next() {
+		var sender ids.UUID
+		if err := rows.Scan(&sender); err != nil {
+			return nil, err
+		}
+		if sender != readerID && st.has(sender) {
+			recipients = append(recipients, sender)
+		}
+	}
+	return recipients, rows.Err()
+}
+
+// Messages returns messages with seq below beforeSeq, newest first: in a
+// group, those since the user joined and, for a former member, until they
+// left.
+func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
+	var joinedSeq uint64
+	var leftSeq sql.NullInt64
+	err := s.db.QueryRowContext(ctx, `
+		SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ? AND user_id = ?`,
+		conversationID, userID).Scan(&joinedSeq, &leftSeq)
+	if errors.Is(err, sql.ErrNoRows) {
+		if _, err := load(ctx, s.db, selectState, conversationID); err != nil {
+			return nil, err
+		}
+		return nil, apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
+	}
+	if err != nil {
+		return nil, err
+	}
+	upTo := uint64(math.MaxUint64)
+	if leftSeq.Valid {
+		upTo = uint64(leftSeq.Int64)
 	}
 	if beforeSeq == 0 {
 		beforeSeq = math.MaxUint64
@@ -251,8 +264,8 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 	limit = min(limit, maxPageSize)
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT seq, sender_user_id, client_message_id, body, sent_at FROM message
-		WHERE conversation_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
-		conversationID, beforeSeq, limit)
+		WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
+		conversationID, joinedSeq, upTo, beforeSeq, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -260,32 +273,16 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 	var messages []*pb.Message
 	for rows.Next() {
 		msg := &pb.Message{ConversationId: conversationID.Bytes()}
+		var body []byte
 		var sentAt time.Time
-		if err := rows.Scan(&msg.Seq, &msg.SenderUserId, &msg.ClientMessageId, &msg.Text, &sentAt); err != nil {
+		if err := rows.Scan(&msg.Seq, &msg.SenderUserId, &msg.ClientMessageId, &body, &sentAt); err != nil {
 			return nil, err
 		}
 		msg.SentAt = timestamppb.New(sentAt)
+		if err := decodeBody(body, msg); err != nil {
+			return nil, err
+		}
 		messages = append(messages, msg)
 	}
 	return messages, rows.Err()
-}
-
-func insertOutbox(ctx context.Context, tx *sql.Tx, h header, conversationID ids.UUID, kind string, event *pb.Event, at time.Time) error {
-	payload, err := proto.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("marshal outbox event: %w", err)
-	}
-	outboxID := ids.Random()
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		conversationID, outboxID, h.userA, h.userB, kind, payload, at); err != nil {
-		return err
-	}
-	// The insert reaches the binlog, which is all the fan-out reads; deleting
-	// the row in the same transaction keeps the table empty.
-	_, err = tx.ExecContext(ctx, `
-		DELETE FROM outbox WHERE conversation_id = ? AND outbox_id = ?`,
-		conversationID, outboxID)
-	return err
 }

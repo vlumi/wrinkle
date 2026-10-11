@@ -41,34 +41,48 @@ func (u *rawUint) UnmarshalJSON(b []byte) error {
 
 // outboxRow is a row of a conversation's outbox.
 type outboxRow struct {
-	conversationID, userA, userB ids.UUID
-	outboxID                     uint64
-	kind                         string
-	event                        *pb.Event
+	conversationID ids.UUID
+	outboxID       uint64
+	recipients     []ids.UUID
+	// The conversation as of the change.
+	conversationKind string
+	topic            string
+	memberCount      uint32
+	kind             string
+	event            *pb.Event
 }
 
 func parseOutboxRow(value []byte) (*outboxRow, error) {
 	var r struct {
-		ConversationID rawID   `json:"conversation_id"`
-		OutboxID       rawUint `json:"outbox_id"`
-		UserA          rawID   `json:"user_a"`
-		UserB          rawID   `json:"user_b"`
-		Kind           string  `json:"kind"`
-		Payload        []byte  `json:"payload"`
+		ConversationID   rawID   `json:"conversation_id"`
+		OutboxID         rawUint `json:"outbox_id"`
+		Recipients       []byte  `json:"recipients"`
+		ConversationKind string  `json:"conversation_kind"`
+		Topic            string  `json:"topic"`
+		MemberCount      rawUint `json:"member_count"`
+		Kind             string  `json:"kind"`
+		Payload          []byte  `json:"payload"`
 	}
 	if err := json.Unmarshal(value, &r); err != nil {
 		return nil, err
 	}
-	o := &outboxRow{outboxID: uint64(r.OutboxID), kind: r.Kind}
+	o := &outboxRow{
+		outboxID:         uint64(r.OutboxID),
+		conversationKind: r.ConversationKind,
+		topic:            r.Topic,
+		memberCount:      uint32(r.MemberCount),
+		kind:             r.Kind,
+	}
 	var err error
 	if o.conversationID, err = r.ConversationID.uuid("conversation_id"); err != nil {
 		return nil, err
 	}
-	if o.userA, err = r.UserA.uuid("user_a"); err != nil {
-		return nil, err
+	if len(r.Recipients)%16 != 0 {
+		return nil, fmt.Errorf("recipients of %d bytes", len(r.Recipients))
 	}
-	if o.userB, err = r.UserB.uuid("user_b"); err != nil {
-		return nil, err
+	for i := 0; i < len(r.Recipients); i += 16 {
+		id, _ := ids.Parse(r.Recipients[i : i+16])
+		o.recipients = append(o.recipients, id)
 	}
 	if o.event, err = parseEvent(r.Payload); err != nil {
 		return nil, err
@@ -76,11 +90,17 @@ func parseOutboxRow(value []byte) (*outboxRow, error) {
 	return o, nil
 }
 
+func (o *outboxRow) direct() bool { return o.conversationKind == "direct" }
+
+// peerOf returns the other recipient of a direct conversation's row, which
+// always has both participants.
 func (o *outboxRow) peerOf(userID ids.UUID) ids.UUID {
-	if userID == o.userA {
-		return o.userB
+	for _, id := range o.recipients {
+		if id != userID {
+			return id
+		}
 	}
-	return o.userA
+	return ids.UUID{}
 }
 
 // userOutboxRow is a row of a user's outbox: a profile or device change.

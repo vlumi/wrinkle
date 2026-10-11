@@ -178,8 +178,9 @@ func swapAvatar(ctx context.Context, tx *sql.Tx, userID ids.UUID, old, avatar []
 	return nil
 }
 
-// release gives up the claim on the old name after a rename. When the names
-// differ only in case they share one claim, which takes the new spelling.
+// release gives up the claim on the old name after a rename. Names that
+// differ only in case share one claim, which stays as it is: claims compare
+// ignoring case, and Vitess cannot change a vindex column in place.
 func (s *Service) release(ctx context.Context, userID ids.UUID, oldName, newName string) error {
 	var same bool
 	if err := s.db.QueryRowContext(ctx, `
@@ -187,9 +188,7 @@ func (s *Service) release(ctx context.Context, userID ids.UUID, oldName, newName
 		return err
 	}
 	if same {
-		_, err := s.db.ExecContext(ctx, `
-			UPDATE user_name SET name = ? WHERE name = ? AND user_id = ?`, newName, oldName, userID)
-		return err
+		return nil
 	}
 	_, err := s.db.ExecContext(ctx, `
 		DELETE FROM user_name WHERE name = ? AND user_id = ?`, oldName, userID)

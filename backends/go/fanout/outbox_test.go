@@ -3,12 +3,17 @@ package fanout
 import (
 	"encoding/base64"
 	"testing"
+
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 // Records as Debezium wrote them, binary columns in base64.
 
 func TestParseOutboxRow(t *testing.T) {
-	value := []byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"6453981837480687173","user_a":"QdU4zkeJR2KIGb3J8piNBQ==","user_b":"ybnQII5KToqNOikjwBiS0A==","kind":"message","payload":"EgwIjaCu1gYQmKXepgNSQQo/ChALhfcWRpRGB5sKZoQEtR9MEAEaEEHVOM5HiUdiiBm9yfKYjQUiAW0qBmZyb20gYjIMCI2grtYGEJil3qYD","created_at":1791725581886543}`)
+	value := []byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"6453981837480687173",` +
+		`"recipients":"QdU4zkeJR2KIGb3J8piNBcm50CCOSk6KjTopI8AYktA=","conversation_kind":"group","topic":"Hikes","member_count":2,` +
+		`"kind":"message","payload":"EgwIjaCu1gYQmKXepgNSQQo/ChALhfcWRpRGB5sKZoQEtR9MEAEaEEHVOM5HiUdiiBm9yfKYjQUiAW0qBmZyb20gYjIMCI2grtYGEJil3qYD","created_at":1791725581886543}`)
 	o, err := parseOutboxRow(value)
 	if err != nil {
 		t.Fatal(err)
@@ -19,12 +24,53 @@ func TestParseOutboxRow(t *testing.T) {
 	if o.outboxID != 6453981837480687173 || o.kind != "message" {
 		t.Fatalf("outbox id %d kind %s", o.outboxID, o.kind)
 	}
-	if o.peerOf(o.userA) != o.userB || o.peerOf(o.userB) != o.userA {
+	if o.conversationKind != "group" || o.direct() || o.topic != "Hikes" || o.memberCount != 2 {
+		t.Fatalf("conversation %s %q %d", o.conversationKind, o.topic, o.memberCount)
+	}
+	if len(o.recipients) != 2 || base64.StdEncoding.EncodeToString(o.recipients[0][:]) != "QdU4zkeJR2KIGb3J8piNBQ==" ||
+		base64.StdEncoding.EncodeToString(o.recipients[1][:]) != "ybnQII5KToqNOikjwBiS0A==" {
+		t.Fatalf("recipients %v", o.recipients)
+	}
+	if o.peerOf(o.recipients[0]) != o.recipients[1] || o.peerOf(o.recipients[1]) != o.recipients[0] {
 		t.Fatal("peers")
 	}
 	msg := o.event.GetMessage().GetMessage()
 	if msg.GetSeq() != 1 || msg.GetText() != "from b" || string(msg.GetConversationId()) != string(o.conversationID[:]) {
 		t.Fatalf("event %v", o.event)
+	}
+	if _, err := parseOutboxRow([]byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":1,"recipients":"AAEC","member_count":0,"payload":""}`)); err == nil {
+		t.Fatal("parsed 3 bytes of recipients")
+	}
+}
+
+func TestMembership(t *testing.T) {
+	a, b, c := ids.New(), ids.New(), ids.New()
+	user := func(id ids.UUID) *pb.User { return &pb.User{UserId: id.Bytes()} }
+	notice := func(sender ids.UUID, n *pb.Notice) *pb.Message {
+		return &pb.Message{SenderUserId: sender.Bytes(), Content: &pb.Message_Notice{Notice: n}}
+	}
+	left := notice(a, &pb.Notice{Kind: &pb.Notice_MemberLeft{MemberLeft: &pb.MemberLeft{Promoted: user(b)}}})
+	for _, tc := range []struct {
+		name          string
+		user          ids.UUID
+		msg           *pb.Message
+		member, admin flag
+	}{
+		{"creator", a, notice(a, &pb.Notice{Kind: &pb.Notice_GroupCreated{GroupCreated: &pb.GroupCreated{}}}), flag{true, true}, flag{true, true}},
+		{"invitee", b, notice(a, &pb.Notice{Kind: &pb.Notice_GroupCreated{GroupCreated: &pb.GroupCreated{}}}), flag{true, true}, flag{true, false}},
+		{"added", c, notice(a, &pb.Notice{Kind: &pb.Notice_MembersAdded{MembersAdded: &pb.MembersAdded{Users: []*pb.User{user(b), user(c)}}}}), flag{true, true}, flag{true, false}},
+		{"not added", a, notice(a, &pb.Notice{Kind: &pb.Notice_MembersAdded{MembersAdded: &pb.MembersAdded{Users: []*pb.User{user(c)}}}}), flag{}, flag{}},
+		{"removed", c, notice(a, &pb.Notice{Kind: &pb.Notice_MemberRemoved{MemberRemoved: &pb.MemberRemoved{User: user(c)}}}), flag{true, false}, flag{true, false}},
+		{"leaver", a, left, flag{true, false}, flag{true, false}},
+		{"promoted", b, left, flag{}, flag{true, true}},
+		{"bystander", c, left, flag{}, flag{}},
+		{"demoted", b, notice(a, &pb.Notice{Kind: &pb.Notice_AdminChanged{AdminChanged: &pb.AdminChanged{User: user(b)}}}), flag{}, flag{true, false}},
+		{"text", b, &pb.Message{SenderUserId: a.Bytes(), Content: &pb.Message_Text{Text: "hi"}}, flag{}, flag{}},
+	} {
+		member, admin := membership(tc.user, tc.msg)
+		if member != tc.member || admin != tc.admin {
+			t.Errorf("%s: member %v admin %v, want %v %v", tc.name, member, admin, tc.member, tc.admin)
+		}
 	}
 }
 

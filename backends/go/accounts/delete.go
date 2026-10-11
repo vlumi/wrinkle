@@ -7,15 +7,19 @@ import (
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-// DeleteAccount checks the password, then empties the user row, keeping it
-// as a tombstone, signs out every device and writes a ProfileEvent of the
-// deleted user, all in one transaction. Fan-out tells the partners, closes
+// DeleteAccount checks the password, has leaveGroups take the user out of
+// their groups, then empties the user row, keeping it as a tombstone, signs
+// out every device and writes a ProfileEvent of the deleted user, all in
+// one transaction. Fan-out tells the partners, closes
 // the connections and removes the user's log, list and devices. The name
 // claim goes last; one left behind is stale, as the row no longer has the
 // name.
-func (s *Service) DeleteAccount(ctx context.Context, userID ids.UUID, req *pb.DeleteAccountRequest) error {
+func (s *Service) DeleteAccount(ctx context.Context, userID ids.UUID, req *pb.DeleteAccountRequest, leaveGroups func(context.Context) error) error {
 	verified, err := s.verifyCurrent(ctx, userID, req.GetPassword())
 	if err != nil {
+		return err
+	}
+	if err := leaveGroups(ctx); err != nil {
 		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)

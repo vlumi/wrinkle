@@ -42,9 +42,9 @@ func NewNotifier(apns *APNs, userDB *sql.DB, presence Presence, log *slog.Logger
 }
 
 // MessageDelivered is called after a message was appended to the user's
-// log. The sender's own devices are not notified.
+// log. The sender's own devices are not notified, nor anyone of notices.
 func (n *Notifier) MessageDelivered(userID ids.UUID, msg *pb.Message) {
-	if n == nil || bytes.Equal(msg.GetSenderUserId(), userID[:]) {
+	if n == nil || bytes.Equal(msg.GetSenderUserId(), userID[:]) || msg.GetNotice() != nil {
 		return
 	}
 	select {
@@ -79,12 +79,9 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 	if !ok {
 		return fmt.Errorf("message without a conversation id")
 	}
-	// The conversation list has the peer's current name.
-	var peerName string
-	if err := n.db.QueryRowContext(ctx, `
-		SELECT peer_name FROM user_conversation WHERE user_id = ? AND conversation_id = ?`,
-		userID, conversationID).Scan(&peerName); err != nil {
-		return fmt.Errorf("peer name: %w", err)
+	title, body, err := n.alertText(ctx, userID, conversationID, msg)
+	if err != nil {
+		return err
 	}
 	connected, err := n.presence.ConnectedDevices(ctx, userID)
 	if err != nil {
@@ -96,8 +93,8 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 	}
 	// Clients find the conversation by the lowercase hex of its id.
 	alert := Alert{
-		Title:    peerName,
-		Body:     truncate(msg.GetText(), maxBodyRunes),
+		Title:    title,
+		Body:     truncate(body, maxBodyRunes),
 		Badge:    badge,
 		ThreadID: conversationID.String(),
 		Data:     map[string]string{"conversation_id": conversationID.String()},
@@ -108,6 +105,27 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 		}
 	}
 	return nil
+}
+
+// alertText is the notification's title and body: in a direct
+// conversation the peer's current name, from the conversation list, and
+// the text; in a group the topic and the text after the sender's name.
+func (n *Notifier) alertText(ctx context.Context, userID, conversationID ids.UUID, msg *pb.Message) (string, string, error) {
+	var kind, peerName, topic string
+	if err := n.db.QueryRowContext(ctx, `
+		SELECT kind, peer_name, topic FROM user_conversation WHERE user_id = ? AND conversation_id = ?`,
+		userID, conversationID).Scan(&kind, &peerName, &topic); err != nil {
+		return "", "", fmt.Errorf("conversation entry: %w", err)
+	}
+	if kind != "group" {
+		return peerName, msg.GetText(), nil
+	}
+	var sender string
+	err := n.db.QueryRowContext(ctx, `SELECT name FROM user WHERE user_id = ?`, msg.GetSenderUserId()).Scan(&sender)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", "", fmt.Errorf("sender name: %w", err)
+	}
+	return topic, sender + ": " + msg.GetText(), nil
 }
 
 func (n *Notifier) send(ctx context.Context, userID ids.UUID, r registration, alert Alert) {
