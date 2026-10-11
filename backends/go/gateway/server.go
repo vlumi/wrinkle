@@ -79,17 +79,7 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 	ws.SetReadLimit(maxFrameBytes)
 	metrics.Connections.Inc()
 	defer metrics.Connections.Dec()
-	// Own context rather than the request's, so the request and its headers
-	// are not kept alive for the life of the connection.
-	ctx, cancel := context.WithCancel(s.ctx)
-	c := &conn{
-		server: s,
-		ws:     ws,
-		log:    s.log.With("remote", r.RemoteAddr),
-		ctx:    ctx,
-		cancel: cancel,
-		out:    make(chan []byte, outboundQueue),
-	}
+	c := newConn(s, ws, r.RemoteAddr)
 	c.serve()
 	ws.Close(websocket.StatusNormalClosure, "")
 }

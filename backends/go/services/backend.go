@@ -39,7 +39,7 @@ func (l *Local) Call(ctx context.Context, userID, deviceID uint64, req *pb.Reque
 		if apierror.Code(err) == pb.ErrorCode_ERROR_CODE_INTERNAL {
 			l.log.Error("request failed", "request", req.GetId(), "err", err)
 		}
-		resp.Body = &pb.Response_Error{Error: apierror.Proto(err)}
+		return apierror.Response(req.GetId(), err), nil
 	}
 	return resp, nil
 }

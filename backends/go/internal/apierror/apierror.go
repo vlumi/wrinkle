@@ -39,6 +39,10 @@ func FailedPrecondition(format string, args ...any) *Error {
 	return New(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, format, args...)
 }
 
+func Unavailable(format string, args ...any) *Error {
+	return New(pb.ErrorCode_ERROR_CODE_UNAVAILABLE, format, args...)
+}
+
 // Code returns the error's code; errors without one are internal.
 func Code(err error) pb.ErrorCode {
 	var e *Error
@@ -57,4 +61,9 @@ func Proto(err error) *pb.Error {
 		msg = "internal error"
 	}
 	return &pb.Error{Code: code, Message: msg}
+}
+
+// Response is the response to a request that failed with err.
+func Response(requestID uint64, err error) *pb.Response {
+	return &pb.Response{RequestId: requestID, Body: &pb.Response_Error{Error: Proto(err)}}
 }

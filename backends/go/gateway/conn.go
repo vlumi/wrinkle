@@ -23,6 +23,10 @@ const (
 	outboundQueue  = 32
 )
 
+// frameEvent is the number of Frame's event field, for wrapping an already
+// serialized Event without decoding it.
+var frameEvent = (&pb.Frame{}).ProtoReflect().Descriptor().Fields().ByName("event").Number()
+
 // conn is one device's WebSocket connection. Idle, it is one goroutine (the
 // read loop) and a small queue: the writer runs only while there is
 // something to write.
@@ -40,6 +44,20 @@ type conn struct {
 	userID    uint64
 	deviceID  uint64
 	writing   bool
+}
+
+func newConn(s *Server, ws *websocket.Conn, remoteAddr string) *conn {
+	// Own context rather than the request's, so the request and its headers
+	// are not kept alive for the life of the connection.
+	ctx, cancel := context.WithCancel(s.ctx)
+	return &conn{
+		server: s,
+		ws:     ws,
+		log:    s.log.With("remote", remoteAddr),
+		ctx:    ctx,
+		cancel: cancel,
+		out:    make(chan []byte, outboundQueue),
+	}
 }
 
 func (c *conn) identity() (userID, deviceID uint64, ok bool) {
@@ -80,13 +98,7 @@ func (c *conn) serve() {
 			go c.handleRequest(ctx, kind.Request)
 		case *pb.Frame_Ack:
 			if userID, deviceID, ok := c.identity(); ok {
-				go func() {
-					actx, cancel := context.WithTimeout(ctx, requestTimeout)
-					defer cancel()
-					if err := c.server.backend.Ack(actx, userID, deviceID, kind.Ack.GetCursor()); err != nil {
-						c.log.Warn("ack failed", "err", err)
-					}
-				}()
+				go c.ack(ctx, userID, deviceID, kind.Ack.GetCursor())
 			}
 		case *pb.Frame_Ping:
 			c.sendFrame(&pb.Frame{Kind: &pb.Frame_Pong{Pong: &pb.Pong{}}})
@@ -102,30 +114,39 @@ func (c *conn) serve() {
 // again when needed.
 func (c *conn) writeLoop() {
 	for {
-		var data []byte
 		select {
-		case data = <-c.out:
-		default:
-			c.mu.Lock()
-			if len(c.out) == 0 {
+		case data := <-c.out:
+			if err := c.write(data); err != nil {
+				c.ws.Close(websocket.StatusInternalError, "write failed")
+				c.mu.Lock()
 				c.writing = false
 				c.mu.Unlock()
 				return
 			}
-			c.mu.Unlock()
-			continue
-		}
-		wctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
-		err := c.ws.Write(wctx, websocket.MessageBinary, data)
-		cancel()
-		if err != nil {
-			c.ws.Close(websocket.StatusInternalError, "write failed")
-			c.mu.Lock()
-			c.writing = false
-			c.mu.Unlock()
-			return
+		default:
+			if c.stopWritingIfIdle() {
+				return
+			}
 		}
 	}
+}
+
+// stopWritingIfIdle clears the writing flag if the queue is still empty,
+// under the lock send takes to decide whether to start a writer.
+func (c *conn) stopWritingIfIdle() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if len(c.out) > 0 {
+		return false
+	}
+	c.writing = false
+	return true
+}
+
+func (c *conn) write(data []byte) error {
+	ctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
+	defer cancel()
+	return c.ws.Write(ctx, websocket.MessageBinary, data)
 }
 
 // send queues bytes for the writer, starting one if none is running. A
@@ -158,14 +179,20 @@ func (c *conn) sendFrame(frame *pb.Frame) {
 	c.send(data)
 }
 
-// pushEvent wraps an already serialized Event in a Frame without decoding
-// it: Frame.event is field 3.
 func (c *conn) pushEvent(payload []byte) {
 	data := make([]byte, 0, len(payload)+8)
-	data = protowire.AppendTag(data, 3, protowire.BytesType)
+	data = protowire.AppendTag(data, frameEvent, protowire.BytesType)
 	data = protowire.AppendBytes(data, payload)
 	c.send(data)
 	metrics.EventsPushed.Inc()
+}
+
+func (c *conn) ack(ctx context.Context, userID, deviceID, cursor uint64) {
+	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	if err := c.server.backend.Ack(ctx, userID, deviceID, cursor); err != nil {
+		c.log.Warn("ack failed", "err", err)
+	}
 }
 
 func (c *conn) handleRequest(ctx context.Context, req *pb.Request) {
@@ -174,47 +201,35 @@ func (c *conn) handleRequest(ctx context.Context, req *pb.Request) {
 	start := time.Now()
 	resp := c.dispatch(ctx, req)
 	c.sendFrame(&pb.Frame{Kind: &pb.Frame_Response{Response: resp}})
-	kind := requestType(req)
-	code := "ok"
-	if e := resp.GetError(); e != nil {
-		code = e.GetCode().String()
-	}
-	metrics.Requests.WithLabelValues(kind, code).Inc()
-	metrics.RequestDuration.WithLabelValues(kind).Observe(time.Since(start).Seconds())
+	observeRequest(req, resp, start)
 }
 
 // dispatch applies the connection's state rules, then hands the request to
 // the backend.
 func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 	userID, deviceID, connected := c.identity()
-	var err error
 	switch {
 	case req.GetConnect() != nil && connected:
-		err = apierror.FailedPrecondition("already connected")
+		return apierror.Response(req.GetId(), apierror.FailedPrecondition("already connected"))
 	case req.GetConnect() == nil && !connected:
-		err = apierror.Unauthenticated("connect first")
-	}
-	if err != nil {
-		return &pb.Response{RequestId: req.GetId(), Body: &pb.Response_Error{Error: apierror.Proto(err)}}
+		return apierror.Response(req.GetId(), apierror.Unauthenticated("connect first"))
 	}
 	resp, err := c.server.backend.Call(ctx, userID, deviceID, req)
 	if err != nil {
 		c.log.Error("backend call failed", "request", req.GetId(), "err", err)
-		return &pb.Response{RequestId: req.GetId(), Body: &pb.Response_Error{Error: &pb.Error{
-			Code: pb.ErrorCode_ERROR_CODE_UNAVAILABLE, Message: "services unavailable",
-		}}}
+		return apierror.Response(req.GetId(), apierror.Unavailable("services unavailable"))
 	}
 	if connectResp := resp.GetConnect(); connectResp != nil {
-		if err := c.attached(ctx, connectResp); err != nil {
-			return &pb.Response{RequestId: req.GetId(), Body: &pb.Response_Error{Error: apierror.Proto(err)}}
+		if err := c.identify(ctx, connectResp); err != nil {
+			return apierror.Response(req.GetId(), err)
 		}
 	}
 	return resp
 }
 
-// connected_ records the identity Connect established and attaches the
+// identify records the identity Connect established and attaches the
 // connection to its user.
-func (c *conn) attached(ctx context.Context, resp *pb.ConnectResponse) error {
+func (c *conn) identify(ctx context.Context, resp *pb.ConnectResponse) error {
 	c.mu.Lock()
 	if c.connected {
 		c.mu.Unlock()
@@ -229,27 +244,4 @@ func (c *conn) attached(ctx context.Context, resp *pb.ConnectResponse) error {
 	}
 	c.log = c.log.With("user", c.userID, "device", c.deviceID)
 	return nil
-}
-
-func requestType(req *pb.Request) string {
-	switch req.GetBody().(type) {
-	case *pb.Request_Connect:
-		return "connect"
-	case *pb.Request_OpenConversation:
-		return "open_conversation"
-	case *pb.Request_SendMessage:
-		return "send_message"
-	case *pb.Request_MarkRead:
-		return "mark_read"
-	case *pb.Request_Sync:
-		return "sync"
-	case *pb.Request_ListConversations:
-		return "list_conversations"
-	case *pb.Request_GetMessages:
-		return "get_messages"
-	case *pb.Request_RegisterPushToken:
-		return "register_push_token"
-	default:
-		return "unknown"
-	}
 }
