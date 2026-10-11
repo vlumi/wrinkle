@@ -4,7 +4,6 @@ package wrinkleclient
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -15,37 +14,17 @@ import (
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-// Error is an error response from the backend.
-type Error struct {
-	Code    pb.ErrorCode
-	Message string
-}
-
-func (e *Error) Error() string {
-	return fmt.Sprintf("%s: %s", e.Code, e.Message)
-}
-
-// Code returns the error code of a backend error, or UNSPECIFIED.
-func Code(err error) pb.ErrorCode {
-	var e *Error
-	if errors.As(err, &e) {
-		return e.Code
-	}
-	return pb.ErrorCode_ERROR_CODE_UNSPECIFIED
-}
-
 type Client struct {
 	ws     *websocket.Conn
 	nextID atomic.Uint64
 
-	// Events receives pushed events; Pongs receives pongs. Both are
-	// unbuffered beyond EventBuffer, and the reader blocks when full.
+	// Events receives pushed events; the reader blocks while EventBuffer
+	// of them wait. Pongs receives pongs, dropping any beyond a few unread.
 	Events chan *pb.Event
 	Pongs  chan struct{}
 
 	mu      sync.Mutex
 	pending map[uint64]chan *pb.Response
-	closed  chan struct{}
 	err     error
 }
 
@@ -65,7 +44,6 @@ func Dial(ctx context.Context, url string) (*Client, error) {
 		Events:  make(chan *pb.Event, EventBuffer),
 		Pongs:   make(chan struct{}, 16),
 		pending: map[uint64]chan *pb.Response{},
-		closed:  make(chan struct{}),
 	}
 	go c.readLoop()
 	return c, nil
@@ -88,7 +66,6 @@ func (c *Client) readLoop() {
 	defer func() {
 		c.mu.Lock()
 		c.err = err
-		close(c.closed)
 		for id, ch := range c.pending {
 			close(ch)
 			delete(c.pending, id)
@@ -113,11 +90,7 @@ func (c *Client) readLoop() {
 		}
 		switch kind := frame.GetKind().(type) {
 		case *pb.Frame_Response:
-			c.mu.Lock()
-			ch, ok := c.pending[kind.Response.GetRequestId()]
-			delete(c.pending, kind.Response.GetRequestId())
-			c.mu.Unlock()
-			if ok {
+			if ch, ok := c.takePending(kind.Response.GetRequestId()); ok {
 				ch <- kind.Response
 			}
 		case *pb.Frame_Event:
@@ -151,16 +124,12 @@ func (c *Client) Call(ctx context.Context, req *pb.Request) (*pb.Response, error
 	c.pending[req.Id] = ch
 	c.mu.Unlock()
 	if err := c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Request{Request: req}}); err != nil {
-		c.mu.Lock()
-		delete(c.pending, req.Id)
-		c.mu.Unlock()
+		c.takePending(req.Id)
 		return nil, err
 	}
 	select {
 	case <-ctx.Done():
-		c.mu.Lock()
-		delete(c.pending, req.Id)
-		c.mu.Unlock()
+		c.takePending(req.Id)
 		return nil, ctx.Err()
 	case resp, ok := <-ch:
 		if !ok {
@@ -173,75 +142,11 @@ func (c *Client) Call(ctx context.Context, req *pb.Request) (*pb.Response, error
 	}
 }
 
-func (c *Client) Connect(ctx context.Context, req *pb.ConnectRequest) (*pb.ConnectResponse, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_Connect{Connect: req}})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetConnect(), nil
-}
-
-func (c *Client) OpenConversation(ctx context.Context, peerUserName string) (*pb.Conversation, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_OpenConversation{
-		OpenConversation: &pb.OpenConversationRequest{PeerUserName: peerUserName}}})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetOpenConversation().GetConversation(), nil
-}
-
-func (c *Client) SendMessage(ctx context.Context, conversationID uint64, clientMessageID, text string) (*pb.Message, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SendMessage{
-		SendMessage: &pb.SendMessageRequest{ConversationId: conversationID, ClientMessageId: clientMessageID, Text: text}}})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetSendMessage().GetMessage(), nil
-}
-
-func (c *Client) MarkRead(ctx context.Context, conversationID, seq uint64) error {
-	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_MarkRead{
-		MarkRead: &pb.MarkReadRequest{ConversationId: conversationID, Seq: seq}}})
-	return err
-}
-
-func (c *Client) Sync(ctx context.Context, cursor uint64, limit uint32) (*pb.SyncResponse, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_Sync{
-		Sync: &pb.SyncRequest{Cursor: cursor, Limit: limit}}})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetSync(), nil
-}
-
-func (c *Client) ListConversations(ctx context.Context) ([]*pb.Conversation, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_ListConversations{
-		ListConversations: &pb.ListConversationsRequest{}}})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetListConversations().GetConversations(), nil
-}
-
-func (c *Client) GetMessages(ctx context.Context, conversationID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetMessages{
-		GetMessages: &pb.GetMessagesRequest{ConversationId: conversationID, BeforeSeq: beforeSeq, Limit: limit}}})
-	if err != nil {
-		return nil, err
-	}
-	return resp.GetGetMessages().GetMessages(), nil
-}
-
-func (c *Client) Ack(ctx context.Context, cursor uint64) error {
-	return c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Ack{Ack: &pb.Ack{Cursor: cursor}}})
-}
-
-func (c *Client) Ping(ctx context.Context) error {
-	return c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Ping{Ping: &pb.Ping{}}})
-}
-
-func (c *Client) RegisterPushToken(ctx context.Context, service pb.PushService, token string) error {
-	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_RegisterPushToken{
-		RegisterPushToken: &pb.RegisterPushTokenRequest{Service: service, Token: token}}})
-	return err
+// takePending removes the call waiting for a response, if there is one.
+func (c *Client) takePending(id uint64) (chan *pb.Response, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	ch, ok := c.pending[id]
+	delete(c.pending, id)
+	return ch, ok
 }
