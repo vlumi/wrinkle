@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
+import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
@@ -55,12 +56,13 @@ public final class Main {
     Metrics.init();
 
     DataSource userDb = null;
+    DataSource conversationDb = null;
     LocalBackend local = null;
     Blobs blobs =
         new Blobs(
             cfg.blobUrl(), new Presigner(cfg.blobKeyId(), cfg.blobSecret(), cfg.blobRegion()));
     if (cfg.needsDatabase()) {
-      DataSource conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
+      conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
       userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
       ConversationService conversations = new ConversationService(conversationDb);
       UploadService uploads = new UploadService(userDb, blobs);
@@ -72,6 +74,7 @@ public final class Main {
               uploads,
               conversations,
               new GroupService(conversationDb, userDb, accounts),
+              new ConversationKeys(conversationDb, userDb),
               new DeviceSyncService(userDb, accounts, conversations));
     }
     Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;
@@ -99,7 +102,7 @@ public final class Main {
     }
     FanoutWorker fanout = null;
     if (cfg.runsFanout()) {
-      fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, presence);
+      fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, conversationDb, presence);
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
       new UploadSweeper(userDb, blobs).start();

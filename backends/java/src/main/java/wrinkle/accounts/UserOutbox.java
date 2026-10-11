@@ -58,7 +58,11 @@ final class UserOutbox {
         "device",
         Event.newBuilder()
             .setOccurredAt(Timestamps.toProto(now))
-            .setDevice(DeviceEvent.newBuilder().setDevice(device).setSignedOut(signedOut))
+            .setDevice(
+                DeviceEvent.newBuilder()
+                    .setDevice(device)
+                    .setSignedOut(signedOut)
+                    .setUserId(userId.toByteString()))
             .build());
   }
 }

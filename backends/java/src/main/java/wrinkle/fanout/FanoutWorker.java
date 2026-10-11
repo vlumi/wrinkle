@@ -28,15 +28,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
 import wrinkle.Uuid;
-import wrinkle.backend.v1.SignedOut;
 import wrinkle.presence.Presence;
-import wrinkle.v1.DeviceEvent;
 import wrinkle.v1.Event;
 
 /**
  * Turns committed outbox rows, read from Kafka, into entries in the event logs of everyone
  * concerned, and pushes them to connected devices: a conversation's events to the recipients its
- * outbox row names, a user's profile changes to the user and every direct conversation partner.
+ * outbox row names, a user's profile changes to the user and every direct conversation partner, a
+ * device's key changes to the user, the partners and the members of the user's groups.
  */
 public final class FanoutWorker {
   // The outbox topics: conversations' rows keyed by conversation id, users' by user id.
@@ -53,10 +52,16 @@ public final class FanoutWorker {
   private final UserLog userLog;
   private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
   private final ProfileFanout profiles;
+  private final DeviceFanout devices;
   private final AtomicBoolean stopped = new AtomicBoolean();
   private volatile Thread thread;
 
-  public FanoutWorker(String brokers, String group, DataSource userDb, Presence presence) {
+  public FanoutWorker(
+      String brokers,
+      String group,
+      DataSource userDb,
+      DataSource conversationDb,
+      Presence presence) {
     Properties p = new Properties();
     p.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
     p.put(ConsumerConfig.GROUP_ID_CONFIG, group);
@@ -69,6 +74,7 @@ public final class FanoutWorker {
     this.consumer = new KafkaConsumer<>(p);
     this.userLog = new UserLog(userDb, presence);
     this.profiles = new ProfileFanout(userLog, tasks);
+    this.devices = new DeviceFanout(userLog, conversationDb, tasks);
   }
 
   /** Consumes on a platform thread of its own until stopped. */
@@ -236,25 +242,12 @@ public final class FanoutWorker {
     }
     switch (o.event().getBodyCase()) {
       case PROFILE -> profiles.deliver(o);
-      case DEVICE -> deliverDevice(o);
+      case DEVICE -> devices.deliver(o);
       default ->
           log.error(
               "skipping user outbox record without a profile or device, kind {}, offset {}",
               o.kind(),
               rec.offset());
-    }
-  }
-
-  /**
-   * A device change goes to the user's own log. A sign-out also closes the device's connections,
-   * even when the event was already delivered before.
-   */
-  private void deliverDevice(UserOutboxRecord o) throws SQLException {
-    userLog.append(o.userId(), o.userId(), o.outboxId(), o.event(), null);
-    DeviceEvent d = o.event().getDevice();
-    if (d.getSignedOut()) {
-      userLog.pushSignedOut(
-          o.userId(), SignedOut.newBuilder().addDeviceIds(d.getDevice().getDeviceId()).build());
     }
   }
 }

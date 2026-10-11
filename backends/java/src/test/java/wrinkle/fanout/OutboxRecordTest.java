@@ -45,7 +45,7 @@ class OutboxRecordTest {
     assertEquals(a, o.peerOf(b));
     Message msg = o.event().getMessage().getMessage();
     assertEquals(1, msg.getSeq());
-    assertEquals("from b", msg.getText());
+    assertEquals("m", msg.getClientMessageId());
     assertTrue(o.conversationId().matches(msg.getConversationId()));
   }
 

@@ -23,6 +23,7 @@ import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageDeletedEvent;
 import wrinkle.v1.ReadEvent;
+import wrinkle.v1.Sealed;
 
 /**
  * The conversation service: direct conversations, sending, read marks and history, against the
@@ -31,7 +32,8 @@ import wrinkle.v1.ReadEvent;
  */
 public final class ConversationService {
   private static final int MAX_CLIENT_MESSAGE_ID = 64;
-  private static final int MAX_TEXT_LENGTH = 4000;
+  private static final int NONCE_BYTES = 12;
+  private static final int MAX_CIPHERTEXT_BYTES = 49152;
   private static final int DEFAULT_PAGE_SIZE = 50;
   private static final int MAX_PAGE_SIZE = 500;
   // How many of the newest messages a read covers are searched for senders to tell.
@@ -109,17 +111,23 @@ public final class ConversationService {
 
   /**
    * Stores a message, assigning the next sequence number. Resending with the same client message id
-   * returns the message stored the first time.
+   * returns the message stored the first time. The content must be sealed with the current key
+   * epoch, and not while the conversation waits for a new one.
    */
-  public Message send(Uuid userId, Uuid conversationId, String clientMessageId, String text)
+  public Message send(Uuid userId, Uuid conversationId, String clientMessageId, Sealed sealed)
       throws SQLException {
     if (clientMessageId.isEmpty()
         || clientMessageId.getBytes(StandardCharsets.UTF_8).length > MAX_CLIENT_MESSAGE_ID) {
       throw ApiError.invalidArgument(
           "client_message_id must be 1 to " + MAX_CLIENT_MESSAGE_ID + " bytes");
     }
-    if (text.isEmpty() || text.codePointCount(0, text.length()) > MAX_TEXT_LENGTH) {
-      throw ApiError.invalidArgument("text must be 1 to " + MAX_TEXT_LENGTH + " characters");
+    if (sealed.getNonce().size() != NONCE_BYTES) {
+      throw ApiError.invalidArgument("sealed.nonce must be " + NONCE_BYTES + " bytes");
+    }
+    int ciphertext = sealed.getCiphertext().size();
+    if (ciphertext == 0 || ciphertext > MAX_CIPHERTEXT_BYTES) {
+      throw ApiError.invalidArgument(
+          "sealed.ciphertext must be 1 to " + MAX_CIPHERTEXT_BYTES + " bytes");
     }
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
@@ -130,6 +138,12 @@ public final class ConversationService {
           c.rollback();
           return stored;
         }
+        if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
+          throw ApiError.failedPrecondition("stale key epoch");
+        }
+        if (h.rotate()) {
+          throw ApiError.failedPrecondition("keys must rotate");
+        }
         LocalDateTime sentAt = Timestamps.now();
         long seq = h.lastSeq() + 1;
         Message msg =
@@ -138,7 +152,7 @@ public final class ConversationService {
                 .setSeq(seq)
                 .setSenderUserId(userId.toByteString())
                 .setClientMessageId(clientMessageId)
-                .setText(text)
+                .setSealed(sealed)
                 .setSentAt(Timestamps.toProto(sentAt))
                 .build();
         Sql.update(

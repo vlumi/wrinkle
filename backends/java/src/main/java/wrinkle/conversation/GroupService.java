@@ -274,7 +274,7 @@ public final class GroupService {
           notice(
               c,
               conversationId,
-              new Header(Rows.GROUP, topic, List.copyOf(members), 0),
+              new Header(Rows.GROUP, topic, List.copyOf(members), 0, 0, false),
               userId,
               Notice.newBuilder().setGroupCreated(created).build(),
               members,
@@ -426,6 +426,7 @@ public final class GroupService {
           }
           Set<Uuid> members = new TreeSet<>(h.members());
           members.addAll(added);
+          Rows.requireRotation(c, conversationId);
           notice(
               c,
               conversationId,
@@ -453,6 +454,7 @@ public final class GroupService {
             throw ApiError.notFound("user " + target + " is not a member");
           }
           markLeft(c, conversationId, target, h.lastSeq() + 1);
+          Rows.requireRotation(c, conversationId);
           Set<Uuid> members = new TreeSet<>(h.members());
           members.remove(target);
           notice(
@@ -508,6 +510,7 @@ public final class GroupService {
             }
           }
           markLeft(c, conversationId, userId, seq);
+          Rows.requireRotation(c, conversationId);
           Set<Uuid> members = new TreeSet<>(h.members());
           members.remove(userId);
           notice(

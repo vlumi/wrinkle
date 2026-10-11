@@ -7,6 +7,7 @@ import wrinkle.ApiError;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
+import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
@@ -16,6 +17,7 @@ import wrinkle.v1.ChangePasswordResponse;
 import wrinkle.v1.CreateGroupResponse;
 import wrinkle.v1.DeleteAccountResponse;
 import wrinkle.v1.DeleteMessageResponse;
+import wrinkle.v1.GetDeviceKeysResponse;
 import wrinkle.v1.GetMembersResponse;
 import wrinkle.v1.GetMessagesResponse;
 import wrinkle.v1.LeaveGroupResponse;
@@ -23,6 +25,7 @@ import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
 import wrinkle.v1.OpenConversationResponse;
+import wrinkle.v1.PublishKeysResponse;
 import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.RegisterResponse;
 import wrinkle.v1.RemoveMemberResponse;
@@ -31,6 +34,7 @@ import wrinkle.v1.Request;
 import wrinkle.v1.Response;
 import wrinkle.v1.SendMessageResponse;
 import wrinkle.v1.SetAdminResponse;
+import wrinkle.v1.SetDeviceKeyResponse;
 import wrinkle.v1.SetTopicResponse;
 import wrinkle.v1.SignInResponse;
 import wrinkle.v1.SignOutDeviceResponse;
@@ -46,6 +50,7 @@ public final class LocalBackend implements Backend {
   private final UploadService uploads;
   private final ConversationService conversations;
   private final GroupService groups;
+  private final ConversationKeys keys;
   private final DeviceSyncService users;
 
   public LocalBackend(
@@ -54,12 +59,14 @@ public final class LocalBackend implements Backend {
       UploadService uploads,
       ConversationService conversations,
       GroupService groups,
+      ConversationKeys keys,
       DeviceSyncService users) {
     this.accounts = accounts;
     this.devices = devices;
     this.uploads = uploads;
     this.conversations = conversations;
     this.groups = groups;
+    this.keys = keys;
     this.users = users;
   }
 
@@ -120,6 +127,14 @@ public final class LocalBackend implements Backend {
         devices.signOutOther(userId, deviceId, req.getSignOutDevice().getDeviceId());
         yield resp.setSignOutDevice(SignOutDeviceResponse.getDefaultInstance());
       }
+      case SET_DEVICE_KEY -> {
+        devices.setKey(userId, deviceId, req.getSetDeviceKey().getPublicKey());
+        yield resp.setSetDeviceKey(SetDeviceKeyResponse.getDefaultInstance());
+      }
+      case GET_DEVICE_KEYS ->
+          resp.setGetDeviceKeys(
+              GetDeviceKeysResponse.newBuilder()
+                  .addAllUsers(devices.keys(req.getGetDeviceKeys().getUserIdsList())));
       case DELETE_ACCOUNT -> {
         accounts.deleteAccount(userId, req.getDeleteAccount(), () -> groups.leaveAll(userId));
         yield resp.setDeleteAccount(DeleteAccountResponse.getDefaultInstance());
@@ -173,7 +188,26 @@ public final class LocalBackend implements Backend {
                         userId,
                         conversationId(r.getConversationId()),
                         r.getClientMessageId(),
-                        r.getText())));
+                        r.getSealed())));
+      }
+      case PUBLISH_KEYS -> {
+        var r = req.getPublishKeys();
+        keys.publish(
+            userId,
+            deviceId,
+            conversationId(r.getConversationId()),
+            Integer.toUnsignedLong(r.getEpoch()),
+            r.getKeysList());
+        yield resp.setPublishKeys(PublishKeysResponse.getDefaultInstance());
+      }
+      case GET_CONVERSATION_KEYS -> {
+        var r = req.getGetConversationKeys();
+        yield resp.setGetConversationKeys(
+            keys.get(
+                userId,
+                deviceId,
+                conversationId(r.getConversationId()),
+                Integer.toUnsignedLong(r.getAfterEpoch())));
       }
       case DELETE_MESSAGE -> {
         var r = req.getDeleteMessage();

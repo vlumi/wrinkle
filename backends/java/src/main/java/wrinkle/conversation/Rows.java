@@ -29,8 +29,12 @@ final class Rows {
 
   private static final SecureRandom RANDOM = new SecureRandom();
 
-  /** The conversation row: its kind, topic, current members (sorted bytewise) and last seq. */
-  record Header(String kind, String topic, List<Uuid> members, long lastSeq) {
+  /**
+   * The conversation row: its kind, topic, current members (sorted bytewise), last seq, current key
+   * epoch, and whether the membership changed since that epoch.
+   */
+  record Header(
+      String kind, String topic, List<Uuid> members, long lastSeq, long keyEpoch, boolean rotate) {
     boolean includes(Uuid userId) {
       return members.contains(userId);
     }
@@ -45,7 +49,8 @@ final class Rows {
     try (PreparedStatement ps =
             Sql.prepare(
                 c,
-                "SELECT kind, topic, members, last_seq FROM conversation WHERE conversation_id = ?"
+                "SELECT kind, topic, members, last_seq, key_epoch, rotate FROM conversation WHERE"
+                    + " conversation_id = ?"
                     + (locking ? " FOR UPDATE" : ""),
                 conversationId);
         ResultSet rs = ps.executeQuery()) {
@@ -53,7 +58,12 @@ final class Rows {
         throw ApiError.notFound("conversation " + conversationId + " does not exist");
       }
       return new Header(
-          rs.getString(1), rs.getString(2), Uuid.split(rs.getBytes(3)), rs.getLong(4));
+          rs.getString(1),
+          rs.getString(2),
+          Uuid.split(rs.getBytes(3)),
+          rs.getLong(4),
+          rs.getLong(5),
+          rs.getBoolean(6));
     }
   }
 
@@ -70,6 +80,17 @@ final class Rows {
       throw ApiError.permissionDenied(
           "user " + userId + " is not in conversation " + conversationId);
     }
+  }
+
+  /**
+   * After a membership change the current key epoch must not be used again: sends wait for the next
+   * one. Before the first epoch there is nothing to replace.
+   */
+  static void requireRotation(Connection c, Uuid conversationId) throws SQLException {
+    Sql.update(
+        c,
+        "UPDATE conversation SET rotate = TRUE WHERE conversation_id = ? AND key_epoch > 0",
+        conversationId);
   }
 
   /** A client message id for a notice, chosen by the server. */

@@ -12,6 +12,7 @@ import wrinkle.v1.MemberRemoved;
 import wrinkle.v1.MembersAdded;
 import wrinkle.v1.Message;
 import wrinkle.v1.Notice;
+import wrinkle.v1.Sealed;
 import wrinkle.v1.User;
 
 // The membership flags each notice sets in a recipient's list entry.
@@ -29,8 +30,12 @@ class MembershipTest {
   }
 
   @Test
-  void textChangesNothing() {
-    Message m = Message.newBuilder().setSenderUserId(alice.toByteString()).setText("hi").build();
+  void sealedChangesNothing() {
+    Message m =
+        Message.newBuilder()
+            .setSenderUserId(alice.toByteString())
+            .setSealed(Sealed.getDefaultInstance())
+            .build();
     assertEquals(Membership.UNCHANGED, Membership.of(alice, m));
   }
 
