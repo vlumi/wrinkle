@@ -10,7 +10,7 @@ Run the stack and one backend on a Mac, then connect to it from phones and other
    brew install go git
    ```
 
-2. Clone the repository. It is private, so the Mac needs an SSH key or token that GitHub accepts.
+2. Clone the repository. While it is private, the Mac needs an SSH key or token that GitHub accepts.
 
 3. Bring up the infrastructure:
 
@@ -123,6 +123,6 @@ Not supported yet. The project builds unsigned for the simulator (`CODE_SIGNING_
 
 ## Things to know
 
-- Every infrastructure port listens on the network: MySQL through vtgate on 15003 without a password, Kafka on 19092, Kafka Connect on 8083, Valkey on 6379, Grafana on 3000, Prometheus on 9090. Fine on a home network, not on a shared one.
+- Only the gateway (8080) and the page server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
-- Grafana at `http://<address>:3000` shows the backend's connections, requests and fan-out while you test.
+- Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.
