@@ -218,7 +218,7 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		msg, err := l.conversations.Send(ctx, userID, conversationID,
-			r.SendMessage.GetClientMessageId(), r.SendMessage.GetSealed())
+			r.SendMessage.GetClientMessageId(), r.SendMessage.GetSealed(), r.SendMessage.GetBlobIds())
 		if err != nil {
 			return err
 		}

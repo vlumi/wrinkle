@@ -128,6 +128,25 @@ func encodeBody(msg *pb.Message) ([]byte, error) {
 	return b, nil
 }
 
+// encodeBlobIDs concatenates a message's attachment ids, as
+// message.blob_ids stores them.
+func encodeBlobIDs(blobIDs [][]byte) []byte {
+	b := make([]byte, 0, 16*len(blobIDs))
+	for _, id := range blobIDs {
+		b = append(b, id...)
+	}
+	return b
+}
+
+func decodeBlobIDs(b []byte) [][]byte {
+	var list [][]byte
+	for len(b) >= 16 {
+		list = append(list, slices.Clone(b[:16]))
+		b = b[16:]
+	}
+	return list
+}
+
 // membershipChanged marks that the next send needs a new key epoch, unless
 // there is none yet: the first publish starts one anyway.
 func (st *state) membershipChanged() {
@@ -172,9 +191,9 @@ func (s *Service) store(ctx context.Context, tx *sql.Tx, conversationID ids.UUID
 	}
 	outboxID := ids.Random()
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id, body, sent_at, outbox_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		conversationID, msg.Seq, msg.GetSenderUserId(), msg.GetClientMessageId(), body, sentAt, outboxID); err != nil {
+		INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id, body, blob_ids, sent_at, outbox_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		conversationID, msg.Seq, msg.GetSenderUserId(), msg.GetClientMessageId(), body, encodeBlobIDs(msg.GetBlobIds()), sentAt, outboxID); err != nil {
 		return err
 	}
 	// Sending moves the sender's own read position, without a read event:

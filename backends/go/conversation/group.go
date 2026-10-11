@@ -461,14 +461,15 @@ func (s *Service) Describe(ctx context.Context, conversationID, userID ids.UUID)
 	c.Member = err == nil && !leftSeq.Valid
 	if st.lastSeq > 0 {
 		msg := &pb.Message{ConversationId: c.ConversationId, Seq: st.lastSeq}
-		var body []byte
+		var body, blobs []byte
 		var sentAt time.Time
 		err := s.db.QueryRowContext(ctx, `
-			SELECT sender_user_id, client_message_id, body, sent_at FROM message WHERE conversation_id = ? AND seq = ?`,
-			conversationID, st.lastSeq).Scan(&msg.SenderUserId, &msg.ClientMessageId, &body, &sentAt)
+			SELECT sender_user_id, client_message_id, body, blob_ids, sent_at FROM message WHERE conversation_id = ? AND seq = ?`,
+			conversationID, st.lastSeq).Scan(&msg.SenderUserId, &msg.ClientMessageId, &body, &blobs, &sentAt)
 		switch {
 		case err == nil:
 			msg.SentAt = timestamppb.New(sentAt)
+			msg.BlobIds = decodeBlobIDs(blobs)
 			if err := decodeBody(body, msg); err != nil {
 				return nil, err
 			}

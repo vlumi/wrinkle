@@ -130,6 +130,7 @@ func scanConversations(rows *sql.Rows) ([]*pb.Conversation, error) {
 			}
 			c.LastMessage.Content = content.Content
 			c.LastMessage.DeletedAt = content.DeletedAt
+			c.LastMessage.BlobIds = content.BlobIds
 		}
 		list = append(list, c)
 	}

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -24,6 +25,7 @@ const (
 	maxClientMessageID = 64
 	nonceBytes         = 12
 	maxCiphertext      = 48 << 10
+	maxBlobIDs         = 10
 	defaultPageSize    = 50
 	maxPageSize        = 500
 	// readSendersWindow bounds the messages a group read event looks at
@@ -37,15 +39,23 @@ type Profiles interface {
 	Profiles(ctx context.Context, userIDs []ids.UUID) (map[ids.UUID]*pb.User, error)
 }
 
-type Service struct {
-	db       *sql.DB
-	profiles Profiles
-	keys     DeviceKeys
-	now      func() time.Time
+// Attachments takes the uploads of a message's attachments into use, and
+// releases them once it is deleted, in the user keyspace.
+type Attachments interface {
+	UseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error
+	ReleaseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error
 }
 
-func New(db *sql.DB, profiles Profiles, keys DeviceKeys) *Service {
-	return &Service{db: db, profiles: profiles, keys: keys, now: func() time.Time { return time.Now().UTC() }}
+type Service struct {
+	db          *sql.DB
+	profiles    Profiles
+	keys        DeviceKeys
+	attachments Attachments
+	now         func() time.Time
+}
+
+func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments) *Service {
+	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments, now: func() time.Time { return time.Now().UTC() }}
 }
 
 // Open finds or creates the direct conversation between two users, user_a
@@ -109,8 +119,10 @@ func isDuplicate(err error) bool {
 // Send stores a sealed message, assigning the next sequence number.
 // Resending with the same client message id returns the message stored the
 // first time; otherwise the content must be sealed with the current key
-// epoch, and none is current while the conversation needs a new one.
-func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, sealed *pb.Sealed) (*pb.Message, error) {
+// epoch, and none is current while the conversation needs a new one. The
+// attachments' uploads are taken into use first; a send that fails after
+// that leaves them used. An upload goes with one message only.
+func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, sealed *pb.Sealed, blobIDs [][]byte) (*pb.Message, error) {
 	if clientMessageID == "" || len(clientMessageID) > maxClientMessageID {
 		return nil, apierror.InvalidArgument("client_message_id must be 1 to %d bytes", maxClientMessageID)
 	}
@@ -119,6 +131,15 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	}
 	if n := len(sealed.GetCiphertext()); n == 0 || n > maxCiphertext {
 		return nil, apierror.InvalidArgument("sealed.ciphertext must be 1 to %d bytes", maxCiphertext)
+	}
+	blobs, err := parseBlobIDs(blobIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(blobs) > 0 {
+		if err := s.useAttachments(ctx, userID, conversationID, clientMessageID, blobs); err != nil {
+			return nil, err
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -135,14 +156,15 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 		SenderUserId:    userID.Bytes(),
 		ClientMessageId: clientMessageID,
 	}
-	var body []byte
+	var body, storedBlobs []byte
 	var sentAt time.Time
 	err = tx.QueryRowContext(ctx, `
-		SELECT seq, body, sent_at FROM message
+		SELECT seq, body, blob_ids, sent_at FROM message
 		WHERE conversation_id = ? AND sender_user_id = ? AND client_message_id = ?`,
-		conversationID, userID, clientMessageID).Scan(&msg.Seq, &body, &sentAt)
+		conversationID, userID, clientMessageID).Scan(&msg.Seq, &body, &storedBlobs, &sentAt)
 	if err == nil {
 		msg.SentAt = timestamppb.New(sentAt)
+		msg.BlobIds = decodeBlobIDs(storedBlobs)
 		return msg, decodeBody(body, msg)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
@@ -157,6 +179,9 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	msg.Content = &pb.Message_Sealed{Sealed: &pb.Sealed{
 		Epoch: sealed.GetEpoch(), Nonce: sealed.GetNonce(), Ciphertext: sealed.GetCiphertext(),
 	}}
+	for _, id := range blobs {
+		msg.BlobIds = append(msg.BlobIds, id.Bytes())
+	}
 	st.lastSeq++
 	if err := s.store(ctx, tx, conversationID, st, msg, st.members, false); err != nil {
 		return nil, err
@@ -165,6 +190,42 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 		return nil, err
 	}
 	return msg, nil
+}
+
+// parseBlobIDs checks a message's attachment ids: at most ten distinct
+// ones.
+func parseBlobIDs(blobIDs [][]byte) ([]ids.UUID, error) {
+	if len(blobIDs) > maxBlobIDs {
+		return nil, apierror.InvalidArgument("blob_ids must have at most %d ids", maxBlobIDs)
+	}
+	list := make([]ids.UUID, 0, len(blobIDs))
+	for _, b := range blobIDs {
+		id, ok := ids.Parse(b)
+		if !ok {
+			return nil, apierror.InvalidArgument("blob_ids must be 16 bytes each")
+		}
+		if slices.Contains(list, id) {
+			return nil, apierror.InvalidArgument("blob_ids must be distinct")
+		}
+		list = append(list, id)
+	}
+	return list, nil
+}
+
+// useAttachments takes the attachments' uploads into use, unless the
+// message is a resend of one already stored.
+func (s *Service) useAttachments(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, blobIDs []ids.UUID) error {
+	var one int
+	err := s.db.QueryRowContext(ctx, `
+		SELECT 1 FROM message WHERE conversation_id = ? AND sender_user_id = ? AND client_message_id = ?`,
+		conversationID, userID, clientMessageID).Scan(&one)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	return s.attachments.UseAttachments(ctx, userID, blobIDs)
 }
 
 // MarkRead moves the user's read position forward. Moving it backwards or
@@ -277,7 +338,7 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 	}
 	limit = min(limit, maxPageSize)
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT seq, sender_user_id, client_message_id, body, sent_at FROM message
+		SELECT seq, sender_user_id, client_message_id, body, blob_ids, sent_at FROM message
 		WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
 		conversationID, joinedSeq, upTo, beforeSeq, limit)
 	if err != nil {
@@ -287,12 +348,13 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 	var messages []*pb.Message
 	for rows.Next() {
 		msg := &pb.Message{ConversationId: conversationID.Bytes()}
-		var body []byte
+		var body, blobs []byte
 		var sentAt time.Time
-		if err := rows.Scan(&msg.Seq, &msg.SenderUserId, &msg.ClientMessageId, &body, &sentAt); err != nil {
+		if err := rows.Scan(&msg.Seq, &msg.SenderUserId, &msg.ClientMessageId, &body, &blobs, &sentAt); err != nil {
 			return nil, err
 		}
 		msg.SentAt = timestamppb.New(sentAt)
+		msg.BlobIds = decodeBlobIDs(blobs)
 		if err := decodeBody(body, msg); err != nil {
 			return nil, err
 		}

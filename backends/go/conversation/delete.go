@@ -17,7 +17,8 @@ import (
 // keeps only the deletion time, and the event tells the current members,
 // and the user when no longer one, so that their logs and lists drop the
 // content. A former member may delete what they sent before leaving.
-// Deleting a deleted message again does nothing.
+// Deleting a deleted message again does nothing. The attachments' uploads
+// are released after the commit, for the sweeper to delete.
 func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, seq uint64) error {
 	if seq == 0 {
 		return apierror.InvalidArgument("seq must be positive")
@@ -48,11 +49,11 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 		return notFound
 	}
 	var sender ids.UUID
-	var body []byte
+	var body, blobs []byte
 	var outboxID uint64
 	err = tx.QueryRowContext(ctx, `
-		SELECT sender_user_id, body, outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR UPDATE`,
-		conversationID, seq).Scan(&sender, &body, &outboxID)
+		SELECT sender_user_id, body, blob_ids, outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR UPDATE`,
+		conversationID, seq).Scan(&sender, &body, &blobs, &outboxID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return notFound
 	}
@@ -78,7 +79,7 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
-		UPDATE message SET body = ? WHERE conversation_id = ? AND seq = ?`,
+		UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?`,
 		body, conversationID, seq); err != nil {
 		return err
 	}
@@ -101,5 +102,15 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), recipients, st, "message_deleted", target, event, now); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	if len(blobs) == 0 {
+		return nil
+	}
+	released := make([]ids.UUID, len(blobs)/16)
+	for i := range released {
+		copy(released[i][:], blobs[16*i:])
+	}
+	return s.attachments.ReleaseAttachments(ctx, userID, released)
 }

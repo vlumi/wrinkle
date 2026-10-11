@@ -236,7 +236,7 @@ func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, pee
 	if o.direct() {
 		peerColumn = peerID
 	}
-	body, err := proto.Marshal(&pb.Message{Content: msg.GetContent()})
+	body, err := proto.Marshal(&pb.Message{Content: msg.GetContent(), BlobIds: msg.GetBlobIds()})
 	if err != nil {
 		return err
 	}
@@ -314,6 +314,7 @@ func recordDeletion(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxR
 		}
 		if msg := event.GetMessage().GetMessage(); msg != nil {
 			msg.Content = nil
+			msg.BlobIds = nil
 			msg.DeletedAt = deleted.GetDeletedAt()
 			if payload, err = proto.Marshal(event); err != nil {
 				return err

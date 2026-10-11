@@ -96,9 +96,10 @@ func run() error {
 		}
 		defer userDB.Close()
 		accts := accounts.New(userDB, store)
-		conversations := conversation.New(conversationDB, accts, accts)
+		uploadService := uploads.New(userDB, store)
+		conversations := conversation.New(conversationDB, accts, accts, uploadService)
 		users := devicesync.New(userDB, accts, conversations)
-		local = services.NewLocal(accts, conversations, users, uploads.New(userDB, store), stickers.New(userDB, store), log.With("role", "services"))
+		local = services.NewLocal(accts, conversations, users, uploadService, stickers.New(userDB, store), log.With("role", "services"))
 	}
 	// Valkey carries presence and pushes, from fan-out to gateways.
 	var pres *presence.Client

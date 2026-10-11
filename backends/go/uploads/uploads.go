@@ -89,3 +89,101 @@ func validMediaType(s string) bool {
 	kind, sub, ok := strings.Cut(s, "/")
 	return ok && kind != "" && sub != "" && !strings.Contains(sub, "/")
 }
+
+func notAttachmentUpload() error {
+	return apierror.FailedPrecondition("not an attachment upload of yours")
+}
+
+// UseAttachments takes the user's uploaded attachment blobs into use, so
+// the sweeper keeps them; the ids are distinct, and none may be in use by
+// another message already.
+func (s *Service) UseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error {
+	if len(blobIDs) == 0 {
+		return nil
+	}
+	query, args := blobQuery(`
+		SELECT used FROM upload WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN `, userID, blobIDs)
+	if _, err := attachmentUploads(ctx, s.db, query, args, len(blobIDs)); err != nil {
+		return err
+	}
+	for _, id := range blobIDs {
+		uploaded, err := s.blobs.Exists(ctx, id)
+		if err != nil {
+			return err
+		}
+		if !uploaded {
+			return apierror.FailedPrecondition("not uploaded")
+		}
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Locking the rows again keeps the sweeper from taking them meanwhile.
+	used, err := attachmentUploads(ctx, tx, query+` FOR UPDATE`, args, len(blobIDs))
+	if err != nil {
+		return err
+	}
+	// Another message refers to it; deleting either would release it.
+	if used {
+		return apierror.FailedPrecondition("already attached")
+	}
+	query, args = blobQuery(`UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id IN `, userID, blobIDs)
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+type querier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+// attachmentUploads checks that the query finds the given number of
+// attachment uploads, and tells whether any of them is used.
+func attachmentUploads(ctx context.Context, q querier, query string, args []any, want int) (bool, error) {
+	rows, err := q.QueryContext(ctx, query, args...)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	n, anyUsed := 0, false
+	for rows.Next() {
+		var used bool
+		if err := rows.Scan(&used); err != nil {
+			return false, err
+		}
+		n++
+		anyUsed = anyUsed || used
+	}
+	if err := rows.Err(); err != nil {
+		return false, err
+	}
+	if n != want {
+		return false, notAttachmentUpload()
+	}
+	return anyUsed, nil
+}
+
+// ReleaseAttachments marks the user's attachment blobs unused, so the
+// sweeper deletes them.
+func (s *Service) ReleaseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error {
+	if len(blobIDs) == 0 {
+		return nil
+	}
+	query, args := blobQuery(`
+		UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN `, userID, blobIDs)
+	_, err := s.db.ExecContext(ctx, query, args...)
+	return err
+}
+
+// blobQuery appends the list of blob ids to a query on one user's uploads.
+func blobQuery(prefix string, userID ids.UUID, blobIDs []ids.UUID) (string, []any) {
+	args := make([]any, 0, 1+len(blobIDs))
+	args = append(args, userID)
+	for _, id := range blobIDs {
+		args = append(args, id)
+	}
+	return prefix + `(?` + strings.Repeat(`, ?`, len(blobIDs)-1) + `)`, args
+}

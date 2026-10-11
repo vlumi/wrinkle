@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 func TestMembers(t *testing.T) {
@@ -50,5 +52,24 @@ func TestMembershipChangeRotatesOnlyAfterTheFirstEpoch(t *testing.T) {
 	st.membershipChanged()
 	if !st.rotate {
 		t.Fatal("no rotate after epoch 1")
+	}
+}
+
+func TestBlobIDs(t *testing.T) {
+	a, b := ids.New(), ids.New()
+	if list, err := parseBlobIDs([][]byte{a.Bytes(), b.Bytes()}); err != nil || len(list) != 2 || list[0] != a || list[1] != b {
+		t.Fatalf("parse: %v %v", list, err)
+	}
+	for _, bad := range [][][]byte{{a.Bytes(), a.Bytes()}, {a.Bytes()[:15]}, make([][]byte, maxBlobIDs+1)} {
+		if _, err := parseBlobIDs(bad); apierror.Code(err) != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
+			t.Fatalf("parse %x: %v", bad, err)
+		}
+	}
+	stored := encodeBlobIDs([][]byte{a.Bytes(), b.Bytes()})
+	if got := decodeBlobIDs(stored); len(got) != 2 || !bytes.Equal(got[0], a.Bytes()) || !bytes.Equal(got[1], b.Bytes()) {
+		t.Fatalf("decode %x", got)
+	}
+	if got := decodeBlobIDs(nil); got != nil {
+		t.Fatalf("decode empty: %x", got)
 	}
 }
