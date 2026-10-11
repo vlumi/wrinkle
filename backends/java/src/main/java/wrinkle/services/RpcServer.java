@@ -4,7 +4,6 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import wrinkle.Metrics;
 import wrinkle.backend.v1.AckRequest;
 import wrinkle.backend.v1.AckResponse;
 import wrinkle.backend.v1.BackendServiceGrpc;
@@ -18,39 +17,36 @@ import wrinkle.backend.v1.CallResponse;
 public final class RpcServer extends BackendServiceGrpc.BackendServiceImplBase {
   private static final Logger log = LoggerFactory.getLogger(RpcServer.class);
 
-  private final Local local;
+  private final LocalBackend local;
 
-  public RpcServer(Local local) {
+  public RpcServer(LocalBackend local) {
     this.local = local;
   }
 
   @Override
   public void call(CallRequest req, StreamObserver<CallResponse> out) {
-    Metrics.virtualThreads()
-        .execute(
-            () -> {
-              CallResponse resp =
-                  CallResponse.newBuilder()
-                      .setResponse(local.call(req.getUserId(), req.getDeviceId(), req.getRequest()))
-                      .build();
-              out.onNext(resp);
-              out.onCompleted();
-            });
+    Thread.startVirtualThread(
+        () -> {
+          out.onNext(
+              CallResponse.newBuilder()
+                  .setResponse(local.call(req.getUserId(), req.getDeviceId(), req.getRequest()))
+                  .build());
+          out.onCompleted();
+        });
   }
 
   @Override
   public void ack(AckRequest req, StreamObserver<AckResponse> out) {
-    Metrics.virtualThreads()
-        .execute(
-            () -> {
-              try {
-                local.ack(req.getUserId(), req.getDeviceId(), req.getCursor());
-                out.onNext(AckResponse.getDefaultInstance());
-                out.onCompleted();
-              } catch (Exception e) {
-                log.warn("ack failed", e);
-                out.onError(Status.INTERNAL.withDescription("ack failed").asRuntimeException());
-              }
-            });
+    Thread.startVirtualThread(
+        () -> {
+          try {
+            local.ack(req.getUserId(), req.getDeviceId(), req.getCursor());
+            out.onNext(AckResponse.getDefaultInstance());
+            out.onCompleted();
+          } catch (Exception e) {
+            log.warn("ack failed", e);
+            out.onError(Status.INTERNAL.withDescription("ack failed").asRuntimeException());
+          }
+        });
   }
 }

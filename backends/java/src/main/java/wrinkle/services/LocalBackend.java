@@ -15,29 +15,27 @@ import wrinkle.v1.Response;
 import wrinkle.v1.SendMessageResponse;
 
 /** Runs the conversation and sync services in-process. */
-public final class Local implements Backend {
-  private static final Logger log = LoggerFactory.getLogger(Local.class);
+public final class LocalBackend implements Backend {
+  private static final Logger log = LoggerFactory.getLogger(LocalBackend.class);
 
   private final ConversationService conversations;
   private final DeviceSyncService users;
 
-  public Local(ConversationService conversations, DeviceSyncService users) {
+  public LocalBackend(ConversationService conversations, DeviceSyncService users) {
     this.conversations = conversations;
     this.users = users;
   }
 
   @Override
   public Response call(long userId, long deviceId, Request req) {
-    Response.Builder resp = Response.newBuilder().setRequestId(req.getId());
     try {
-      dispatch(userId, deviceId, req, resp);
+      return dispatch(userId, deviceId, req).setRequestId(req.getId()).build();
     } catch (Exception e) {
       if (!(e instanceof ApiError)) {
         log.error("request {} failed", req.getId(), e);
       }
-      resp.setError(ApiError.toProto(e));
+      return ApiError.response(req, e);
     }
-    return resp.build();
   }
 
   @Override
@@ -45,16 +43,15 @@ public final class Local implements Backend {
     users.ack(userId, deviceId, cursor);
   }
 
-  private void dispatch(long userId, long deviceId, Request req, Response.Builder resp)
-      throws Exception {
+  private Response.Builder dispatch(long userId, long deviceId, Request req) throws Exception {
+    Response.Builder resp = Response.newBuilder();
     if (req.hasConnect()) {
-      resp.setConnect(users.connect(req.getConnect()));
-      return;
+      return resp.setConnect(users.connect(req.getConnect()));
     }
     if (userId == 0) {
       throw ApiError.unauthenticated("connect first");
     }
-    switch (req.getBodyCase()) {
+    return switch (req.getBodyCase()) {
       case OPEN_CONVERSATION ->
           resp.setOpenConversation(
               OpenConversationResponse.newBuilder()
@@ -62,7 +59,7 @@ public final class Local implements Backend {
                       users.open(userId, req.getOpenConversation().getPeerUserName())));
       case SEND_MESSAGE -> {
         var r = req.getSendMessage();
-        resp.setSendMessage(
+        yield resp.setSendMessage(
             SendMessageResponse.newBuilder()
                 .setMessage(
                     conversations.send(
@@ -71,7 +68,7 @@ public final class Local implements Backend {
       case MARK_READ -> {
         var r = req.getMarkRead();
         conversations.markRead(userId, r.getConversationId(), r.getSeq());
-        resp.setMarkRead(MarkReadResponse.getDefaultInstance());
+        yield resp.setMarkRead(MarkReadResponse.getDefaultInstance());
       }
       case SYNC ->
           resp.setSync(users.sync(userId, req.getSync().getCursor(), req.getSync().getLimit()));
@@ -81,7 +78,7 @@ public final class Local implements Backend {
                   .addAllConversations(users.listConversations(userId)));
       case GET_MESSAGES -> {
         var r = req.getGetMessages();
-        resp.setGetMessages(
+        yield resp.setGetMessages(
             GetMessagesResponse.newBuilder()
                 .addAllMessages(
                     conversations.messages(
@@ -90,9 +87,9 @@ public final class Local implements Backend {
       case REGISTER_PUSH_TOKEN -> {
         var r = req.getRegisterPushToken();
         users.registerPushToken(userId, deviceId, r.getService(), r.getToken());
-        resp.setRegisterPushToken(RegisterPushTokenResponse.getDefaultInstance());
+        yield resp.setRegisterPushToken(RegisterPushTokenResponse.getDefaultInstance());
       }
       default -> throw ApiError.invalidArgument("request has no body");
-    }
+    };
   }
 }

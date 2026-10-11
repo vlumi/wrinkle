@@ -1,6 +1,8 @@
 package wrinkle;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
@@ -19,14 +21,34 @@ public record Config(
 
   private static final Set<String> ROLES = Set.of("gateway", "fanout", "services");
 
+  public boolean runsGateway() {
+    return roles.contains("gateway");
+  }
+
+  public boolean runsServices() {
+    return roles.contains("services");
+  }
+
+  public boolean runsFanout() {
+    return roles.contains("fanout");
+  }
+
+  /** A gateway that forwards to a services process instead of running the services in-process. */
+  public boolean forwardsToServices() {
+    return runsGateway() && !services.isEmpty();
+  }
+
+  /** The services, in-process or as a role, and fan-out work on the database. */
+  public boolean needsDatabase() {
+    return runsServices() || runsFanout() || (runsGateway() && !forwardsToServices());
+  }
+
   public static Config parse(String[] args) {
     String roles = env("WRINKLE_ROLES", "gateway,fanout");
     String listen = env("WRINKLE_LISTEN", ":8080");
     String mysql = env("WRINKLE_MYSQL", "127.0.0.1:15003");
     String kafka = env("WRINKLE_KAFKA", "localhost:19092");
     String valkey = env("WRINKLE_VALKEY", "localhost:6379");
-    // A gateway forwards to a services process at this address instead of running the services
-    // in-process.
     String services = env("WRINKLE_SERVICES", "");
     String servicesListen = env("WRINKLE_SERVICES_LISTEN", ":9000");
     String node = env("WRINKLE_NODE", hostname());
@@ -90,8 +112,8 @@ public record Config(
 
   private static String hostname() {
     try {
-      return java.net.InetAddress.getLocalHost().getHostName();
-    } catch (java.net.UnknownHostException e) {
+      return InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException e) {
       return "localhost";
     }
   }

@@ -4,18 +4,10 @@ import io.prometheus.metrics.core.metrics.Counter;
 import io.prometheus.metrics.core.metrics.Gauge;
 import io.prometheus.metrics.core.metrics.Histogram;
 import io.prometheus.metrics.instrumentation.jvm.JvmMetrics;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /** The metrics every backend exposes, with the names in docs/metrics.md. */
 public final class Metrics {
   private Metrics() {}
-
-  private static final ExecutorService VIRTUAL = Executors.newVirtualThreadPerTaskExecutor();
-
-  public static ExecutorService virtualThreads() {
-    return VIRTUAL;
-  }
 
   public static final Gauge CONNECTIONS =
       Gauge.builder()

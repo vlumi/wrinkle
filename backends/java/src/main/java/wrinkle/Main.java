@@ -16,7 +16,7 @@ import wrinkle.fanout.FanoutWorker;
 import wrinkle.gateway.Gateway;
 import wrinkle.presence.Presence;
 import wrinkle.services.Backend;
-import wrinkle.services.Local;
+import wrinkle.services.LocalBackend;
 import wrinkle.services.RpcClient;
 import wrinkle.services.RpcServer;
 
@@ -28,6 +28,7 @@ import wrinkle.services.RpcServer;
  */
 public final class Main {
   private static final Logger log = LoggerFactory.getLogger(Main.class);
+  private static final String FANOUT_GROUP = "wrinkle-fanout";
 
   private Main() {}
 
@@ -35,24 +36,50 @@ public final class Main {
     Config cfg = Config.parse(args);
     Metrics.init();
 
-    boolean wantGateway = cfg.roles().contains("gateway");
-    boolean wantServices = cfg.roles().contains("services");
-    boolean forwarding = wantGateway && !cfg.services().isEmpty();
-
-    // The database is needed by the services (in-process or as a role) and by fan-out; a gateway
-    // forwarding to a services process does without.
-    DataSource conversationDb = null;
     DataSource userDb = null;
-    Local local = null;
-    if (wantServices || cfg.roles().contains("fanout") || (wantGateway && !forwarding)) {
-      conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
+    LocalBackend local = null;
+    if (cfg.needsDatabase()) {
+      DataSource conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
       userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
       ConversationService conversations = new ConversationService(conversationDb);
-      local = new Local(conversations, new DeviceSyncService(userDb, conversations));
+      local = new LocalBackend(conversations, new DeviceSyncService(userDb, conversations));
     }
     Presence presence = new Presence(cfg.valkey(), cfg.node());
 
     ServerBuilder sb = Server.builder().http(cfg.listen());
+    addOperationalEndpoints(sb);
+
+    Gateway gateway = null;
+    if (cfg.runsGateway()) {
+      Backend backend = cfg.forwardsToServices() ? new RpcClient(cfg.services()) : local;
+      gateway = new Gateway(backend, presence);
+      gateway.register(sb);
+      if (cfg.forwardsToServices()) {
+        log.info("gateway forwarding to services at {}", cfg.services());
+      }
+    }
+    if (cfg.runsServices()) {
+      // The RPC on its own port, as in the Go backend.
+      sb.http(cfg.servicesListen());
+      sb.virtualHost(cfg.servicesListen().getPort())
+          .service(GrpcService.builder().addService(new RpcServer(local)).build());
+      log.info("services listening on {}", cfg.servicesListen());
+    }
+    FanoutWorker fanout = null;
+    if (cfg.runsFanout()) {
+      fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, presence);
+      Thread.ofPlatform().name("fanout").start(fanout::run);
+      log.info("fanout consuming {}", FanoutWorker.TOPIC);
+    }
+
+    Server server = sb.build();
+    server.start().join();
+    log.info("listening on {}", cfg.listen());
+
+    awaitShutdown(server, gateway, fanout, presence);
+  }
+
+  private static void addOperationalEndpoints(ServerBuilder sb) {
     sb.service("/healthz", (ctx, req) -> HttpResponse.of("ok\n"));
     sb.service("/metrics", PrometheusExpositionService.of(PrometheusRegistry.defaultRegistry));
     // Lets a measurement collect garbage before sampling memory.
@@ -62,53 +89,26 @@ public final class Main {
           System.gc();
           return HttpResponse.of("ok\n");
         });
+  }
 
-    Gateway gateway = null;
-    if (wantGateway) {
-      Backend backend = forwarding ? new RpcClient(cfg.services()) : local;
-      gateway = new Gateway(backend, presence);
-      gateway.register(sb);
-      if (forwarding) {
-        log.info("gateway forwarding to services at {}", cfg.services());
-      }
-    }
-    if (wantServices) {
-      // The RPC on its own port, as in the Go backend.
-      sb.http(cfg.servicesListen());
-      sb.virtualHost(cfg.servicesListen().getPort())
-          .service(GrpcService.builder().addService(new RpcServer(local)).build());
-      log.info("services listening on {}", cfg.servicesListen());
-    }
-    FanoutWorker fanout = null;
-    if (cfg.roles().contains("fanout")) {
-      fanout = new FanoutWorker(cfg.kafka(), "wrinkle-fanout", userDb, presence);
-      Thread.ofPlatform().name("fanout").start(fanout::run);
-      log.info("fanout consuming {}", FanoutWorker.TOPIC);
-    }
-
-    Server server = sb.build();
-    server.start().join();
-    log.info("listening on {}", cfg.listen());
-
-    FanoutWorker finalFanout = fanout;
-    Gateway finalGateway = gateway;
+  /** Blocks until the process is told to stop, then stops the roles that run. */
+  private static void awaitShutdown(
+      Server server, Gateway gateway, FanoutWorker fanout, Presence presence) {
     CompletableFuture<Void> stopped = new CompletableFuture<>();
-    Runtime.getRuntime()
-        .addShutdownHook(
-            Thread.ofPlatform()
-                .unstarted(
-                    () -> {
-                      log.info("shutting down");
-                      if (finalFanout != null) {
-                        finalFanout.stop();
-                      }
-                      server.stop().join();
-                      if (finalGateway != null) {
-                        finalGateway.close();
-                      }
-                      presence.close();
-                      stopped.complete(null);
-                    }));
+    Runnable shutDown =
+        () -> {
+          log.info("shutting down");
+          if (fanout != null) {
+            fanout.stop();
+          }
+          server.stop().join();
+          if (gateway != null) {
+            gateway.close();
+          }
+          presence.close();
+          stopped.complete(null);
+        };
+    Runtime.getRuntime().addShutdownHook(Thread.ofPlatform().unstarted(shutDown));
     stopped.join();
   }
 }
