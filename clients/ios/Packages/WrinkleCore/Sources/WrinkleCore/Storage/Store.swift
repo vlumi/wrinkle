@@ -177,10 +177,12 @@ public final class StoredMessage {
     public var seq: Int64
     public var senderID: IDHex
     public var clientMessageID: String
-    /// The opened text; empty for a notice, a sticker and while the content is not opened.
+    /// The opened text or caption; empty for a notice, a sticker and while not opened.
     public var text: String
     /// The opened sticker's id as hex; empty for none.
     public var stickerID: IDHex
+    /// The serialized Attachments of opened content that has them.
+    public var attachments: Data?
     /// The serialized message while its sealed content is not opened.
     public var sealedMessage: Data?
     /// The serialized Notice, for a group notice.
@@ -210,7 +212,7 @@ public final class StoredMessage {
     /// Sealed content this device cannot open (yet).
     public var isLocked: Bool { sealedMessage != nil }
 
-    /// Whether the user may delete it: their own text or sticker, not yet deleted.
+    /// Whether the user may delete it: their own text, sticker or attachments, not yet deleted.
     public func deletable(by userID: IDHex) -> Bool {
         senderID == userID && notice == nil && deletedAt == nil
     }
@@ -220,13 +222,10 @@ public final class StoredMessage {
         guard deletedAt == nil else { return }
         text = ""
         stickerID = ""
+        attachments = nil
         notice = nil
         sealedMessage = nil
         deletedAt = date
-    }
-
-    public var noticeContent: Wrinkle_V1_Notice? {
-        notice.flatMap { try? Wrinkle_V1_Notice(serializedBytes: $0) }
     }
 }
 
@@ -251,7 +250,7 @@ public struct Store {
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 8
+    static let version = 9
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {

@@ -1,5 +1,11 @@
 import Foundation
 
+extension StoredMessage {
+    public var noticeContent: Wrinkle_V1_Notice? {
+        notice.flatMap { try? Wrinkle_V1_Notice(serializedBytes: $0) }
+    }
+}
+
 /// Group notices as the sentences shown in the conversation and the list.
 public enum NoticeText {
     /// The sentence for a notice. `sender` is the acting user's name as known, or nil; `me`

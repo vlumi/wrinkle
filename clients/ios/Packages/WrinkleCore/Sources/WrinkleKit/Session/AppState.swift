@@ -38,6 +38,10 @@ public final class AppState {
     public internal(set) var palette: [Data] = []
     /// Stickers decoded so far, by sticker id as hex; nil for one that cannot be shown.
     var stickerImages: [String: CGImage?] = [:]
+    /// Attachments being sent, by conversation, kept across a failed send for its retry.
+    var outgoing: [IDHex: OutgoingAttachments] = [:]
+    /// How much of each file being sent is uploaded, by the picked file's id.
+    public internal(set) var uploadProgress: [UUID: Double] = [:]
     /// Another device of the user that set its key and awaits the user's decision on sharing
     /// the message history with it.
     public internal(set) var newDevice: Wrinkle_V1_Device?

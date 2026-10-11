@@ -7,13 +7,21 @@ extension Store {
     /// Opens the message's sealed content if a held key does.
     public func open(_ stored: StoredMessage) {
         guard let data = stored.sealedMessage, let content = opened(data) else { return }
-        stored.text = content.stickerID == nil ? content.text : ""
-        stored.stickerID = content.stickerID?.hex ?? ""
+        stored.text = ""
+        stored.stickerID = ""
+        stored.attachments = nil
+        switch content.body {
+        case .sticker: stored.stickerID = content.stickerID?.hex ?? ""
+        case .attachments(let a):
+            stored.text = a.caption
+            if AttachmentRules.valid(a) { stored.attachments = try? a.serializedData() }
+        default: stored.text = content.text
+        }
         stored.sealedMessage = nil
     }
 
     /// Opens the latest message of the conversation, for the list: a sticker reads as
-    /// "Sticker".
+    /// "Sticker", attachments as their caption or what they are.
     public func open(_ c: StoredConversation) {
         guard let data = c.lastSealed, let content = opened(data) else { return }
         c.lastText = content.preview

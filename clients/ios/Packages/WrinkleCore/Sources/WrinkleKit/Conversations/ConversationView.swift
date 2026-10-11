@@ -10,7 +10,6 @@ struct ConversationView: View {
     @Query private var members: [StoredMember]
     @Query private var verifications: [StoredVerification]
     @Query private var reactions: [StoredReaction]
-    @State private var text = ""
     @State private var error: String?
     @State private var showInfo = false
     @State private var contact: Wrinkle_V1_User?
@@ -34,7 +33,6 @@ struct ConversationView: View {
 
     private var conversation: StoredConversation? { conversations.first }
     private var isGroup: Bool { conversation?.isGroup ?? false }
-    private var trimmedText: String { text.trimmingCharacters(in: .whitespaces) }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,18 +82,8 @@ struct ConversationView: View {
                 Text("You are no longer in this group")
                     .font(.footnote).foregroundStyle(.secondary).padding()
             } else {
-                HStack {
-                    Button {
-                        showStickers = true
-                    } label: {
-                        Image(systemName: "face.smiling")
-                    }
-                    .accessibilityLabel("Stickers")
-                    TextField("Message", text: $text).textFieldStyle(.roundedBorder)
-                        .onSubmit(send)
-                    Button("Send", action: send).disabled(trimmedText.isEmpty)
-                }
-                .padding()
+                MessageComposer(
+                    conversationID: conversationID, showStickers: $showStickers, error: $error)
             }
             if let error {
                 Text(error).font(.footnote).foregroundStyle(.red).padding(.bottom)
@@ -351,21 +339,6 @@ extension ConversationView {
                 error = nil
             } catch {
                 self.error = errorText(error)
-            }
-        }
-    }
-
-    private func send() {
-        let t = trimmedText
-        guard !t.isEmpty else { return }
-        text = ""
-        Task {
-            do {
-                try await app.send(text: t, in: conversationID)
-                error = nil
-            } catch {
-                self.error = errorText(
-                    error, [.permissionDenied: "You are no longer in this group."])
             }
         }
     }

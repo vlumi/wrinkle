@@ -33,7 +33,8 @@ public struct SharedNames: Codable, Equatable, Sendable {
 /// The text of a message push, decrypted: the backend sends only "New message" and the sealed
 /// content, which a held epoch key opens.
 public enum PushContent {
-    /// The notification body: the text, or "Sticker" for a sticker, in a direct conversation;
+    /// The notification body: the text, "Sticker" for a sticker, or the attachments' caption,
+    /// "Photo", "n photos" or "File: <name>", in a direct conversation;
     /// "<sender>: <text>" in a group; nil when the push has no sealed content or no held key opens it.
     public static func body(
         _ info: [AnyHashable: Any], keys: EpochKeys, names: SharedNames

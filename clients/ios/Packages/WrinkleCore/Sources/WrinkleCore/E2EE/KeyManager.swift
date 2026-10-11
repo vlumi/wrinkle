@@ -157,11 +157,12 @@ public actor KeyManager {
 
     // MARK: Sending
 
-    /// Seals the content and sends it, first publishing a new epoch if the conversation needs
-    /// one; a send refused for a stale epoch refreshes and is retried once.
+    /// Seals the content and sends it with the attachment blobs it refers to, first publishing
+    /// a new epoch if the conversation needs one; a send refused for a stale epoch refreshes
+    /// and is retried once.
     public func send(
         content: Wrinkle_V1_Content, to conversationID: Data, members: Members,
-        clientMessageID: String, _ connection: Connection
+        clientMessageID: String, blobIDs: [Data] = [], _ connection: Connection
     ) async throws -> Wrinkle_V1_Message {
         var (epoch, key) = try await currentEpoch(conversationID, members, connection)
         var retried = false
@@ -175,7 +176,7 @@ public actor KeyManager {
             do {
                 return try await connection.sendMessage(
                     conversationID: conversationID, clientMessageID: clientMessageID,
-                    sealed: sealed)
+                    sealed: sealed, blobIDs: blobIDs)
             } catch let e as BackendError where e.code == .failedPrecondition && !retried {
                 retried = true
                 rosters[conversationID] = nil

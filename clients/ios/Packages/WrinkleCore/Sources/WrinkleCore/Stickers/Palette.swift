@@ -28,10 +28,14 @@ extension Wrinkle_V1_Content {
         return s.stickerID
     }
 
-    /// The content as one line of text: the text, or "Sticker".
+    /// The content as one line of text: the text, "Sticker", or the attachments' caption or
+    /// description.
     public var preview: String {
-        if case .sticker = body { return Palette.previewText }
-        return text
+        switch body {
+        case .sticker: return Palette.previewText
+        case .attachments(let a): return a.preview
+        default: return text
+        }
     }
 }
 

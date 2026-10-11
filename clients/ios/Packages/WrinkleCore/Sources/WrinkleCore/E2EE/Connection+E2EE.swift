@@ -36,9 +36,11 @@ extension Connection {
         ).getConversationKeys
     }
 
-    /// Sends content already sealed; see KeyManager.send.
+    /// Sends content already sealed, with the attachment blobs it refers to; see
+    /// KeyManager.send.
     public func sendMessage(
-        conversationID: Data, clientMessageID: String, sealed: Wrinkle_V1_Sealed
+        conversationID: Data, clientMessageID: String, sealed: Wrinkle_V1_Sealed,
+        blobIDs: [Data] = []
     )
         async throws -> Wrinkle_V1_Message
     {
@@ -48,6 +50,7 @@ extension Connection {
                     $0.conversationID = conversationID
                     $0.clientMessageID = clientMessageID
                     $0.sealed = sealed
+                    $0.blobIds = blobIDs
                 })
         ).sendMessage.message
     }

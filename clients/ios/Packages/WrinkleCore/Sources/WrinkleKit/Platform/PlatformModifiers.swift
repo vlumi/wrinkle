@@ -44,3 +44,16 @@ enum Toolbar {
         #endif
     }
 }
+
+extension View {
+    /// A full-screen cover on iOS, a sheet on the Mac.
+    func fullScreen<Item: Identifiable, Content: View>(
+        item: Binding<Item?>, @ViewBuilder content: @escaping (Item) -> Content
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(item: item, content: content)
+        #else
+        sheet(item: item, content: content)
+        #endif
+    }
+}

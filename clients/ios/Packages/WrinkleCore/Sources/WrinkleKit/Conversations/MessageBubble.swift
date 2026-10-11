@@ -67,6 +67,9 @@ struct MessageBubble: View {
             } else if message.isLocked {
                 Label("Can't decrypt this message", systemImage: "lock")
                     .italic().foregroundStyle(.secondary)
+            } else if let attachments = message.attachmentContent {
+                AttachmentsView(attachments: attachments)
+                if !message.text.isEmpty { Text(message.text) }
             } else {
                 Text(message.text)
             }

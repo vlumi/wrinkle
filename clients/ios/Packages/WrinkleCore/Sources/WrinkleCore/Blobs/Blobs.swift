@@ -38,10 +38,22 @@ public actor Blobs {
         return data
     }
 
+    /// A blob's bytes fetched from the blob address, not cached: attachment blobs are only
+    /// ciphertext, kept decrypted instead (AttachmentFiles).
+    public func fetch(blob: Data, base: URL) async throws -> Data {
+        let (data, response) = try await session.data(from: BlobAddress.url(blob: blob, base: base))
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+        return data
+    }
+
     /// Uploads bytes to an upload slot, with Content-Type and Content-Length exactly as the
-    /// slot was requested, and caches them under the blob id.
+    /// slot was requested, and caches them under the blob id unless told not to. Progress is
+    /// reported as the share of bytes sent.
     public func upload(
-        _ data: Data, blob: Data, uploadPath: String, mediaType: String, base: URL
+        _ data: Data, blob: Data, uploadPath: String, mediaType: String, base: URL,
+        cache: Bool = true, progress: (@Sendable (Double) -> Void)? = nil
     ) async throws {
         guard let url = BlobAddress.url(uploadPath: uploadPath, base: base) else {
             throw URLError(.badURL)
@@ -50,14 +62,30 @@ public actor Blobs {
         request.httpMethod = "PUT"
         request.setValue(mediaType, forHTTPHeaderField: "Content-Type")
         request.setValue(String(data.count), forHTTPHeaderField: "Content-Length")
-        let (_, response) = try await session.upload(for: request, from: data)
+        let delegate = progress.map(UploadProgress.init)
+        let (_, response) = try await session.upload(for: request, from: data, delegate: delegate)
         guard let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status)
         else { throw URLError(.badServerResponse) }
-        store(data, key: blob.hex)
+        if cache { store(data, key: blob.hex) }
     }
 
     private func store(_ data: Data, key: String) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try? data.write(to: directory.appending(path: key), options: .atomic)
+    }
+}
+
+/// Reports an upload's progress as the share of bytes sent.
+final class UploadProgress: NSObject, URLSessionTaskDelegate, Sendable {
+    let report: @Sendable (Double) -> Void
+
+    init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+
+    func urlSession(
+        _ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64,
+        totalBytesSent: Int64, totalBytesExpectedToSend: Int64
+    ) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        report(Double(totalBytesSent) / Double(totalBytesExpectedToSend))
     }
 }
