@@ -199,7 +199,8 @@ public final class LocalBackend implements Backend {
                         userId,
                         conversationId(r.getConversationId()),
                         r.getClientMessageId(),
-                        r.getSealed())));
+                        r.getSealed(),
+                        r.getBlobIdsList())));
       }
       case PUBLISH_KEYS -> {
         var r = req.getPublishKeys();

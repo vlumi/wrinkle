@@ -5,7 +5,8 @@ import wrinkle.v1.Message;
 
 /**
  * A message's content as message.body and user_conversation.last_body store it: a serialized
- * Message with only its content set, sealed or a notice, or only deleted_at once deleted.
+ * Message with only its content set, sealed with its attachment ids or a notice, or only deleted_at
+ * once deleted.
  */
 public final class MessageBody {
   private MessageBody() {}
@@ -16,7 +17,7 @@ public final class MessageBody {
       return b.setDeletedAt(m.getDeletedAt()).build().toByteArray();
     }
     switch (m.getContentCase()) {
-      case SEALED -> b.setSealed(m.getSealed());
+      case SEALED -> b.setSealed(m.getSealed()).addAllBlobIds(m.getBlobIdsList());
       case NOTICE -> b.setNotice(m.getNotice());
       default -> {}
     }

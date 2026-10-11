@@ -9,6 +9,8 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 import javax.sql.DataSource;
@@ -185,5 +187,91 @@ public final class UploadService {
               c, "UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id = ?", userId, blobId);
           return null;
         });
+  }
+
+  /**
+   * Marks the user's attachment uploads used, once each is found to be theirs, uploaded and not
+   * attached to another message; fails with FAILED_PRECONDITION otherwise.
+   */
+  public void useAttachments(Uuid userId, List<Uuid> blobIds) throws Exception {
+    if (blobIds.isEmpty()) {
+      return;
+    }
+    String query =
+        "SELECT used FROM upload WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN "
+            + inList(blobIds.size());
+    Object[] args = idArgs(userId, blobIds);
+    try (Connection c = db.getConnection()) {
+      requireAll(c, query, args, blobIds.size());
+    }
+    for (Uuid blobId : blobIds) {
+      if (!blobs.exists(blobId)) {
+        throw ApiError.failedPrecondition("not uploaded");
+      }
+    }
+    Devices.inTransaction(
+        db,
+        c -> {
+          // Locking the rows again keeps the sweeper from taking them meanwhile. A used one is
+          // another message's, and deleting either would release it.
+          if (requireAll(c, query + " FOR UPDATE", args, blobIds.size())) {
+            throw ApiError.failedPrecondition("already attached");
+          }
+          Sql.update(
+              c,
+              "UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id IN "
+                  + inList(blobIds.size()),
+              args);
+          return null;
+        });
+  }
+
+  /** Whether any of the uploads the query finds is used; FAILED_PRECONDITION unless all exist. */
+  private static boolean requireAll(Connection c, String query, Object[] args, int want)
+      throws SQLException {
+    int found = 0;
+    boolean used = false;
+    try (PreparedStatement ps = Sql.prepare(c, query, args);
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        found++;
+        used |= rs.getBoolean(1);
+      }
+    }
+    if (found != want) {
+      throw ApiError.failedPrecondition("not an attachment upload of yours");
+    }
+    return used;
+  }
+
+  /**
+   * Marks the user's attachment uploads unused again, once the message referring to them is gone,
+   * so the sweeper deletes them.
+   */
+  public void releaseAttachments(Uuid userId, List<Uuid> blobIds) throws SQLException {
+    if (blobIds.isEmpty()) {
+      return;
+    }
+    try (Connection c = db.getConnection()) {
+      Sql.update(
+          c,
+          "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'attachment' AND"
+              + " blob_id IN "
+              + inList(blobIds.size()),
+          idArgs(userId, blobIds));
+    }
+  }
+
+  private static String inList(int n) {
+    return "(" + String.join(", ", Collections.nCopies(n, "?")) + ")";
+  }
+
+  private static Object[] idArgs(Uuid userId, List<Uuid> blobIds) {
+    Object[] args = new Object[blobIds.size() + 1];
+    args[0] = userId;
+    for (int i = 0; i < blobIds.size(); i++) {
+      args[i + 1] = blobIds.get(i);
+    }
+    return args;
   }
 }

@@ -25,13 +25,28 @@ class MessageBodyTest {
   }
 
   @Test
+  void keepsTheAttachmentIds() {
+    ByteString blob = ByteString.copyFrom(new byte[16]);
+    Message m = Message.newBuilder().setSeq(3).setSealed(SEALED).addBlobIds(blob).build();
+    Message stored = MessageBody.decode(Message.newBuilder(), MessageBody.encode(m)).build();
+    assertEquals(Message.newBuilder().setSealed(SEALED).addBlobIds(blob).build(), stored);
+  }
+
+  @Test
   void keepsOnlyDeletedAtOnceDeleted() {
     Timestamp at = Timestamp.newBuilder().setSeconds(100).build();
-    Message m = Message.newBuilder().setSeq(3).setSealed(SEALED).setDeletedAt(at).build();
+    Message m =
+        Message.newBuilder()
+            .setSeq(3)
+            .setSealed(SEALED)
+            .addBlobIds(ByteString.copyFrom(new byte[16]))
+            .setDeletedAt(at)
+            .build();
     Message stored =
         MessageBody.decode(Message.newBuilder().setSeq(3), MessageBody.encode(m)).build();
     assertEquals(Message.ContentCase.CONTENT_NOT_SET, stored.getContentCase());
     assertTrue(stored.hasDeletedAt());
     assertEquals(at, stored.getDeletedAt());
+    assertEquals(0, stored.getBlobIdsCount());
   }
 }

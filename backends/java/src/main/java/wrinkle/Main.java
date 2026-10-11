@@ -65,8 +65,8 @@ public final class Main {
     if (cfg.needsDatabase()) {
       conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
       userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
-      ConversationService conversations = new ConversationService(conversationDb);
       UploadService uploads = new UploadService(userDb, blobs);
+      ConversationService conversations = new ConversationService(conversationDb, uploads);
       AccountService accounts = new AccountService(userDb, uploads);
       local =
           new LocalBackend(

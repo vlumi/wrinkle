@@ -1,5 +1,6 @@
 package wrinkle.conversation;
 
+import com.google.protobuf.ByteString;
 import java.security.SecureRandom;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -118,14 +119,15 @@ final class Rows {
     Sql.update(
         c,
         "INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id, body,"
-            + " sent_at, outbox_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            + " sent_at, outbox_id, blob_ids) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         msg.getConversationId().toByteArray(),
         msg.getSeq(),
         msg.getSenderUserId().toByteArray(),
         msg.getClientMessageId(),
         MessageBody.encode(msg),
         sentAt,
-        outboxId);
+        outboxId,
+        ByteString.copyFrom(msg.getBlobIdsList()).toByteArray());
     // The sender has read what they sent; their own list learns it from the message itself.
     Sql.update(
         c,
@@ -219,7 +221,10 @@ final class Rows {
   }
 
   /** A message row's columns from seq on, in the order selectMessage reads them. */
-  static final String MESSAGE_COLUMNS = "seq, sender_user_id, client_message_id, body, sent_at";
+  static final String MESSAGE_COLUMNS =
+      "seq, sender_user_id, client_message_id, body, sent_at, blob_ids";
+
+  static final int MESSAGE_COLUMN_COUNT = 6;
 
   static Message message(Uuid conversationId, ResultSet rs) throws SQLException {
     Message.Builder m =
@@ -229,6 +234,10 @@ final class Rows {
             .setSenderUserId(Uuid.of(rs.getBytes(2)).toByteString())
             .setClientMessageId(rs.getString(3))
             .setSentAt(Timestamps.toProto(rs.getObject(5, LocalDateTime.class)));
-    return MessageBody.decode(m, rs.getBytes(4)).build();
+    MessageBody.decode(m, rs.getBytes(4)).clearBlobIds();
+    for (Uuid id : Uuid.split(rs.getBytes(6))) {
+      m.addBlobIds(id.toByteString());
+    }
+    return m.build();
   }
 }

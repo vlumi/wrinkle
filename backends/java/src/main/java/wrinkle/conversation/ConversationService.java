@@ -1,5 +1,6 @@
 package wrinkle.conversation;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +25,7 @@ import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.conversation.Rows.Header;
+import wrinkle.uploads.UploadService;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageDeletedEvent;
@@ -45,11 +48,14 @@ public final class ConversationService {
   private static final int MAX_PAGE_SIZE = 500;
   // How many of the newest messages a read covers are searched for senders to tell.
   private static final int READ_SENDERS_WINDOW = 1000;
+  private static final int MAX_ATTACHMENTS = 10;
 
   private final DataSource db;
+  private final UploadService uploads;
 
-  public ConversationService(DataSource db) {
+  public ConversationService(DataSource db, UploadService uploads) {
     this.db = db;
+    this.uploads = uploads;
   }
 
   /**
@@ -119,10 +125,16 @@ public final class ConversationService {
   /**
    * Stores a message, assigning the next sequence number. Resending with the same client message id
    * returns the message stored the first time. The content must be sealed with the current key
-   * epoch, and not while the conversation waits for a new one.
+   * epoch, and not while the conversation waits for a new one. The attachments must be the sender's
+   * uploads, already uploaded; they become used.
    */
-  public Message send(Uuid userId, Uuid conversationId, String clientMessageId, Sealed sealed)
-      throws SQLException {
+  public Message send(
+      Uuid userId,
+      Uuid conversationId,
+      String clientMessageId,
+      Sealed sealed,
+      List<ByteString> blobIdBytes)
+      throws Exception {
     if (clientMessageId.isEmpty()
         || clientMessageId.getBytes(StandardCharsets.UTF_8).length > MAX_CLIENT_MESSAGE_ID) {
       throw ApiError.invalidArgument(
@@ -135,6 +147,20 @@ public final class ConversationService {
     if (ciphertext == 0 || ciphertext > MAX_CIPHERTEXT_BYTES) {
       throw ApiError.invalidArgument(
           "sealed.ciphertext must be 1 to " + MAX_CIPHERTEXT_BYTES + " bytes");
+    }
+    List<Uuid> blobIds = blobIds(blobIdBytes);
+    if (!blobIds.isEmpty()) {
+      // A resend finds its message before the uploads are checked again; after a delete they may
+      // be gone.
+      try (Connection c = db.getConnection()) {
+        Rows.memberHeader(c, conversationId, userId, false);
+        Message stored = findSent(c, userId, conversationId, clientMessageId);
+        if (stored != null) {
+          return stored;
+        }
+      }
+      // A send failing after this leaves the uploads used with nothing referring to them.
+      uploads.useAttachments(userId, blobIds);
     }
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
@@ -161,6 +187,7 @@ public final class ConversationService {
                 .setClientMessageId(clientMessageId)
                 .setSealed(sealed)
                 .setSentAt(Timestamps.toProto(sentAt))
+                .addAllBlobIds(blobIdBytes)
                 .build();
         Sql.update(
             c,
@@ -177,14 +204,42 @@ public final class ConversationService {
     }
   }
 
+  /** The attachment ids: at most MAX_ATTACHMENTS, 16 bytes each, distinct. */
+  private static List<Uuid> blobIds(List<ByteString> bytes) {
+    if (bytes.size() > MAX_ATTACHMENTS) {
+      throw ApiError.invalidArgument("at most " + MAX_ATTACHMENTS + " blob_ids");
+    }
+    List<Uuid> ids = new ArrayList<>(bytes.size());
+    Set<Uuid> seen = new HashSet<>();
+    for (ByteString b : bytes) {
+      Uuid id = Uuid.parse(b);
+      if (id == null) {
+        throw ApiError.invalidArgument("blob_ids must be 16 bytes each");
+      }
+      if (!seen.add(id)) {
+        throw ApiError.invalidArgument("blob_ids must be distinct");
+      }
+      ids.add(id);
+    }
+    return ids;
+  }
+
   /**
    * Deletes one of the user's own messages for everyone: its content gives way to deleted_at, and
-   * the members, with the user even after leaving, learn of it. Deleting again does nothing.
+   * the members, with the user even after leaving, learn of it. Deleting again does nothing. The
+   * attachments' uploads become unused, for the sweeper.
    */
   public void deleteMessage(Uuid userId, Uuid conversationId, long seq) throws SQLException {
     if (seq <= 0) {
       throw ApiError.invalidArgument("seq must be positive");
     }
+    List<Uuid> released = deleteMessageRow(userId, conversationId, seq);
+    uploads.releaseAttachments(userId, released);
+  }
+
+  /** Deletes the message, returning the attachment ids it had. */
+  private List<Uuid> deleteMessageRow(Uuid userId, Uuid conversationId, long seq)
+      throws SQLException {
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
       try {
@@ -206,7 +261,7 @@ public final class ConversationService {
             throw ApiError.notFound("message " + seq + " does not exist");
           }
           msg = Rows.message(conversationId, rs);
-          targetOutboxId = rs.getLong(6);
+          targetOutboxId = rs.getLong(Rows.MESSAGE_COLUMN_COUNT + 1);
         }
         if (msg.hasNotice()) {
           throw ApiError.invalidArgument("a notice cannot be deleted");
@@ -216,13 +271,13 @@ public final class ConversationService {
         }
         if (msg.hasDeletedAt()) {
           c.commit();
-          return;
+          return List.of();
         }
         LocalDateTime at = Timestamps.now();
         Message deleted = Message.newBuilder().setDeletedAt(Timestamps.toProto(at)).build();
         Sql.update(
             c,
-            "UPDATE message SET body = ? WHERE conversation_id = ? AND seq = ?",
+            "UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?",
             MessageBody.encode(deleted),
             conversationId,
             seq);
@@ -255,6 +310,7 @@ public final class ConversationService {
             at,
             targetOutboxId);
         c.commit();
+        return msg.getBlobIdsList().stream().map(Uuid::parse).toList();
       } catch (SQLException | RuntimeException e) {
         c.rollback();
         throw e;

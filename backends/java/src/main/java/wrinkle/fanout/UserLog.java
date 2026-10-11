@@ -354,6 +354,7 @@ final class UserLog {
         b.getMessageBuilder()
             .getMessageBuilder()
             .clearContent()
+            .clearBlobIds()
             .setDeletedAt(deleted.getDeletedAt());
         Sql.update(
             c,
