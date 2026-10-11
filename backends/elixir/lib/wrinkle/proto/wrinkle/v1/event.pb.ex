@@ -27,6 +27,7 @@ defmodule Wrinkle.V1.Event do
     oneof: 0
 
   field :reaction, 16, type: Wrinkle.V1.ReactionEvent, oneof: 0
+  field :palette, 17, type: Wrinkle.V1.PaletteEvent, oneof: 0
 end
 
 defmodule Wrinkle.V1.MessageEvent do
@@ -116,4 +117,15 @@ defmodule Wrinkle.V1.ReactionEvent do
   field :user_id, 3, type: :bytes, json_name: "userId"
   field :sealed, 4, type: Wrinkle.V1.Sealed
   field :updated_at, 5, type: Google.Protobuf.Timestamp, json_name: "updatedAt"
+end
+
+defmodule Wrinkle.V1.PaletteEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.PaletteEvent",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_ids, 1, repeated: true, type: :bytes, json_name: "stickerIds"
 end

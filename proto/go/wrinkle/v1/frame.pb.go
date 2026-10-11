@@ -332,6 +332,12 @@ type Request struct {
 	//	*Request_PublishKeys
 	//	*Request_GetConversationKeys
 	//	*Request_SetReaction
+	//	*Request_CreateSticker
+	//	*Request_GetStickers
+	//	*Request_GetPalette
+	//	*Request_SaveSticker
+	//	*Request_RemoveSticker
+	//	*Request_MoveSticker
 	Body          isRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -660,6 +666,60 @@ func (x *Request) GetSetReaction() *SetReactionRequest {
 	return nil
 }
 
+func (x *Request) GetCreateSticker() *CreateStickerRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_CreateSticker); ok {
+			return x.CreateSticker
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetGetStickers() *GetStickersRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_GetStickers); ok {
+			return x.GetStickers
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetGetPalette() *GetPaletteRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_GetPalette); ok {
+			return x.GetPalette
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetSaveSticker() *SaveStickerRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_SaveSticker); ok {
+			return x.SaveSticker
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetRemoveSticker() *RemoveStickerRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_RemoveSticker); ok {
+			return x.RemoveSticker
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetMoveSticker() *MoveStickerRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_MoveSticker); ok {
+			return x.MoveSticker
+		}
+	}
+	return nil
+}
+
 type isRequest_Body interface {
 	isRequest_Body()
 }
@@ -788,6 +848,30 @@ type Request_SetReaction struct {
 	SetReaction *SetReactionRequest `protobuf:"bytes,40,opt,name=set_reaction,json=setReaction,proto3,oneof"`
 }
 
+type Request_CreateSticker struct {
+	CreateSticker *CreateStickerRequest `protobuf:"bytes,41,opt,name=create_sticker,json=createSticker,proto3,oneof"`
+}
+
+type Request_GetStickers struct {
+	GetStickers *GetStickersRequest `protobuf:"bytes,42,opt,name=get_stickers,json=getStickers,proto3,oneof"`
+}
+
+type Request_GetPalette struct {
+	GetPalette *GetPaletteRequest `protobuf:"bytes,43,opt,name=get_palette,json=getPalette,proto3,oneof"`
+}
+
+type Request_SaveSticker struct {
+	SaveSticker *SaveStickerRequest `protobuf:"bytes,44,opt,name=save_sticker,json=saveSticker,proto3,oneof"`
+}
+
+type Request_RemoveSticker struct {
+	RemoveSticker *RemoveStickerRequest `protobuf:"bytes,45,opt,name=remove_sticker,json=removeSticker,proto3,oneof"`
+}
+
+type Request_MoveSticker struct {
+	MoveSticker *MoveStickerRequest `protobuf:"bytes,46,opt,name=move_sticker,json=moveSticker,proto3,oneof"`
+}
+
 func (*Request_Connect) isRequest_Body() {}
 
 func (*Request_OpenConversation) isRequest_Body() {}
@@ -850,6 +934,18 @@ func (*Request_GetConversationKeys) isRequest_Body() {}
 
 func (*Request_SetReaction) isRequest_Body() {}
 
+func (*Request_CreateSticker) isRequest_Body() {}
+
+func (*Request_GetStickers) isRequest_Body() {}
+
+func (*Request_GetPalette) isRequest_Body() {}
+
+func (*Request_SaveSticker) isRequest_Body() {}
+
+func (*Request_RemoveSticker) isRequest_Body() {}
+
+func (*Request_MoveSticker) isRequest_Body() {}
+
 type Response struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -887,6 +983,12 @@ type Response struct {
 	//	*Response_PublishKeys
 	//	*Response_GetConversationKeys
 	//	*Response_SetReaction
+	//	*Response_CreateSticker
+	//	*Response_GetStickers
+	//	*Response_GetPalette
+	//	*Response_SaveSticker
+	//	*Response_RemoveSticker
+	//	*Response_MoveSticker
 	Body          isResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1224,6 +1326,60 @@ func (x *Response) GetSetReaction() *SetReactionResponse {
 	return nil
 }
 
+func (x *Response) GetCreateSticker() *CreateStickerResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_CreateSticker); ok {
+			return x.CreateSticker
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetGetStickers() *GetStickersResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_GetStickers); ok {
+			return x.GetStickers
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetGetPalette() *GetPaletteResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_GetPalette); ok {
+			return x.GetPalette
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSaveSticker() *SaveStickerResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_SaveSticker); ok {
+			return x.SaveSticker
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetRemoveSticker() *RemoveStickerResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_RemoveSticker); ok {
+			return x.RemoveSticker
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetMoveSticker() *MoveStickerResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_MoveSticker); ok {
+			return x.MoveSticker
+		}
+	}
+	return nil
+}
+
 type isResponse_Body interface {
 	isResponse_Body()
 }
@@ -1356,6 +1512,30 @@ type Response_SetReaction struct {
 	SetReaction *SetReactionResponse `protobuf:"bytes,40,opt,name=set_reaction,json=setReaction,proto3,oneof"`
 }
 
+type Response_CreateSticker struct {
+	CreateSticker *CreateStickerResponse `protobuf:"bytes,41,opt,name=create_sticker,json=createSticker,proto3,oneof"`
+}
+
+type Response_GetStickers struct {
+	GetStickers *GetStickersResponse `protobuf:"bytes,42,opt,name=get_stickers,json=getStickers,proto3,oneof"`
+}
+
+type Response_GetPalette struct {
+	GetPalette *GetPaletteResponse `protobuf:"bytes,43,opt,name=get_palette,json=getPalette,proto3,oneof"`
+}
+
+type Response_SaveSticker struct {
+	SaveSticker *SaveStickerResponse `protobuf:"bytes,44,opt,name=save_sticker,json=saveSticker,proto3,oneof"`
+}
+
+type Response_RemoveSticker struct {
+	RemoveSticker *RemoveStickerResponse `protobuf:"bytes,45,opt,name=remove_sticker,json=removeSticker,proto3,oneof"`
+}
+
+type Response_MoveSticker struct {
+	MoveSticker *MoveStickerResponse `protobuf:"bytes,46,opt,name=move_sticker,json=moveSticker,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Body() {}
 
 func (*Response_Connect) isResponse_Body() {}
@@ -1419,6 +1599,18 @@ func (*Response_PublishKeys) isResponse_Body() {}
 func (*Response_GetConversationKeys) isResponse_Body() {}
 
 func (*Response_SetReaction) isResponse_Body() {}
+
+func (*Response_CreateSticker) isResponse_Body() {}
+
+func (*Response_GetStickers) isResponse_Body() {}
+
+func (*Response_GetPalette) isResponse_Body() {}
+
+func (*Response_SaveSticker) isResponse_Body() {}
+
+func (*Response_RemoveSticker) isResponse_Body() {}
+
+func (*Response_MoveSticker) isResponse_Body() {}
 
 type Error struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1606,7 +1798,7 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x03ack\x18\x04 \x01(\v2\x0f.wrinkle.v1.AckH\x00R\x03ack\x12&\n" +
 	"\x04ping\x18\x05 \x01(\v2\x10.wrinkle.v1.PingH\x00R\x04ping\x12&\n" +
 	"\x04pong\x18\x06 \x01(\v2\x10.wrinkle.v1.PongH\x00R\x04pongB\x06\n" +
-	"\x04kind\"\x93\x11\n" +
+	"\x04kind\"\xba\x14\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x126\n" +
 	"\aconnect\x18\n" +
@@ -1643,8 +1835,15 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x0fget_device_keys\x18% \x01(\v2 .wrinkle.v1.GetDeviceKeysRequestH\x00R\rgetDeviceKeys\x12C\n" +
 	"\fpublish_keys\x18& \x01(\v2\x1e.wrinkle.v1.PublishKeysRequestH\x00R\vpublishKeys\x12\\\n" +
 	"\x15get_conversation_keys\x18' \x01(\v2&.wrinkle.v1.GetConversationKeysRequestH\x00R\x13getConversationKeys\x12C\n" +
-	"\fset_reaction\x18( \x01(\v2\x1e.wrinkle.v1.SetReactionRequestH\x00R\vsetReactionB\x06\n" +
-	"\x04body\"\xed\x11\n" +
+	"\fset_reaction\x18( \x01(\v2\x1e.wrinkle.v1.SetReactionRequestH\x00R\vsetReaction\x12I\n" +
+	"\x0ecreate_sticker\x18) \x01(\v2 .wrinkle.v1.CreateStickerRequestH\x00R\rcreateSticker\x12C\n" +
+	"\fget_stickers\x18* \x01(\v2\x1e.wrinkle.v1.GetStickersRequestH\x00R\vgetStickers\x12@\n" +
+	"\vget_palette\x18+ \x01(\v2\x1d.wrinkle.v1.GetPaletteRequestH\x00R\n" +
+	"getPalette\x12C\n" +
+	"\fsave_sticker\x18, \x01(\v2\x1e.wrinkle.v1.SaveStickerRequestH\x00R\vsaveSticker\x12I\n" +
+	"\x0eremove_sticker\x18- \x01(\v2 .wrinkle.v1.RemoveStickerRequestH\x00R\rremoveSticker\x12C\n" +
+	"\fmove_sticker\x18. \x01(\v2\x1e.wrinkle.v1.MoveStickerRequestH\x00R\vmoveStickerB\x06\n" +
+	"\x04body\"\x9a\x15\n" +
 	"\bResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12)\n" +
@@ -1683,7 +1882,14 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x0fget_device_keys\x18% \x01(\v2!.wrinkle.v1.GetDeviceKeysResponseH\x00R\rgetDeviceKeys\x12D\n" +
 	"\fpublish_keys\x18& \x01(\v2\x1f.wrinkle.v1.PublishKeysResponseH\x00R\vpublishKeys\x12]\n" +
 	"\x15get_conversation_keys\x18' \x01(\v2'.wrinkle.v1.GetConversationKeysResponseH\x00R\x13getConversationKeys\x12D\n" +
-	"\fset_reaction\x18( \x01(\v2\x1f.wrinkle.v1.SetReactionResponseH\x00R\vsetReactionB\x06\n" +
+	"\fset_reaction\x18( \x01(\v2\x1f.wrinkle.v1.SetReactionResponseH\x00R\vsetReaction\x12J\n" +
+	"\x0ecreate_sticker\x18) \x01(\v2!.wrinkle.v1.CreateStickerResponseH\x00R\rcreateSticker\x12D\n" +
+	"\fget_stickers\x18* \x01(\v2\x1f.wrinkle.v1.GetStickersResponseH\x00R\vgetStickers\x12A\n" +
+	"\vget_palette\x18+ \x01(\v2\x1e.wrinkle.v1.GetPaletteResponseH\x00R\n" +
+	"getPalette\x12D\n" +
+	"\fsave_sticker\x18, \x01(\v2\x1f.wrinkle.v1.SaveStickerResponseH\x00R\vsaveSticker\x12J\n" +
+	"\x0eremove_sticker\x18- \x01(\v2!.wrinkle.v1.RemoveStickerResponseH\x00R\rremoveSticker\x12D\n" +
+	"\fmove_sticker\x18. \x01(\v2\x1f.wrinkle.v1.MoveStickerResponseH\x00R\vmoveStickerB\x06\n" +
 	"\x04body\"L\n" +
 	"\x05Error\x12)\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x15.wrinkle.v1.ErrorCodeR\x04code\x12\x18\n" +
@@ -1763,37 +1969,49 @@ var file_wrinkle_v1_frame_proto_goTypes = []any{
 	(*PublishKeysRequest)(nil),          // 37: wrinkle.v1.PublishKeysRequest
 	(*GetConversationKeysRequest)(nil),  // 38: wrinkle.v1.GetConversationKeysRequest
 	(*SetReactionRequest)(nil),          // 39: wrinkle.v1.SetReactionRequest
-	(*ConnectResponse)(nil),             // 40: wrinkle.v1.ConnectResponse
-	(*OpenConversationResponse)(nil),    // 41: wrinkle.v1.OpenConversationResponse
-	(*SendMessageResponse)(nil),         // 42: wrinkle.v1.SendMessageResponse
-	(*MarkReadResponse)(nil),            // 43: wrinkle.v1.MarkReadResponse
-	(*SyncResponse)(nil),                // 44: wrinkle.v1.SyncResponse
-	(*ListConversationsResponse)(nil),   // 45: wrinkle.v1.ListConversationsResponse
-	(*GetMessagesResponse)(nil),         // 46: wrinkle.v1.GetMessagesResponse
-	(*RegisterPushTokenResponse)(nil),   // 47: wrinkle.v1.RegisterPushTokenResponse
-	(*RegisterResponse)(nil),            // 48: wrinkle.v1.RegisterResponse
-	(*SignInResponse)(nil),              // 49: wrinkle.v1.SignInResponse
-	(*ChangePasswordResponse)(nil),      // 50: wrinkle.v1.ChangePasswordResponse
-	(*UpdateProfileResponse)(nil),       // 51: wrinkle.v1.UpdateProfileResponse
-	(*SignOutResponse)(nil),             // 52: wrinkle.v1.SignOutResponse
-	(*ListDevicesResponse)(nil),         // 53: wrinkle.v1.ListDevicesResponse
-	(*RenameDeviceResponse)(nil),        // 54: wrinkle.v1.RenameDeviceResponse
-	(*SignOutDeviceResponse)(nil),       // 55: wrinkle.v1.SignOutDeviceResponse
-	(*DeleteAccountResponse)(nil),       // 56: wrinkle.v1.DeleteAccountResponse
-	(*CreateUploadResponse)(nil),        // 57: wrinkle.v1.CreateUploadResponse
-	(*CreateGroupResponse)(nil),         // 58: wrinkle.v1.CreateGroupResponse
-	(*AddMembersResponse)(nil),          // 59: wrinkle.v1.AddMembersResponse
-	(*RemoveMemberResponse)(nil),        // 60: wrinkle.v1.RemoveMemberResponse
-	(*LeaveGroupResponse)(nil),          // 61: wrinkle.v1.LeaveGroupResponse
-	(*SetTopicResponse)(nil),            // 62: wrinkle.v1.SetTopicResponse
-	(*SetAdminResponse)(nil),            // 63: wrinkle.v1.SetAdminResponse
-	(*GetMembersResponse)(nil),          // 64: wrinkle.v1.GetMembersResponse
-	(*DeleteMessageResponse)(nil),       // 65: wrinkle.v1.DeleteMessageResponse
-	(*SetDeviceKeyResponse)(nil),        // 66: wrinkle.v1.SetDeviceKeyResponse
-	(*GetDeviceKeysResponse)(nil),       // 67: wrinkle.v1.GetDeviceKeysResponse
-	(*PublishKeysResponse)(nil),         // 68: wrinkle.v1.PublishKeysResponse
-	(*GetConversationKeysResponse)(nil), // 69: wrinkle.v1.GetConversationKeysResponse
-	(*SetReactionResponse)(nil),         // 70: wrinkle.v1.SetReactionResponse
+	(*CreateStickerRequest)(nil),        // 40: wrinkle.v1.CreateStickerRequest
+	(*GetStickersRequest)(nil),          // 41: wrinkle.v1.GetStickersRequest
+	(*GetPaletteRequest)(nil),           // 42: wrinkle.v1.GetPaletteRequest
+	(*SaveStickerRequest)(nil),          // 43: wrinkle.v1.SaveStickerRequest
+	(*RemoveStickerRequest)(nil),        // 44: wrinkle.v1.RemoveStickerRequest
+	(*MoveStickerRequest)(nil),          // 45: wrinkle.v1.MoveStickerRequest
+	(*ConnectResponse)(nil),             // 46: wrinkle.v1.ConnectResponse
+	(*OpenConversationResponse)(nil),    // 47: wrinkle.v1.OpenConversationResponse
+	(*SendMessageResponse)(nil),         // 48: wrinkle.v1.SendMessageResponse
+	(*MarkReadResponse)(nil),            // 49: wrinkle.v1.MarkReadResponse
+	(*SyncResponse)(nil),                // 50: wrinkle.v1.SyncResponse
+	(*ListConversationsResponse)(nil),   // 51: wrinkle.v1.ListConversationsResponse
+	(*GetMessagesResponse)(nil),         // 52: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenResponse)(nil),   // 53: wrinkle.v1.RegisterPushTokenResponse
+	(*RegisterResponse)(nil),            // 54: wrinkle.v1.RegisterResponse
+	(*SignInResponse)(nil),              // 55: wrinkle.v1.SignInResponse
+	(*ChangePasswordResponse)(nil),      // 56: wrinkle.v1.ChangePasswordResponse
+	(*UpdateProfileResponse)(nil),       // 57: wrinkle.v1.UpdateProfileResponse
+	(*SignOutResponse)(nil),             // 58: wrinkle.v1.SignOutResponse
+	(*ListDevicesResponse)(nil),         // 59: wrinkle.v1.ListDevicesResponse
+	(*RenameDeviceResponse)(nil),        // 60: wrinkle.v1.RenameDeviceResponse
+	(*SignOutDeviceResponse)(nil),       // 61: wrinkle.v1.SignOutDeviceResponse
+	(*DeleteAccountResponse)(nil),       // 62: wrinkle.v1.DeleteAccountResponse
+	(*CreateUploadResponse)(nil),        // 63: wrinkle.v1.CreateUploadResponse
+	(*CreateGroupResponse)(nil),         // 64: wrinkle.v1.CreateGroupResponse
+	(*AddMembersResponse)(nil),          // 65: wrinkle.v1.AddMembersResponse
+	(*RemoveMemberResponse)(nil),        // 66: wrinkle.v1.RemoveMemberResponse
+	(*LeaveGroupResponse)(nil),          // 67: wrinkle.v1.LeaveGroupResponse
+	(*SetTopicResponse)(nil),            // 68: wrinkle.v1.SetTopicResponse
+	(*SetAdminResponse)(nil),            // 69: wrinkle.v1.SetAdminResponse
+	(*GetMembersResponse)(nil),          // 70: wrinkle.v1.GetMembersResponse
+	(*DeleteMessageResponse)(nil),       // 71: wrinkle.v1.DeleteMessageResponse
+	(*SetDeviceKeyResponse)(nil),        // 72: wrinkle.v1.SetDeviceKeyResponse
+	(*GetDeviceKeysResponse)(nil),       // 73: wrinkle.v1.GetDeviceKeysResponse
+	(*PublishKeysResponse)(nil),         // 74: wrinkle.v1.PublishKeysResponse
+	(*GetConversationKeysResponse)(nil), // 75: wrinkle.v1.GetConversationKeysResponse
+	(*SetReactionResponse)(nil),         // 76: wrinkle.v1.SetReactionResponse
+	(*CreateStickerResponse)(nil),       // 77: wrinkle.v1.CreateStickerResponse
+	(*GetStickersResponse)(nil),         // 78: wrinkle.v1.GetStickersResponse
+	(*GetPaletteResponse)(nil),          // 79: wrinkle.v1.GetPaletteResponse
+	(*SaveStickerResponse)(nil),         // 80: wrinkle.v1.SaveStickerResponse
+	(*RemoveStickerResponse)(nil),       // 81: wrinkle.v1.RemoveStickerResponse
+	(*MoveStickerResponse)(nil),         // 82: wrinkle.v1.MoveStickerResponse
 }
 var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	2,  // 0: wrinkle.v1.Frame.request:type_name -> wrinkle.v1.Request
@@ -1833,44 +2051,56 @@ var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	37, // 34: wrinkle.v1.Request.publish_keys:type_name -> wrinkle.v1.PublishKeysRequest
 	38, // 35: wrinkle.v1.Request.get_conversation_keys:type_name -> wrinkle.v1.GetConversationKeysRequest
 	39, // 36: wrinkle.v1.Request.set_reaction:type_name -> wrinkle.v1.SetReactionRequest
-	4,  // 37: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
-	40, // 38: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
-	41, // 39: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
-	42, // 40: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
-	43, // 41: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
-	44, // 42: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
-	45, // 43: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
-	46, // 44: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
-	47, // 45: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
-	48, // 46: wrinkle.v1.Response.register:type_name -> wrinkle.v1.RegisterResponse
-	49, // 47: wrinkle.v1.Response.sign_in:type_name -> wrinkle.v1.SignInResponse
-	50, // 48: wrinkle.v1.Response.change_password:type_name -> wrinkle.v1.ChangePasswordResponse
-	51, // 49: wrinkle.v1.Response.update_profile:type_name -> wrinkle.v1.UpdateProfileResponse
-	52, // 50: wrinkle.v1.Response.sign_out:type_name -> wrinkle.v1.SignOutResponse
-	53, // 51: wrinkle.v1.Response.list_devices:type_name -> wrinkle.v1.ListDevicesResponse
-	54, // 52: wrinkle.v1.Response.rename_device:type_name -> wrinkle.v1.RenameDeviceResponse
-	55, // 53: wrinkle.v1.Response.sign_out_device:type_name -> wrinkle.v1.SignOutDeviceResponse
-	56, // 54: wrinkle.v1.Response.delete_account:type_name -> wrinkle.v1.DeleteAccountResponse
-	57, // 55: wrinkle.v1.Response.create_upload:type_name -> wrinkle.v1.CreateUploadResponse
-	58, // 56: wrinkle.v1.Response.create_group:type_name -> wrinkle.v1.CreateGroupResponse
-	59, // 57: wrinkle.v1.Response.add_members:type_name -> wrinkle.v1.AddMembersResponse
-	60, // 58: wrinkle.v1.Response.remove_member:type_name -> wrinkle.v1.RemoveMemberResponse
-	61, // 59: wrinkle.v1.Response.leave_group:type_name -> wrinkle.v1.LeaveGroupResponse
-	62, // 60: wrinkle.v1.Response.set_topic:type_name -> wrinkle.v1.SetTopicResponse
-	63, // 61: wrinkle.v1.Response.set_admin:type_name -> wrinkle.v1.SetAdminResponse
-	64, // 62: wrinkle.v1.Response.get_members:type_name -> wrinkle.v1.GetMembersResponse
-	65, // 63: wrinkle.v1.Response.delete_message:type_name -> wrinkle.v1.DeleteMessageResponse
-	66, // 64: wrinkle.v1.Response.set_device_key:type_name -> wrinkle.v1.SetDeviceKeyResponse
-	67, // 65: wrinkle.v1.Response.get_device_keys:type_name -> wrinkle.v1.GetDeviceKeysResponse
-	68, // 66: wrinkle.v1.Response.publish_keys:type_name -> wrinkle.v1.PublishKeysResponse
-	69, // 67: wrinkle.v1.Response.get_conversation_keys:type_name -> wrinkle.v1.GetConversationKeysResponse
-	70, // 68: wrinkle.v1.Response.set_reaction:type_name -> wrinkle.v1.SetReactionResponse
-	0,  // 69: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
-	70, // [70:70] is the sub-list for method output_type
-	70, // [70:70] is the sub-list for method input_type
-	70, // [70:70] is the sub-list for extension type_name
-	70, // [70:70] is the sub-list for extension extendee
-	0,  // [0:70] is the sub-list for field type_name
+	40, // 37: wrinkle.v1.Request.create_sticker:type_name -> wrinkle.v1.CreateStickerRequest
+	41, // 38: wrinkle.v1.Request.get_stickers:type_name -> wrinkle.v1.GetStickersRequest
+	42, // 39: wrinkle.v1.Request.get_palette:type_name -> wrinkle.v1.GetPaletteRequest
+	43, // 40: wrinkle.v1.Request.save_sticker:type_name -> wrinkle.v1.SaveStickerRequest
+	44, // 41: wrinkle.v1.Request.remove_sticker:type_name -> wrinkle.v1.RemoveStickerRequest
+	45, // 42: wrinkle.v1.Request.move_sticker:type_name -> wrinkle.v1.MoveStickerRequest
+	4,  // 43: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
+	46, // 44: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
+	47, // 45: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
+	48, // 46: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
+	49, // 47: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
+	50, // 48: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
+	51, // 49: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
+	52, // 50: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
+	53, // 51: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
+	54, // 52: wrinkle.v1.Response.register:type_name -> wrinkle.v1.RegisterResponse
+	55, // 53: wrinkle.v1.Response.sign_in:type_name -> wrinkle.v1.SignInResponse
+	56, // 54: wrinkle.v1.Response.change_password:type_name -> wrinkle.v1.ChangePasswordResponse
+	57, // 55: wrinkle.v1.Response.update_profile:type_name -> wrinkle.v1.UpdateProfileResponse
+	58, // 56: wrinkle.v1.Response.sign_out:type_name -> wrinkle.v1.SignOutResponse
+	59, // 57: wrinkle.v1.Response.list_devices:type_name -> wrinkle.v1.ListDevicesResponse
+	60, // 58: wrinkle.v1.Response.rename_device:type_name -> wrinkle.v1.RenameDeviceResponse
+	61, // 59: wrinkle.v1.Response.sign_out_device:type_name -> wrinkle.v1.SignOutDeviceResponse
+	62, // 60: wrinkle.v1.Response.delete_account:type_name -> wrinkle.v1.DeleteAccountResponse
+	63, // 61: wrinkle.v1.Response.create_upload:type_name -> wrinkle.v1.CreateUploadResponse
+	64, // 62: wrinkle.v1.Response.create_group:type_name -> wrinkle.v1.CreateGroupResponse
+	65, // 63: wrinkle.v1.Response.add_members:type_name -> wrinkle.v1.AddMembersResponse
+	66, // 64: wrinkle.v1.Response.remove_member:type_name -> wrinkle.v1.RemoveMemberResponse
+	67, // 65: wrinkle.v1.Response.leave_group:type_name -> wrinkle.v1.LeaveGroupResponse
+	68, // 66: wrinkle.v1.Response.set_topic:type_name -> wrinkle.v1.SetTopicResponse
+	69, // 67: wrinkle.v1.Response.set_admin:type_name -> wrinkle.v1.SetAdminResponse
+	70, // 68: wrinkle.v1.Response.get_members:type_name -> wrinkle.v1.GetMembersResponse
+	71, // 69: wrinkle.v1.Response.delete_message:type_name -> wrinkle.v1.DeleteMessageResponse
+	72, // 70: wrinkle.v1.Response.set_device_key:type_name -> wrinkle.v1.SetDeviceKeyResponse
+	73, // 71: wrinkle.v1.Response.get_device_keys:type_name -> wrinkle.v1.GetDeviceKeysResponse
+	74, // 72: wrinkle.v1.Response.publish_keys:type_name -> wrinkle.v1.PublishKeysResponse
+	75, // 73: wrinkle.v1.Response.get_conversation_keys:type_name -> wrinkle.v1.GetConversationKeysResponse
+	76, // 74: wrinkle.v1.Response.set_reaction:type_name -> wrinkle.v1.SetReactionResponse
+	77, // 75: wrinkle.v1.Response.create_sticker:type_name -> wrinkle.v1.CreateStickerResponse
+	78, // 76: wrinkle.v1.Response.get_stickers:type_name -> wrinkle.v1.GetStickersResponse
+	79, // 77: wrinkle.v1.Response.get_palette:type_name -> wrinkle.v1.GetPaletteResponse
+	80, // 78: wrinkle.v1.Response.save_sticker:type_name -> wrinkle.v1.SaveStickerResponse
+	81, // 79: wrinkle.v1.Response.remove_sticker:type_name -> wrinkle.v1.RemoveStickerResponse
+	82, // 80: wrinkle.v1.Response.move_sticker:type_name -> wrinkle.v1.MoveStickerResponse
+	0,  // 81: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
+	82, // [82:82] is the sub-list for method output_type
+	82, // [82:82] is the sub-list for method input_type
+	82, // [82:82] is the sub-list for extension type_name
+	82, // [82:82] is the sub-list for extension extendee
+	0,  // [0:82] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_frame_proto_init() }
@@ -1920,6 +2150,12 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Request_PublishKeys)(nil),
 		(*Request_GetConversationKeys)(nil),
 		(*Request_SetReaction)(nil),
+		(*Request_CreateSticker)(nil),
+		(*Request_GetStickers)(nil),
+		(*Request_GetPalette)(nil),
+		(*Request_SaveSticker)(nil),
+		(*Request_RemoveSticker)(nil),
+		(*Request_MoveSticker)(nil),
 	}
 	file_wrinkle_v1_frame_proto_msgTypes[2].OneofWrappers = []any{
 		(*Response_Error)(nil),
@@ -1954,6 +2190,12 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Response_PublishKeys)(nil),
 		(*Response_GetConversationKeys)(nil),
 		(*Response_SetReaction)(nil),
+		(*Response_CreateSticker)(nil),
+		(*Response_GetStickers)(nil),
+		(*Response_GetPalette)(nil),
+		(*Response_SaveSticker)(nil),
+		(*Response_RemoveSticker)(nil),
+		(*Response_MoveSticker)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -38,7 +38,12 @@ message Content {
   oneof body {
     // 1 to 4000 characters.
     string text = 1;
+    StickerRef sticker = 2;
   }
+}
+
+message StickerRef {
+  bytes sticker_id = 1;
 }
 
 // A user's reactions to one message.

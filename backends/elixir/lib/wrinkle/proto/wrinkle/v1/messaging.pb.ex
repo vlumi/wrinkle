@@ -525,6 +525,131 @@ defmodule Wrinkle.V1.SetReactionResponse do
     syntax: :proto3
 end
 
+defmodule Wrinkle.V1.CreateStickerRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.CreateStickerRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :blob_id, 1, type: :bytes, json_name: "blobId"
+end
+
+defmodule Wrinkle.V1.CreateStickerResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.CreateStickerResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker, 1, type: Wrinkle.V1.Sticker
+end
+
+defmodule Wrinkle.V1.GetStickersRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetStickersRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_ids, 1, repeated: true, type: :bytes, json_name: "stickerIds"
+end
+
+defmodule Wrinkle.V1.GetStickersResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetStickersResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :stickers, 1, repeated: true, type: Wrinkle.V1.Sticker
+end
+
+defmodule Wrinkle.V1.GetPaletteRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetPaletteRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.GetPaletteResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetPaletteResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :stickers, 1, repeated: true, type: Wrinkle.V1.Sticker
+end
+
+defmodule Wrinkle.V1.SaveStickerRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SaveStickerRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_id, 1, type: :bytes, json_name: "stickerId"
+end
+
+defmodule Wrinkle.V1.SaveStickerResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SaveStickerResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.RemoveStickerRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RemoveStickerRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_id, 1, type: :bytes, json_name: "stickerId"
+end
+
+defmodule Wrinkle.V1.RemoveStickerResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RemoveStickerResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.MoveStickerRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.MoveStickerRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_id, 1, type: :bytes, json_name: "stickerId"
+  field :before_sticker_id, 2, type: :bytes, json_name: "beforeStickerId"
+end
+
+defmodule Wrinkle.V1.MoveStickerResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.MoveStickerResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
 defmodule Wrinkle.V1.SetDeviceKeyRequest do
   @moduledoc false
 

@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIqEDCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SAASLQoIcmVhY3Rpb24YECABKAsyGS53cmlua2xlLnYxLlJlYWN0aW9uRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIs4DCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SAASLQoIcmVhY3Rpb24YECABKAsyGS53cmlua2xlLnYxLlJlYWN0aW9uRXZlbnRIABIrCgdwYWxldHRlGBEgASgLMhgud3JpbmtsZS52MS5QYWxldHRlRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiIwoMUGFsZXR0ZUV2ZW50EhMKC3N0aWNrZXJfaWRzGAEgAygMQp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -81,6 +81,12 @@ export type Event = Message<"wrinkle.v1.Event"> & {
      */
     value: ReactionEvent;
     case: "reaction";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.PaletteEvent palette = 17;
+     */
+    value: PaletteEvent;
+    case: "palette";
   } | { case: undefined; value?: undefined };
 };
 
@@ -298,4 +304,25 @@ export type ReactionEvent = Message<"wrinkle.v1.ReactionEvent"> & {
  */
 export const ReactionEventSchema: GenMessage<ReactionEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 7);
+
+/**
+ * The user's sticker palette changed. Received by the user only.
+ *
+ * @generated from message wrinkle.v1.PaletteEvent
+ */
+export type PaletteEvent = Message<"wrinkle.v1.PaletteEvent"> & {
+  /**
+   * The whole palette, in the user's order.
+   *
+   * @generated from field: repeated bytes sticker_ids = 1;
+   */
+  stickerIds: Uint8Array[];
+};
+
+/**
+ * Describes the message wrinkle.v1.PaletteEvent.
+ * Use `create(PaletteEventSchema)` to create a new message.
+ */
+export const PaletteEventSchema: GenMessage<PaletteEvent> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_event, 8);
 

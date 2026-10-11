@@ -143,6 +143,22 @@ defmodule Wrinkle.V1.Request do
     oneof: 0
 
   field :set_reaction, 40, type: Wrinkle.V1.SetReactionRequest, json_name: "setReaction", oneof: 0
+
+  field :create_sticker, 41,
+    type: Wrinkle.V1.CreateStickerRequest,
+    json_name: "createSticker",
+    oneof: 0
+
+  field :get_stickers, 42, type: Wrinkle.V1.GetStickersRequest, json_name: "getStickers", oneof: 0
+  field :get_palette, 43, type: Wrinkle.V1.GetPaletteRequest, json_name: "getPalette", oneof: 0
+  field :save_sticker, 44, type: Wrinkle.V1.SaveStickerRequest, json_name: "saveSticker", oneof: 0
+
+  field :remove_sticker, 45,
+    type: Wrinkle.V1.RemoveStickerRequest,
+    json_name: "removeSticker",
+    oneof: 0
+
+  field :move_sticker, 46, type: Wrinkle.V1.MoveStickerRequest, json_name: "moveSticker", oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -272,6 +288,33 @@ defmodule Wrinkle.V1.Response do
   field :set_reaction, 40,
     type: Wrinkle.V1.SetReactionResponse,
     json_name: "setReaction",
+    oneof: 0
+
+  field :create_sticker, 41,
+    type: Wrinkle.V1.CreateStickerResponse,
+    json_name: "createSticker",
+    oneof: 0
+
+  field :get_stickers, 42,
+    type: Wrinkle.V1.GetStickersResponse,
+    json_name: "getStickers",
+    oneof: 0
+
+  field :get_palette, 43, type: Wrinkle.V1.GetPaletteResponse, json_name: "getPalette", oneof: 0
+
+  field :save_sticker, 44,
+    type: Wrinkle.V1.SaveStickerResponse,
+    json_name: "saveSticker",
+    oneof: 0
+
+  field :remove_sticker, 45,
+    type: Wrinkle.V1.RemoveStickerResponse,
+    json_name: "removeSticker",
+    oneof: 0
+
+  field :move_sticker, 46,
+    type: Wrinkle.V1.MoveStickerResponse,
+    json_name: "moveSticker",
     oneof: 0
 end
 

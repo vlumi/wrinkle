@@ -110,6 +110,14 @@ public nonisolated struct Wrinkle_V1_Event: @unchecked Sendable {
     set {_uniqueStorage()._body = .reaction(newValue)}
   }
 
+  public var palette: Wrinkle_V1_PaletteEvent {
+    get {
+      if case .palette(let v)? = _storage._body {return v}
+      return Wrinkle_V1_PaletteEvent()
+    }
+    set {_uniqueStorage()._body = .palette(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -120,6 +128,7 @@ public nonisolated struct Wrinkle_V1_Event: @unchecked Sendable {
     case device(Wrinkle_V1_DeviceEvent)
     case messageDeleted(Wrinkle_V1_MessageDeletedEvent)
     case reaction(Wrinkle_V1_ReactionEvent)
+    case palette(Wrinkle_V1_PaletteEvent)
 
   }
 
@@ -310,13 +319,27 @@ public nonisolated struct Wrinkle_V1_ReactionEvent: Sendable {
   fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
+/// The user's sticker palette changed. Received by the user only.
+public nonisolated struct Wrinkle_V1_PaletteEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// The whole palette, in the user's order.
+  public var stickerIds: [Data] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0\u{1}device\0\u{3}message_deleted\0\u{1}reaction\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0\u{1}device\0\u{3}message_deleted\0\u{1}reaction\0\u{1}palette\0")
 
   fileprivate class _StorageClass {
     var _cursor: UInt64 = 0
@@ -446,6 +469,19 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
             _storage._body = .reaction(v)
           }
         }()
+        case 17: try {
+          var v: Wrinkle_V1_PaletteEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .palette(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .palette(v)
+          }
+        }()
         default: break
         }
       }
@@ -492,6 +528,10 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
       case .reaction?: try {
         guard case .reaction(let v)? = _storage._body else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
+      }()
+      case .palette?: try {
+        guard case .palette(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
       }()
       case nil: break
       }
@@ -801,6 +841,36 @@ nonisolated extension Wrinkle_V1_ReactionEvent: SwiftProtobuf.Message, SwiftProt
     if lhs.userID != rhs.userID {return false}
     if lhs._sealed != rhs._sealed {return false}
     if lhs._updatedAt != rhs._updatedAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_PaletteEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".PaletteEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}sticker_ids\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedBytesField(value: &self.stickerIds) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.stickerIds.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.stickerIds, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_PaletteEvent, rhs: Wrinkle_V1_PaletteEvent) -> Bool {
+    if lhs.stickerIds != rhs.stickerIds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

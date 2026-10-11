@@ -38,7 +38,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/content.proto.
  */
 export const file_wrinkle_v1_content: GenFile = /*@__PURE__*/
-  fileDesc("Chh3cmlua2xlL3YxL2NvbnRlbnQucHJvdG8SCndyaW5rbGUudjEiIQoHQ29udGVudBIOCgR0ZXh0GAEgASgJSABCBgoEYm9keSIaCglSZWFjdGlvbnMSDQoFZW1vamkYASADKAlCnwEKDmNvbS53cmlua2xlLnYxQgxDb250ZW50UHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw");
+  fileDesc("Chh3cmlua2xlL3YxL2NvbnRlbnQucHJvdG8SCndyaW5rbGUudjEiTAoHQ29udGVudBIOCgR0ZXh0GAEgASgJSAASKQoHc3RpY2tlchgCIAEoCzIWLndyaW5rbGUudjEuU3RpY2tlclJlZkgAQgYKBGJvZHkiIAoKU3RpY2tlclJlZhISCgpzdGlja2VyX2lkGAEgASgMIhoKCVJlYWN0aW9ucxINCgVlbW9qaRgBIAMoCUKfAQoOY29tLndyaW5rbGUudjFCDENvbnRlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z");
 
 /**
  * @generated from message wrinkle.v1.Content
@@ -55,6 +55,12 @@ export type Content = Message<"wrinkle.v1.Content"> & {
      */
     value: string;
     case: "text";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.StickerRef sticker = 2;
+     */
+    value: StickerRef;
+    case: "sticker";
   } | { case: undefined; value?: undefined };
 };
 
@@ -64,6 +70,23 @@ export type Content = Message<"wrinkle.v1.Content"> & {
  */
 export const ContentSchema: GenMessage<Content> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_content, 0);
+
+/**
+ * @generated from message wrinkle.v1.StickerRef
+ */
+export type StickerRef = Message<"wrinkle.v1.StickerRef"> & {
+  /**
+   * @generated from field: bytes sticker_id = 1;
+   */
+  stickerId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.StickerRef.
+ * Use `create(StickerRefSchema)` to create a new message.
+ */
+export const StickerRefSchema: GenMessage<StickerRef> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_content, 1);
 
 /**
  * A user's reactions to one message.
@@ -84,5 +107,5 @@ export type Reactions = Message<"wrinkle.v1.Reactions"> & {
  * Use `create(ReactionsSchema)` to create a new message.
  */
 export const ReactionsSchema: GenMessage<Reactions> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_content, 1);
+  messageDesc(file_wrinkle_v1_content, 2);
 

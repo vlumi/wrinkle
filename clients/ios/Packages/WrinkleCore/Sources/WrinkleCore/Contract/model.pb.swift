@@ -96,6 +96,37 @@ public nonisolated struct Wrinkle_V1_User: Sendable {
   public init() {}
 }
 
+/// A sticker: a small public image made by a user, read like any blob at
+/// /blobs/<lowercase hex sticker id>. Stickers never change and are never
+/// deleted.
+public nonisolated struct Wrinkle_V1_Sticker: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Also the id of its blob.
+  public var stickerID: Data = Data()
+
+  public var creatorUserID: Data = Data()
+
+  public var mediaType: String = String()
+
+  public var createdAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_createdAt = newValue}
+  }
+  /// Returns true if `createdAt` has been explicitly set.
+  public var hasCreatedAt: Bool {self._createdAt != nil}
+  /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
+  public mutating func clearCreatedAt() {self._createdAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
 /// A device signed in to the requesting user's account.
 public nonisolated struct Wrinkle_V1_Device: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
@@ -622,6 +653,55 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.icon != rhs.icon {return false}
     if lhs.avatar != rhs.avatar {return false}
     if lhs.deleted != rhs.deleted {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Sticker: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Sticker"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}sticker_id\0\u{3}creator_user_id\0\u{3}media_type\0\u{3}created_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.stickerID) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.creatorUserID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.mediaType) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.stickerID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.stickerID, fieldNumber: 1)
+    }
+    if !self.creatorUserID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.creatorUserID, fieldNumber: 2)
+    }
+    if !self.mediaType.isEmpty {
+      try visitor.visitSingularStringField(value: self.mediaType, fieldNumber: 3)
+    }
+    try { if let v = self._createdAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Sticker, rhs: Wrinkle_V1_Sticker) -> Bool {
+    if lhs.stickerID != rhs.stickerID {return false}
+    if lhs.creatorUserID != rhs.creatorUserID {return false}
+    if lhs.mediaType != rhs.mediaType {return false}
+    if lhs._createdAt != rhs._createdAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

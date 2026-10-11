@@ -28,6 +28,17 @@ message User {
   bool deleted = 5;
 }
 
+// A sticker: a small public image made by a user, read like any blob at
+// /blobs/<lowercase hex sticker id>. Stickers never change and are never
+// deleted.
+message Sticker {
+  // Also the id of its blob.
+  bytes sticker_id = 1;
+  bytes creator_user_id = 2;
+  string media_type = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
 // A device signed in to the requesting user's account.
 message Device {
   uint64 device_id = 1;

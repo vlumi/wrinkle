@@ -9,6 +9,18 @@ defmodule Wrinkle.V1.Content do
   oneof :body, 0
 
   field :text, 1, type: :string, oneof: 0
+  field :sticker, 2, type: Wrinkle.V1.StickerRef, oneof: 0
+end
+
+defmodule Wrinkle.V1.StickerRef do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.StickerRef",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_id, 1, type: :bytes, json_name: "stickerId"
 end
 
 defmodule Wrinkle.V1.Reactions do

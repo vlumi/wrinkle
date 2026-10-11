@@ -103,6 +103,12 @@ message Request {
     PublishKeysRequest publish_keys = 38;
     GetConversationKeysRequest get_conversation_keys = 39;
     SetReactionRequest set_reaction = 40;
+    CreateStickerRequest create_sticker = 41;
+    GetStickersRequest get_stickers = 42;
+    GetPaletteRequest get_palette = 43;
+    SaveStickerRequest save_sticker = 44;
+    RemoveStickerRequest remove_sticker = 45;
+    MoveStickerRequest move_sticker = 46;
   }
 }
 
@@ -141,6 +147,12 @@ message Response {
     PublishKeysResponse publish_keys = 38;
     GetConversationKeysResponse get_conversation_keys = 39;
     SetReactionResponse set_reaction = 40;
+    CreateStickerResponse create_sticker = 41;
+    GetStickersResponse get_stickers = 42;
+    GetPaletteResponse get_palette = 43;
+    SaveStickerResponse save_sticker = 44;
+    RemoveStickerResponse remove_sticker = 45;
+    MoveStickerResponse move_sticker = 46;
   }
 }
 

@@ -301,6 +301,62 @@ message SetReactionRequest {
 
 message SetReactionResponse {}
 
+// Stickers are made by users and public; anyone may save any sticker to
+// their palette, at most 200, in their own order. Sending one is a message
+// whose sealed content names it (content.proto).
+
+// Makes an uploaded blob (BLOB_PURPOSE_STICKER) a sticker, with the blob's
+// id, and saves it to the creator's palette unless that is full. A blob
+// that is not the user's sticker upload, or not uploaded yet, fails with
+// ERROR_CODE_FAILED_PRECONDITION. Making the same sticker again returns it.
+message CreateStickerRequest {
+  bytes blob_id = 1;
+}
+
+message CreateStickerResponse {
+  Sticker sticker = 1;
+}
+
+// Returns the known stickers among up to 100 ids, in the order asked.
+message GetStickersRequest {
+  repeated bytes sticker_ids = 1;
+}
+
+message GetStickersResponse {
+  repeated Sticker stickers = 1;
+}
+
+message GetPaletteRequest {}
+
+message GetPaletteResponse {
+  repeated Sticker stickers = 1;
+}
+
+// Adds a sticker at the end of the palette. An unknown sticker fails with
+// ERROR_CODE_NOT_FOUND, a full palette with ERROR_CODE_FAILED_PRECONDITION;
+// one already saved stays where it is.
+message SaveStickerRequest {
+  bytes sticker_id = 1;
+}
+
+message SaveStickerResponse {}
+
+message RemoveStickerRequest {
+  bytes sticker_id = 1;
+}
+
+message RemoveStickerResponse {}
+
+// Moves a saved sticker before another, or to the end when
+// before_sticker_id is empty. A sticker not in the palette fails with
+// ERROR_CODE_NOT_FOUND.
+message MoveStickerRequest {
+  bytes sticker_id = 1;
+  bytes before_sticker_id = 2;
+}
+
+message MoveStickerResponse {}
+
 // End-to-end encryption. Each device has an X25519 key pair and publishes
 // the public key; each conversation has key epochs, an epoch key made by a
 // member device and wrapped for every member device. A conversation needs a

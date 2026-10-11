@@ -25,6 +25,7 @@ message Event {
     DeviceEvent device = 14;
     MessageDeletedEvent message_deleted = 15;
     ReactionEvent reaction = 16;
+    PaletteEvent palette = 17;
   }
 }
 
@@ -87,4 +88,10 @@ message ReactionEvent {
   // Unset when the user removed their reactions.
   Sealed sealed = 4;
   google.protobuf.Timestamp updated_at = 5;
+}
+
+// The user's sticker palette changed. Received by the user only.
+message PaletteEvent {
+  // The whole palette, in the user's order.
+  repeated bytes sticker_ids = 1;
 }

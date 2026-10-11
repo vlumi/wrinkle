@@ -480,6 +480,54 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     set {body = .setReaction(newValue)}
   }
 
+  public var createSticker: Wrinkle_V1_CreateStickerRequest {
+    get {
+      if case .createSticker(let v)? = body {return v}
+      return Wrinkle_V1_CreateStickerRequest()
+    }
+    set {body = .createSticker(newValue)}
+  }
+
+  public var getStickers: Wrinkle_V1_GetStickersRequest {
+    get {
+      if case .getStickers(let v)? = body {return v}
+      return Wrinkle_V1_GetStickersRequest()
+    }
+    set {body = .getStickers(newValue)}
+  }
+
+  public var getPalette: Wrinkle_V1_GetPaletteRequest {
+    get {
+      if case .getPalette(let v)? = body {return v}
+      return Wrinkle_V1_GetPaletteRequest()
+    }
+    set {body = .getPalette(newValue)}
+  }
+
+  public var saveSticker: Wrinkle_V1_SaveStickerRequest {
+    get {
+      if case .saveSticker(let v)? = body {return v}
+      return Wrinkle_V1_SaveStickerRequest()
+    }
+    set {body = .saveSticker(newValue)}
+  }
+
+  public var removeSticker: Wrinkle_V1_RemoveStickerRequest {
+    get {
+      if case .removeSticker(let v)? = body {return v}
+      return Wrinkle_V1_RemoveStickerRequest()
+    }
+    set {body = .removeSticker(newValue)}
+  }
+
+  public var moveSticker: Wrinkle_V1_MoveStickerRequest {
+    get {
+      if case .moveSticker(let v)? = body {return v}
+      return Wrinkle_V1_MoveStickerRequest()
+    }
+    set {body = .moveSticker(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -514,6 +562,12 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     case publishKeys(Wrinkle_V1_PublishKeysRequest)
     case getConversationKeys(Wrinkle_V1_GetConversationKeysRequest)
     case setReaction(Wrinkle_V1_SetReactionRequest)
+    case createSticker(Wrinkle_V1_CreateStickerRequest)
+    case getStickers(Wrinkle_V1_GetStickersRequest)
+    case getPalette(Wrinkle_V1_GetPaletteRequest)
+    case saveSticker(Wrinkle_V1_SaveStickerRequest)
+    case removeSticker(Wrinkle_V1_RemoveStickerRequest)
+    case moveSticker(Wrinkle_V1_MoveStickerRequest)
 
   }
 
@@ -785,6 +839,54 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     set {body = .setReaction(newValue)}
   }
 
+  public var createSticker: Wrinkle_V1_CreateStickerResponse {
+    get {
+      if case .createSticker(let v)? = body {return v}
+      return Wrinkle_V1_CreateStickerResponse()
+    }
+    set {body = .createSticker(newValue)}
+  }
+
+  public var getStickers: Wrinkle_V1_GetStickersResponse {
+    get {
+      if case .getStickers(let v)? = body {return v}
+      return Wrinkle_V1_GetStickersResponse()
+    }
+    set {body = .getStickers(newValue)}
+  }
+
+  public var getPalette: Wrinkle_V1_GetPaletteResponse {
+    get {
+      if case .getPalette(let v)? = body {return v}
+      return Wrinkle_V1_GetPaletteResponse()
+    }
+    set {body = .getPalette(newValue)}
+  }
+
+  public var saveSticker: Wrinkle_V1_SaveStickerResponse {
+    get {
+      if case .saveSticker(let v)? = body {return v}
+      return Wrinkle_V1_SaveStickerResponse()
+    }
+    set {body = .saveSticker(newValue)}
+  }
+
+  public var removeSticker: Wrinkle_V1_RemoveStickerResponse {
+    get {
+      if case .removeSticker(let v)? = body {return v}
+      return Wrinkle_V1_RemoveStickerResponse()
+    }
+    set {body = .removeSticker(newValue)}
+  }
+
+  public var moveSticker: Wrinkle_V1_MoveStickerResponse {
+    get {
+      if case .moveSticker(let v)? = body {return v}
+      return Wrinkle_V1_MoveStickerResponse()
+    }
+    set {body = .moveSticker(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -820,6 +922,12 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     case publishKeys(Wrinkle_V1_PublishKeysResponse)
     case getConversationKeys(Wrinkle_V1_GetConversationKeysResponse)
     case setReaction(Wrinkle_V1_SetReactionResponse)
+    case createSticker(Wrinkle_V1_CreateStickerResponse)
+    case getStickers(Wrinkle_V1_GetStickersResponse)
+    case getPalette(Wrinkle_V1_GetPaletteResponse)
+    case saveSticker(Wrinkle_V1_SaveStickerResponse)
+    case removeSticker(Wrinkle_V1_RemoveStickerResponse)
+    case moveSticker(Wrinkle_V1_MoveStickerResponse)
 
   }
 
@@ -1022,7 +1130,7 @@ nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1434,6 +1542,84 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .setReaction(v)
         }
       }()
+      case 41: try {
+        var v: Wrinkle_V1_CreateStickerRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .createSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .createSticker(v)
+        }
+      }()
+      case 42: try {
+        var v: Wrinkle_V1_GetStickersRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getStickers(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getStickers(v)
+        }
+      }()
+      case 43: try {
+        var v: Wrinkle_V1_GetPaletteRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getPalette(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getPalette(v)
+        }
+      }()
+      case 44: try {
+        var v: Wrinkle_V1_SaveStickerRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .saveSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .saveSticker(v)
+        }
+      }()
+      case 45: try {
+        var v: Wrinkle_V1_RemoveStickerRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .removeSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .removeSticker(v)
+        }
+      }()
+      case 46: try {
+        var v: Wrinkle_V1_MoveStickerRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .moveSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .moveSticker(v)
+        }
+      }()
       default: break
       }
     }
@@ -1572,6 +1758,30 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .setReaction(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 40)
     }()
+    case .createSticker?: try {
+      guard case .createSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 41)
+    }()
+    case .getStickers?: try {
+      guard case .getStickers(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 42)
+    }()
+    case .getPalette?: try {
+      guard case .getPalette(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 43)
+    }()
+    case .saveSticker?: try {
+      guard case .saveSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 44)
+    }()
+    case .removeSticker?: try {
+      guard case .removeSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 45)
+    }()
+    case .moveSticker?: try {
+      guard case .moveSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 46)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1587,7 +1797,7 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2012,6 +2222,84 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
           self.body = .setReaction(v)
         }
       }()
+      case 41: try {
+        var v: Wrinkle_V1_CreateStickerResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .createSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .createSticker(v)
+        }
+      }()
+      case 42: try {
+        var v: Wrinkle_V1_GetStickersResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getStickers(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getStickers(v)
+        }
+      }()
+      case 43: try {
+        var v: Wrinkle_V1_GetPaletteResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getPalette(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getPalette(v)
+        }
+      }()
+      case 44: try {
+        var v: Wrinkle_V1_SaveStickerResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .saveSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .saveSticker(v)
+        }
+      }()
+      case 45: try {
+        var v: Wrinkle_V1_RemoveStickerResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .removeSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .removeSticker(v)
+        }
+      }()
+      case 46: try {
+        var v: Wrinkle_V1_MoveStickerResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .moveSticker(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .moveSticker(v)
+        }
+      }()
       default: break
       }
     }
@@ -2153,6 +2441,30 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
     case .setReaction?: try {
       guard case .setReaction(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 40)
+    }()
+    case .createSticker?: try {
+      guard case .createSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 41)
+    }()
+    case .getStickers?: try {
+      guard case .getStickers(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 42)
+    }()
+    case .getPalette?: try {
+      guard case .getPalette(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 43)
+    }()
+    case .saveSticker?: try {
+      guard case .saveSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 44)
+    }()
+    case .removeSticker?: try {
+      guard case .removeSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 45)
+    }()
+    case .moveSticker?: try {
+      guard case .moveSticker(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 46)
     }()
     case nil: break
     }

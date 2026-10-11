@@ -24,6 +24,20 @@ defmodule Wrinkle.V1.User do
   field :deleted, 5, type: :bool
 end
 
+defmodule Wrinkle.V1.Sticker do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.Sticker",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :sticker_id, 1, type: :bytes, json_name: "stickerId"
+  field :creator_user_id, 2, type: :bytes, json_name: "creatorUserId"
+  field :media_type, 3, type: :string, json_name: "mediaType"
+  field :created_at, 4, type: Google.Protobuf.Timestamp, json_name: "createdAt"
+end
+
 defmodule Wrinkle.V1.Device do
   @moduledoc false
 
