@@ -1,0 +1,81 @@
+# The containerized cluster (make cluster-up): services instances and gateways
+# in any number and language behind one HAProxy, on the infrastructure's
+# network. Used together with docker-compose.yml; infra/cluster.sh sets the
+# counts and the push settings.
+
+x-infra: &infra
+  WRINKLE_MYSQL: vitess:15003
+  WRINKLE_KAFKA: kafka:9092
+  WRINKLE_VALKEY: valkey:6379
+
+x-push: &push
+  WRINKLE_TEAM_ID: ${WRINKLE_TEAM_ID:-}
+  WRINKLE_APNS_KEY: ${APNS_KEY_FILE:+/run/apns/key.p8}
+  WRINKLE_APNS_KEY_ID: ${WRINKLE_APNS_KEY_ID:-}
+
+x-gateway: &gateway
+  WRINKLE_SERVICES: cluster-lb:9100
+  WRINKLE_VALKEY: valkey:6379
+  WRINKLE_LISTEN: ":8080"
+
+services:
+  cluster-lb:
+    image: haproxy:3.4.6
+    volumes:
+      - ./haproxy/cluster.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "${LB_BIND:-0.0.0.0}:8080:8080"
+      - "127.0.0.1:8404:8404" # statistics
+    restart: unless-stopped
+
+  go-services:
+    build: { context: .., dockerfile: backends/go/Dockerfile }
+    image: wrinkle/go:dev
+    command: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
+    environment:
+      <<: [*infra, *push]
+    volumes:
+      - ${APNS_KEY_FILE:-/dev/null}:/run/apns/key.p8:ro
+    restart: unless-stopped
+
+  java-services:
+    build: { context: .., dockerfile: backends/java/Dockerfile }
+    image: wrinkle/java:dev
+    command: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
+    environment:
+      <<: *infra
+    restart: unless-stopped
+
+  go-gw:
+    build: { context: .., dockerfile: backends/go/Dockerfile }
+    image: wrinkle/go:dev
+    command: [--roles, gateway]
+    environment:
+      <<: *gateway
+    depends_on: [cluster-lb]
+    restart: unless-stopped
+
+  java-gw:
+    build: { context: .., dockerfile: backends/java/Dockerfile }
+    image: wrinkle/java:dev
+    command: [--roles, gateway]
+    environment:
+      <<: *gateway
+    depends_on: [cluster-lb]
+    restart: unless-stopped
+
+  elixir-gw:
+    build: { context: .., dockerfile: backends/elixir/Dockerfile }
+    image: wrinkle/elixir:dev
+    environment:
+      <<: *gateway
+    depends_on: [cluster-lb]
+    restart: unless-stopped
+
+  rust-gw:
+    build: { context: .., dockerfile: backends/rust/Dockerfile }
+    image: wrinkle/rust:dev
+    environment:
+      <<: *gateway
+    depends_on: [cluster-lb]
+    restart: unless-stopped

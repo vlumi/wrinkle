@@ -100,6 +100,30 @@ lb-up:  ## The balancers: devices on :8080 to the gateways, gateways on :9100 to
 lb-down:  ## Stop the balancers
 	$(COMPOSE) --profile lb stop haproxy
 
+##@ Cluster (the side-by-side setup in containers, any number of each)
+##~ Counts: GO_SERVICES=2 JAVA_SERVICES=1 GO_GW=1 ELIXIR_GW=1 RUST_GW=1 JAVA_GW=1 (0 to 8 each).
+##~ cluster-up again with other counts rescales. Devices on :8080; statistics on localhost:8404.
+
+GO_SERVICES ?= 2
+JAVA_SERVICES ?= 1
+GO_GW ?= 1
+ELIXIR_GW ?= 1
+RUST_GW ?= 1
+JAVA_GW ?= 1
+
+.PHONY: cluster-up cluster-down cluster-status cluster-logs
+cluster-up: infra-up  ## Build the images and start or rescale the cluster
+	GO_SERVICES=$(GO_SERVICES) JAVA_SERVICES=$(JAVA_SERVICES) GO_GW=$(GO_GW) ELIXIR_GW=$(ELIXIR_GW) RUST_GW=$(RUST_GW) JAVA_GW=$(JAVA_GW) infra/cluster.sh up
+
+cluster-down:  ## Stop and remove the cluster, leaving the infrastructure running
+	infra/cluster.sh down
+
+cluster-status:  ## Every container of the cluster
+	infra/cluster.sh status
+
+cluster-logs:  ## Follow the cluster's logs (SERVICE=go-gw for one kind)
+	infra/cluster.sh logs $(SERVICE)
+
 ##@ Clients
 
 .PHONY: web web-dev monitor ios-sim ios-device ios-project
