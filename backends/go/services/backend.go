@@ -188,6 +188,15 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_SendMessage{SendMessage: &pb.SendMessageResponse{Message: msg}}
+	case *pb.Request_DeleteMessage:
+		conversationID, err := parseConversationID(r.DeleteMessage.GetConversationId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.Delete(ctx, userID, conversationID, r.DeleteMessage.GetSeq()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_DeleteMessage{DeleteMessage: &pb.DeleteMessageResponse{}}
 	case *pb.Request_MarkRead:
 		conversationID, err := parseConversationID(r.MarkRead.GetConversationId())
 		if err != nil {

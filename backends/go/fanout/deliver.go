@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -49,6 +50,9 @@ func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) err
 		if w.notifier != nil {
 			w.notifier.MessageDelivered(userID, msg)
 		}
+	}
+	if deleted := event.GetMessageDeleted(); deleted != nil && w.notifier != nil {
+		w.notifier.MessageDeleted(userID, deleted)
 	}
 	return nil
 }
@@ -175,6 +179,8 @@ func updateConversationList(ctx context.Context, tx *sql.Tx, userID, peerID ids.
 		return recordMessage(ctx, tx, userID, peerID, peer, o, body.Message.GetMessage(), event.GetOccurredAt().AsTime())
 	case *pb.Event_Read:
 		return recordRead(ctx, tx, userID, o, body.Read)
+	case *pb.Event_MessageDeleted:
+		return recordDeletion(ctx, tx, userID, o, body.MessageDeleted)
 	}
 	return nil
 }
@@ -287,6 +293,48 @@ func recordRead(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxRow, 
 		UPDATE user_conversation SET `+column+` = GREATEST(`+column+`, ?)
 		WHERE user_id = ? AND conversation_id = ?`,
 		read.GetSeq(), userID, o.conversationID)
+	return err
+}
+
+// recordDeletion drops the deleted message's content from the copy in the
+// user's log, so that a sync from before it never returns the content, and
+// from the list entry when it is the last message, keeping the entry's
+// place in the list.
+func recordDeletion(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxRow, deleted *pb.MessageDeletedEvent) error {
+	var position uint64
+	var payload []byte
+	err := tx.QueryRowContext(ctx, `
+		SELECT position, payload FROM user_event WHERE user_id = ? AND source_id = ? AND outbox_id = ? FOR UPDATE`,
+		userID, o.conversationID, o.targetOutboxID).Scan(&position, &payload)
+	switch {
+	case err == nil:
+		event := &pb.Event{}
+		if err := proto.Unmarshal(payload, event); err != nil {
+			return fmt.Errorf("event at %d of user %s: %w", position, userID, err)
+		}
+		if msg := event.GetMessage().GetMessage(); msg != nil {
+			msg.Content = nil
+			msg.DeletedAt = deleted.GetDeletedAt()
+			if payload, err = proto.Marshal(event); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `
+				UPDATE user_event SET payload = ? WHERE user_id = ? AND position = ?`,
+				payload, userID, position); err != nil {
+				return err
+			}
+		}
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	body, err := proto.Marshal(&pb.Message{DeletedAt: deleted.GetDeletedAt()})
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
+		UPDATE user_conversation SET last_body = ?
+		WHERE user_id = ? AND conversation_id = ? AND last_seq = ?`,
+		body, userID, o.conversationID, deleted.GetSeq())
 	return err
 }
 

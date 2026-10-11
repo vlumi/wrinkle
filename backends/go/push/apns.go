@@ -134,15 +134,17 @@ func (a *APNs) providerToken() (string, error) {
 	return a.token, nil
 }
 
-// Alert is what a notification shows.
+// Alert is what a notification shows, or, when Background, a silent
+// notification that wakes the app to act on Data.
 type Alert struct {
-	Title    string
-	Body     string
-	Badge    int
-	ThreadID string
+	Title      string
+	Body       string
+	Badge      int
+	ThreadID   string
+	Background bool
 	// Custom keys beside "aps", for the app to act on when the alert is
-	// tapped.
-	Data map[string]string
+	// tapped or the app woken.
+	Data map[string]any
 }
 
 // Send delivers one alert to one device token.
@@ -151,14 +153,19 @@ func (a *APNs) Send(ctx context.Context, sandbox bool, deviceToken string, alert
 	if err != nil {
 		return err
 	}
-	payload := map[string]any{
-		"aps": map[string]any{
-			"alert":     map[string]string{"title": alert.Title, "body": alert.Body},
-			"badge":     alert.Badge,
-			"sound":     "default",
-			"thread-id": alert.ThreadID,
-		},
+	aps := map[string]any{
+		"alert":     map[string]string{"title": alert.Title, "body": alert.Body},
+		"badge":     alert.Badge,
+		"sound":     "default",
+		"thread-id": alert.ThreadID,
 	}
+	pushType, priority := "alert", "10"
+	if alert.Background {
+		// Apple requires the low priority for background notifications.
+		aps = map[string]any{"content-available": 1}
+		pushType, priority = "background", "5"
+	}
+	payload := map[string]any{"aps": aps}
 	for k, v := range alert.Data {
 		payload[k] = v
 	}
@@ -176,8 +183,8 @@ func (a *APNs) Send(ctx context.Context, sandbox bool, deviceToken string, alert
 	}
 	req.Header.Set("authorization", "bearer "+jwt)
 	req.Header.Set("apns-topic", a.cfg.Topic)
-	req.Header.Set("apns-push-type", "alert")
-	req.Header.Set("apns-priority", "10")
+	req.Header.Set("apns-push-type", pushType)
+	req.Header.Set("apns-priority", priority)
 	resp, err := a.http.Do(req)
 	if err != nil {
 		return err

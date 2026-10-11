@@ -202,7 +202,7 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 			ConversationId: conversationID.Bytes(), UserId: userID.Bytes(), Seq: seq,
 		}},
 	}
-	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), recipients, st, "read", event, now); err != nil {
+	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), recipients, st, "read", sql.Null[uint64]{}, event, now); err != nil {
 		return err
 	}
 	return tx.Commit()

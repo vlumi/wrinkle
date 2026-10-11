@@ -114,22 +114,25 @@ func group(ctx context.Context, q rowQuerier, query string, conversationID, user
 	return st, nil
 }
 
-// encodeBody keeps only the message's content, as message.body stores it.
+// encodeBody keeps only the message's content, or its deletion time, as
+// message.body stores it.
 func encodeBody(msg *pb.Message) ([]byte, error) {
-	b, err := proto.Marshal(&pb.Message{Content: msg.GetContent()})
+	b, err := proto.Marshal(&pb.Message{Content: msg.GetContent(), DeletedAt: msg.GetDeletedAt()})
 	if err != nil {
 		return nil, fmt.Errorf("marshal message body: %w", err)
 	}
 	return b, nil
 }
 
-// decodeBody sets the message's content from a stored body.
+// decodeBody sets the message's content, or its deletion time, from a
+// stored body.
 func decodeBody(body []byte, msg *pb.Message) error {
 	content := &pb.Message{}
 	if err := proto.Unmarshal(body, content); err != nil {
 		return fmt.Errorf("unmarshal message body: %w", err)
 	}
 	msg.Content = content.Content
+	msg.DeletedAt = content.DeletedAt
 	return nil
 }
 
@@ -174,7 +177,7 @@ func (s *Service) store(ctx context.Context, tx *sql.Tx, conversationID ids.UUID
 		OccurredAt: msg.SentAt,
 		Body:       &pb.Event_Message{Message: &pb.MessageEvent{Message: msg}},
 	}
-	return insertOutbox(ctx, tx, conversationID, outboxID, recipients, st, "message", event, sentAt)
+	return insertOutbox(ctx, tx, conversationID, outboxID, recipients, st, "message", sql.Null[uint64]{}, event, sentAt)
 }
 
 // notice stores a change to a group, made by the sender, as the message at
@@ -193,7 +196,9 @@ func (s *Service) notice(ctx context.Context, tx *sql.Tx, conversationID ids.UUI
 	return s.store(ctx, tx, conversationID, st, msg, recipients, true)
 }
 
-func insertOutbox(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, outboxID uint64, recipients []ids.UUID, st state, kind string, event *pb.Event, at time.Time) error {
+// insertOutbox writes the outbox row of a change; target is the outbox row
+// of the message a deletion is about.
+func insertOutbox(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, outboxID uint64, recipients []ids.UUID, st state, kind string, target sql.Null[uint64], event *pb.Event, at time.Time) error {
 	payload, err := proto.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal outbox event: %w", err)
@@ -203,9 +208,9 @@ func insertOutbox(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, outb
 		to = append(to, id[:]...)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		conversationID, outboxID, to, st.kind, st.topic, len(st.members), kind, payload, at); err != nil {
+		INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, target_outbox_id, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		conversationID, outboxID, to, st.kind, st.topic, len(st.members), kind, target, payload, at); err != nil {
 		return err
 	}
 	// The insert reaches the binlog, which is all the fan-out reads; deleting

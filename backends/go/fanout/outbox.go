@@ -49,19 +49,22 @@ type outboxRow struct {
 	topic            string
 	memberCount      uint32
 	kind             string
-	event            *pb.Event
+	// The outbox row of the message a deletion is about, 0 for others.
+	targetOutboxID uint64
+	event          *pb.Event
 }
 
 func parseOutboxRow(value []byte) (*outboxRow, error) {
 	var r struct {
-		ConversationID   rawID   `json:"conversation_id"`
-		OutboxID         rawUint `json:"outbox_id"`
-		Recipients       []byte  `json:"recipients"`
-		ConversationKind string  `json:"conversation_kind"`
-		Topic            string  `json:"topic"`
-		MemberCount      rawUint `json:"member_count"`
-		Kind             string  `json:"kind"`
-		Payload          []byte  `json:"payload"`
+		ConversationID   rawID    `json:"conversation_id"`
+		OutboxID         rawUint  `json:"outbox_id"`
+		Recipients       []byte   `json:"recipients"`
+		ConversationKind string   `json:"conversation_kind"`
+		Topic            string   `json:"topic"`
+		MemberCount      rawUint  `json:"member_count"`
+		Kind             string   `json:"kind"`
+		TargetOutboxID   *rawUint `json:"target_outbox_id"`
+		Payload          []byte   `json:"payload"`
 	}
 	if err := json.Unmarshal(value, &r); err != nil {
 		return nil, err
@@ -72,6 +75,9 @@ func parseOutboxRow(value []byte) (*outboxRow, error) {
 		topic:            r.Topic,
 		memberCount:      uint32(r.MemberCount),
 		kind:             r.Kind,
+	}
+	if r.TargetOutboxID != nil {
+		o.targetOutboxID = uint64(*r.TargetOutboxID)
 	}
 	var err error
 	if o.conversationID, err = r.ConversationID.uuid("conversation_id"); err != nil {

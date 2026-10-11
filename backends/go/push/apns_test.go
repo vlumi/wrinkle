@@ -97,7 +97,7 @@ func TestSendSignsAndAddressesTheRequest(t *testing.T) {
 		t.Fatal(err)
 	}
 	err = a.Send(context.Background(), true, "abc123", Alert{
-		Title: "bob", Body: "hello", Badge: 3, ThreadID: "42", Data: map[string]string{"conversation_id": "42"},
+		Title: "bob", Body: "hello", Badge: 3, ThreadID: "42", Data: map[string]any{"conversation_id": "42", "seq": uint64(7)},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -119,8 +119,41 @@ func TestSendSignsAndAddressesTheRequest(t *testing.T) {
 	if alert["title"] != "bob" || alert["body"] != "hello" || aps["badge"].(float64) != 3 || aps["thread-id"] != "42" {
 		t.Fatalf("payload: %v", body)
 	}
-	if body["conversation_id"] != "42" {
+	if body["conversation_id"] != "42" || body["seq"] != float64(7) {
 		t.Fatalf("custom data missing: %v", body)
+	}
+}
+
+func TestSendBackground(t *testing.T) {
+	_, path := testKey(t)
+	var got *http.Request
+	var body map[string]any
+	srv := http2Server(t, func(w http.ResponseWriter, r *http.Request) {
+		got = r
+		raw, _ := io.ReadAll(r.Body)
+		_ = json.Unmarshal(raw, &body)
+		w.WriteHeader(http.StatusOK)
+	})
+	a, err := NewAPNs(APNsConfig{KeyFile: path, KeyID: "KEY123", TeamID: "TEAM456", Topic: "t",
+		ProductionURL: srv.URL, HTTPClient: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = a.Send(context.Background(), false, "tok", Alert{
+		Background: true, Data: map[string]any{"conversation_id": "42", "seq": uint64(7), "deleted": true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Header.Get("apns-push-type") != "background" || got.Header.Get("apns-priority") != "5" {
+		t.Fatalf("headers %v", got.Header)
+	}
+	aps := body["aps"].(map[string]any)
+	if len(aps) != 1 || aps["content-available"] != float64(1) {
+		t.Fatalf("aps %v", aps)
+	}
+	if body["conversation_id"] != "42" || body["seq"] != float64(7) || body["deleted"] != true {
+		t.Fatalf("payload: %v", body)
 	}
 }
 

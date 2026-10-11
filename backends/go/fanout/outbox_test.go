@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -40,6 +42,27 @@ func TestParseOutboxRow(t *testing.T) {
 	}
 	if _, err := parseOutboxRow([]byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":1,"recipients":"AAEC","member_count":0,"payload":""}`)); err == nil {
 		t.Fatal("parsed 3 bytes of recipients")
+	}
+}
+
+func TestParseOutboxRowTarget(t *testing.T) {
+	payload, err := proto.Marshal(&pb.Event{Body: &pb.Event_MessageDeleted{MessageDeleted: &pb.MessageDeletedEvent{Seq: 3}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	row := func(target string) []byte {
+		return []byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"2","recipients":"","conversation_kind":"direct",` +
+			`"member_count":2,"kind":"message_deleted","target_outbox_id":` + target + `,"payload":"` + base64.StdEncoding.EncodeToString(payload) + `"}`)
+	}
+	o, err := parseOutboxRow(row(`"18446744073709551615"`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.targetOutboxID != 18446744073709551615 || o.event.GetMessageDeleted().GetSeq() != 3 {
+		t.Fatalf("target %d event %v", o.targetOutboxID, o.event)
+	}
+	if o, err = parseOutboxRow(row("null")); err != nil || o.targetOutboxID != 0 {
+		t.Fatalf("target of a null column: %v %v", o, err)
 	}
 }
 

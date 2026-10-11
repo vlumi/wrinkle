@@ -20,8 +20,8 @@ type Presence interface {
 	ConnectedDevices(ctx context.Context, userID ids.UUID) (map[uint64]bool, error)
 }
 
-// Notifier pushes a message to a user's devices that are not connected and
-// have registered a token. Sends run in the background, bounded, so the
+// Notifier pushes a message, or the deletion of one, to a user's devices
+// that are not connected and have registered a token. Sends run in the background, bounded, so the
 // fan-out never waits for APNs.
 type Notifier struct {
 	apns     *APNs
@@ -47,6 +47,21 @@ func (n *Notifier) MessageDelivered(userID ids.UUID, msg *pb.Message) {
 	if n == nil || bytes.Equal(msg.GetSenderUserId(), userID[:]) || msg.GetNotice() != nil {
 		return
 	}
+	n.background(userID, func(ctx context.Context) error { return n.notify(ctx, userID, msg) })
+}
+
+// MessageDeleted is called after a deletion was appended to the user's
+// log. A background notification lets the app withdraw the message's
+// alert if it showed one.
+func (n *Notifier) MessageDeleted(userID ids.UUID, deleted *pb.MessageDeletedEvent) {
+	if n == nil {
+		return
+	}
+	n.background(userID, func(ctx context.Context) error { return n.withdraw(ctx, userID, deleted) })
+}
+
+// background runs a send in a goroutine, when a slot is free.
+func (n *Notifier) background(userID ids.UUID, send func(ctx context.Context) error) {
 	select {
 	case n.slots <- struct{}{}:
 	default:
@@ -58,7 +73,7 @@ func (n *Notifier) MessageDelivered(userID ids.UUID, msg *pb.Message) {
 		defer func() { <-n.slots }()
 		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 		defer cancel()
-		if err := n.notify(ctx, userID, msg); err != nil {
+		if err := send(ctx); err != nil {
 			n.log.Warn("push failed", "user", userID, "err", err)
 		}
 	}()
@@ -83,10 +98,6 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 	if err != nil {
 		return err
 	}
-	connected, err := n.presence.ConnectedDevices(ctx, userID)
-	if err != nil {
-		return err
-	}
 	badge, err := n.unread(ctx, userID)
 	if err != nil {
 		return err
@@ -97,7 +108,33 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 		Body:     truncate(body, maxBodyRunes),
 		Badge:    badge,
 		ThreadID: conversationID.String(),
-		Data:     map[string]string{"conversation_id": conversationID.String()},
+		Data:     map[string]any{"conversation_id": conversationID.String(), "seq": msg.GetSeq()},
+	}
+	return n.sendDisconnected(ctx, userID, regs, alert)
+}
+
+func (n *Notifier) withdraw(ctx context.Context, userID ids.UUID, deleted *pb.MessageDeletedEvent) error {
+	regs, err := n.registrations(ctx, userID)
+	if err != nil || len(regs) == 0 {
+		return err
+	}
+	conversationID, ok := ids.Parse(deleted.GetConversationId())
+	if !ok {
+		return fmt.Errorf("deletion without a conversation id")
+	}
+	alert := Alert{
+		Background: true,
+		Data:       map[string]any{"conversation_id": conversationID.String(), "seq": deleted.GetSeq(), "deleted": true},
+	}
+	return n.sendDisconnected(ctx, userID, regs, alert)
+}
+
+// sendDisconnected sends the alert to each registered device that is not
+// connected.
+func (n *Notifier) sendDisconnected(ctx context.Context, userID ids.UUID, regs []registration, alert Alert) error {
+	connected, err := n.presence.ConnectedDevices(ctx, userID)
+	if err != nil {
+		return err
 	}
 	for _, r := range regs {
 		if !connected[r.deviceID] {

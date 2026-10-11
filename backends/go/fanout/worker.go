@@ -40,10 +40,11 @@ type Publisher interface {
 	Publish(ctx context.Context, userID ids.UUID, payload []byte) error
 }
 
-// Notifier is told about messages appended to a user's log, to push them to
-// devices that are not connected. Nil disables it.
+// Notifier is told about messages and deletions appended to a user's log,
+// to push them to devices that are not connected. Nil disables it.
 type Notifier interface {
 	MessageDelivered(userID ids.UUID, msg *pb.Message)
+	MessageDeleted(userID ids.UUID, deleted *pb.MessageDeletedEvent)
 }
 
 type Worker struct {
