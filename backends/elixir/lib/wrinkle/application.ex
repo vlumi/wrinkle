@@ -21,6 +21,7 @@ defmodule Wrinkle.Application do
         start: {Redix.PubSub, :start_link, [valkey ++ [name: Wrinkle.ValkeyPubSub]]}
       },
       Wrinkle.Presence,
+      {PartitionSupervisor, child_spec: Wrinkle.Presence.Writer, name: Wrinkle.PresenceWriters},
       Wrinkle.Backend,
       Wrinkle.Push,
       Wrinkle.Keepalive,

@@ -13,7 +13,7 @@ defmodule Wrinkle.Socket do
   alias Wrinkle.V1.Error, as: WireError
 
   @connect_deadline 5_000
-  @subscribe_timeout 10_000
+  @subscribe_timeout 5_000
   @max_in_flight 32
   @outbound_queue 32
   # Only pushes close a connection that does not keep up. Responses wait in
@@ -111,8 +111,18 @@ defmodule Wrinkle.Socket do
     respond({id, "connect", started}, response, %{state | connect: :done})
   end
 
-  def handle_info(:subscribe_deadline, %{connect: {:subscribing, _, _, _}} = state) do
-    {:stop, :normal, {1011, "push subscription unavailable"}, state}
+  # Not connected after all: Connect may be retried, within a fresh deadline.
+  def handle_info(
+        :subscribe_deadline,
+        %{connect: {:subscribing, id, _, started}, device: {user_id, device_id}} = state
+      ) do
+    Logger.warning("push subscription of user #{user_id} not ready, connect refused")
+    Push.detach()
+    Presence.delete(user_id, device_id)
+    Process.demonitor(state.push, [:flush])
+    Process.send_after(self(), :connect_deadline, @connect_deadline)
+    response = error(id, :ERROR_CODE_UNAVAILABLE, "push channel unavailable")
+    respond({id, "connect", started}, response, %{state | device: nil, connect: :none, push: nil})
   end
 
   def handle_info({:push, frame}, state) do

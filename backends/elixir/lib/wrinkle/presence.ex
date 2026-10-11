@@ -29,17 +29,14 @@ defmodule Wrinkle.Presence do
     id
   end
 
+  @doc "Records the device as connected here, without waiting for Valkey."
   def put(user_id, device_id) do
-    Redix.noreply_command(Wrinkle.Valkey, [
-      "HSET",
-      key(user_id),
-      Integer.to_string(device_id),
-      instance()
-    ])
+    write(user_id, ["HSET", key(user_id), Integer.to_string(device_id), instance()])
   end
 
+  @doc "Removes the device's entry if it names this instance, without waiting for Valkey."
   def delete(user_id, device_id) do
-    Redix.noreply_command(Wrinkle.Valkey, [
+    write(user_id, [
       "EVAL",
       @delete_if_ours,
       "1",
@@ -47,6 +44,11 @@ defmodule Wrinkle.Presence do
       Integer.to_string(device_id),
       instance()
     ])
+  end
+
+  # A user's writes go to one writer, in order; different users' in parallel.
+  defp write(user_id, command) do
+    GenServer.cast({:via, PartitionSupervisor, {Wrinkle.PresenceWriters, user_id}}, command)
   end
 
   @doc "Stops refreshing this instance's key and deletes it, on drain."
@@ -82,5 +84,25 @@ defmodule Wrinkle.Presence do
     # Also waits for the connections' deletes, sent earlier on the same connection.
     Redix.command(Wrinkle.Valkey, ["DEL", instance_key()])
     {:reply, :ok, :stopped}
+  end
+end
+
+defmodule Wrinkle.Presence.Writer do
+  @moduledoc "Sends presence writes to Valkey, so a connection never waits on them."
+  use GenServer
+  require Logger
+
+  def start_link(_), do: GenServer.start_link(__MODULE__, nil)
+
+  @impl true
+  def init(nil), do: {:ok, nil}
+
+  @impl true
+  def handle_cast(command, state) do
+    with {:error, reason} <- Redix.noreply_command(Wrinkle.Valkey, command) do
+      Logger.warning("presence update failed: #{inspect(reason)}")
+    end
+
+    {:noreply, state}
   end
 end
