@@ -95,6 +95,17 @@ CREATE TABLE message (
   UNIQUE KEY message_client_id (conversation_id, sender_user_id, client_message_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
+-- Each member's sealed reactions to a message, replaced as a whole.
+CREATE TABLE reaction (
+  conversation_id BINARY(16) NOT NULL,
+  seq BIGINT UNSIGNED NOT NULL,
+  user_id BINARY(16) NOT NULL,
+  -- Serialized wrinkle.v1.Sealed.
+  body VARBINARY(2048) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (conversation_id, seq, user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
 CREATE TABLE read_mark (
   conversation_id BINARY(16) NOT NULL,
   user_id BINARY(16) NOT NULL,
@@ -116,7 +127,7 @@ CREATE TABLE outbox (
   conversation_kind VARCHAR(8) NOT NULL,
   topic VARCHAR(255) NOT NULL DEFAULT '',
   member_count INT UNSIGNED NOT NULL,
-  -- Event body type: message, read, message_deleted.
+  -- Event body type: message, read, message_deleted, reaction.
   kind VARCHAR(32) NOT NULL,
   -- message_deleted: the outbox row of the deleted message, which names its
   -- copies in the recipients' logs.
