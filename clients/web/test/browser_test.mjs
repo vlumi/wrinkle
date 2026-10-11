@@ -1,6 +1,7 @@
 // Drives the web client in headless Chrome over the DevTools protocol:
 // two users register in two pages, send a message each way, see a read
-// receipt and a rename, reload, sign out and in again.
+// receipt, a rename and a picture, sign a second device in and out from the
+// first, delete an account, reload, sign out and in again.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -18,7 +19,7 @@ const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/";
 
 // A hard deadline: a hang anywhere (a dialog, a paused page, the backend)
 // fails the run instead of stalling the gate.
-const DEADLINE_MS = 120_000;
+const DEADLINE_MS = 180_000;
 setTimeout(() => {
   console.error(`browser test: no result within ${DEADLINE_MS / 1000} s`);
   process.exit(1);
@@ -281,6 +282,38 @@ await alice.eval(click(".row"));
 await alice.waitFor(`${text("peer-name")} === ${JSON.stringify(robertName)}`);
 check(true, "the conversation header shows the new name");
 
+// Bob uploads an 800×600 picture: it becomes a 512 square, and Alice sees it.
+await bob.eval(`new Promise((resolve) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 600;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#c33";
+  ctx.fillRect(0, 0, 800, 600);
+  ctx.fillStyle = "#36c";
+  ctx.fillRect(100, 0, 600, 600);
+  canvas.toBlob((blob) => {
+    const input = ${q("picture-input")};
+    const files = new DataTransfer();
+    files.items.add(new File([blob], "picture.png", { type: "image/png" }));
+    input.files = files.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    resolve(true);
+  }, "image/png");
+})`);
+const picture = (sel) =>
+  `(() => { const img = document.querySelector(${JSON.stringify(sel + " img")}); return !!img && img.complete && img.naturalWidth === 512 && img.naturalHeight === 512 && img.src.startsWith("http://wrinkle.test:9200/blobs/"); })()`;
+await bob.waitFor(
+  `${qa("settings-done")}.some(p => p.textContent === "Picture changed.") && ${picture(".profile .avatar")}`,
+);
+check(true, "bob uploaded a picture, cropped and scaled to 512 × 512, read from the blob address");
+await alice.waitFor(picture(".conversation header .avatar"));
+check(true, "alice sees bob's picture");
+await bob.eval(click('[data-testid="remove-picture"]'));
+await bob.waitFor(`!document.querySelector(".profile .avatar img") && ${text("avatar")} === "🦊"`);
+await alice.waitFor(`document.querySelector(".conversation header .avatar").textContent === "🦊"`);
+check(true, "bob removed the picture; alice sees his icon again");
+
 // Bob changes his password; his other devices, none here, are signed out.
 await bob.eval(type("current-password", PASSWORD));
 await bob.eval(type("new-password", PASSWORD + "!"));
@@ -288,6 +321,62 @@ await bob.waitFor(`${q("new-password")}.value === ${JSON.stringify(PASSWORD + "!
 await fill(bob, "confirm-password", PASSWORD + "!");
 await bob.waitFor(`${qa("settings-done")}.some(p => p.textContent.includes("other devices were signed out"))`);
 check(true, "bob changed his password and is told his other devices were signed out");
+
+// Bob signs in on a phone too; his first device lists it live, renames it
+// and signs it out, which closes its connection for good.
+const nthDevice = (i, testid) => `${qa("device")}[${i}]?.querySelector('[data-testid="${testid}"]')`;
+await bob.waitFor(`${qa("device")}.length === 1 && !!${nthDevice(0, "this-device")}`);
+const phone = new Page("bob-phone", 390);
+await phone.open();
+await authenticate(phone, "signIn", robertName, PASSWORD + "!");
+await phone.waitFor(`${text("status")} === "online"`);
+await bob.waitFor(
+  `${qa("device")}.length === 2 && !!${nthDevice(0, "this-device")} && !${nthDevice(1, "this-device")}`,
+);
+check(true, "bob's devices list the new one as it signs in, this one marked");
+await bob.eval(`(${nthDevice(1, "rename-device")}.click(), true)`);
+await bob.waitFor(`!!${q("device-new-name")}`);
+await fill(bob, "device-new-name", "Bob's phone");
+await bob.waitFor(`${nthDevice(1, "device-name")}?.textContent === "Bob's phone" && !${q("device-new-name")}`);
+check(true, "bob renamed his other device");
+await bob.eval(`(${nthDevice(1, "signout-device")}.click(), true)`);
+await phone.waitFor(`!!${q("url")} && document.querySelector(".notice")?.textContent === "Signed out."`);
+check(
+  (await phone.eval(`localStorage.getItem("wrinkle.credentials")`)) === null,
+  "the signed-out phone is back at sign-in, told so, its credentials forgotten",
+);
+await bob.waitFor(`${qa("device")}.length === 1`);
+check(true, "bob's devices no longer list the phone");
+await sleep(1500);
+check(await phone.eval(`!!${q("url")} && !${q("status")}`), "the phone does not reconnect");
+
+// Dave writes to Bob, then deletes his account: Bob sees a deleted account,
+// and the name is free again.
+const daveName = "web-dave-" + suffix;
+await authenticate(phone, "register", daveName, PASSWORD);
+await phone.waitFor(`${text("status")} === "online"`);
+await fill(phone, "peer", robertName);
+await phone.waitFor(`${text("peer-name")} === ${JSON.stringify(robertName)}`);
+await fill(phone, "text", "bye bob");
+await bob.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(daveName)})`,
+);
+await phone.eval(click('[data-testid="open-settings"]'));
+await phone.eval(click('[data-testid="delete-account"]'));
+await phone.waitFor(`!!${q("delete-password")}`);
+await fill(phone, "delete-password", PASSWORD + "?");
+await phone.waitFor(`${text("settings-error")} === "The password is wrong."`);
+check(true, "deleting an account with a wrong password says so");
+await fill(phone, "delete-password", PASSWORD);
+await phone.waitFor(`!!${q("url")} && document.querySelector(".notice")?.textContent === "Your account was deleted."`);
+check(true, "dave deleted his account and is back at sign-in");
+await bob.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === "Deleted account" && r.querySelector(".avatar.deleted") && r.textContent.includes("bye bob"))`,
+);
+check(true, "bob's list shows a deleted account, the message kept");
+await authenticate(phone, "register", daveName, PASSWORD);
+await phone.waitFor(`${text("status")} === "online" && ${text("me")} === ${JSON.stringify(daveName)}`);
+check(true, "the deleted account's name can be registered again");
 
 // Reload Alice: the session resumes with the device token and history comes back.
 await alice.send("Page.reload");
@@ -343,13 +432,13 @@ check(true, "a revoked token returns to sign-in with a note");
 
 if (process.env.SCREENSHOT) {
   const { writeFileSync } = await import("node:fs");
-  for (const p of [alice, bob]) {
+  for (const p of [alice, bob, phone]) {
     const shot = await p.send("Page.captureScreenshot", { format: "png" });
     writeFileSync(process.env.SCREENSHOT.replace(/\.png$/, `-${p.name}.png`), Buffer.from(shot.result.data, "base64"));
   }
 }
 
-for (const p of [alice, bob]) {
+for (const p of [alice, bob, phone]) {
   const errors = p.logs.filter((l) => l.startsWith("EXCEPTION") || l.startsWith("DIALOG"));
   check(
     errors.length === 0,

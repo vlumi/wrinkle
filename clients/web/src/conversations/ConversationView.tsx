@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Avatar } from "../account/Avatar";
+import { displayName } from "../account/icons";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { sameId } from "../ids";
 import { useSession } from "../session/session";
@@ -34,15 +35,16 @@ export function ConversationView({ id }: { id: string }) {
 
   if (!conversation) return null;
   const oldest = messages[0];
+  const peerName = displayName(conversation.peer);
 
   return (
-    <section className="conversation" aria-label={`Conversation with ${conversation.peer?.name}`}>
+    <section className="conversation" aria-label={`Conversation with ${peerName}`}>
       <header>
         <button className="back" onClick={() => show(null)} aria-label="Back to conversations">
           ‹
         </button>
         <Avatar user={conversation.peer} />
-        <h2 data-testid="peer-name">{conversation.peer?.name}</h2>
+        <h2 data-testid="peer-name">{peerName}</h2>
       </header>
       <ol
         ref={scroller}
@@ -80,12 +82,16 @@ export function ConversationView({ id }: { id: string }) {
           <PendingItem key={p.clientMessageId} pending={p} />
         ))}
       </ol>
-      <Composer
-        onSend={(text) => {
-          atBottom.current = true;
-          send(text).catch(() => {});
-        }}
-      />
+      {conversation.peer?.deleted ? (
+        <p className="hint closed">This account was deleted.</p>
+      ) : (
+        <Composer
+          onSend={(text) => {
+            atBottom.current = true;
+            send(text).catch(() => {});
+          }}
+        />
+      )}
     </section>
   );
 }

@@ -5,14 +5,17 @@
 import { create } from "zustand";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
+import { BlobPurpose } from "../gen/wrinkle/v1/messaging_pb";
 import type { DeviceCredentials } from "../gen/wrinkle/v1/messaging_pb";
-import type { User } from "../gen/wrinkle/v1/model_pb";
+import type { Device, User } from "../gen/wrinkle/v1/model_pb";
+import { blobAddress } from "../blobs/blobs";
 import { BackendError, Connection } from "../connection/connection";
 import type { ConnectionState } from "../connection/connection";
 import { addMessages, applyEvent, key, noteLatest, unread, upsertConversation } from "../conversations/model";
 import type { Data } from "../conversations/model";
 import { addPending, confirmPending, failPending, newMessageId } from "../conversations/pending";
 import type { PendingByConversation } from "../conversations/pending";
+import { sortDevices, withDevice } from "../devices/model";
 import { fromHex, hex, sameId } from "../ids";
 import { rememberGateway } from "../signin/gateways";
 import { saved } from "./saved";
@@ -33,6 +36,8 @@ export interface Session extends Data {
   /** Settings on screen, in place of the conversation. */
   settings: boolean;
   pending: PendingByConversation;
+  /** The account's signed-in devices, once listed. */
+  devices: Device[] | null;
   error: string | null;
   /** Why the device was signed out, for the sign-in screen. */
   notice: string | null;
@@ -41,8 +46,14 @@ export interface Session extends Data {
   /** Registers or signs in, then connects; rejects with the backend's error. */
   authenticate(mode: AuthMode, name: string, password: string, url: string): Promise<void>;
   signOut(): Promise<void>;
-  updateProfile(change: { name?: string; icon?: string }): Promise<void>;
+  updateProfile(change: { name?: string; icon?: string; avatar?: Uint8Array }): Promise<void>;
+  /** Uploads a prepared picture and makes it the avatar. */
+  setPicture(picture: Blob): Promise<void>;
   changePassword(current: string, next: string): Promise<void>;
+  loadDevices(): Promise<void>;
+  renameDevice(deviceId: bigint, name: string): Promise<void>;
+  signOutDevice(deviceId: bigint): Promise<void>;
+  deleteAccount(password: string): Promise<void>;
   openConversation(peerName: string): Promise<void>;
   show(conversationId: string | null): Promise<void>;
   showSettings(open: boolean): void;
@@ -63,6 +74,8 @@ interface PendingAuth {
 let conn: Connection | null = null;
 let cursor = 0n;
 let pendingAuth: PendingAuth | null = null;
+/** A sign-out this device asked for, with the notice to show when the server closes the connection for it. */
+let leaving: { notice: string | null } | null = null;
 
 /** The state with no user's data in it. */
 const blank = {
@@ -72,6 +85,7 @@ const blank = {
   current: null,
   settings: false,
   pending: {},
+  devices: null,
 } satisfies Partial<Session>;
 
 const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
@@ -98,6 +112,7 @@ export const useSession = create<Session>((set, get) => {
       },
       open: () => onOpen().catch(fail),
       event: onEvent,
+      signedOut: () => signedOut(leaving ? leaving.notice : "Signed out."),
     });
     conn.open();
   }
@@ -113,6 +128,7 @@ export const useSession = create<Session>((set, get) => {
   /** Forgets the device and returns to the sign-in screen. */
   function signedOut(notice: string | null) {
     pendingAuth = null;
+    leaving = null;
     conn?.close();
     conn = null;
     saved.forget();
@@ -206,6 +222,12 @@ export const useSession = create<Session>((set, get) => {
       set({ me: event.body.value.user ?? me });
       return;
     }
+    if (event.body.case === "device") {
+      const { device, signedOut } = event.body.value;
+      const devices = get().devices;
+      if (device && devices) set({ devices: withDevice(devices, device, signedOut) });
+      return;
+    }
     const { data, unknownConversation } = applyEvent(get(), event, me.userId);
     const m = event.body.case === "message" ? event.body.value.message : undefined;
     const pending = m ? confirmPending(get().pending, m.conversationId, m.clientMessageId) : get().pending;
@@ -271,6 +293,7 @@ export const useSession = create<Session>((set, get) => {
 
     async signOut() {
       const c = conn;
+      leaving = { notice: null };
       if (c && get().status === "connected") {
         await c.call("signOut", { case: "signOut", value: {} }).catch(() => {});
       }
@@ -283,12 +306,65 @@ export const useSession = create<Session>((set, get) => {
       if (resp.user) set({ me: resp.user });
     },
 
+    async setPicture(picture) {
+      const c = conn;
+      const address = c && blobAddress(c.url);
+      if (!c || !address) throw new Error("not connected");
+      const upload = await c.call("createUpload", {
+        case: "createUpload",
+        value: { purpose: BlobPurpose.AVATAR, mediaType: picture.type, size: BigInt(picture.size) },
+      });
+      // The browser sets Content-Length from the body, which is the size asked for.
+      const resp = await fetch(address + upload.uploadPath, {
+        method: "PUT",
+        headers: { "Content-Type": picture.type },
+        body: picture,
+      });
+      if (!resp.ok) throw new Error(`The upload failed (HTTP ${resp.status}).`);
+      await get().updateProfile({ avatar: upload.blobId });
+    },
+
     async changePassword(current, next) {
       if (!conn) throw new Error("not connected");
       await conn.call("changePassword", {
         case: "changePassword",
         value: { currentPassword: current, newPassword: next },
       });
+    },
+
+    async loadDevices() {
+      if (!conn) return;
+      const resp = await conn.call("listDevices", { case: "listDevices", value: {} });
+      set({ devices: sortDevices(resp.devices) });
+    },
+
+    async renameDevice(deviceId, name) {
+      if (!conn) throw new Error("not connected");
+      const resp = await conn.call("renameDevice", { case: "renameDevice", value: { deviceId, name } });
+      const devices = get().devices;
+      if (resp.device && devices) set({ devices: withDevice(devices, resp.device, false) });
+    },
+
+    async signOutDevice(deviceId) {
+      if (!conn) throw new Error("not connected");
+      await conn.call("signOutDevice", { case: "signOutDevice", value: { deviceId } });
+      const devices = get().devices;
+      if (devices) set({ devices: devices.filter((d) => d.deviceId !== deviceId) });
+    },
+
+    async deleteAccount(password) {
+      if (!conn) throw new Error("not connected");
+      const notice = "Your account was deleted.";
+      leaving = { notice };
+      try {
+        await conn.call("deleteAccount", { case: "deleteAccount", value: { password } });
+      } catch (err) {
+        // The server may close the connection before the response arrives.
+        if (!get().credentials) return;
+        leaving = null;
+        throw err;
+      }
+      signedOut(notice);
     },
 
     async openConversation(peerName) {

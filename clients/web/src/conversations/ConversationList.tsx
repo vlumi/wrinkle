@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Avatar } from "../account/Avatar";
+import { displayName } from "../account/icons";
 import { errorText } from "../connection/connection";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { Conversation } from "../gen/wrinkle/v1/model_pb";
@@ -94,7 +95,7 @@ function ConversationRow({
     <button className={current ? "row current" : "row"} onClick={onClick}>
       <Avatar user={c.peer} />
       <span className="peer">
-        <span className="name">{c.peer?.name}</span>
+        <span className="name">{displayName(c.peer)}</span>
         {n > 0n && (
           <span className="unread" data-testid="unread">
             {n.toString()}

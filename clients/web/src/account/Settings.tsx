@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { errorText } from "../connection/connection";
+import { Devices } from "../devices/Devices";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { useSession } from "../session/session";
 import { Avatar } from "./Avatar";
 import { ICONS } from "./icons";
+import { preparePicture } from "./picture";
 import { nameProblem, passwordProblem } from "./rules";
 
 /** The signed-in user's profile and account. */
@@ -25,11 +27,14 @@ export function Settings({ onClose }: { onClose(): void }) {
           <span data-testid="profile-name">{me?.name}</span>
         </div>
         <NameForm current={me?.name ?? ""} />
+        <PictureForm hasPicture={(me?.avatar.length ?? 0) > 0} />
         <IconPicker current={me?.icon ?? ""} />
         <PasswordForm />
+        <Devices />
         <button className="signout" data-testid="signout" onClick={() => signOut()}>
           Sign out
         </button>
+        <DeleteAccount />
       </div>
     </section>
   );
@@ -88,6 +93,58 @@ function NameForm({ current }: { current: string }) {
       </label>
       <OutcomeLine outcome={outcome} />
     </form>
+  );
+}
+
+function PictureForm({ hasPicture }: { hasPicture: boolean }) {
+  const setPicture = useSession((s) => s.setPicture);
+  const updateProfile = useSession((s) => s.updateProfile);
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome>(null);
+
+  function run(work: Promise<void>, done: string) {
+    setBusy(true);
+    setOutcome(null);
+    work
+      .then(() => setOutcome({ done }))
+      .catch((err) => setOutcome({ error: errorText(err) }))
+      .finally(() => setBusy(false));
+  }
+
+  return (
+    <div className="field">
+      <span className="label">Picture</span>
+      <span className="picture-actions">
+        <button type="button" data-testid="choose-picture" disabled={busy} onClick={() => input.current?.click()}>
+          {busy ? "Saving…" : "Choose picture"}
+        </button>
+        {hasPicture && (
+          <button
+            type="button"
+            className="secondary"
+            data-testid="remove-picture"
+            disabled={busy}
+            onClick={() => run(updateProfile({ avatar: new Uint8Array() }), "Picture removed.")}
+          >
+            Remove picture
+          </button>
+        )}
+      </span>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        hidden
+        data-testid="picture-input"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (file) run(preparePicture(file).then(setPicture), "Picture changed.");
+        }}
+      />
+      <OutcomeLine outcome={outcome} />
+    </div>
   );
 }
 
@@ -182,6 +239,64 @@ function PasswordForm() {
         />
       </label>
       <button type="submit">Change password</button>
+      <OutcomeLine outcome={outcome} />
+    </form>
+  );
+}
+
+function DeleteAccount() {
+  const deleteAccount = useSession((s) => s.deleteAccount);
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [outcome, setOutcome] = useState<Outcome>(null);
+
+  if (!open)
+    return (
+      <button className="delete-account" data-testid="delete-account" onClick={() => setOpen(true)}>
+        Delete account…
+      </button>
+    );
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        deleteAccount(password).catch((err) =>
+          setOutcome({ error: errorText(err, { [ErrorCode.UNAUTHENTICATED]: "The password is wrong." }) }),
+        );
+      }}
+    >
+      <p className="hint">
+        Deleting the account frees your name and signs out every device. People you talked with see a deleted account;
+        the messages you sent stay with them.
+      </p>
+      <label>
+        Password
+        <input
+          data-testid="delete-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="current-password"
+          required
+        />
+      </label>
+      <span className="row-input">
+        <button type="submit" className="danger" disabled={!password}>
+          Delete account
+        </button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            setOpen(false);
+            setPassword("");
+            setOutcome(null);
+          }}
+        >
+          Cancel
+        </button>
+      </span>
       <OutcomeLine outcome={outcome} />
     </form>
   );

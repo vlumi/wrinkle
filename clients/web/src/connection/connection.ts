@@ -36,7 +36,12 @@ export interface Handlers {
   state(state: ConnectionState): void;
   open(): void;
   event(event: Event): void;
+  /** The server signed the device out (close code 4001); the connection stays closed. */
+  signedOut(): void;
 }
+
+/** The close code of a signed-out device or deleted account: no reconnecting. */
+export const CLOSE_SIGNED_OUT = 4001;
 
 const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 10_000;
@@ -66,13 +71,17 @@ export class Connection {
       this.handlers.open();
     };
     ws.onmessage = (e) => this.receive(new Uint8Array(e.data as ArrayBuffer));
-    ws.onclose = () => {
+    ws.onclose = (e) => {
       if (this.ws !== ws) return;
       this.ws = null;
       for (const p of this.pending.values()) p.reject(new Error("connection closed"));
       this.pending.clear();
+      const signedOut = e.code === CLOSE_SIGNED_OUT;
+      if (signedOut) this.closed = true;
       this.handlers.state("offline");
-      if (!this.closed) {
+      if (signedOut) {
+        this.handlers.signedOut();
+      } else if (!this.closed) {
         this.retry = setTimeout(() => this.open(), this.backoff);
         this.backoff = Math.min(this.backoff * 2, RECONNECT_MAX_MS);
       }
