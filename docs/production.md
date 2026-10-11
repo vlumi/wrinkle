@@ -86,7 +86,7 @@ The cluster's Compose files on one machine, HAProxy terminating TLS, nightly bac
 | Off-site backup storage (Hetzner Storage Box, 1 TB) | about €4 |
 | **Total** | **about €30** |
 
-Memory is what the stack runs out of first, so high-memory plans elsewhere fit too: Linode's (Akamai) 24 GB plan with 2 shared vCPUs is $60 a month. Its 20 GB disk is too small for the images, the database and Kafka's log, so it needs a block storage volume besides (about $10 a month for 100 GB), and two shared vCPUs are tight when traffic picks up: at 1000 messages a second the Vitess layer alone used 2.7 cores locally. Hetzner's offer is less than half the price with four times the vCPUs, at the cost of a fifth less memory.
+Memory is what the stack runs out of first, so high-memory plans elsewhere fit too: Linode's (Akamai) 24 GB plan with 2 shared vCPUs is $60 a month. Its 20 GB disk is too small for the images, the database and Kafka's log, so it needs a block storage volume besides (about $10 a month for 100 GB), and two shared vCPUs are tight when traffic picks up: at 1000 messages a second the Vitess layer alone used 2.7 cores locally. Hetzner's offer is less than half the price with four times the vCPUs, with a third less memory.
 
 The arm64 images the prototype builds for Apple Silicon run unchanged on Hetzner's Arm servers; on x86 hosts such as Linode they build the same way. No redundancy: a failed server is downtime until it is restored from backup. Enough for friends and family, and the right first step for anything.
 
