@@ -13,6 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 	"github.com/vlumi/wrinkle/backends/go/services"
@@ -39,7 +40,6 @@ type Server struct {
 
 	backend  services.Backend
 	presence *presence.Client
-	sub      *presence.Subscription
 	registry *registry
 	log      *slog.Logger
 
@@ -57,7 +57,6 @@ func New(ctx context.Context, backend services.Backend, pres *presence.Client, l
 	}
 	base, cancel := context.WithCancel(context.Background())
 	requestCtx, cancelRequests := context.WithCancel(context.Background())
-	sub := pres.Subscribe(base)
 	log.Info("gateway instance", "instance", pres.Instance())
 	return &Server{
 		ctx:            base,
@@ -66,8 +65,7 @@ func New(ctx context.Context, backend services.Backend, pres *presence.Client, l
 		cancelRequests: cancelRequests,
 		backend:        backend,
 		presence:       pres,
-		sub:            sub,
-		registry:       newRegistry(sub),
+		registry:       newRegistry(pres, log),
 		log:            log,
 		conns:          map[*conn]struct{}{},
 	}, nil
@@ -78,29 +76,17 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/ws", s.serveWS)
 }
 
-// Run delivers pushes to local connections and keeps the instance and its
-// connections alive until the context ends.
+// Run keeps the instance and its connections alive until the context ends,
+// and delivers pushes to local connections until the gateway has drained.
 func (s *Server) Run(ctx context.Context) error {
 	go s.keepalive(ctx)
-	messages := s.sub.Messages()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case msg, ok := <-messages:
-			if !ok {
-				return nil
-			}
-			userID, ok := presence.UserOf(msg.Channel)
-			if !ok {
-				continue
-			}
-			payload := []byte(msg.Payload)
-			for _, c := range s.registry.conns(userID) {
-				c.pushEvent(payload)
-			}
+	go s.registry.reconcile(s.ctx)
+	s.registry.run(s.ctx, func(userID uint64, payload []byte) {
+		for _, c := range s.registry.conns(userID) {
+			c.pushEvent(payload)
 		}
-	}
+	})
+	return nil
 }
 
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +146,9 @@ func (s *Server) openConns() []*conn {
 
 func (s *Server) attach(ctx context.Context, c *conn) error {
 	if err := s.registry.add(ctx, c); err != nil {
-		return fmt.Errorf("subscribe: %w", err)
+		s.registry.remove(c)
+		s.log.Warn("subscribing failed", "user", c.userID, "err", err)
+		return apierror.Unavailable("push subscription unavailable")
 	}
 	if err := s.presence.DeviceConnected(ctx, c.userID, c.deviceID); err != nil {
 		s.log.Warn("presence update failed", "err", err)
@@ -171,9 +159,7 @@ func (s *Server) attach(ctx context.Context, c *conn) error {
 func (s *Server) detach(c *conn) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.registry.remove(ctx, c); err != nil {
-		s.log.Warn("unsubscribe failed", "err", err)
-	}
+	s.registry.remove(c)
 	if err := s.presence.DeviceDisconnected(ctx, c.userID, c.deviceID); err != nil {
 		s.log.Warn("presence update failed", "err", err)
 	}
@@ -212,7 +198,7 @@ func (s *Server) Drain(ctx context.Context) {
 	if err := s.presence.Withdraw(withdrawCtx); err != nil {
 		s.log.Warn("withdrawing the instance failed", "err", err)
 	}
-	_ = s.sub.Close()
+	s.registry.close()
 }
 
 // waitFor waits for the group up to the timeout or the context's end, and

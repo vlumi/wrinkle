@@ -102,13 +102,7 @@ func (c *conn) close(code websocket.StatusCode, reason string) {
 // serve runs the read loop until the connection ends.
 func (c *conn) serve() {
 	ctx := c.ctx
-	c.mu.Lock()
-	c.connectTimer = time.AfterFunc(connectTimeout, func() {
-		if _, _, ok := c.identity(); !ok {
-			c.close(websocket.StatusPolicyViolation, "connect first")
-		}
-	})
-	c.mu.Unlock()
+	c.startConnectTimer()
 	defer func() {
 		// Cancel before detaching: a Connect finishing concurrently sees the
 		// cancellation and detaches itself (see identify).
@@ -156,6 +150,18 @@ func (c *conn) serve() {
 			return
 		}
 	}
+}
+
+// startConnectTimer closes the connection if Connect has not completed
+// within connectTimeout.
+func (c *conn) startConnectTimer() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.connectTimer = time.AfterFunc(connectTimeout, func() {
+		if _, _, ok := c.identity(); !ok {
+			c.close(websocket.StatusPolicyViolation, "connect first")
+		}
+	})
 }
 
 func (c *conn) stopConnectTimer() {
@@ -224,19 +230,20 @@ func (c *conn) write(data []byte) error {
 	return c.ws.Write(ctx, websocket.MessageBinary, data)
 }
 
-// send queues bytes for the writer, starting one if none is running. A
-// device that does not keep up is disconnected; it syncs on reconnect.
-// Pushed events never wait for room in the queue; replies to the device's
-// own frames wait up to writeTimeout, which holds back its read loop.
-func (c *conn) send(data []byte, reply bool) {
+// send queues bytes for the writer, starting one if none is running, and
+// reports whether they were queued. A device that does not keep up is
+// disconnected; it syncs on reconnect. Pushed events never wait for room in
+// the queue; replies to the device's own frames wait up to writeTimeout,
+// which holds back its read loop.
+func (c *conn) send(data []byte, reply bool) bool {
 	select {
 	case c.out <- data:
 	case <-c.ctx.Done():
-		return
+		return false
 	default:
 		if !reply || !c.sendWaiting(data) {
 			c.close(websocket.StatusTryAgainLater, "too slow")
-			return
+			return false
 		}
 	}
 	c.mu.Lock()
@@ -246,6 +253,7 @@ func (c *conn) send(data []byte, reply bool) {
 	if start {
 		go c.writeLoop()
 	}
+	return true
 }
 
 func (c *conn) sendWaiting(data []byte) bool {
@@ -274,8 +282,9 @@ func (c *conn) pushEvent(payload []byte) {
 	data := make([]byte, 0, len(payload)+8)
 	data = protowire.AppendTag(data, frameEvent, protowire.BytesType)
 	data = protowire.AppendBytes(data, payload)
-	c.send(data, false)
-	metrics.EventsPushed.Inc()
+	if c.send(data, false) {
+		metrics.EventsPushed.Inc()
+	}
 }
 
 // writeAcks writes the pending ack cursor until no newer one has arrived.
@@ -347,6 +356,11 @@ func (c *conn) identify(ctx context.Context, resp *pb.ConnectResponse) error {
 	c.mu.Unlock()
 	c.stopConnectTimer()
 	if err := c.server.attach(ctx, c); err != nil {
+		// Not connected after all: Connect may be retried, within a fresh deadline.
+		c.mu.Lock()
+		c.connected, c.userID, c.deviceID = false, 0, 0
+		c.mu.Unlock()
+		c.startConnectTimer()
 		return err
 	}
 	if c.ctx.Err() != nil {

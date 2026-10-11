@@ -111,29 +111,36 @@ func updateConversationList(ctx context.Context, tx *sql.Tx, userID, peerID uint
 }
 
 // recordMessage adds the conversation to the user's list, or makes the
-// message its last unless a later one is already there.
+// message its last unless a later one is already there. The sender's own
+// read position moves to the message.
 func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID uint64, peerName string, conversationID uint64, msg *pb.Message, occurredAt time.Time) error {
+	var ownSeq uint64
+	if msg.GetSenderUserId() == userID {
+		ownSeq = msg.GetSeq()
+	}
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO user_conversation
 			(user_id, conversation_id, peer_user_id, peer_name, last_seq,
 			 last_sender_user_id, last_client_message_id, last_body, last_sent_at,
 			 read_seq, peer_read_seq, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
 		ON DUPLICATE KEY UPDATE
 			last_seq = GREATEST(last_seq, ?),
 			last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),
 			last_client_message_id = IF(? >= last_seq, ?, last_client_message_id),
 			last_body = IF(? >= last_seq, ?, last_body),
 			last_sent_at = IF(? >= last_seq, ?, last_sent_at),
+			read_seq = GREATEST(read_seq, ?),
 			updated_at = GREATEST(updated_at, ?)`,
 		userID, conversationID, peerID, peerName, msg.GetSeq(),
 		msg.GetSenderUserId(), msg.GetClientMessageId(), msg.GetText(), msg.GetSentAt().AsTime(),
-		occurredAt,
+		ownSeq, occurredAt,
 		msg.GetSeq(),
 		msg.GetSeq(), msg.GetSenderUserId(),
 		msg.GetSeq(), msg.GetClientMessageId(),
 		msg.GetSeq(), msg.GetText(),
 		msg.GetSeq(), msg.GetSentAt().AsTime(),
+		ownSeq,
 		occurredAt)
 	return err
 }

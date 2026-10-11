@@ -33,3 +33,12 @@ not a setting
 		}
 	}
 }
+
+func TestEnvInt(t *testing.T) {
+	for value, want := range map[string]int{"": 64, "8": 8, "many": 64} {
+		t.Setenv("WRINKLE_TEST_INT", value)
+		if got := envInt("WRINKLE_TEST_INT", 64); got != want {
+			t.Errorf("%q: got %d, want %d", value, got, want)
+		}
+	}
+}

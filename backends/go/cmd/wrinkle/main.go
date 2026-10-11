@@ -48,8 +48,8 @@ func run() error {
 		svcAddr = flag.String("services", env("WRINKLE_SERVICES", ""), "gateway: forward requests to a services process at this address instead of running the services in-process")
 		svcLsn  = flag.String("services-listen", env("WRINKLE_SERVICES_LISTEN", ":9000"), "services role: gRPC listen address")
 		node    = flag.String("node", env("WRINKLE_NODE", hostname), "this node's name in presence")
-		dbConns = flag.Int("db-conns", 64, "connections per keyspace")
-		fanoutN = flag.Int("fanout-concurrency", 64, "fanout: conversations delivered at a time")
+		dbConns = flag.Int("db-conns", envInt("WRINKLE_DB_CONNS", 64), "connections per keyspace")
+		fanoutN = flag.Int("fanout-concurrency", envInt("WRINKLE_FANOUT_CONCURRENCY", 64), "fanout: conversations delivered at a time")
 		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
 		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
@@ -90,11 +90,15 @@ func run() error {
 		users := devicesync.New(userDB, conversations)
 		local = services.NewLocal(conversations, users, log.With("role", "services"))
 	}
-	pres, err := presence.New(ctx, *valkey, *node)
-	if err != nil {
-		return err
+	// Valkey carries presence and pushes, from fan-out to gateways.
+	var pres *presence.Client
+	if want.gateway || want.fanout {
+		pres, err = presence.New(ctx, *valkey, *node)
+		if err != nil {
+			return err
+		}
+		defer pres.Close()
 	}
-	defer pres.Close()
 
 	// Roles run until the signal context ends, except the HTTP server, which
 	// keeps answering (health with 503) until the gateway has drained.

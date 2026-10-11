@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
 
 	backendv1 "github.com/vlumi/wrinkle/proto/go/wrinkle/backend/v1"
@@ -60,8 +62,18 @@ type Client struct {
 	rpc  backendv1.BackendServiceClient
 }
 
+// Dial returns a client without connecting: the channel connects on first
+// use and reconnects by itself, so a gateway starts while the services are
+// not reachable yet, and its requests fail fast with Unavailable until they
+// are.
 func Dial(addr string) (*Client, error) {
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	// The default backoff grows to two minutes, which would leave a gateway
+	// started before its services failing long after they came up.
+	reconnect := backoff.DefaultConfig
+	reconnect.MaxDelay = 5 * time.Second
+	conn, err := grpc.NewClient(addr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithConnectParams(grpc.ConnectParams{Backoff: reconnect, MinConnectTimeout: 5 * time.Second}))
 	if err != nil {
 		return nil, fmt.Errorf("services at %s: %w", addr, err)
 	}

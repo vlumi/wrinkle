@@ -59,8 +59,8 @@ func channel(userID uint64) string {
 	return channelPrefix + strconv.FormatUint(userID, 10)
 }
 
-// UserOf returns the user a push channel belongs to.
-func UserOf(channel string) (uint64, bool) {
+// userOf returns the user a push channel belongs to.
+func userOf(channel string) (uint64, bool) {
 	id, err := strconv.ParseUint(strings.TrimPrefix(channel, channelPrefix), 10, 64)
 	return id, err == nil
 }
@@ -71,10 +71,10 @@ func (c *Client) Publish(ctx context.Context, userID uint64, payload []byte) err
 	return c.rdb.Publish(ctx, channel(userID), payload).Err()
 }
 
-// Subscribe returns a subscription that gateways add users to as devices
-// connect.
-func (c *Client) Subscribe(ctx context.Context) *Subscription {
-	return &Subscription{ps: c.rdb.Subscribe(ctx)}
+// Subscribe opens a pub/sub connection for a gateway to subscribe its
+// users' channels on. It connects on first use.
+func (c *Client) Subscribe() *Subscription {
+	return &Subscription{ps: c.rdb.Subscribe(context.Background())}
 }
 
 // Announce marks this instance alive; a gateway calls it at startup and
@@ -151,21 +151,76 @@ func instanceKey(instance string) string {
 	return "gateway:" + instance
 }
 
+// Subscription is one pub/sub connection. A gateway replaces it, rather than
+// let it reconnect by itself, when it fails, and subscribes its channels
+// again on the new one.
 type Subscription struct {
 	ps *redis.PubSub
 }
 
-func (s *Subscription) Add(ctx context.Context, userID uint64) error {
-	return s.ps.Subscribe(ctx, channel(userID))
+// NoticeKind tells what arrived on a subscription.
+type NoticeKind int
+
+const (
+	// Other is anything else: a pong, or a notice for a channel that is
+	// not a user's.
+	Other NoticeKind = iota
+	// Pushed is an event for a user.
+	Pushed
+	// Confirmed answers one channel of a Subscribe or Unsubscribe call.
+	Confirmed
+)
+
+type Notice struct {
+	Kind    NoticeKind
+	UserID  uint64
+	Payload string
 }
 
-func (s *Subscription) Remove(ctx context.Context, userID uint64) error {
-	return s.ps.Unsubscribe(ctx, channel(userID))
+// Add subscribes the users' channels. It returns once the request is
+// written; Receive confirms each channel.
+func (s *Subscription) Add(ctx context.Context, userIDs []uint64) error {
+	return s.ps.Subscribe(ctx, channels(userIDs)...)
 }
 
-// Messages delivers pushes; each carries the channel and the payload.
-func (s *Subscription) Messages() <-chan *redis.Message {
-	return s.ps.Channel(redis.WithChannelSize(4096))
+// Remove unsubscribes the users' channels; Receive confirms each.
+func (s *Subscription) Remove(ctx context.Context, userIDs []uint64) error {
+	return s.ps.Unsubscribe(ctx, channels(userIDs)...)
+}
+
+// Ping asks for a pong, which Receive returns as Other.
+func (s *Subscription) Ping(ctx context.Context) error {
+	return s.ps.Ping(ctx)
+}
+
+// Receive waits up to the timeout for what arrives next. Only one goroutine
+// may receive.
+func (s *Subscription) Receive(ctx context.Context, timeout time.Duration) (Notice, error) {
+	msg, err := s.ps.ReceiveTimeout(ctx, timeout)
+	if err != nil {
+		return Notice{}, err
+	}
+	switch msg := msg.(type) {
+	case *redis.Message:
+		if userID, ok := userOf(msg.Channel); ok {
+			return Notice{Kind: Pushed, UserID: userID, Payload: msg.Payload}, nil
+		}
+	case *redis.Subscription:
+		if msg.Kind == "subscribe" || msg.Kind == "unsubscribe" {
+			if userID, ok := userOf(msg.Channel); ok {
+				return Notice{Kind: Confirmed, UserID: userID}, nil
+			}
+		}
+	}
+	return Notice{Kind: Other}, nil
 }
 
 func (s *Subscription) Close() error { return s.ps.Close() }
+
+func channels(userIDs []uint64) []string {
+	list := make([]string, len(userIDs))
+	for i, id := range userIDs {
+		list[i] = channel(id)
+	}
+	return list
+}

@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -58,4 +60,19 @@ func env(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// envInt returns the variable's value as an integer, or the fallback when
+// it is unset, empty or not a number.
+func envInt(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		slog.Warn("ignoring a variable that is not a number", "variable", key, "value", v)
+		return fallback
+	}
+	return n
 }
