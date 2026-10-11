@@ -51,7 +51,7 @@ CREATE TABLE conversation_pair (
 -- like a pair claim.
 CREATE TABLE group_claim (
   creator_user_id BINARY(16) NOT NULL,
-  client_group_id VARCHAR(64) NOT NULL,
+  client_group_id VARCHAR(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL,
   conversation_id BINARY(16) NOT NULL,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (creator_user_id, client_group_id)
