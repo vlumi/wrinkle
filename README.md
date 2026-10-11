@@ -48,7 +48,7 @@ flowchart TB
 
 Components:
 
-- **Load balancer:** spreads devices' connections over the gateways and moves them off one that stops; HAProxy, for gateways run side by side.
+- **Load balancers:** one spreads devices' connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy, in the side-by-side setup.
 - **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`).
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
 - **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
@@ -60,14 +60,14 @@ Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by 
 
 ## Implementations
 
-All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them. A backend can also be split into a gateway and a services process over an internal RPC; the Elixir and Rust implementations are gateways in that shape, run beside the Go services, since connection handling is where the languages differ most.
+All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them. A backend can also be split into gateways and services instances over an internal RPC, any number of each behind balancers, which is the shape the design scales in. The Elixir and Rust implementations are gateways only, since connection handling is where the languages differ most; Go and Java services serve them all, in one pool.
 
 | Backend | Shape | Push |
 |---|---|---|
-| Go | all roles in one process, or a gateway and a services process | yes |
-| Java | all roles in one process | stores tokens, does not send yet |
-| Elixir | gateway, beside the Go services | through the Go services |
-| Rust | gateway, beside the Go services | through the Go services |
+| Go | all roles in one process, or gateways and services instances | yes |
+| Java | all roles in one process, or gateways and services instances | stores tokens, does not send yet |
+| Elixir | gateways, beside Go or Java services | through the Go services |
+| Rust | gateways, beside Go or Java services | through the Go services |
 
 Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
 
@@ -89,7 +89,7 @@ Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 
 ```sh
 make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
 make run-go-mono       # a whole backend on ws://localhost:8080/v1/ws; also run-java-mono
-make run-go-services   # or gateways beside the services: run-go-gw, run-elixir-gw, run-rust-gw, and lb-up
+make lb-up             # or side by side: balancers, then run-go-services or run-java-services, and gateways run-*-gw
 make web               # the web client, built and served on port 8081
 make ios-sim           # the iOS app in a simulator; ios-device on a paired iPhone
 make load              # a quick load run against the running backend

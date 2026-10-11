@@ -35,7 +35,7 @@ The generated code is committed, so the code generators (`make tools`) are not n
 
 ## Backends
 
-`make run-go-mono` and `make run-java-mono` each run a whole backend on port 8080, so one at a time; Ctrl-C stops one. The Go, Elixir and Rust gateways instead run beside the Go services, described below. All of them share the database, so users and conversations carry over. `make` lists every target.
+`make run-go-mono` and `make run-java-mono` each run a whole backend on port 8080, so one at a time; Ctrl-C stops one. The side-by-side setup, described below, instead runs services instances and gateways as separate processes. All of them share the database, so users and conversations carry over. `make` lists every target.
 
 The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
@@ -45,7 +45,7 @@ The first time each program listens, macOS asks whether to accept incoming conne
 make run-go-mono
 ```
 
-The Go gateway can also run as a separate process beside the Go services, as the Elixir and Rust gateways do; see [Gateways side by side](#gateways-side-by-side).
+The Go gateway can also run as a separate process beside the Go services, as the Elixir and Rust gateways do; see [Side by side](#side-by-side).
 
 ### Java
 
@@ -61,7 +61,7 @@ The symlink lets `java_home` find the Homebrew JDK, which the Makefile uses. The
 
 ### Elixir
 
-The Elixir implementation is a gateway, run beside the Go services as described in [Gateways side by side](#gateways-side-by-side). Its toolchain:
+The Elixir implementation is a gateway, run beside the Go services as described in [Side by side](#side-by-side). Its toolchain:
 
 ```sh
 brew install elixir
@@ -79,27 +79,27 @@ export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 rustup default stable
 ```
 
-### Gateways side by side
+### Side by side
 
-The Go, Elixir and Rust gateways run against one Go services process, each on its own port. Run any one of them, or all at once, and users on different gateways can message each other:
-
-```sh
-make run-go-services       # the Go services and fan-out; leave it running
-make run-go-gw             # in another terminal: ws://<address>:8180/v1/ws
-make run-elixir-gw         # ws://<address>:8181/v1/ws
-make run-rust-gw           # ws://<address>:8182/v1/ws
-```
-
-Stop `run-go-mono` or `run-java-mono` first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
-
-To connect to one particular gateway, put its port in the client's gateway field. Or put a load balancer in front of them all on port 8080, where the clients connect by default:
+The shape the design scales in: services instances and gateways as separate processes, any number of each, in any of the languages, behind two balancers. Go and Java services implement the same internal contract, so they serve in one pool; their fan-out shares one Kafka consumer group, so they split that work too.
 
 ```sh
-make lb-up                 # HAProxy on ws://<address>:8080/v1/ws
-make lb-down
+make lb-up                         # the balancers; leave them running
+make run-go-services               # services instance 1, in another terminal
+make run-java-services INSTANCE=2  # another, in Java (instances 1 to 4, either language)
+make run-go-gw                     # gateways, each in its own terminal: ws://<address>:8180/v1/ws
+make run-elixir-gw                 # :8181
+make run-rust-gw                   # :8182
+make run-java-gw                   # :8183
+make lb-down                       # when done
 ```
 
-Each new connection goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds. Its devices reconnect and land on the others, then come back to it as new connections once it is running again. `http://localhost:8404/` on the host shows each gateway's state and connections. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`.
+- **Devices to gateways:** `ws://<address>:8080/v1/ws`, where the clients connect by default, goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds; its devices reconnect and land on the others. To reach one gateway in particular, put its port in the client's gateway field.
+- **Gateways to services:** each gateway keeps one HTTP/2 connection to the services balancer on 127.0.0.1:9100, which hands out each request separately, in turn, to the running instances. Instance *n* serves the RPC on 9100+*n*, on loopback only. Stop an instance and the rest take its requests and its share of the fan-out.
+
+`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics.
+
+Java services instances store push tokens but send no pushes yet; with only Java instances running, iOS devices get no notifications.
 
 ## Clients
 
@@ -159,7 +159,7 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 ## Things to know
 
-- Only the gateways (8080, or 8180 to 8182 side by side, with the load balancer on 8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
+- Only the gateways (8080, or 8180 to 8183 side by side, with the balancer on 8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
 - `http://localhost:8081/monitor` on the host, with `make web` running, links to every monitoring page (Grafana, Prometheus, the load balancer's statistics, Kafka Connect, Vitess, each backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.
