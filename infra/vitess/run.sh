@@ -7,6 +7,9 @@ KEYSPACES="${KEYSPACES:?comma-separated keyspace names}"
 NUM_SHARDS="${NUM_SHARDS:?comma-separated shard counts, one per keyspace}"
 
 echo "max_connections = ${MYSQL_MAX_CONNECTIONS:-1000}" >> /vt/config/mycnf/test-suite.cnf
+# The test server's default pool is 32 MB; a day of load runs exceeds it and
+# the stack slows as it grows. Keep the working set in memory.
+echo "innodb_buffer_pool_size = ${INNODB_BUFFER_POOL_SIZE:-512M}" >> /vt/config/mycnf/test-suite.cnf
 
 # Stale socket files from a previous run keep mysqld from starting.
 rm -f "$VTDATAROOT"/*/mysql.sock "$VTDATAROOT"/*/mysql.sock.lock

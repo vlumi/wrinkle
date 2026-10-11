@@ -11,6 +11,7 @@ services:
       KEYSPACES: conversation,user
       NUM_SHARDS: 2,2
       PORT: "15000"
+      INNODB_BUFFER_POOL_SIZE: 512M
     ports:
       - "15000:15000" # vtcombo HTTP
       - "15001:15001" # vtcombo gRPC (VStream for Debezium)
