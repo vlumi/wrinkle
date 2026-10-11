@@ -700,6 +700,10 @@ impl request::Body {
             Self::SetAdmin(_) => "set_admin",
             Self::GetMembers(_) => "get_members",
             Self::DeleteMessage(_) => "delete_message",
+            Self::SetDeviceKey(_) => "set_device_key",
+            Self::GetDeviceKeys(_) => "get_device_keys",
+            Self::PublishKeys(_) => "publish_keys",
+            Self::GetConversationKeys(_) => "get_conversation_keys",
         }
     }
 }
