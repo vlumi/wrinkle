@@ -15,7 +15,7 @@ fi
 log=$(mktemp -t wrinkle-backend.XXXXXX)
 "$@" >"$log" 2>&1 &
 backend=$!
-HOST=127.0.0.1 node "$web/server.mjs" 8081 >/dev/null 2>&1 &
+HOST=127.0.0.1 WEB_TLS=0 node "$web/server.mjs" 8081 >/dev/null 2>&1 &
 web=$!
 disown "$backend" "$web"
 cleanup() {

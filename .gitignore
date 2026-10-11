@@ -1,5 +1,7 @@
 .DS_Store
 .env
+# Local TLS certificates (make certs)
+infra/certs/
 *.local
 
 # Build output

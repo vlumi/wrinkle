@@ -23,7 +23,9 @@ fi
 ./ports-free.sh "$port"
 
 node="$(hostname -s)-$lang-$port"
-export WRINKLE_SERVICES=127.0.0.1:9100 WRINKLE_LISTEN=":$port" WRINKLE_NODE="$node"
+# On loopback: devices reach it through the balancer, from the network
+# through the TLS edge.
+export WRINKLE_SERVICES=127.0.0.1:9100 WRINKLE_LISTEN="127.0.0.1:$port" WRINKLE_NODE="$node"
 echo "$lang gateway on ws://localhost:$port/v1/ws"
 case $lang in
   go) exec ../bin/wrinkle --roles gateway ;;

@@ -24,7 +24,8 @@ services:
     volumes:
       - ./haproxy/cluster.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
-      - "${LB_BIND:-0.0.0.0}:8080:8080"
+      # On loopback: devices on the network come through the TLS edge.
+      - "${LB_BIND:-127.0.0.1}:8080:8080"
       - "127.0.0.1:8404:8404" # statistics
     restart: unless-stopped
 

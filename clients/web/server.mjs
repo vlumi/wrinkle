@@ -1,15 +1,24 @@
 // Serves the built web client (dist/) to the network, with no dependencies.
 // Usage: node server.mjs [port]; HOST and PORT override the defaults
-// (0.0.0.0:8081). The page connects to the gateway on its own host, port 8080.
+// (0.0.0.0:8081). Over HTTPS with the certificate from make certs when there
+// is one, unless WEB_TLS=0; the page then connects to the TLS edge on its own
+// host, port 8443.
 // /monitor, for requests from this host only, links to the monitoring pages.
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer as createHTTPServer } from "node:http";
+import { createServer as createHTTPSServer } from "node:https";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { monitor } from "./monitor.mjs";
 
-const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "dist");
+const here = fileURLToPath(new URL(".", import.meta.url));
+const root = resolve(here, "dist");
+const certs = resolve(here, "../../infra/certs");
+const tls =
+  process.env.WEB_TLS !== "0" && existsSync(join(certs, "cert.pem"))
+    ? { cert: readFileSync(join(certs, "cert.pem")), key: readFileSync(join(certs, "key.pem")) }
+    : null;
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.argv[2] ?? process.env.PORT ?? 8081);
 
@@ -35,7 +44,7 @@ async function existingFile(path) {
   }
 }
 
-const server = createServer(async (req, res) => {
+const handler = async (req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname === "/healthz") {
     res.end("ok\n");
@@ -55,9 +64,11 @@ const server = createServer(async (req, res) => {
     "cache-control": path.startsWith(assets) ? "public, max-age=31536000, immutable" : "no-cache",
   });
   createReadStream(path).pipe(res);
-});
+};
+const server = tls ? createHTTPSServer(tls, handler) : createHTTPServer(handler);
 
 server.listen(port, host, () => {
-  console.log(`web client on http://${host === "0.0.0.0" ? "<this host>" : host}:${port}/`);
-  console.log(`monitoring on http://localhost:${port}/monitor (this host only)`);
+  const scheme = tls ? "https" : "http";
+  console.log(`web client on ${scheme}://${host === "0.0.0.0" ? "<this host>" : host}:${port}/`);
+  console.log(`monitoring on ${scheme}://localhost:${port}/monitor (this host only)`);
 });

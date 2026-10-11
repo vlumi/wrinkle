@@ -2,7 +2,8 @@
 # stack fits in about 4 GB; backends run beside it. Every port is published
 # on loopback only: the backends run on the host and reach it there.
 # GRAFANA_BIND=0.0.0.0 opens Grafana to the network. The load balancer, in
-# the lb profile, faces the network on 8080 like a gateway.
+# the lb profile, serves devices on loopback port 8080 like a gateway; the
+# TLS edge, in the tls profile, faces the network on 8443.
 
 name: wrinkle
 
@@ -106,6 +107,19 @@ services:
         limits:
           memory: 256M
 
+  # Only with the tls profile (make tls-up): TLS for devices on the network,
+  # in front of whatever serves port 8080 on the host.
+  edge:
+    image: haproxy:3.4.6
+    profiles: [tls]
+    volumes:
+      - ./edge/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./certs:/usr/local/etc/haproxy/certs:ro
+    ports:
+      - "${TLS_BIND:-0.0.0.0}:8443:8443"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
   # Only with the lb profile (make lb-up): one address in front of the
   # side-by-side gateways, facing the network like a gateway does, and one
   # in front of the services instances, for the gateways.
@@ -115,7 +129,8 @@ services:
     volumes:
       - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
-      - "${LB_BIND:-0.0.0.0}:8080:8080"
+      # On loopback: devices on the network come through the TLS edge.
+      - "${LB_BIND:-127.0.0.1}:8080:8080"
       - "127.0.0.1:9100:9100" # the services, for the gateways on this host
       - "127.0.0.1:8404:8404" # statistics
     extra_hosts:

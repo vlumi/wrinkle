@@ -54,7 +54,7 @@ infra-up:  ## Start the stack and register the outbox connectors
 	infra/debezium/register.sh
 
 infra-down:  ## Stop the stack and discard all data
-	$(COMPOSE) --profile lb down -v --remove-orphans
+	$(COMPOSE) --profile lb --profile tls down -v --remove-orphans
 
 infra-reset: infra-down infra-up  ## Recreate the stack empty
 
@@ -75,11 +75,11 @@ reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backen
 .PHONY: run-go-mono run-java-mono
 run-go-mono: build-go  ## Go, all roles in one process
 	backends/ports-free.sh 8080
-	$(GO_BACKEND) $(ARGS)
+	WRINKLE_LISTEN=127.0.0.1:8080 $(GO_BACKEND) $(ARGS)
 
 run-java-mono: build-java  ## Java, all roles in one process
 	backends/ports-free.sh 8080
-	$(JAVA_BACKEND) $(ARGS)
+	WRINKLE_LISTEN=127.0.0.1:8080 $(JAVA_BACKEND) $(ARGS)
 
 ##@ Side by side (services instances and gateways behind the balancers)
 ##~ make lb-up, then services instances and gateways in other terminals, in any number and language.
@@ -106,7 +106,17 @@ run-rust-gw: build-rust  ## Rust gateway on :8182
 run-java-gw: build-java  ## Java gateway on :8183
 	backends/gateway.sh java $(PORT)
 
-.PHONY: lb-up lb-down
+.PHONY: certs tls-up tls-down lb-up lb-down
+certs:  ## A TLS certificate for this Mac from mkcert, for the TLS edge and the web client
+	infra/certs.sh
+
+tls-up:  ## TLS for devices on the network: wss://<address>:8443/v1/ws to whatever serves :8080 on this host
+	@test -f infra/certs/haproxy.pem || infra/certs.sh
+	$(COMPOSE) --profile tls up -d --wait edge
+
+tls-down:  ## Stop the TLS edge
+	$(COMPOSE) --profile tls stop edge
+
 lb-up:  ## The balancers: devices on :8080 to the gateways, gateways on :9100 to the services; statistics on localhost:8404
 	backends/ports-free.sh 8080
 	$(COMPOSE) --profile lb up -d --wait haproxy
@@ -141,7 +151,7 @@ web-dev: web-deps  ## Web client with live reload on :8081, for working on it
 	$(NPM) run dev
 
 monitor:  ## Open the monitoring page, links to every dashboard (on this host, with make web running)
-	open http://localhost:8081/monitor
+	open "$$(test -f infra/certs/cert.pem && echo https || echo http)://localhost:8081/monitor"
 
 ios-sim:  ## iOS app in an iPhone simulator (DEVICE="17 Pro" to pick one)
 	clients/ios/Scripts/generate.sh
@@ -265,7 +275,7 @@ proto-check: proto  ## Fail when the committed generated code is stale
 
 .PHONY: tools clean
 tools:  ## Install the code generators and linters (Homebrew, go install, mix)
-	brew install xcodegen swift-protobuf swiftlint elixir rustup node shellcheck shfmt hadolint
+	brew install xcodegen swift-protobuf swiftlint elixir rustup node shellcheck shfmt hadolint mkcert
 	go install github.com/bufbuild/buf/cmd/buf@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
