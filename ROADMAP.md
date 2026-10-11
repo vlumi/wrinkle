@@ -18,6 +18,7 @@ Resolved:
 Resolved later:
 
 - Outbox rows are deleted in the transaction that inserts them, as in Debezium's outbox pattern: the connector streams the insert and skips the delete, so the table stays empty.
+- Debezium kept over a relay in the services that produces to Kafka itself. A relay gives the same guarantee with fewer moving parts, but it loses the order of a conversation's events unless it polls each shard in order, has to be written in every services language, and must follow resharding by itself. Reading the change log keeps commit order for free, which at the scale the design aims for outweighs the extra process.
 
 ## 2. Go backend
 
