@@ -80,6 +80,7 @@ func run(cfg config) error {
 	start = time.Now()
 	connectAll(ctx, devices, cfg.url, cfg.ramp, stats)
 	fmt.Fprintf(os.Stderr, "connected in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
+	signOutStale(ctx, devices, stats)
 	ready := openAll(ctx, devices, stats)
 	if len(ready) == 0 {
 		return fmt.Errorf("no device is ready")
@@ -89,6 +90,9 @@ func run(cfg config) error {
 		formGroups(ctx, ready, cfg.groupSize, cfg.devicesPerUser, stats)
 		fmt.Fprintf(os.Stderr, "formed groups of %d in %s\n", cfg.groupSize, time.Since(start).Round(time.Millisecond))
 	}
+	start = time.Now()
+	prepareKeys(ctx, ready, stats)
+	fmt.Fprintf(os.Stderr, "published conversation keys in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
 	for _, d := range ready {
 		go d.receive(ctx)
 	}

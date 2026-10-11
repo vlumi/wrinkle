@@ -104,5 +104,6 @@ func (w *signInWorker) signIn(ctx context.Context, d *device, first bool) error 
 	}
 	d.token = creds.GetDeviceToken()
 	d.userID = creds.GetUserId()
+	d.deviceID = creds.GetDeviceId()
 	return nil
 }

@@ -25,6 +25,7 @@ type result struct {
 	Sent           int64   `json:"sent"`
 	GroupSent      int64   `json:"group_sent,omitempty"`
 	SendErrors     int64   `json:"send_errors"`
+	DecryptErrors  int64   `json:"decrypt_errors"`
 	Received       int64   `json:"received"`
 	Expected       int64   `json:"expected"`
 	SentRate       float64 `json:"sent_rate"`
@@ -65,6 +66,7 @@ func (s *stats) result(cfg config, before, after sample) result {
 		ConnectErrors:  s.connectErrors.Load(),
 		Sent:           s.sentInWindow.Load(),
 		SendErrors:     s.sendErrors.Load(),
+		DecryptErrors:  s.decryptErrors.Load(),
 		Received:       s.received.Load(),
 		Expected:       s.expectedReceipts(),
 		SendP50Ms:      ms(percentile(rtt, 0.50)),
@@ -108,10 +110,10 @@ func (r result) String() string {
 		groups = fmt.Sprintf(" groups of %d: %.0f%% of sends (%d)", r.GroupSize, 100*r.GroupShare, r.GroupSent)
 	}
 	return fmt.Sprintf(
-		"connections=%d devices/user=%d target=%.0f/s sent=%d (%.1f/s) errors=%d received=%d/%d%s\n"+
+		"connections=%d devices/user=%d target=%.0f/s sent=%d (%.1f/s) errors=%d undecryptable=%d received=%d/%d%s\n"+
 			"end-to-end p50=%.1fms p90=%.1fms p99=%.1fms max=%.1fms; send rtt p50=%.1fms p99=%.1fms\n"+
 			"backend cpu=%.2fs (%.1f ms per 1000 msgs) rss=%.1f MiB live=%.1f MiB connections=%.0f",
-		r.Connections, r.DevicesPerUser, r.TargetRate, r.Sent, r.SentRate, r.SendErrors, r.Received, r.Expected, groups,
+		r.Connections, r.DevicesPerUser, r.TargetRate, r.Sent, r.SentRate, r.SendErrors, r.DecryptErrors, r.Received, r.Expected, groups,
 		r.P50Ms, r.P90Ms, r.P99Ms, r.MaxMs, r.SendP50Ms, r.SendP99Ms,
 		r.BackendCPUS, r.CPUMsPer1000, r.BackendRSSB/(1<<20), r.BackendLiveB/(1<<20), r.BackendConns)
 }

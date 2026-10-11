@@ -11,6 +11,7 @@ import (
 type stats struct {
 	connectErrors atomic.Int64
 	sendErrors    atomic.Int64
+	decryptErrors atomic.Int64 // received messages that did not open
 	received      atomic.Int64 // receipts of messages sent in the window
 	sentInWindow  atomic.Int64
 	groupSent     atomic.Int64 // of sentInWindow, to groups

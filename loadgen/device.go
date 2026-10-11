@@ -29,6 +29,7 @@ type device struct {
 	client          *wrinkleclient.Client
 	token           string
 	userID          []byte
+	deviceID        uint64
 	conversationID  []byte
 	directReceivers int64
 	// The device's group, if any, and the share of sends that go there.
@@ -37,7 +38,8 @@ type device struct {
 	groupShare     float64
 }
 
-// connect connects the device with the token it signed in with.
+// connect connects the device with the token it signed in with and gives
+// it a key pair.
 func (d *device) connect(ctx context.Context, url string) error {
 	if d.token == "" {
 		return fmt.Errorf("not signed in")
@@ -48,7 +50,11 @@ func (d *device) connect(ctx context.Context, url string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := c.Connect(cctx, d.token); err != nil {
+	_, err = c.Connect(cctx, d.token)
+	if err == nil {
+		_, err = c.EnableKeys(cctx, d.userID, d.deviceID)
+	}
+	if err != nil {
 		c.Close()
 		return err
 	}
@@ -67,9 +73,10 @@ func (d *device) open(ctx context.Context) error {
 	return nil
 }
 
-// send sends one message, to the device's group for its share of the sends
-// and to its direct conversation otherwise, whose client id carries the
-// send time, so any receiving device can compute the end-to-end latency.
+// send seals and sends one message, to the device's group for its share of
+// the sends and to its direct conversation otherwise, whose client id
+// carries the send time, so any receiving device can compute the end-to-end
+// latency.
 func (d *device) send(ctx context.Context) {
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
@@ -80,7 +87,7 @@ func (d *device) send(ctx context.Context) {
 		conversationID, receivers, group = d.groupID, d.groupReceivers, true
 	}
 	d.stats.recordSent(now, receivers, group)
-	if _, err := d.client.SendMessage(cctx, conversationID, id, "load"); err != nil {
+	if _, err := d.client.SendText(cctx, conversationID, id, "load"); err != nil {
 		if d.stats.sendErrors.Add(1) <= 3 {
 			fmt.Fprintf(os.Stderr, "send from %s: %v\n", d.userName, err)
 		}
@@ -89,8 +96,8 @@ func (d *device) send(ctx context.Context) {
 	d.stats.recordSendRTT(now, time.Since(now))
 }
 
-// receive drains events, recording the latency of the peer's messages and
-// acking at most once a second.
+// receive drains events, opening the peers' messages and recording their
+// latency, and acks at most once a second.
 func (d *device) receive(ctx context.Context) {
 	var cursor, acked uint64
 	ticker := time.NewTicker(time.Second)
@@ -111,7 +118,13 @@ func (d *device) receive(ctx context.Context) {
 			}
 			cursor = ev.GetCursor()
 			msg := ev.GetMessage().GetMessage()
-			if msg == nil || bytes.Equal(msg.GetSenderUserId(), d.userID) {
+			if msg.GetSealed() == nil || bytes.Equal(msg.GetSenderUserId(), d.userID) {
+				continue
+			}
+			if _, err := d.client.MessageText(ctx, msg); err != nil {
+				if d.stats.decryptErrors.Add(1) <= 3 {
+					fmt.Fprintf(os.Stderr, "open message by %s: %v\n", d.userName, err)
+				}
 				continue
 			}
 			if sentAt, ok := sentTime(msg.GetClientMessageId()); ok {
