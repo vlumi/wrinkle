@@ -142,6 +142,11 @@ Notes:
 - [ ] A key wrapped by a device that has since signed out, and whose key a device never saw, is refused as unverifiable.
 - [ ] The web client needs a secure context (HTTPS) for WebCrypto, so a page served over plain HTTP on the network cannot send.
 
+## Reactions
+
+- [x] Reactions as one sealed set per user and message, replaced as a whole: relayed as `ReactionEvent`s and returned with `GetMessages`, removed with the message. Go and Java implement it; both clients show chips with counts and react from a picker.
+- No push to the message's sender for a reaction: the services cannot say what the reaction was.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -166,7 +171,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3), deleting one's own messages (#4, done), stickers (#5), end-to-end encryption (#6, done), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3, done), deleting one's own messages (#4, done), stickers (#5), end-to-end encryption (#6, done), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 
