@@ -66,15 +66,8 @@ func parseMetrics(r io.Reader) sample {
 		if line == "" || line[0] == '#' {
 			continue
 		}
-		name, value, ok := strings.Cut(line, " ")
+		name, v, ok := parseSample(line)
 		if !ok {
-			continue
-		}
-		if i := strings.IndexByte(name, '{'); i >= 0 {
-			name = name[:i]
-		}
-		v, err := strconv.ParseFloat(value, 64)
-		if err != nil {
 			continue
 		}
 		switch name {
@@ -89,6 +82,50 @@ func parseMetrics(r io.Reader) sample {
 		}
 	}
 	return s
+}
+
+// parseSample splits a Prometheus text sample line, name{labels} value
+// [timestamp], into the metric name and value. Label values are quoted and
+// may hold spaces, commas, braces and escaped quotes.
+func parseSample(line string) (name string, value float64, ok bool) {
+	end := strings.IndexAny(line, "{ \t")
+	if end <= 0 {
+		return "", 0, false
+	}
+	name, rest := line[:end], line[end:]
+	if rest[0] == '{' {
+		brace := labelsEnd(rest)
+		if brace < 0 {
+			return "", 0, false
+		}
+		rest = rest[brace+1:]
+	}
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return "", 0, false
+	}
+	v, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return "", 0, false
+	}
+	return name, v, true
+}
+
+// labelsEnd returns the index of the brace closing the label set that s
+// starts with, skipping quoted values, or -1.
+func labelsEnd(s string) int {
+	quoted := false
+	for i := 1; i < len(s); i++ {
+		switch c := s[i]; {
+		case quoted && c == '\\':
+			i++
+		case c == '"':
+			quoted = !quoted
+		case !quoted && c == '}':
+			return i
+		}
+	}
+	return -1
 }
 
 // rssOfListener returns the resident memory of the process listening on the
