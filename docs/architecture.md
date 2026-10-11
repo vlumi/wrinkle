@@ -83,7 +83,7 @@ sequenceDiagram
   D->>G: Ack(cursor)
 ```
 
-Connect must be the first request; until it completes, the gateway answers anything else with `UNAUTHENTICATED`, and after 5 seconds without it the gateway closes the connection. The response carries the cursor the device last acked and the head of the user's log, so a device knows at once how far behind it is. Sync pages through the log, up to 1000 events at a time.
+Connect must be the first request; until it completes, the gateway answers anything else with `UNAUTHENTICATED`, and after 5 seconds without it the gateway closes the connection. The gateway answers Connect only once the user's push channel is subscribed, so no push that follows is missed; if that does not happen within 5 seconds (Valkey unreachable), Connect fails with `UNAVAILABLE` and may be retried. The response carries the cursor the device last acked and the head of the user's log, so a device knows at once how far behind it is. Sync pages through the log, up to 1000 events at a time.
 
 ### Sending a message
 
