@@ -52,7 +52,7 @@ func tombstone(t *testing.T, what string, msg *pb.Message, deleted *pb.MessageDe
 func TestDeleteMessage(t *testing.T) {
 	a, b, conv := pair(t)
 	a2 := otherDevice(t, a)
-	sent, err := a.SendMessage(ctx(t), conv, "m1", "secret")
+	sent, err := a.SendText(ctx(t), conv, "m1", "secret")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,8 @@ func TestDeleteMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := c.SendMessage(ctx(t), other.GetConversationId(), "m1", "later"); err != nil {
+	knowPeer(c, other.GetConversationId(), b)
+	if _, err := c.SendText(ctx(t), other.GetConversationId(), "m1", "later"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, other.GetConversationId(), 1)
@@ -135,20 +136,20 @@ func TestDeleteMessage(t *testing.T) {
 	if err := a.DeleteMessage(ctx(t), conv, 1); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.SendMessage(ctx(t), conv, "m2", "again"); err != nil {
+	if _, err := a.SendText(ctx(t), conv, "m2", "again"); err != nil {
 		t.Fatal(err)
 	}
 	ev := nextEvent(t, b, func(*pb.Event) bool { return true })
-	if m := ev.GetMessage().GetMessage(); m.GetSeq() != 2 || m.GetText() != "again" {
+	if m := ev.GetMessage().GetMessage(); m.GetSeq() != 2 || text(t, b, m) != "again" {
 		t.Fatalf("event after deleting twice: %v", ev)
 	}
 	entry := waitConversation(t, b, conv, func(c *pb.Conversation) bool { return c.GetLastSeq() == 2 })
-	if entry.GetLastMessage().GetText() != "again" || entry.GetLastMessage().GetDeletedAt() != nil {
+	if text(t, b, entry.GetLastMessage()) != "again" || entry.GetLastMessage().GetDeletedAt() != nil {
 		t.Fatalf("entry after a later message: %v", entry)
 	}
 
 	// Resending a deleted message's client id returns it deleted.
-	resent, err := a.SendMessage(ctx(t), conv, "m1", "secret")
+	resent, err := a.SendText(ctx(t), conv, "m1", "secret")
 	if err != nil || resent.GetSeq() != 1 {
 		t.Fatalf("resent: %v %v", resent, err)
 	}
@@ -157,7 +158,7 @@ func TestDeleteMessage(t *testing.T) {
 
 func TestDeleteMessageValidation(t *testing.T) {
 	a, b, conv := pair(t)
-	if _, err := a.SendMessage(ctx(t), conv, "m1", "hi"); err != nil {
+	if _, err := a.SendText(ctx(t), conv, "m1", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, conv, 1)
@@ -176,7 +177,7 @@ func TestDeleteMessageValidation(t *testing.T) {
 	wantCode(t, a.DeleteMessage(ctx(t), group, 1), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 
 	// Nothing was deleted: the next event is the next message.
-	if _, err := a.SendMessage(ctx(t), conv, "m2", "still here"); err != nil {
+	if _, err := a.SendText(ctx(t), conv, "m2", "still here"); err != nil {
 		t.Fatal(err)
 	}
 	ev := nextEvent(t, b, func(*pb.Event) bool { return true })
@@ -184,7 +185,7 @@ func TestDeleteMessageValidation(t *testing.T) {
 		t.Fatalf("event after failed deletions: %v", ev)
 	}
 	msgs, err := b.GetMessages(ctx(t), conv, 0, 0)
-	if err != nil || len(msgs) != 2 || msgs[1].GetText() != "hi" || msgs[1].GetDeletedAt() != nil {
+	if err != nil || len(msgs) != 2 || msgs[1].GetDeletedAt() != nil || text(t, b, msgs[1]) != "hi" {
 		t.Fatalf("history after failed deletions: %v %v", msgs, err)
 	}
 }
@@ -195,7 +196,7 @@ func TestDeleteMessageInGroup(t *testing.T) {
 	c := newUser(t, "carol")
 	d := newUser(t, "dave")
 	id := newGroup(t, a, "Rowing", b, c, d)
-	if _, err := b.SendMessage(ctx(t), id, "m1", "from bob"); err != nil {
+	if _, err := b.SendText(ctx(t), id, "m1", "from bob"); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range []*device{a, b, c, d} {
@@ -233,7 +234,7 @@ func TestDeleteMessageInGroup(t *testing.T) {
 	wantCode(t, d.DeleteMessage(ctx(t), id, 2), pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
 
 	// A member who left may still delete what they sent before.
-	if _, err := c.SendMessage(ctx(t), id, "m1", "from carol"); err != nil {
+	if _, err := c.SendText(ctx(t), id, "m1", "from carol"); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range []*device{a, b, c} {
@@ -245,7 +246,7 @@ func TestDeleteMessageInGroup(t *testing.T) {
 	for _, m := range []*device{a, b, c} {
 		noticeEvent(t, m, id, 5)
 	}
-	if _, err := a.SendMessage(ctx(t), id, "m1", "after carol"); err != nil {
+	if _, err := a.SendText(ctx(t), id, "m1", "after carol"); err != nil {
 		t.Fatal(err)
 	}
 	for _, m := range []*device{a, b} {
@@ -264,7 +265,7 @@ func TestDeleteMessageInGroup(t *testing.T) {
 	}
 	tombstone(t, "former member's message", msgs[0], deleted)
 	entry := findConversation(t, a, id)
-	if entry.GetLastSeq() != 6 || entry.GetLastMessage().GetText() != "after carol" {
+	if entry.GetLastSeq() != 6 || text(t, a, entry.GetLastMessage()) != "after carol" {
 		t.Fatalf("a deletion changed a later last message: %v", entry)
 	}
 }

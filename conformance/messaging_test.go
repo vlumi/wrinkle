@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -48,7 +50,7 @@ func TestOpenConversation(t *testing.T) {
 func TestSendAssignsDenseSequence(t *testing.T) {
 	a, _, conv := pair(t)
 	for i := uint64(1); i <= 3; i++ {
-		msg, err := a.SendMessage(ctx(t), conv, fmt.Sprintf("m%d", i), fmt.Sprintf("message %d", i))
+		msg, err := a.SendText(ctx(t), conv, fmt.Sprintf("m%d", i), fmt.Sprintf("message %d", i))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -56,7 +58,7 @@ func TestSendAssignsDenseSequence(t *testing.T) {
 			t.Fatalf("message %d got seq %d", i, msg.GetSeq())
 		}
 		if !bytes.Equal(msg.GetConversationId(), conv) || !bytes.Equal(msg.GetSenderUserId(), a.user.GetUserId()) ||
-			msg.GetClientMessageId() != fmt.Sprintf("m%d", i) || msg.GetText() != fmt.Sprintf("message %d", i) {
+			msg.GetClientMessageId() != fmt.Sprintf("m%d", i) || text(t, a, msg) != fmt.Sprintf("message %d", i) {
 			t.Fatalf("response does not echo the message: %v", msg)
 		}
 		if msg.GetSentAt() == nil || time.Since(msg.GetSentAt().AsTime()) > time.Minute {
@@ -67,18 +69,18 @@ func TestSendAssignsDenseSequence(t *testing.T) {
 
 func TestSendIsIdempotent(t *testing.T) {
 	a, _, conv := pair(t)
-	first, err := a.SendMessage(ctx(t), conv, "same", "once")
+	first, err := a.SendText(ctx(t), conv, "same", "once")
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := a.SendMessage(ctx(t), conv, "same", "once again")
+	second, err := a.SendText(ctx(t), conv, "same", "once again")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.GetSeq() != first.GetSeq() || second.GetText() != first.GetText() {
+	if second.GetSeq() != first.GetSeq() || !proto.Equal(second.GetSealed(), first.GetSealed()) || text(t, a, second) != "once" {
 		t.Fatalf("resend stored a new message: %v then %v", first, second)
 	}
-	next, err := a.SendMessage(ctx(t), conv, "other", "two")
+	next, err := a.SendText(ctx(t), conv, "other", "two")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,32 +91,47 @@ func TestSendIsIdempotent(t *testing.T) {
 
 func TestSendValidation(t *testing.T) {
 	a, _, conv := pair(t)
-	_, err := a.SendMessage(ctx(t), conv, "", "no id")
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = a.SendMessage(ctx(t), conv, "empty", "")
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = a.SendMessage(ctx(t), conv, strings.Repeat("i", 65), "id too long")
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	// Text is limited to 4000 characters (code points), not bytes or UTF-16 units.
-	if _, err := a.SendMessage(ctx(t), conv, "longest", strings.Repeat("😀", 4000)); err != nil {
+	epoch, err := a.PrepareKeys(ctx(t), conv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	send := func(conversationID []byte, clientMessageID string, sealed *pb.Sealed) error {
+		_, err := a.SendMessage(ctx(t), conversationID, clientMessageID, sealed)
+		return err
+	}
+	wantCode(t, send(conv, "", junkSealed(epoch)), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	wantCode(t, send(conv, strings.Repeat("i", 65), junkSealed(epoch)), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	wantCode(t, send(conv, "no content", nil), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	// Sealed content: a 12-byte nonce and 1 to 49152 bytes of ciphertext.
+	short := junkSealed(epoch)
+	short.Nonce = short.Nonce[:11]
+	wantCode(t, send(conv, "short nonce", short), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	empty := junkSealed(epoch)
+	empty.Ciphertext = nil
+	wantCode(t, send(conv, "empty", empty), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	largest := junkSealed(epoch)
+	largest.Ciphertext = make([]byte, 49152)
+	if err := send(conv, "largest", largest); err != nil {
+		t.Fatalf("49152 bytes: %v", err)
+	}
+	tooLarge := junkSealed(epoch)
+	tooLarge.Ciphertext = make([]byte, 49153)
+	wantCode(t, send(conv, "too large", tooLarge), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	// The longest text sealed fits.
+	if _, err := a.SendText(ctx(t), conv, "longest", strings.Repeat("😀", 4000)); err != nil {
 		t.Fatalf("4000 characters: %v", err)
 	}
-	_, err = a.SendMessage(ctx(t), conv, "too long", strings.Repeat("é", 4001))
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = a.SendMessage(ctx(t), randomID(t), "x", "no such conversation")
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_NOT_FOUND)
+	wantCode(t, send(randomID(t), "x", junkSealed(1)), pb.ErrorCode_ERROR_CODE_NOT_FOUND)
 	// Ids are 16 bytes.
-	_, err = a.SendMessage(ctx(t), conv[:15], "x", "short id")
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = a.SendMessage(ctx(t), nil, "x", "no id")
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	wantCode(t, send(conv[:15], "x", junkSealed(epoch)), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	wantCode(t, send(nil, "x", junkSealed(epoch)), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 	err = a.MarkRead(ctx(t), append(bytes.Clone(conv), 0), 1)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 	_, err = a.GetMessages(ctx(t), conv[:8], 0, 0)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 
 	outsider := newUser(t, "eve")
-	_, err = outsider.SendMessage(ctx(t), conv, "x", "not mine")
+	_, err = outsider.SendMessage(ctx(t), conv, "x", junkSealed(epoch))
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
 	_, err = outsider.GetMessages(ctx(t), conv, 0, 0)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
@@ -127,13 +144,13 @@ func TestMessageIsPushedToEveryDevice(t *testing.T) {
 	a2 := otherDevice(t, a)
 	b2 := otherDevice(t, b)
 
-	sent, err := a.SendMessage(ctx(t), conv, "m1", "hello everyone")
+	sent, err := a.SendText(ctx(t), conv, "m1", "hello everyone")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []*device{a, a2, b, b2} {
 		got := messageEvent(t, d, conv, 1)
-		if got.GetText() != sent.GetText() || !bytes.Equal(got.GetSenderUserId(), a.user.GetUserId()) ||
+		if text(t, d, got) != "hello everyone" || !proto.Equal(got.GetSealed(), sent.GetSealed()) || !bytes.Equal(got.GetSenderUserId(), a.user.GetUserId()) ||
 			got.GetClientMessageId() != "m1" || !got.GetSentAt().AsTime().Equal(sent.GetSentAt().AsTime()) {
 			t.Fatalf("pushed message differs from the sent one: %v vs %v", got, sent)
 		}

@@ -139,7 +139,7 @@ func avatarEvent(t *testing.T, d *device, userID, avatar []byte) {
 
 func TestAvatar(t *testing.T) {
 	a, b, conv := pair(t)
-	if _, err := a.SendMessage(ctx(t), conv, "m1", "hi"); err != nil {
+	if _, err := a.SendText(ctx(t), conv, "m1", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, conv, 1)

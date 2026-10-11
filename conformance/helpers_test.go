@@ -135,7 +135,23 @@ func signUp(t *testing.T, name string) *device {
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	return connectToken(t, token)
+	return withKey(t, connectToken(t, token))
+}
+
+// withKey gives a newly connected device a key pair, as clients do on
+// their first connect, and consumes the device's own event for it.
+func withKey(t *testing.T, d *device) *device {
+	t.Helper()
+	k, err := d.EnableKeys(ctx(t), d.user.GetUserId(), d.deviceID)
+	if err != nil {
+		t.Fatalf("set device key: %v", err)
+	}
+	pub := k.Private.PublicKey().Bytes()
+	nextEvent(t, d, func(ev *pb.Event) bool {
+		e := ev.GetDevice()
+		return e.GetDevice().GetDeviceId() == d.deviceID && bytes.Equal(e.GetDevice().GetPublicKey(), pub)
+	})
+	return d
 }
 
 // newUser signs up a user with a unique name.
@@ -147,13 +163,21 @@ func newUser(t *testing.T, prefix string) *device {
 // otherDevice signs in and connects another device of d's user.
 func otherDevice(t *testing.T, d *device) *device {
 	t.Helper()
+	return withKey(t, connectToken(t, signIn(t, d.user.GetName(), password).GetDeviceToken()))
+}
+
+// otherDeviceWithoutKey signs in another device that sets no key.
+func otherDeviceWithoutKey(t *testing.T, d *device) *device {
+	t.Helper()
 	return connectToken(t, signIn(t, d.user.GetName(), password).GetDeviceToken())
 }
 
 // reconnect connects d's device again on a new connection.
 func reconnect(t *testing.T, d *device) *device {
 	t.Helper()
-	return connectToken(t, d.token)
+	again := connectToken(t, d.token)
+	again.SetKeys(d.Keys())
+	return again
 }
 
 // pair signs up two users and opens their conversation.
@@ -165,7 +189,15 @@ func pair(t *testing.T) (a, b *device, conversationID []byte) {
 	if err != nil {
 		t.Fatalf("open conversation: %v", err)
 	}
+	knowPeer(b, conv.GetConversationId(), a)
 	return a, b, conv.GetConversationId()
+}
+
+// knowPeer tells d's keys who the other user of a direct conversation is,
+// as a client knows when it shows the conversation; until its first
+// message only the user who opened it has it listed.
+func knowPeer(d *device, conversationID []byte, peer *device) {
+	d.Keys().SetPeer(conversationID, peer.user.GetUserId())
 }
 
 // randomID is a 16-byte id nothing has.
@@ -220,11 +252,27 @@ func readEvent(t *testing.T, d *device, conversationID, userID []byte, seq uint6
 
 func isMessage(ev *pb.Event) bool { return ev.GetMessage() != nil }
 
+// text opens a message's sealed content on the device.
+func text(t *testing.T, d *device, m *pb.Message) string {
+	t.Helper()
+	s, err := d.MessageText(ctx(t), m)
+	if err != nil {
+		t.Fatalf("open message %d: %v", m.GetSeq(), err)
+	}
+	return s
+}
+
+// junkSealed is well-formed sealed content no device can open, for
+// requests that fail before the content matters.
+func junkSealed(epoch uint32) *pb.Sealed {
+	return &pb.Sealed{Epoch: epoch, Nonce: make([]byte, 12), Ciphertext: make([]byte, 32)}
+}
+
 // sendMessages sends n messages with client ids m1 to mn.
 func sendMessages(t *testing.T, d *device, conversationID []byte, n int, text string) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
-		if _, err := d.SendMessage(ctx(t), conversationID, fmt.Sprintf("m%d", i), text); err != nil {
+		if _, err := d.SendText(ctx(t), conversationID, fmt.Sprintf("m%d", i), text); err != nil {
 			t.Fatal(err)
 		}
 	}

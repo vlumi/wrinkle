@@ -180,7 +180,7 @@ func TestAddMembers(t *testing.T) {
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
 	id := newGroup(t, a, "Book club", b)
-	if _, err := a.SendMessage(ctx(t), id, "m1", "before carol"); err != nil {
+	if _, err := a.SendText(ctx(t), id, "m1", "before carol"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, id, 2)
@@ -206,11 +206,11 @@ func TestAddMembers(t *testing.T) {
 	if err != nil || len(msgs) != 1 || msgs[0].GetSeq() != 3 {
 		t.Fatalf("new member's history: %v %v", msgs, err)
 	}
-	if _, err := c.SendMessage(ctx(t), id, "m1", "hello all"); err != nil {
+	if _, err := c.SendText(ctx(t), id, "m1", "hello all"); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []*device{a, b} {
-		if got := messageEvent(t, d, id, 4); got.GetText() != "hello all" {
+		if got := messageEvent(t, d, id, 4); text(t, d, got) != "hello all" {
 			t.Fatalf("message from the new member: %v", got)
 		}
 	}
@@ -219,7 +219,7 @@ func TestAddMembers(t *testing.T) {
 	if err := a.AddMembers(ctx(t), id, []string{b.user.GetName(), c.user.GetName()}); err != nil {
 		t.Fatal(err)
 	}
-	if msg, err := a.SendMessage(ctx(t), id, "m2", "next"); err != nil || msg.GetSeq() != 5 {
+	if msg, err := a.SendText(ctx(t), id, "m2", "next"); err != nil || msg.GetSeq() != 5 {
 		t.Fatalf("adding existing members took a seq: %v %v", msg, err)
 	}
 
@@ -283,7 +283,7 @@ func TestRemoveMember(t *testing.T) {
 	}
 	waitConversation(t, a, id, func(c *pb.Conversation) bool { return c.GetMemberCount() == 2 && c.GetMember() && c.GetAdmin() })
 
-	_, err = c.SendMessage(ctx(t), id, "m1", "still here?")
+	_, err = c.SendText(ctx(t), id, "m1", "still here?")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
 	err = c.MarkRead(ctx(t), id, 1)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
@@ -295,7 +295,7 @@ func TestRemoveMember(t *testing.T) {
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_NOT_FOUND)
 
 	// The history stays, up to the removal.
-	if _, err := a.SendMessage(ctx(t), id, "m1", "after carol"); err != nil {
+	if _, err := a.SendText(ctx(t), id, "m1", "after carol"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, id, 3)
@@ -314,7 +314,7 @@ func TestRemoveMember(t *testing.T) {
 	if err != nil || len(msgs) != 1 || msgs[0].GetSeq() != 4 {
 		t.Fatalf("history after rejoining: %v %v", msgs, err)
 	}
-	if _, err := c.SendMessage(ctx(t), id, "m2", "back"); err != nil {
+	if _, err := c.SendText(ctx(t), id, "m2", "back"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -354,7 +354,7 @@ func TestLeaveGroup(t *testing.T) {
 	}
 	err = a.LeaveGroup(ctx(t), id)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
-	_, err = a.SendMessage(ctx(t), id, "m1", "gone")
+	_, err = a.SendText(ctx(t), id, "m1", "gone")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
 
 	// A member who is not an admin leaves without a promotion.
@@ -390,7 +390,7 @@ func TestSetTopic(t *testing.T) {
 	if err := c.SetTopic(ctx(t), id, "New topic"); err != nil {
 		t.Fatal(err)
 	}
-	if msg, err := a.SendMessage(ctx(t), id, "m1", "next"); err != nil || msg.GetSeq() != 3 {
+	if msg, err := a.SendText(ctx(t), id, "m1", "next"); err != nil || msg.GetSeq() != 3 {
 		t.Fatalf("an unchanged topic took a seq: %v %v", msg, err)
 	}
 
@@ -481,7 +481,7 @@ func TestGroupOrdering(t *testing.T) {
 	for _, d := range []*device{a, b, c} {
 		wg.Go(func() {
 			for i := range perSender {
-				if _, err := d.SendMessage(sendCtx, id, fmt.Sprintf("m%d", i), fmt.Sprintf("%s %d", d.user.GetName(), i)); err != nil {
+				if _, err := d.SendText(sendCtx, id, fmt.Sprintf("m%d", i), fmt.Sprintf("%s %d", d.user.GetName(), i)); err != nil {
 					errs <- err
 				}
 			}
@@ -537,7 +537,7 @@ func TestGroupReadPositions(t *testing.T) {
 	c := newUser(t, "carol")
 	id := newGroup(t, a, "Readers", b, c)
 
-	if _, err := a.SendMessage(ctx(t), id, "m1", "from alice"); err != nil {
+	if _, err := a.SendText(ctx(t), id, "m1", "from alice"); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []*device{a, b, c} {
@@ -551,7 +551,7 @@ func TestGroupReadPositions(t *testing.T) {
 	}
 	readEvent(t, a, id, b.user.GetUserId(), 2)
 	readEvent(t, b, id, b.user.GetUserId(), 2)
-	if _, err := a.SendMessage(ctx(t), id, "m2", "again"); err != nil {
+	if _, err := a.SendText(ctx(t), id, "m2", "again"); err != nil {
 		t.Fatal(err)
 	}
 	// Events of a conversation arrive in order, so Carol's next one would
@@ -591,7 +591,7 @@ func TestGroupReadPositions(t *testing.T) {
 	waitConversation(t, a, id, func(c *pb.Conversation) bool { return c.GetPeerReadSeq() == 0 && c.GetLastSeq() == 3 })
 
 	// Bob hears nothing of Carol's read; his next event is the next message.
-	if _, err := c.SendMessage(ctx(t), id, "m1", "from carol"); err != nil {
+	if _, err := c.SendText(ctx(t), id, "m1", "from carol"); err != nil {
 		t.Fatal(err)
 	}
 	if ev := nextEvent(t, b, func(*pb.Event) bool { return true }); ev.GetMessage().GetMessage().GetSeq() != 4 {

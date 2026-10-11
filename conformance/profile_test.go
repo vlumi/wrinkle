@@ -121,7 +121,7 @@ func TestProfileValidationAndIcon(t *testing.T) {
 func TestProfileEventReachesDevicesAndPartners(t *testing.T) {
 	a, b, conv := pair(t)
 	a2 := otherDevice(t, a)
-	if _, err := b.SendMessage(ctx(t), conv, "m1", "hi"); err != nil {
+	if _, err := b.SendText(ctx(t), conv, "m1", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []*device{a, a2, b} {
@@ -185,7 +185,7 @@ func TestNewConversationShowsPeerProfile(t *testing.T) {
 	if _, err := a.UpdateProfile(ctx(t), nil, ptr("frog")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.SendMessage(ctx(t), conv.GetConversationId(), "m1", "hi"); err != nil {
+	if _, err := a.SendText(ctx(t), conv.GetConversationId(), "m1", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, conv.GetConversationId(), 1)

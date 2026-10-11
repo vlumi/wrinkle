@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
+
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -31,11 +33,11 @@ func TestListConversations(t *testing.T) {
 		t.Fatalf("empty conversation: %v", c)
 	}
 
-	if _, err := a.SendMessage(ctx(t), conv, "m1", "first"); err != nil {
+	if _, err := a.SendText(ctx(t), conv, "m1", "first"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, b, conv, 1)
-	sent2, err := a.SendMessage(ctx(t), conv, "m2", "second")
+	sent2, err := a.SendText(ctx(t), conv, "m2", "second")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +48,7 @@ func TestListConversations(t *testing.T) {
 	if !bytes.Equal(c.GetPeer().GetUserId(), a.user.GetUserId()) || c.GetPeer().GetName() != a.user.GetName() {
 		t.Fatalf("wrong peer: %v", c.GetPeer())
 	}
-	if c.GetLastSeq() != 2 || c.GetLastMessage().GetSeq() != 2 || c.GetLastMessage().GetText() != sent2.GetText() {
+	if c.GetLastSeq() != 2 || c.GetLastMessage().GetSeq() != 2 || text(t, b, c.GetLastMessage()) != "second" || !proto.Equal(c.GetLastMessage().GetSealed(), sent2.GetSealed()) {
 		t.Fatalf("last message not reflected: %v", c)
 	}
 	if c.GetReadSeq() != 0 || c.GetPeerReadSeq() != 0 {
@@ -79,7 +81,9 @@ func TestListOrdersByActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.SendMessage(ctx(t), withB.GetConversationId(), "m", "from b"); err != nil {
+	knowPeer(b, withB.GetConversationId(), a)
+	knowPeer(c, withC.GetConversationId(), a)
+	if _, err := b.SendText(ctx(t), withB.GetConversationId(), "m", "from b"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, a, withB.GetConversationId(), 1)
@@ -90,7 +94,7 @@ func TestListOrdersByActivity(t *testing.T) {
 	if len(list) != 2 || !bytes.Equal(list[0].GetConversationId(), withB.GetConversationId()) || !bytes.Equal(list[1].GetConversationId(), withC.GetConversationId()) {
 		t.Fatalf("expected the active conversation first: %v", list)
 	}
-	if _, err := c.SendMessage(ctx(t), withC.GetConversationId(), "m", "from c"); err != nil {
+	if _, err := c.SendText(ctx(t), withC.GetConversationId(), "m", "from c"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, a, withC.GetConversationId(), 1)
@@ -105,12 +109,12 @@ func TestListOrdersByActivity(t *testing.T) {
 
 func TestSendingMarksOwnMessageRead(t *testing.T) {
 	a, b, conv := pair(t)
-	if _, err := b.SendMessage(ctx(t), conv, "m1", "from b"); err != nil {
+	if _, err := b.SendText(ctx(t), conv, "m1", "from b"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, a, conv, 1)
 	messageEvent(t, b, conv, 1)
-	if _, err := a.SendMessage(ctx(t), conv, "m2", "from a"); err != nil {
+	if _, err := a.SendText(ctx(t), conv, "m2", "from a"); err != nil {
 		t.Fatal(err)
 	}
 	// Once the sender's own log has the message, so has the sender's list.

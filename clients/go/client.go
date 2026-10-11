@@ -23,6 +23,8 @@ type Client struct {
 	Events chan *pb.Event
 	Pongs  chan struct{}
 
+	keys atomic.Pointer[Keys]
+
 	mu      sync.Mutex
 	pending map[uint64]chan *pb.Response
 	err     error
@@ -94,6 +96,7 @@ func (c *Client) readLoop() {
 				ch <- kind.Response
 			}
 		case *pb.Frame_Event:
+			c.Keys().observe(kind.Event)
 			c.Events <- kind.Event
 		case *pb.Frame_Pong:
 			select {

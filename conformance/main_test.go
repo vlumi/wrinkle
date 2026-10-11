@@ -52,7 +52,7 @@ func probe() error {
 	if err != nil {
 		return err
 	}
-	if _, err := a.SendMessage(ctx, conv.GetConversationId(), "probe", "probe"); err != nil {
+	if _, err := a.SendText(ctx, conv.GetConversationId(), "probe", "probe"); err != nil {
 		return err
 	}
 	for {
@@ -78,6 +78,9 @@ func probeUser(ctx context.Context, name string) (*wrinkleclient.Client, error) 
 	creds, err := c.Register(ctx, name, password, "probe")
 	if err == nil {
 		_, err = c.Connect(ctx, creds.GetDeviceToken())
+	}
+	if err == nil {
+		_, err = c.EnableKeys(ctx, creds.GetUserId(), creds.GetDeviceId())
 	}
 	if err != nil {
 		c.Close()

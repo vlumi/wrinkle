@@ -66,12 +66,15 @@ func (c *Client) OpenConversation(ctx context.Context, peerName string) (*pb.Con
 	if err != nil {
 		return nil, err
 	}
-	return resp.GetOpenConversation().GetConversation(), nil
+	conv := resp.GetOpenConversation().GetConversation()
+	c.Keys().learnConversation(conv)
+	return conv, nil
 }
 
-func (c *Client) SendMessage(ctx context.Context, conversationID []byte, clientMessageID, text string) (*pb.Message, error) {
+// SendMessage sends sealed content as it is; SendText seals and sends.
+func (c *Client) SendMessage(ctx context.Context, conversationID []byte, clientMessageID string, sealed *pb.Sealed) (*pb.Message, error) {
 	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SendMessage{
-		SendMessage: &pb.SendMessageRequest{ConversationId: conversationID, ClientMessageId: clientMessageID, Text: text}}})
+		SendMessage: &pb.SendMessageRequest{ConversationId: conversationID, ClientMessageId: clientMessageID, Sealed: sealed}}})
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +109,11 @@ func (c *Client) ListConversations(ctx context.Context) ([]*pb.Conversation, err
 	if err != nil {
 		return nil, err
 	}
-	return resp.GetListConversations().GetConversations(), nil
+	convs := resp.GetListConversations().GetConversations()
+	for _, conv := range convs {
+		c.Keys().learnConversation(conv)
+	}
+	return convs, nil
 }
 
 func (c *Client) GetMessages(ctx context.Context, conversationID []byte, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {

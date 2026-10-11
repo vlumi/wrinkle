@@ -163,7 +163,7 @@ func TestIdsAre16Bytes(t *testing.T) {
 	if len(a.user.GetUserId()) != 16 || len(b.user.GetUserId()) != 16 || len(conv) != 16 {
 		t.Fatalf("ids of %d, %d and %d bytes", len(a.user.GetUserId()), len(b.user.GetUserId()), len(conv))
 	}
-	msg, err := a.SendMessage(ctx(t), conv, "m1", "hi")
+	msg, err := a.SendText(ctx(t), conv, "m1", "hi")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -49,7 +49,14 @@ func TestRequestsBeforeConnect(t *testing.T) {
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
 	_, err = c.OpenConversation(ctx(t), uniqueName(t, "nobody"))
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
-	_, err = c.SendMessage(ctx(t), randomID(t), "m1", "hi")
+	_, err = c.SendMessage(ctx(t), randomID(t), "m1", junkSealed(1))
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	wantCode(t, c.SetDeviceKey(ctx(t), make([]byte, 32)), pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	_, err = c.GetDeviceKeys(ctx(t), [][]byte{randomID(t)})
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	err = c.PublishKeys(ctx(t), randomID(t), 1, []*pb.WrappedKey{{RecipientUserId: randomID(t), RecipientDeviceId: 1, Wrapped: make([]byte, 60)}})
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	_, err = c.GetConversationKeys(ctx(t), randomID(t), 0)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
 	err = c.ChangePassword(ctx(t), password, password+"!")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
@@ -110,7 +117,7 @@ func TestPing(t *testing.T) {
 
 func TestAckIsRememberedPerDevice(t *testing.T) {
 	a, b, conv := pair(t)
-	if _, err := b.SendMessage(ctx(t), conv, "m1", "hello"); err != nil {
+	if _, err := b.SendText(ctx(t), conv, "m1", "hello"); err != nil {
 		t.Fatal(err)
 	}
 	messageEvent(t, a, conv, 1)

@@ -11,7 +11,7 @@ func TestDeleteAccount(t *testing.T) {
 	a, b, conv := pair(t)
 	a2 := otherDevice(t, a)
 	name := a.user.GetName()
-	if _, err := b.SendMessage(ctx(t), conv, "m1", "hi"); err != nil {
+	if _, err := b.SendText(ctx(t), conv, "m1", "hi"); err != nil {
 		t.Fatal(err)
 	}
 	for _, d := range []*device{a, a2, b} {
