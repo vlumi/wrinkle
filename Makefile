@@ -73,9 +73,12 @@ run-java-mono: build-java  ## Java, all roles in one process
 
 INSTANCE ?= 1
 
-.PHONY: run-go-services run-go-gw run-elixir-gw run-rust-gw
+.PHONY: run-go-services run-java-services run-go-gw run-java-gw run-elixir-gw run-rust-gw
 run-go-services: build-go  ## Go services and fan-out, instance INSTANCE (RPC on :9100+n)
 	INSTANCE=$(INSTANCE) backends/go/services.sh $(ARGS)
+
+run-java-services: build-java  ## Java services and fan-out, instance INSTANCE; no pushes yet
+	INSTANCE=$(INSTANCE) backends/java/services.sh $(ARGS)
 
 run-go-gw: build-go  ## Go gateway on :8180
 	backends/gateway.sh go $(PORT)
@@ -85,6 +88,9 @@ run-elixir-gw: build-elixir  ## Elixir gateway on :8181
 
 run-rust-gw: build-rust  ## Rust gateway on :8182
 	backends/gateway.sh rust $(PORT)
+
+run-java-gw: build-java  ## Java gateway on :8183
+	backends/gateway.sh java $(PORT)
 
 .PHONY: lb-up lb-down
 lb-up:  ## The balancers: devices on :8080 to the gateways, gateways on :9100 to the services; statistics on localhost:8404
@@ -159,7 +165,7 @@ format:  ## Rewrite sources with each language's formatter
 
 test: go-test java-test elixir-test rust-test web-unit  ## Unit tests for everything
 
-conformance: conformance-go conformance-go-split conformance-java conformance-elixir conformance-rust  ## The conformance tests against every backend
+conformance: conformance-go conformance-go-split conformance-java conformance-java-split conformance-elixir conformance-rust  ## The conformance tests against every backend
 
 smoke: infra-up  ## The change-data path: an outbox insert reaches Kafka
 	infra/smoke-test.sh
@@ -170,9 +176,9 @@ web-test: infra-up web-deps build-go  ## The web client in headless Chrome again
 ios-test: infra-up build-go  ## The iOS client's package tests, headless, against the Go backend
 	clients/ios/Scripts/test-backend.sh $(GO_BACKEND)
 
-##~ conformance-go, -go-split, -java, -elixir, -rust test one backend.
+##~ conformance-go, -go-split, -java, -java-split, -elixir, -rust test one backend.
 
-.PHONY: conformance-go conformance-go-split conformance-java conformance-elixir conformance-rust
+.PHONY: conformance-go conformance-go-split conformance-java conformance-java-split conformance-elixir conformance-rust
 conformance-go: infra-up build-go
 	conformance/run.sh $(GO_BACKEND)
 
@@ -181,6 +187,9 @@ conformance-go-split: infra-up build-go
 
 conformance-java: infra-up build-java
 	conformance/run.sh $(JAVA_BACKEND)
+
+conformance-java-split: infra-up build-java
+	conformance/run.sh $(CURDIR)/backends/java/split.sh
 
 conformance-elixir: infra-up build-go elixir-deps
 	conformance/run.sh $(CURDIR)/backends/elixir/run.sh
@@ -194,13 +203,13 @@ CONNECTIONS ?= 1000
 RATE ?= 500
 DURATION ?= 30s
 
-.PHONY: load measure-go-mono measure-go-gw measure-java-mono measure-elixir-gw measure-rust-gw measure-all
+.PHONY: load measure-go-mono measure-go-gw measure-java-mono measure-java-gw measure-elixir-gw measure-rust-gw measure-all
 load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s)
 	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s
 
-measure-all: measure-go-mono measure-go-gw measure-java-mono measure-elixir-gw measure-rust-gw  ## The protocol against every backend, each from a fresh stack (about 50 minutes)
+measure-all: measure-go-mono measure-go-gw measure-java-mono measure-java-gw measure-elixir-gw measure-rust-gw  ## The protocol against every backend, each from a fresh stack (about an hour)
 
-##~ measure-go-mono, -java-mono, -go-gw, -elixir-gw, -rust-gw run the protocol for one (about 10 minutes each).
+##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw run the protocol for one (about 10 minutes each).
 
 measure-go-mono: infra-up build-go
 	FRESH=1 LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(GO_BACKEND)
@@ -210,6 +219,9 @@ measure-go-gw: infra-up build-go
 
 measure-java-mono: infra-up build-java
 	FRESH=1 LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
+
+measure-java-gw: infra-up build-java
+	FRESH=1 LABEL=java-gateway loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java-gateway.jsonl $(CURDIR)/backends/java/split.sh
 
 measure-elixir-gw: infra-up build-go elixir-deps
 	FRESH=1 LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh

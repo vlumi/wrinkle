@@ -10,6 +10,8 @@ if [ $# -eq 0 ]; then
   exit 2
 fi
 
+../backends/ports-free.sh 8080
+
 # A load run may have left undelivered records behind; do not make the
 # backend drain them before the first test.
 ../infra/reset-fanout.sh
