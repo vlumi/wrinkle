@@ -3,67 +3,128 @@ import SwiftData
 import SwiftUI
 import WrinkleCore
 
-/// The device's session: sign-in, the cursor into the user's log, and the flow of events into
-/// the store. Reconnects with backoff; after a reconnect it syncs from the stored cursor, so the
-/// device fetches only what it missed.
+/// Signing in, or creating an account.
+public enum AccountMode: Hashable, Sendable {
+    case signIn, register
+}
+
+/// The device's session: its account, the cursor into the user's log, and the flow of events
+/// into the store. Reconnects with backoff using the device token kept in the Keychain; after a
+/// reconnect it syncs from the stored cursor, so the device fetches only what it missed.
 @MainActor
 @Observable
 public final class AppState {
     public init() {}
 
-    public private(set) var userName: String?
+    /// The user as the backend last described them; nil until the first Connect.
     public private(set) var me: Wrinkle_V1_User?
     public private(set) var state: ConnectionState = .offline
-    public var lastError: String?
+    /// The last connection failure, for diagnostics.
+    public private(set) var lastError: String?
+    /// Why the device was returned to the sign-in screen, if not by its own choice.
+    public var notice: String?
     /// A conversation to show, set when a notification is tapped.
-    public var pendingConversation: Int64?
+    public var pendingConversation: IDHex?
 
+    private var credentials: Credentials?
     private var connection: Connection?
     private var store: Store?
     private var cursor: UInt64 = 0
-    private var deviceID: UInt64 = 0
     private var sessionTask: Task<Void, Never>?
-    private var url: URL?
     private var pushToken: (service: Wrinkle_V1_PushService, token: String)?
 
+    /// The simulator reaches the backend on the Mac directly.
     public static let defaultURL = "ws://localhost:8080/v1/ws"
+    /// A device on the network goes through the TLS edge on the Mac.
+    public static let networkURLHint = "wss://<mac>.local:8443/v1/ws"
     private static let syncLimit: UInt32 = 200
     static let historyPage: UInt32 = 50
+    private static let signOutWait: Duration = .seconds(3)
+    private static let signedOutNotice =
+        "This device was signed out, perhaps by a password change elsewhere. Sign in again."
 
     /// The device's name, without UIKit so the package compiles for the Mac too.
     static var deviceName: String {
         #if canImport(UIKit)
-        ProcessInfo.processInfo.hostName
+        AccountRules.deviceName(ProcessInfo.processInfo.hostName)
         #else
-        Host.current().localizedName ?? "mac"
+        AccountRules.deviceName(Host.current().localizedName ?? "mac")
         #endif
     }
 
-    public var isSignedIn: Bool { userName != nil }
+    public var isSignedIn: Bool { credentials != nil }
 
-    /// The signed-in user's id, or 0 before the first connect.
-    var myUserID: Int64 { me.map { Int64($0.userID) } ?? 0 }
+    /// The signed-in user's id, or empty when signed out.
+    var myUserID: IDHex { credentials?.userID.hex ?? "" }
 
-    public func signIn(name: String, url: String, context: ModelContext) {
-        signOut()
-        guard let wsURL = URL(string: url) else {
-            lastError = "bad gateway URL"
-            return
-        }
-        userName = name
-        self.url = wsURL
-        store = Store(context: context)
-        deviceID = SavedSession.deviceID(for: name)
-        cursor = SavedSession.cursor(for: name)
-        SavedSession.setLast(name: name, url: url)
-        startSession(name: name, url: wsURL)
+    /// The server last used, to fill in the sign-in form.
+    public var lastURL: String { credentials?.serverURL ?? SavedSession.lastURL ?? Self.defaultURL }
+
+    /// Resumes the saved session, if there is one.
+    public func resume(context: ModelContext) {
+        if store == nil { store = Store(context: context) }
+        SavedSession.migrate()
+        guard credentials == nil, let saved = Credentials.load() else { return }
+        credentials = saved
+        cursor = SavedSession.cursor(for: saved.deviceID)
+        startSession(first: nil)
     }
 
-    public func signOut() {
+    /// Registers or signs in on a new connection, then keeps it as the session's first.
+    public func authenticate(_ mode: AccountMode, name: String, password: String, url: String)
+        async throws
+    {
+        guard let wsURL = URL(string: url), ["ws", "wss"].contains(wsURL.scheme?.lowercased())
+        else { throw AccountError("Enter a ws:// or wss:// server URL.") }
         stopSession()
-        userName = nil
-        me = nil
-        SavedSession.forgetLast()
+        let conn = Connection(url: wsURL)
+        do {
+            try await conn.open()
+        } catch {
+            await conn.close()
+            throw AccountError("Cannot reach the server at \(url).")
+        }
+        let creds: Wrinkle_V1_DeviceCredentials
+        do {
+            switch mode {
+            case .register:
+                creds = try await conn.register(
+                    name: name, password: password, deviceName: Self.deviceName)
+            case .signIn:
+                creds = try await conn.signIn(
+                    name: name, password: password, deviceName: Self.deviceName)
+            }
+        } catch {
+            await conn.close()
+            throw error
+        }
+        // A new device: whatever an earlier account left here goes.
+        store?.reset()
+        let saved = Credentials(
+            userID: creds.userID, deviceID: creds.deviceID, deviceToken: creds.deviceToken,
+            serverURL: url)
+        saved.save()
+        SavedSession.setLastURL(url)
+        credentials = saved
+        cursor = 0
+        notice = nil
+        lastError = nil
+        startSession(first: conn)
+    }
+
+    /// Signs this device out on the backend, if it can within a few seconds, and forgets the
+    /// account and everything stored for it.
+    public func signOut() async {
+        if let connection, me != nil {
+            let request = Task { try? await connection.signOut() }
+            let deadline = Task {
+                try? await Task.sleep(for: Self.signOutWait)
+                await connection.close()
+            }
+            await request.value
+            deadline.cancel()
+        }
+        endSession(notice: nil)
     }
 
     /// The app went to the background: close the connection, so the backend
@@ -76,8 +137,8 @@ public final class AppState {
 
     /// The app is active again: reconnect and sync what was missed.
     public func enterForeground() {
-        guard let userName, let url, sessionTask == nil else { return }
-        startSession(name: userName, url: url)
+        guard credentials != nil, sessionTask == nil else { return }
+        startSession(first: nil)
     }
 
     /// The token APNs issued this device; registered now if connected, and
@@ -90,15 +151,8 @@ public final class AppState {
         }
     }
 
-    /// Resumes the last session, if there was one.
-    public func resume(context: ModelContext) {
-        if let last = SavedSession.last {
-            signIn(name: last.name, url: last.url, context: context)
-        }
-    }
-
-    private func startSession(name: String, url: URL) {
-        sessionTask = Task { await self.runSession(name: name, url: url) }
+    private func startSession(first: Connection?) {
+        sessionTask = Task { await self.runSession(first: first) }
     }
 
     private func stopSession() {
@@ -109,20 +163,42 @@ public final class AppState {
         state = .offline
     }
 
-    private func runSession(name: String, url: URL) async {
+    /// Back to the sign-in screen: the Keychain entry, the cursor and the local store go.
+    private func endSession(notice: String?) {
+        stopSession()
+        if let credentials { SavedSession.forgetCursor(for: credentials.deviceID) }
+        Credentials.delete()
+        credentials = nil
+        me = nil
+        cursor = 0
+        pendingConversation = nil
+        store?.reset()
+        self.notice = notice
+    }
+
+    /// Runs connections until cancelled. `first` is already open, from signing in.
+    private func runSession(first: Connection?) async {
+        var opened = first
         var backoff: Duration = .milliseconds(500)
-        while !Task.isCancelled {
-            let conn = Connection(url: url)
+        while !Task.isCancelled, let creds = credentials, let url = URL(string: creds.serverURL) {
+            let conn = opened ?? Connection(url: url)
+            let isOpen = opened != nil
+            opened = nil
             connection = conn
             let stateTask = Task { for await s in conn.states { self.state = s } }
             do {
-                try await conn.open()
+                if !isOpen { try await conn.open() }
                 backoff = .milliseconds(500)
-                try await onOpen(conn, name: name)
+                try await onOpen(conn, creds)
                 for await event in conn.events {
                     if Task.isCancelled { break }
                     await onEvent(event, conn)
                 }
+            } catch is TokenRejected {
+                stateTask.cancel()
+                await conn.close()
+                endSession(notice: Self.signedOutNotice)
+                return
             } catch {
                 lastError = "\(error)"
             }
@@ -135,12 +211,16 @@ public final class AppState {
         }
     }
 
-    private func onOpen(_ conn: Connection, name: String) async throws {
-        let resp = try await conn.connect(
-            userName: name, deviceID: deviceID, deviceName: Self.deviceName)
+    private struct TokenRejected: Error {}
+
+    private func onOpen(_ conn: Connection, _ creds: Credentials) async throws {
+        let resp: Wrinkle_V1_ConnectResponse
+        do {
+            resp = try await conn.connect(deviceToken: creds.deviceToken)
+        } catch let e as BackendError where e.code == .unauthenticated {
+            throw TokenRejected()
+        }
         me = resp.user
-        deviceID = resp.deviceID
-        SavedSession.setDeviceID(deviceID, for: name)
         if cursor == 0 {
             // A device without history starts at the head; the past comes from the
             // conversation list and history requests.
@@ -155,7 +235,7 @@ public final class AppState {
 
     private func advanceCursor(to next: UInt64) {
         cursor = next
-        if let userName { SavedSession.setCursor(cursor, for: userName) }
+        if let credentials { SavedSession.setCursor(cursor, for: credentials.deviceID) }
     }
 
     private func refreshConversations(_ conn: Connection) async throws {
@@ -166,10 +246,10 @@ public final class AppState {
     }
 
     private func syncFromCursor(_ conn: Connection) async throws {
-        guard let store, let me else { return }
+        guard let store, me != nil else { return }
         while true {
             let resp = try await conn.sync(cursor: cursor, limit: Self.syncLimit)
-            for e in resp.events { _ = store.apply(e, me: Int64(me.userID)) }
+            for e in resp.events { apply(e, store) }
             store.save()
             advanceCursor(to: resp.cursor)
             if !resp.hasMore_p { break }
@@ -177,8 +257,16 @@ public final class AppState {
         try await conn.ack(cursor: cursor)
     }
 
+    @discardableResult
+    private func apply(_ event: Wrinkle_V1_Event, _ store: Store) -> StoredConversation? {
+        if case .profile(let p) = event.body, p.user.userID.hex == myUserID {
+            me = p.user
+        }
+        return store.apply(event, me: myUserID)
+    }
+
     private func onEvent(_ event: Wrinkle_V1_Event, _ conn: Connection) async {
-        guard let store, let me else { return }
+        guard let store, me != nil else { return }
         // Pushes and sync overlap; the cursor tells them apart. A gap means
         // something was missed: sync fills it.
         guard event.cursor > cursor else { return }
@@ -186,7 +274,7 @@ public final class AppState {
             try? await syncFromCursor(conn)
             return
         }
-        if store.apply(event, me: Int64(me.userID)) == nil, case .message = event.body {
+        if apply(event, store) == nil, case .message = event.body {
             // The first message of a conversation the peer opened.
             try? await refreshConversations(conn)
         }
@@ -195,29 +283,43 @@ public final class AppState {
         try? await conn.ack(cursor: cursor)
     }
 
-    // MARK: Actions
+}
 
-    public func openConversation(peerName: String) async throws -> Int64 {
-        guard let connection, let store else { throw URLError(.notConnectedToInternet) }
-        let c = try await connection.openConversation(peerUserName: peerName)
+// MARK: Actions
+
+extension AppState {
+    private func connected() throws -> (Connection, Store) {
+        guard let connection, let store, me != nil else { throw AccountError("Not connected.") }
+        return (connection, store)
+    }
+
+    private func wireID(_ hex: IDHex) throws -> Data {
+        guard let id = Data.id(hex: hex) else { throw AccountError("Unknown conversation.") }
+        return id
+    }
+
+    public func openConversation(peerName: String) async throws -> IDHex {
+        let (connection, store) = try connected()
+        let c = try await connection.openConversation(peerName: peerName)
         let stored = store.upsert(c)
         store.save()
         return stored.id
     }
 
-    public func loadHistory(conversationID: Int64, before: Int64?) async throws {
-        guard let connection, let store else { return }
+    public func loadHistory(conversationID: IDHex, before: Int64?) async throws {
+        let (connection, store) = try connected()
         let messages = try await connection.getMessages(
-            conversationID: UInt64(conversationID), beforeSeq: UInt64(before ?? 0),
+            conversationID: try wireID(conversationID), beforeSeq: UInt64(before ?? 0),
             limit: Self.historyPage)
         for m in messages { store.insert(m) }
         store.save()
     }
 
-    public func send(text: String, in conversationID: Int64) async throws {
-        guard let connection, let store else { throw URLError(.notConnectedToInternet) }
+    public func send(text: String, in conversationID: IDHex) async throws {
+        let (connection, store) = try connected()
         let m = try await connection.sendMessage(
-            conversationID: UInt64(conversationID), clientMessageID: UUID().uuidString, text: text)
+            conversationID: try wireID(conversationID), clientMessageID: UUID().uuidString,
+            text: text)
         store.insert(m)
         if let c = store.conversation(conversationID), c.noteLatest(m) {
             c.readSeq = Int64(m.seq)
@@ -226,14 +328,33 @@ public final class AppState {
     }
 
     /// Marks the conversation read up to its last message, if anything is unread.
-    public func markRead(conversationID: Int64) {
-        guard let connection, let store, let c = store.conversation(conversationID), c.unread > 0
+    public func markRead(conversationID: IDHex) {
+        guard let session = try? connected() else { return }
+        let (connection, store) = session
+        guard let id = Data.id(hex: conversationID), let c = store.conversation(conversationID),
+            c.unread > 0
         else { return }
         let seq = c.lastSeq
         c.readSeq = seq
         store.save()
-        Task {
-            try? await connection.markRead(conversationID: UInt64(conversationID), seq: UInt64(seq))
-        }
+        Task { try? await connection.markRead(conversationID: id, seq: UInt64(seq)) }
     }
+
+    /// Changes the given fields of the profile; nil keeps a field.
+    public func updateProfile(name: String? = nil, icon: String? = nil) async throws {
+        let (connection, _) = try connected()
+        me = try await connection.updateProfile(name: name, icon: icon)
+    }
+
+    /// Changes the password; the account's other devices are signed out.
+    public func changePassword(current: String, new: String) async throws {
+        let (connection, _) = try connected()
+        try await connection.changePassword(current: current, new: new)
+    }
+}
+
+/// A failure the client itself detected, worded for the user.
+public struct AccountError: Error, CustomStringConvertible {
+    public let description: String
+    init(_ description: String) { self.description = description }
 }

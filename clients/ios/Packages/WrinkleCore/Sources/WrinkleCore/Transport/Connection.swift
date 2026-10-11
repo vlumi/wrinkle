@@ -140,25 +140,70 @@ public actor Connection {
 
     // MARK: Requests
 
-    public func connect(userName: String, deviceID: UInt64, deviceName: String) async throws
-        -> Wrinkle_V1_ConnectResponse
+    /// Creates an account and signs this device in; Connect with the token follows.
+    public func register(name: String, password: String, deviceName: String) async throws
+        -> Wrinkle_V1_DeviceCredentials
     {
-        let r = try await call(
-            .connect(
+        try await call(
+            .register(
                 .with {
-                    $0.userName = userName
-                    $0.deviceID = deviceID
+                    $0.name = name
+                    $0.password = password
                     $0.deviceName = deviceName
-                }))
-        return r.connect
+                })
+        ).register.credentials
     }
 
-    public func openConversation(peerUserName: String) async throws -> Wrinkle_V1_Conversation {
-        try await call(.openConversation(.with { $0.peerUserName = peerUserName }))
+    /// Signs this device in to an existing account; Connect with the token follows.
+    public func signIn(name: String, password: String, deviceName: String) async throws
+        -> Wrinkle_V1_DeviceCredentials
+    {
+        try await call(
+            .signIn(
+                .with {
+                    $0.name = name
+                    $0.password = password
+                    $0.deviceName = deviceName
+                })
+        ).signIn.credentials
+    }
+
+    public func connect(deviceToken: String) async throws -> Wrinkle_V1_ConnectResponse {
+        try await call(.connect(.with { $0.deviceToken = deviceToken })).connect
+    }
+
+    public func changePassword(current: String, new: String) async throws {
+        _ = try await call(
+            .changePassword(
+                .with {
+                    $0.currentPassword = current
+                    $0.newPassword = new
+                }))
+    }
+
+    /// Changes the given fields of the profile; nil keeps a field.
+    public func updateProfile(name: String? = nil, icon: String? = nil) async throws
+        -> Wrinkle_V1_User
+    {
+        try await call(
+            .updateProfile(
+                .with {
+                    if let name { $0.name = name }
+                    if let icon { $0.icon = icon }
+                })
+        ).updateProfile.user
+    }
+
+    public func signOut() async throws {
+        _ = try await call(.signOut(Wrinkle_V1_SignOutRequest()))
+    }
+
+    public func openConversation(peerName: String) async throws -> Wrinkle_V1_Conversation {
+        try await call(.openConversation(.with { $0.peerName = peerName }))
             .openConversation.conversation
     }
 
-    public func sendMessage(conversationID: UInt64, clientMessageID: String, text: String)
+    public func sendMessage(conversationID: Data, clientMessageID: String, text: String)
         async throws -> Wrinkle_V1_Message
     {
         try await call(
@@ -171,7 +216,7 @@ public actor Connection {
         ).sendMessage.message
     }
 
-    public func markRead(conversationID: UInt64, seq: UInt64) async throws {
+    public func markRead(conversationID: Data, seq: UInt64) async throws {
         _ = try await call(
             .markRead(
                 .with {
@@ -195,7 +240,7 @@ public actor Connection {
             .listConversations.conversations
     }
 
-    public func getMessages(conversationID: UInt64, beforeSeq: UInt64, limit: UInt32)
+    public func getMessages(conversationID: Data, beforeSeq: UInt64, limit: UInt32)
         async throws -> [Wrinkle_V1_Message]
     {
         try await call(

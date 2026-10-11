@@ -56,9 +56,10 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        # A development client talking to a local backend over plain ws://.
+        # Plain ws:// only to local hosts (the simulator's localhost, <mac>.local);
+        # the TLS edge's wss:// passes default ATS once its mkcert root is trusted.
         NSAppTransportSecurity:
-          NSAllowsArbitraryLoads: true
+          NSAllowsLocalNetworking: true
         # Asked the first time the app reaches a backend on the local network.
         NSLocalNetworkUsageDescription: Wrinkle connects to a messaging backend on your local network.
     dependencies:

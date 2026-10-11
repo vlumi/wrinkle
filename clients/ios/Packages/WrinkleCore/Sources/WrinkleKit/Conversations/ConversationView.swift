@@ -3,14 +3,14 @@ import SwiftUI
 import WrinkleCore
 
 struct ConversationView: View {
-    let conversationID: Int64
+    let conversationID: IDHex
     @Environment(AppState.self) private var app
     @Query private var conversations: [StoredConversation]
     @Query private var messages: [StoredMessage]
     @State private var text = ""
     @State private var error: String?
 
-    init(conversationID: Int64) {
+    init(conversationID: IDHex) {
         self.conversationID = conversationID
         let id = conversationID
         _conversations = Query(filter: #Predicate<StoredConversation> { $0.id == id })
@@ -64,6 +64,16 @@ struct ConversationView: View {
         }
         .navigationTitle(conversation?.peerName ?? "")
         .inlineTitle()
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                if let conversation {
+                    HStack(spacing: 8) {
+                        Avatar(name: conversation.peerName, icon: conversation.peerIcon, size: 28)
+                        Text(conversation.peerName).font(.headline)
+                    }
+                }
+            }
+        }
         .task {
             if messages.isEmpty {
                 try? await app.loadHistory(conversationID: conversationID, before: nil)
@@ -81,7 +91,7 @@ struct ConversationView: View {
                 try await app.send(text: t, in: conversationID)
                 error = nil
             } catch {
-                self.error = "\(error)"
+                self.error = errorText(error)
             }
         }
     }

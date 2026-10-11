@@ -1,44 +1,37 @@
 import Foundation
 
-/// What the device remembers between launches: per user, the device id the backend assigned and
-/// the cursor into the user's log; and the last session, resumed on launch until signed out.
+/// What the device remembers between launches outside the Keychain: the cursor into the user's
+/// log, per device, and the server last used, to fill in the sign-in form.
 enum SavedSession {
     private static var defaults: UserDefaults { .standard }
-    private static let lastName = "wrinkle.last.name"
-    private static let lastURL = "wrinkle.last.url"
+    private static let versionKey = "wrinkle.version"
+    private static let urlKey = "wrinkle.url"
+    private static let version = 2
 
-    private static func key(_ user: String, _ what: String) -> String { "wrinkle.\(user).\(what)" }
+    private static func cursorKey(_ deviceID: UInt64) -> String { "wrinkle.cursor.\(deviceID)" }
 
-    private static func number(_ key: String) -> UInt64 {
-        UInt64(defaults.string(forKey: key) ?? "0") ?? 0
+    /// Drops what earlier versions saved, keyed by user name and with integer ids.
+    static func migrate() {
+        guard defaults.integer(forKey: versionKey) != version else { return }
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix("wrinkle.") {
+            defaults.removeObject(forKey: key)
+        }
+        defaults.set(version, forKey: versionKey)
     }
 
-    static func deviceID(for user: String) -> UInt64 { number(key(user, "device")) }
-
-    static func setDeviceID(_ id: UInt64, for user: String) {
-        defaults.set(String(id), forKey: key(user, "device"))
+    static func cursor(for deviceID: UInt64) -> UInt64 {
+        UInt64(defaults.string(forKey: cursorKey(deviceID)) ?? "0") ?? 0
     }
 
-    static func cursor(for user: String) -> UInt64 { number(key(user, "cursor")) }
-
-    static func setCursor(_ cursor: UInt64, for user: String) {
-        defaults.set(String(cursor), forKey: key(user, "cursor"))
+    static func setCursor(_ cursor: UInt64, for deviceID: UInt64) {
+        defaults.set(String(cursor), forKey: cursorKey(deviceID))
     }
 
-    static var last: (name: String, url: String)? {
-        guard let name = defaults.string(forKey: lastName),
-            let url = defaults.string(forKey: lastURL)
-        else { return nil }
-        return (name, url)
+    static func forgetCursor(for deviceID: UInt64) {
+        defaults.removeObject(forKey: cursorKey(deviceID))
     }
 
-    static func setLast(name: String, url: String) {
-        defaults.set(name, forKey: lastName)
-        defaults.set(url, forKey: lastURL)
-    }
+    static var lastURL: String? { defaults.string(forKey: urlKey) }
 
-    /// Keeps the URL, which only resumes together with a name.
-    static func forgetLast() {
-        defaults.removeObject(forKey: lastName)
-    }
+    static func setLastURL(_ url: String) { defaults.set(url, forKey: urlKey) }
 }

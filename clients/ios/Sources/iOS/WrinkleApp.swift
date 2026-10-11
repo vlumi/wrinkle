@@ -8,13 +8,24 @@ import WrinkleKit
 @main
 struct WrinkleApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    private let container = Self.makeContainer()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(delegate.app)
         }
-        .modelContainer(for: Store.models)
+        .modelContainer(container)
+    }
+
+    /// The store is a cache of the backend: if it cannot be opened, the app runs on an
+    /// in-memory one and fetches again.
+    private static func makeContainer() -> ModelContainer {
+        if let container = try? Store.container() { return container }
+        let memory = ModelConfiguration(isStoredInMemoryOnly: true)
+        // An in-memory container of the app's own models cannot fail.
+        // swiftlint:disable:next force_try
+        return try! ModelContainer(for: Store.schema, configurations: memory)
     }
 }
 
@@ -63,7 +74,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
     ) async {
         let info = response.notification.request.content.userInfo
-        guard let id = (info["conversation_id"] as? String).flatMap(Int64.init) else { return }
+        // The payload carries the conversation id as lowercase hex.
+        guard let id = info["conversation_id"] as? String, Data.id(hex: id) != nil else { return }
         await MainActor.run { app.pendingConversation = id }
     }
 

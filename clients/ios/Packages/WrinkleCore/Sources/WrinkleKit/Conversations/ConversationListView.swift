@@ -8,7 +8,8 @@ struct ConversationListView: View {
     @Query(sort: \StoredConversation.updatedAt, order: .reverse)
     private var conversations: [StoredConversation]
     @State private var peerName = ""
-    @State private var path: [Int64] = []
+    @State private var path: [IDHex] = []
+    @State private var showProfile = false
     @State private var error: String?
 
     var body: some View {
@@ -34,7 +35,7 @@ struct ConversationListView: View {
                 }
             }
             .navigationTitle(app.me?.name ?? "Wrinkle")
-            .navigationDestination(for: Int64.self) { id in
+            .navigationDestination(for: IDHex.self) { id in
                 ConversationView(conversationID: id)
             }
             .onChange(of: app.pendingConversation, initial: true) { _, id in
@@ -50,7 +51,22 @@ struct ConversationListView: View {
                     StatusBadge(state: app.state)
                 }
                 ToolbarItem(placement: Toolbar.trailing) {
-                    Button("Sign out") { app.signOut() }
+                    Button {
+                        showProfile = true
+                    } label: {
+                        Avatar(name: app.me?.name ?? "", icon: app.me?.icon ?? "", size: 30)
+                    }
+                    .accessibilityLabel("Profile")
+                }
+            }
+            .sheet(isPresented: $showProfile) {
+                NavigationStack {
+                    ProfileView()
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { showProfile = false }
+                            }
+                        }
                 }
             }
         }
@@ -68,7 +84,7 @@ struct ConversationListView: View {
                 error = nil
                 path = [id]
             } catch {
-                self.error = "\(error)"
+                self.error = errorText(error, [.notFound: "No one by that name."])
             }
         }
     }

@@ -3,10 +3,11 @@ import WrinkleCore
 
 struct ConversationRow: View {
     let conversation: StoredConversation
-    let me: Int64
+    let me: IDHex
 
     var body: some View {
         HStack {
+            Avatar(name: conversation.peerName, icon: conversation.peerIcon)
             VStack(alignment: .leading) {
                 Text(conversation.peerName).font(.headline)
                 if let last = conversation.lastText {
