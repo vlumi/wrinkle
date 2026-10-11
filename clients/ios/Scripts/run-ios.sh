@@ -36,7 +36,10 @@ elif want:
 else:
     print(booted or sorted(matches)[0][3])
 ')"
-[ -n "$udid" ] || { echo "error: no available iOS 26 iPhone simulator${device:+ matching '$device'}" >&2; exit 1; }
+[ -n "$udid" ] || {
+  echo "error: no available iOS 26 iPhone simulator${device:+ matching \"$device\"}" >&2
+  exit 1
+}
 
 echo "Simulator: $udid"
 open -a Simulator
@@ -44,6 +47,9 @@ xcrun simctl bootstatus "$udid" -b >/dev/null 2>&1 || true
 
 Scripts/build.sh
 app="$derived/Build/Products/Debug-iphonesimulator/Wrinkle.app"
-[ -d "$app" ] || { echo "error: built app not found at $app" >&2; exit 1; }
+[ -d "$app" ] || {
+  echo "error: built app not found at $app" >&2
+  exit 1
+}
 xcrun simctl install "$udid" "$app"
 xcrun simctl launch "$udid" "$bundle_id"

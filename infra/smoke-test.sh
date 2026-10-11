@@ -10,8 +10,8 @@ CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
 
 echo "waiting for the outbox connector to run"
 for _ in $(seq 1 60); do
-  state=$(curl -sf "$CONNECT_URL/connectors/wrinkle-outbox/status" 2>/dev/null \
-    | sed -n 's/.*"tasks":\[{"id":0,"state":"\([A-Z]*\)".*/\1/p')
+  state=$(curl -sf "$CONNECT_URL/connectors/wrinkle-outbox/status" 2>/dev/null |
+    sed -n 's/.*"tasks":\[{"id":0,"state":"\([A-Z]*\)".*/\1/p')
   if [ "$state" = "RUNNING" ]; then break; fi
   sleep 2
 done

@@ -5,11 +5,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 if ! command -v xcodegen >/dev/null; then
-    echo "error: xcodegen not found (brew install xcodegen)." >&2
-    exit 1
+  echo "error: xcodegen not found (brew install xcodegen)." >&2
+  exit 1
 fi
 if [ -z "${WRINKLE_TEAM_ID:-}" ] && [ -f ../../.env ]; then
-    WRINKLE_TEAM_ID=$(sed -n 's/^WRINKLE_TEAM_ID=//p' ../../.env | tr -d "\"' ")
+  WRINKLE_TEAM_ID=$(sed -n 's/^WRINKLE_TEAM_ID=//p' ../../.env | tr -d "\"' ")
 fi
 export WRINKLE_TEAM_ID="${WRINKLE_TEAM_ID:-}"
 xcodegen generate --quiet

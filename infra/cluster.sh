@@ -28,6 +28,7 @@ case ${1:-} in
     # Push settings from .env, with the key file resolved for mounting.
     if [ -f .env ]; then
       set -a
+      # shellcheck source=/dev/null
       . ./.env
       set +a
     fi

@@ -13,8 +13,8 @@ for _ in $(seq 1 60); do
 done
 
 if ! curl -sf -X PUT -H 'Content-Type: application/json' \
-    --data @outbox-connector.json \
-    "$CONNECT_URL/connectors/$NAME/config" -o "$response"; then
+  --data @outbox-connector.json \
+  "$CONNECT_URL/connectors/$NAME/config" -o "$response"; then
   echo "registering $NAME failed: $(cat "$response")" >&2
   exit 1
 fi

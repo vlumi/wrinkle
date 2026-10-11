@@ -11,7 +11,10 @@ case $lang in
   elixir) port=${2:-8181} ;;
   rust) port=${2:-8182} ;;
   java) port=${2:-8183} ;;
-  *) echo "usage: gateway.sh go|elixir|rust|java [port]" >&2; exit 2 ;;
+  *)
+    echo "usage: gateway.sh go|elixir|rust|java [port]" >&2
+    exit 2
+    ;;
 esac
 if ! curl -sf "http://localhost:8404/;csv" | grep -q "^services,BACKEND,.*,UP,"; then
   echo "No services to forward to: start make lb-up and a services instance (make run-go-services) first." >&2
@@ -19,7 +22,8 @@ if ! curl -sf "http://localhost:8404/;csv" | grep -q "^services,BACKEND,.*,UP,";
 fi
 ./ports-free.sh "$port"
 
-export WRINKLE_SERVICES=127.0.0.1:9100 WRINKLE_LISTEN=":$port" WRINKLE_NODE="$(hostname -s)-$lang-$port"
+node="$(hostname -s)-$lang-$port"
+export WRINKLE_SERVICES=127.0.0.1:9100 WRINKLE_LISTEN=":$port" WRINKLE_NODE="$node"
 echo "$lang gateway on ws://localhost:$port/v1/ws"
 case $lang in
   go) exec ../bin/wrinkle --roles gateway ;;

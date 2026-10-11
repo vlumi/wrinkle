@@ -12,13 +12,14 @@ want="${1:-}"
 
 Scripts/generate.sh
 if ! grep -q 'DEVELOPMENT_TEAM = [A-Z0-9]' Wrinkle.xcodeproj/project.pbxproj; then
-    echo "error: no team; set WRINKLE_TEAM_ID in the repository's .env" >&2
-    exit 1
+  echo "error: no team; set WRINKLE_TEAM_ID in the repository's .env" >&2
+  exit 1
 fi
 
 json=$(mktemp)
 xcrun devicectl list devices --json-output "$json" >/dev/null
-device=$(WANT="$want" python3 - "$json" <<'PY'
+device=$(
+  WANT="$want" python3 - "$json" <<'PY'
 import json, os, sys
 want = os.environ["WANT"].lower()
 for d in json.load(open(sys.argv[1]))["result"]["devices"]:
@@ -33,12 +34,15 @@ for d in json.load(open(sys.argv[1]))["result"]["devices"]:
 PY
 )
 rm -f "$json"
-[ -n "$device" ] || { echo "error: no paired iPhone${want:+ matching '$want'}" >&2; exit 1; }
+[ -n "$device" ] || {
+  echo "error: no paired iPhone${want:+ matching \"$want\"}" >&2
+  exit 1
+}
 
 echo "Building for the device..."
 xcodebuild -project Wrinkle.xcodeproj -scheme Wrinkle-iOS \
-    -destination "generic/platform=iOS" -configuration Debug \
-    -derivedDataPath "$derived" -allowProvisioningUpdates -quiet build
+  -destination "generic/platform=iOS" -configuration Debug \
+  -derivedDataPath "$derived" -allowProvisioningUpdates -quiet build
 
 app="$derived/Build/Products/Debug-iphoneos/Wrinkle.app"
 xcrun devicectl device install app --device "$device" "$app"
