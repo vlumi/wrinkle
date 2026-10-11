@@ -28,6 +28,11 @@
 // are dropped. The server sends WebSocket pings every 30 seconds and closes
 // a connection it has received nothing on for 90.
 //
+// Connect waits up to 5 seconds for the user's pushes to be set up. If they
+// are not, it fails with ERROR_CODE_UNAVAILABLE and the connection stays
+// open but not connected; the client may send Connect again within a fresh
+// 5 seconds.
+//
 // The server closes a connection with these codes; after any of them, a
 // client reconnects with backoff and syncs:
 //   1001  the server is shutting down or the connection was idle
