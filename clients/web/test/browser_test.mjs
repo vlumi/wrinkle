@@ -130,7 +130,7 @@ const visible = (sel) => `(() => { const el = document.querySelector(${JSON.stri
 
 check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
 await alice.waitFor(`!!${q("url")}`);
-check((await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8180/v1/ws", "the gateway defaults to the page's host");
+check((await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8080/v1/ws", "the gateway defaults to the page's host");
 check((await alice.eval(`${qa("gateway")}.length`)) === 0, "no gateways are remembered before the first sign-in");
 
 const GATEWAY = "ws://wrinkle.test:8080/v1/ws";
