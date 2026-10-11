@@ -1,7 +1,8 @@
 import SwiftUI
 import WrinkleCore
 
-/// The signed-in user's name, icon and password, and signing out.
+/// The signed-in user's name, picture, icon, password and devices; signing out and deleting
+/// the account.
 struct ProfileView: View {
     @Environment(AppState.self) private var app
     @State private var name = ""
@@ -26,7 +27,7 @@ struct ProfileView: View {
         Form {
             Section {
                 VStack(spacing: 8) {
-                    Avatar(name: me.name, icon: me.icon, size: 72)
+                    Avatar(user: me, size: 72)
                     Text(me.name).font(.title2)
                 }
                 .frame(maxWidth: .infinity)
@@ -37,6 +38,7 @@ struct ProfileView: View {
                     .disabled(busy || trimmedName.isEmpty || trimmedName == me.name)
                 StatusText(status: nameStatus)
             }
+            PictureSection()
             Section("Icon") {
                 LazyVGrid(columns: columns, spacing: 8) {
                     iconButton("")
@@ -59,6 +61,7 @@ struct ProfileView: View {
             } footer: {
                 Text("Changing the password signs out your other devices.")
             }
+            DevicesSection()
             Section {
                 Button("Sign out", role: .destructive) {
                     busy = true
@@ -66,6 +69,7 @@ struct ProfileView: View {
                 }
                 .disabled(busy)
             }
+            DeleteAccountSection()
         }
         .navigationTitle("Profile")
         .onAppear { name = me.name }

@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import SwiftData
 import SwiftUI
@@ -17,7 +18,7 @@ public final class AppState {
     public init() {}
 
     /// The user as the backend last described them; nil until the first Connect.
-    public private(set) var me: Wrinkle_V1_User?
+    public internal(set) var me: Wrinkle_V1_User?
     public private(set) var state: ConnectionState = .offline
     /// The last connection failure, for diagnostics.
     public private(set) var lastError: String?
@@ -25,6 +26,10 @@ public final class AppState {
     public var notice: String?
     /// A conversation to show, set when a notification is tapped.
     public var pendingConversation: IDHex?
+    /// The account's signed-in devices, once listed; kept current by device events.
+    public internal(set) var devices: [Wrinkle_V1_Device] = []
+    /// Avatars decoded so far, by blob id as hex.
+    var avatarImages: [String: CGImage] = [:]
 
     private var credentials: Credentials?
     private var connection: Connection?
@@ -40,8 +45,10 @@ public final class AppState {
     private static let syncLimit: UInt32 = 200
     static let historyPage: UInt32 = 50
     private static let signOutWait: Duration = .seconds(3)
-    private static let signedOutNotice =
+    private static let rejectedNotice =
         "This device was signed out, perhaps by a password change elsewhere. Sign in again."
+    private static let signedOutNotice = "Signed out."
+    static let deletedNotice = "Account deleted."
 
     /// The device's name, without UIKit so the package compiles for the Mac too.
     static var deviceName: String {
@@ -56,6 +63,14 @@ public final class AppState {
 
     /// The signed-in user's id, or empty when signed out.
     var myUserID: IDHex { credentials?.userID.hex ?? "" }
+
+    /// This device's id, or nil when signed out.
+    var myDeviceID: UInt64? { credentials?.deviceID }
+
+    /// Where the server's blobs are read and uploaded.
+    var blobBase: URL? {
+        credentials.flatMap { URL(string: $0.serverURL) }.flatMap { BlobAddress.base(gateway: $0) }
+    }
 
     /// The server last used, to fill in the sign-in form.
     public var lastURL: String { credentials?.serverURL ?? SavedSession.lastURL ?? Self.defaultURL }
@@ -164,7 +179,7 @@ public final class AppState {
     }
 
     /// Back to the sign-in screen: the Keychain entry, the cursor and the local store go.
-    private func endSession(notice: String?) {
+    func endSession(notice: String?) {
         stopSession()
         if let credentials { SavedSession.forgetCursor(for: credentials.deviceID) }
         Credentials.delete()
@@ -172,6 +187,7 @@ public final class AppState {
         me = nil
         cursor = 0
         pendingConversation = nil
+        devices = []
         store?.reset()
         self.notice = notice
     }
@@ -197,12 +213,18 @@ public final class AppState {
             } catch is TokenRejected {
                 stateTask.cancel()
                 await conn.close()
-                endSession(notice: Self.signedOutNotice)
+                endSession(notice: Self.rejectedNotice)
                 return
             } catch {
                 lastError = "\(error)"
             }
             stateTask.cancel()
+            // Signed out elsewhere, or the account deleted: no reconnecting.
+            if !Task.isCancelled, await conn.closeCode == CloseCode.signedOut {
+                await conn.close()
+                endSession(notice: Self.signedOutNotice)
+                return
+            }
             await conn.close()
             state = .offline
             if Task.isCancelled { break }
@@ -230,6 +252,7 @@ public final class AppState {
             try await conn.registerPushToken(service: pushToken.service, token: pushToken.token)
         }
         try await refreshConversations(conn)
+        if !devices.isEmpty { devices = try await conn.listDevices() }
         try await syncFromCursor(conn)
     }
 
@@ -259,8 +282,13 @@ public final class AppState {
 
     @discardableResult
     private func apply(_ event: Wrinkle_V1_Event, _ store: Store) -> StoredConversation? {
-        if case .profile(let p) = event.body, p.user.userID.hex == myUserID {
+        switch event.body {
+        case .profile(let p) where p.user.userID.hex == myUserID:
             me = p.user
+        case .device(let d):
+            applyDevice(d)
+        default:
+            break
         }
         return store.apply(event, me: myUserID)
     }
@@ -282,13 +310,12 @@ public final class AppState {
         advanceCursor(to: event.cursor)
         try? await conn.ack(cursor: cursor)
     }
-
 }
 
 // MARK: Actions
 
 extension AppState {
-    private func connected() throws -> (Connection, Store) {
+    func connected() throws -> (Connection, Store) {
         guard let connection, let store, me != nil else { throw AccountError("Not connected.") }
         return (connection, store)
     }
@@ -338,18 +365,6 @@ extension AppState {
         c.readSeq = seq
         store.save()
         Task { try? await connection.markRead(conversationID: id, seq: UInt64(seq)) }
-    }
-
-    /// Changes the given fields of the profile; nil keeps a field.
-    public func updateProfile(name: String? = nil, icon: String? = nil) async throws {
-        let (connection, _) = try connected()
-        me = try await connection.updateProfile(name: name, icon: icon)
-    }
-
-    /// Changes the password; the account's other devices are signed out.
-    public func changePassword(current: String, new: String) async throws {
-        let (connection, _) = try connected()
-        try await connection.changePassword(current: current, new: new)
     }
 }
 

@@ -54,7 +54,7 @@ struct ConversationListView: View {
                     Button {
                         showProfile = true
                     } label: {
-                        Avatar(name: app.me?.name ?? "", icon: app.me?.icon ?? "", size: 30)
+                        Avatar(user: app.me ?? Wrinkle_V1_User(), size: 30)
                     }
                     .accessibilityLabel("Profile")
                 }

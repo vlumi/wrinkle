@@ -62,14 +62,14 @@ struct ConversationView: View {
                 Text(error).font(.footnote).foregroundStyle(.red).padding(.bottom)
             }
         }
-        .navigationTitle(conversation?.peerName ?? "")
+        .navigationTitle(conversation?.peerDisplayName ?? "")
         .inlineTitle()
         .toolbar {
             ToolbarItem(placement: .principal) {
                 if let conversation {
                     HStack(spacing: 8) {
-                        Avatar(name: conversation.peerName, icon: conversation.peerIcon, size: 28)
-                        Text(conversation.peerName).font(.headline)
+                        Avatar(peerOf: conversation, size: 28)
+                        Text(conversation.peerDisplayName).font(.headline)
                     }
                 }
             }

@@ -3,7 +3,8 @@ import XCTest
 @testable import WrinkleCore
 
 /// Against a live backend at ws://localhost:8080/v1/ws: accounts, a message each way, a read
-/// receipt, a rename reaching the peer. Skipped when nothing listens, unless
+/// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
+/// deletion. Skipped when nothing listens, unless
 /// WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {
     private let url = URL(
@@ -156,5 +157,150 @@ final class BackendTests: XCTestCase {
         let revoked = await code { try await d.connect(deviceToken: creds.deviceToken) }
         XCTAssertEqual(revoked, .unauthenticated)
         await d.close()
+    }
+
+    /// Waits for the server to close the connection; returns its close code.
+    private func closed(_ c: Connection) async throws -> Int? {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask { for await _ in c.events {} }
+            group.addTask {
+                try await Task.sleep(for: .seconds(5))
+                throw URLError(.timedOut)
+            }
+            try await group.next()
+            group.cancelAll()
+        }
+        return await c.closeCode
+    }
+
+    /// Opens a conversation and sends a message, so that both are in each other's lists.
+    private func converse(_ c: Connection, with peer: String) async throws {
+        let conv = try await c.openConversation(peerName: peer)
+        _ = try await c.sendMessage(
+            conversationID: conv.conversationID, clientMessageID: "hello", text: "hello")
+    }
+
+    private func scratchBlobs() -> Blobs {
+        Blobs(
+            directory: FileManager.default.temporaryDirectory.appending(
+                path: "wrinkle-blobs-\(UUID().uuidString)"))
+    }
+
+    func testAvatarUploadRoundTrip() async throws {
+        let (alice, a) = try await registered(unique("ios-alice"))
+        let (bob, _) = try await registered(unique("ios-bob"))
+        try await converse(bob, with: a.user.name)
+        let base = try XCTUnwrap(BlobAddress.base(gateway: url))
+        let jpeg = try XCTUnwrap(AvatarImage.jpeg(from: testPNG(width: 900, height: 700)))
+
+        let gif = await code {
+            try await alice.createUpload(purpose: .avatar, mediaType: "image/gif", size: 10)
+        }
+        XCTAssertEqual(gif, .invalidArgument)
+        let large = await code {
+            try await alice.createUpload(
+                purpose: .avatar, mediaType: AvatarImage.mediaType, size: AvatarImage.maxBytes + 1)
+        }
+        XCTAssertEqual(large, .invalidArgument)
+
+        let slot = try await alice.createUpload(
+            purpose: .avatar, mediaType: AvatarImage.mediaType, size: jpeg.count)
+        XCTAssertEqual(slot.blobID.count, 16)
+        XCTAssertTrue(slot.uploadPath.hasPrefix("/blobs/\(slot.blobID.hex)?"))
+        let early = await code { try await alice.updateProfile(avatar: slot.blobID) }
+        XCTAssertEqual(early, .failedPrecondition)
+
+        try await scratchBlobs().upload(
+            jpeg, blob: slot.blobID, uploadPath: slot.uploadPath,
+            mediaType: AvatarImage.mediaType, base: base)
+        let foreign = await code { try await bob.updateProfile(avatar: slot.blobID) }
+        XCTAssertEqual(foreign, .failedPrecondition)
+        let me = try await alice.updateProfile(avatar: slot.blobID)
+        XCTAssertEqual(me.avatar, slot.blobID)
+        let profile = try await next(bob.events) { $0.profile.user.avatar == slot.blobID }
+        XCTAssertEqual(profile.profile.user.userID, a.user.userID)
+        let listed = try await bob.listConversations().first?.peer
+        XCTAssertEqual(listed?.avatar, slot.blobID)
+
+        // Read back over plain HTTP, into an empty cache.
+        let read = try await scratchBlobs().data(blob: slot.blobID, base: base)
+        XCTAssertEqual(read, jpeg)
+
+        let cleared = try await alice.updateProfile(avatar: Data())
+        XCTAssertTrue(cleared.avatar.isEmpty)
+        await alice.close()
+        await bob.close()
+    }
+
+    func testDevicesAndRemoteSignOut() async throws {
+        let name = unique("ios-erin")
+        let (first, f) = try await registered(name)
+        let second = try await dial()
+        let creds = try await second.signIn(name: name, password: Self.password, deviceName: "two")
+        _ = try await second.connect(deviceToken: creds.deviceToken)
+
+        let signedIn = try await next(first.events) { $0.device.device.deviceID == creds.deviceID }
+        XCTAssertFalse(signedIn.device.signedOut)
+        XCTAssertEqual(signedIn.device.device.name, "two")
+        let devices = try await first.listDevices()
+        XCTAssertEqual(devices.map(\.deviceID), [f.deviceID, creds.deviceID])
+
+        let renamed = try await first.renameDevice(id: creds.deviceID, name: "renamed")
+        XCTAssertEqual(renamed.name, "renamed")
+        _ = try await next(first.events) { $0.device.device.name == "renamed" }
+
+        let own = await code { try await first.signOutDevice(id: f.deviceID) }
+        XCTAssertEqual(own, .invalidArgument)
+        try await first.signOutDevice(id: creds.deviceID)
+        let closeCode = try await closed(second)
+        XCTAssertEqual(closeCode, CloseCode.signedOut)
+        let gone = try await next(first.events) {
+            $0.device.device.deviceID == creds.deviceID && $0.device.signedOut
+        }
+        XCTAssertTrue(gone.device.signedOut)
+        let again = await code { try await first.signOutDevice(id: creds.deviceID) }
+        XCTAssertEqual(again, .notFound)
+
+        let d = try await dial()
+        let revoked = await code { try await d.connect(deviceToken: creds.deviceToken) }
+        XCTAssertEqual(revoked, .unauthenticated)
+        await d.close()
+        await first.close()
+    }
+
+    func testDeleteAccount() async throws {
+        let name = unique("ios-frank")
+        let (frank, f) = try await registered(name)
+        let (grace, _) = try await registered(unique("ios-grace"))
+        try await converse(grace, with: name)
+
+        let wrong = await code { try await frank.deleteAccount(password: "wrong password") }
+        XCTAssertEqual(wrong, .unauthenticated)
+        do {
+            try await frank.deleteAccount(password: Self.password)
+        } catch {
+            // The close that follows may beat the response, but no error response.
+            XCTAssertNil(error as? BackendError)
+        }
+        let closeCode = try await closed(frank)
+        XCTAssertEqual(closeCode, CloseCode.signedOut)
+
+        let deleted = try await next(grace.events) {
+            $0.profile.user.userID == f.user.userID && $0.profile.user.deleted
+        }
+        XCTAssertTrue(deleted.profile.user.name.isEmpty)
+        let peer = try await grace.listConversations().first?.peer
+        XCTAssertEqual(peer?.deleted, true)
+        XCTAssertEqual(peer?.name, "")
+
+        let c = try await dial()
+        let signIn = await code {
+            try await c.signIn(name: name, password: Self.password, deviceName: "")
+        }
+        XCTAssertEqual(signIn, .unauthenticated)
+        // The name is free again.
+        _ = try await c.register(name: name, password: Self.password, deviceName: "")
+        await c.close()
+        await grace.close()
     }
 }

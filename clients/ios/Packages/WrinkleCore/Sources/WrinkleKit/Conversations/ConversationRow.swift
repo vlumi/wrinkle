@@ -7,9 +7,9 @@ struct ConversationRow: View {
 
     var body: some View {
         HStack {
-            Avatar(name: conversation.peerName, icon: conversation.peerIcon)
+            Avatar(peerOf: conversation)
             VStack(alignment: .leading) {
-                Text(conversation.peerName).font(.headline)
+                Text(conversation.peerDisplayName).font(.headline)
                 if let last = conversation.lastText {
                     Text((conversation.lastSenderID == me ? "You: " : "") + last)
                         .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)

@@ -163,3 +163,28 @@ final class StoreTests: XCTestCase {
         XCTAssertFalse(Store.isOldStore("other.sqlite", current: current))
     }
 }
+
+extension StoreTests {
+    func testPeerAvatarAndDeletedAccount() throws {
+        let store = try makeStore()
+        var conv = Wrinkle_V1_Conversation()
+        conv.conversationID = Data(repeating: 8, count: 16)
+        conv.peer.userID = Data(repeating: 3, count: 16)
+        conv.peer.name = "carol"
+        conv.peer.avatar = Data(repeating: 0xcd, count: 16)
+        let stored = store.upsert(conv)
+        XCTAssertEqual(stored.peerAvatar, String(repeating: "cd", count: 16))
+        XCTAssertEqual(stored.peerDisplayName, "carol")
+
+        var event = Wrinkle_V1_Event()
+        event.profile.user = .with {
+            $0.userID = Data(repeating: 3, count: 16)
+            $0.deleted = true
+        }
+        _ = store.apply(event, me: Data(repeating: 1, count: 16).hex)
+        XCTAssertTrue(stored.peerDeleted)
+        XCTAssertEqual(stored.peerAvatar, "")
+        XCTAssertEqual(stored.peerName, "")
+        XCTAssertEqual(stored.peerDisplayName, "Deleted account")
+    }
+}

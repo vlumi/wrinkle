@@ -11,6 +11,13 @@ public enum ConnectionState: Sendable {
     case offline, connecting, connected
 }
 
+/// WebSocket close codes the client acts on (see frame.proto).
+public enum CloseCode {
+    /// The device was signed out, or the account deleted: forget the credentials and do not
+    /// reconnect.
+    public static let signedOut = 4001
+}
+
 /// One device's WebSocket connection: binary Frames in and out, requests matched to
 /// responses by id, events delivered as a stream.
 public actor Connection {
@@ -19,10 +26,12 @@ public actor Connection {
     private var task: URLSessionWebSocketTask?
     private var nextID: UInt64 = 0
     private var pending: [UInt64: CheckedContinuation<Wrinkle_V1_Response, Error>] = [:]
+    /// The close code the server sent, once the socket has closed; nil before or when none.
+    public private(set) var closeCode: Int?
     private let eventsContinuation: AsyncStream<Wrinkle_V1_Event>.Continuation
     private let stateContinuation: AsyncStream<ConnectionState>.Continuation
 
-    /// Pushed events, in order.
+    /// Pushed events, in order. Ends when the connection closes.
     public nonisolated let events: AsyncStream<Wrinkle_V1_Event>
     /// Connection state changes.
     public nonisolated let states: AsyncStream<ConnectionState>
@@ -56,6 +65,7 @@ public actor Connection {
         task = nil
         failPending(URLError(.cancelled))
         stateContinuation.yield(.offline)
+        eventsContinuation.finish()
     }
 
     private func readLoop(_ task: URLSessionWebSocketTask) async {
@@ -68,8 +78,13 @@ public actor Connection {
             } catch {
                 if self.task === task {
                     self.task = nil
+                    let code = task.closeCode.rawValue
+                    if code != URLSessionWebSocketTask.CloseCode.invalid.rawValue {
+                        closeCode = code
+                    }
                     failPending(error)
                     stateContinuation.yield(.offline)
+                    eventsContinuation.finish()
                 }
                 return
             }
@@ -181,21 +196,59 @@ public actor Connection {
                 }))
     }
 
-    /// Changes the given fields of the profile; nil keeps a field.
-    public func updateProfile(name: String? = nil, icon: String? = nil) async throws
-        -> Wrinkle_V1_User
+    /// Changes the given fields of the profile; nil keeps a field, an empty avatar removes it.
+    public func updateProfile(name: String? = nil, icon: String? = nil, avatar: Data? = nil)
+        async throws -> Wrinkle_V1_User
     {
         try await call(
             .updateProfile(
                 .with {
                     if let name { $0.name = name }
                     if let icon { $0.icon = icon }
+                    if let avatar { $0.avatar = avatar }
                 })
         ).updateProfile.user
     }
 
     public func signOut() async throws {
         _ = try await call(.signOut(Wrinkle_V1_SignOutRequest()))
+    }
+
+    public func listDevices() async throws -> [Wrinkle_V1_Device] {
+        try await call(.listDevices(Wrinkle_V1_ListDevicesRequest())).listDevices.devices
+    }
+
+    public func renameDevice(id: UInt64, name: String) async throws -> Wrinkle_V1_Device {
+        try await call(
+            .renameDevice(
+                .with {
+                    $0.deviceID = id
+                    $0.name = name
+                })
+        ).renameDevice.device
+    }
+
+    /// Signs out another device of the account; its connections close with code 4001.
+    public func signOutDevice(id: UInt64) async throws {
+        _ = try await call(.signOutDevice(.with { $0.deviceID = id }))
+    }
+
+    public func deleteAccount(password: String) async throws {
+        _ = try await call(.deleteAccount(.with { $0.password = password }))
+    }
+
+    /// A slot to PUT a blob to; see Blobs.upload.
+    public func createUpload(purpose: Wrinkle_V1_BlobPurpose, mediaType: String, size: Int)
+        async throws -> Wrinkle_V1_CreateUploadResponse
+    {
+        try await call(
+            .createUpload(
+                .with {
+                    $0.purpose = purpose
+                    $0.mediaType = mediaType
+                    $0.size = UInt64(size)
+                })
+        ).createUpload
     }
 
     public func openConversation(peerName: String) async throws -> Wrinkle_V1_Conversation {

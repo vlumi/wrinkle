@@ -8,6 +8,9 @@ public final class StoredConversation {
     public var peerID: IDHex
     public var peerName: String
     public var peerIcon: String
+    /// The peer's avatar blob id as hex; empty for none.
+    public var peerAvatar: String
+    public var peerDeleted: Bool
     public var lastSeq: Int64
     public var lastSenderID: IDHex?
     public var lastText: String?
@@ -21,6 +24,8 @@ public final class StoredConversation {
         self.peerID = peer.userID.hex
         self.peerName = peer.name
         self.peerIcon = peer.icon
+        self.peerAvatar = peer.avatar.hex
+        self.peerDeleted = peer.deleted
         self.lastSeq = 0
         self.readSeq = 0
         self.peerReadSeq = 0
@@ -29,10 +34,12 @@ public final class StoredConversation {
 
     public var unread: Int64 { max(0, lastSeq - readSeq) }
 
+    /// The peer's name as shown: a deleted account has none.
+    public var peerDisplayName: String { UserDisplay.name(peerName, deleted: peerDeleted) }
+
     public func apply(_ c: Wrinkle_V1_Conversation) {
         peerID = c.peer.userID.hex
-        peerName = c.peer.name
-        peerIcon = c.peer.icon
+        showPeer(c.peer)
         lastSeq = max(lastSeq, Int64(c.lastSeq))
         if c.hasLastMessage { showLast(c.lastMessage) }
         readSeq = max(readSeq, Int64(c.readSeq))
@@ -46,6 +53,13 @@ public final class StoredConversation {
         lastSeq = Int64(m.seq)
         showLast(m)
         return true
+    }
+
+    func showPeer(_ peer: Wrinkle_V1_User) {
+        peerName = peer.name
+        peerIcon = peer.icon
+        peerAvatar = peer.avatar.hex
+        peerDeleted = peer.deleted
     }
 
     private func showLast(_ m: Wrinkle_V1_Message) {
@@ -91,7 +105,7 @@ public struct Store {
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 2
+    static let version = 3
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {
@@ -157,14 +171,11 @@ public struct Store {
         return try? context.fetch(d).first?.seq
     }
 
-    /// Shows a peer's new name and icon in every conversation with them.
+    /// Shows a peer's new profile, or their deleted account, in every conversation with them.
     public func updatePeer(_ user: Wrinkle_V1_User) {
         let peer = user.userID.hex
         let d = FetchDescriptor<StoredConversation>(predicate: #Predicate { $0.peerID == peer })
-        for c in (try? context.fetch(d)) ?? [] {
-            c.peerName = user.name
-            c.peerIcon = user.icon
-        }
+        for c in (try? context.fetch(d)) ?? [] { c.showPeer(user) }
     }
 
     /// Applies one event from the user's log; returns the conversation it touched, if known.
