@@ -21,7 +21,7 @@ public record Config(
     String kafka = env("WRINKLE_KAFKA", "localhost:19092");
     String valkey = env("WRINKLE_VALKEY", "localhost:6379");
     String node = env("WRINKLE_NODE", hostname());
-    int dbConns = 32;
+    int dbConns = 64;
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
       String value = null;

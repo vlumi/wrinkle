@@ -3,6 +3,7 @@ package wrinkle.fanout;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,6 +13,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -80,18 +82,23 @@ public final class FanoutWorker {
         if (records.isEmpty()) {
           continue;
         }
+        // Conversations in parallel, a conversation's records in order: that is
+        // the ordering the contract promises, and a user's log is serialized
+        // by its row lock whatever the interleaving.
         List<Future<?>> tasks = new ArrayList<>();
         for (TopicPartition tp : records.partitions()) {
-          List<ConsumerRecord<byte[], byte[]>> partition = records.records(tp);
-          tasks.add(
-              Metrics.virtualThreads()
-                  .submit(
-                      () -> {
-                        for (ConsumerRecord<byte[], byte[]> rec : partition) {
-                          handleWithRetry(rec);
-                        }
-                        return null;
-                      }));
+          for (List<ConsumerRecord<byte[], byte[]>> conversation :
+              byConversation(records.records(tp))) {
+            tasks.add(
+                Metrics.virtualThreads()
+                    .submit(
+                        () -> {
+                          for (ConsumerRecord<byte[], byte[]> rec : conversation) {
+                            handleWithRetry(rec);
+                          }
+                          return null;
+                        }));
+          }
         }
         boolean failed = false;
         for (Future<?> t : tasks) {
@@ -123,6 +130,17 @@ public final class FanoutWorker {
     } finally {
       consumer.close();
     }
+  }
+
+  /** Groups records by key, the conversation id, keeping each group in offset order. */
+  private static List<List<ConsumerRecord<byte[], byte[]>>> byConversation(
+      List<ConsumerRecord<byte[], byte[]>> records) {
+    Map<String, List<ConsumerRecord<byte[], byte[]>>> groups = new LinkedHashMap<>();
+    for (ConsumerRecord<byte[], byte[]> rec : records) {
+      String key = rec.key() == null ? "" : new String(rec.key(), StandardCharsets.UTF_8);
+      groups.computeIfAbsent(key, k -> new ArrayList<>()).add(rec);
+    }
+    return new ArrayList<>(groups.values());
   }
 
   private void handleWithRetry(ConsumerRecord<byte[], byte[]> rec) throws Exception {
