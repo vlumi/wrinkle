@@ -14,6 +14,11 @@ CREATE TABLE conversation (
   members VARBINARY(4096) NOT NULL,
   -- Sequence counter; the next message gets last_seq + 1.
   last_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  -- The current key epoch, 0 before the first; sends must use it.
+  key_epoch INT UNSIGNED NOT NULL DEFAULT 0,
+  -- The membership changed since the current epoch: sends wait for the
+  -- next one.
+  rotate BOOLEAN NOT NULL DEFAULT FALSE,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (conversation_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
@@ -32,6 +37,22 @@ CREATE TABLE conversation_member (
   left_seq BIGINT UNSIGNED NULL,
   joined_at DATETIME(6) NOT NULL,
   PRIMARY KEY (conversation_id, user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- Epoch keys wrapped for each recipient device, as the sending device
+-- published them. The servers cannot unwrap them.
+CREATE TABLE conversation_key (
+  conversation_id BINARY(16) NOT NULL,
+  recipient_user_id BINARY(16) NOT NULL,
+  recipient_device_id BIGINT UNSIGNED NOT NULL,
+  epoch INT UNSIGNED NOT NULL,
+  sender_user_id BINARY(16) NOT NULL,
+  sender_device_id BIGINT UNSIGNED NOT NULL,
+  sender_public_key VARBINARY(32) NOT NULL,
+  wrapped VARBINARY(128) NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (conversation_id, recipient_user_id, recipient_device_id, epoch),
+  KEY conversation_key_epoch (conversation_id, epoch)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- The direct conversation between two users, sharded by user_a, so that
@@ -62,8 +83,8 @@ CREATE TABLE message (
   seq BIGINT UNSIGNED NOT NULL,
   sender_user_id BINARY(16) NOT NULL,
   client_message_id VARCHAR(64) NOT NULL,
-  -- The content: serialized wrinkle.v1.Message with only its content set,
-  -- or only deleted_at once the sender deleted it.
+  -- The content: serialized wrinkle.v1.Message with only its content set
+  -- (sealed, or a notice), or only deleted_at once the sender deleted it.
   body BLOB NOT NULL,
   sent_at DATETIME(6) NOT NULL,
   -- The outbox row that carried the message, which identifies its copies

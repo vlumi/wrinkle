@@ -9,6 +9,9 @@
     "conversation": {
       "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
     },
+    "conversation_key": {
+      "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
+    },
     "conversation_member": {
       "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
     },

@@ -40,6 +40,8 @@ CREATE TABLE device (
   name VARCHAR(64) NOT NULL,
   -- SHA-256 of the secret part of the device token; NULL once signed out.
   token_hash BINARY(32) NULL,
+  -- The device's X25519 public key, once set.
+  public_key VARBINARY(32) NULL,
   -- The log position the device last acked.
   acked_position BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- Where to push while the device is not connected: the PushService name
