@@ -116,17 +116,3 @@ func (w *Worker) deliverDeletion(ctx context.Context, o *userOutboxRow) error {
 	}
 	return nil
 }
-
-// deliverDevice appends a device change to the user's own log; a device
-// signed out also has its connections closed, even when the log had the
-// event already.
-func (w *Worker) deliverDevice(ctx context.Context, o *userOutboxRow) error {
-	if _, err := w.append(ctx, o.userID, o.userID, o.outboxID, o.event, nil); err != nil {
-		return fmt.Errorf("deliver to user %s: %w", o.userID, err)
-	}
-	if d := o.event.GetDevice(); d.GetSignedOut() {
-		w.publish(ctx, o.userID, &backendv1.Push{Kind: &backendv1.Push_SignedOut{
-			SignedOut: &backendv1.SignedOut{DeviceIds: []uint64{d.GetDevice().GetDeviceId()}}}})
-	}
-	return nil
-}

@@ -2,7 +2,8 @@
 // in the event logs of everyone concerned, and pushes them to connected
 // devices: a conversation's events to the recipients its row names, a
 // user's profile changes to the user and every direct conversation partner,
-// a user's device changes to the user.
+// a user's device changes to the user and, for device keys, to everyone in
+// a conversation with the user.
 package fanout
 
 import (
@@ -48,18 +49,20 @@ type Notifier interface {
 }
 
 type Worker struct {
-	db          *sql.DB
-	kafka       *kgo.Client
-	pub         Publisher
-	notifier    Notifier
-	log         *slog.Logger
-	concurrency int
-	listed      listedCache
+	db *sql.DB
+	// The conversation keyspace, for the members of groups.
+	conversations *sql.DB
+	kafka         *kgo.Client
+	pub           Publisher
+	notifier      Notifier
+	log           *slog.Logger
+	concurrency   int
+	listed        listedCache
 }
 
 // New makes a worker that delivers up to concurrency conversations or users
-// at a time.
-func New(ctx context.Context, brokers []string, group string, concurrency int, db *sql.DB, pub Publisher, notifier Notifier, log *slog.Logger) (*Worker, error) {
+// at a time, into the user keyspace db.
+func New(ctx context.Context, brokers []string, group string, concurrency int, db, conversations *sql.DB, pub Publisher, notifier Notifier, log *slog.Logger) (*Worker, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
@@ -79,7 +82,7 @@ func New(ctx context.Context, brokers []string, group string, concurrency int, d
 		client.Close()
 		return nil, fmt.Errorf("kafka at %v: %w", brokers, err)
 	}
-	return &Worker{db: db, kafka: client, pub: pub, notifier: notifier, log: log, concurrency: max(concurrency, 1)}, nil
+	return &Worker{db: db, conversations: conversations, kafka: client, pub: pub, notifier: notifier, log: log, concurrency: max(concurrency, 1)}, nil
 }
 
 // Close leaves the consumer group. Polling blocks rebalances until the

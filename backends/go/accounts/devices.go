@@ -13,7 +13,7 @@ import (
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-const deviceColumns = `SELECT device_id, name, created_at, last_seen_at, push_token IS NOT NULL FROM device`
+const deviceColumns = `SELECT device_id, name, created_at, last_seen_at, push_token IS NOT NULL, public_key FROM device`
 
 type queryer interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
@@ -22,7 +22,7 @@ type queryer interface {
 func scanDevice(scan func(...any) error) (*pb.Device, error) {
 	d := &pb.Device{}
 	var created, seen time.Time
-	if err := scan(&d.DeviceId, &d.Name, &created, &seen, &d.Push); err != nil {
+	if err := scan(&d.DeviceId, &d.Name, &created, &seen, &d.Push, &d.PublicKey); err != nil {
 		return nil, err
 	}
 	d.CreatedAt = timestamppb.New(created)

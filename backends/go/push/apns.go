@@ -142,9 +142,36 @@ type Alert struct {
 	Badge      int
 	ThreadID   string
 	Background bool
+	// The app's notification service extension may change the alert
+	// before it shows, as it does to decrypt the message.
+	MutableContent bool
 	// Custom keys beside "aps", for the app to act on when the alert is
 	// tapped or the app woken.
 	Data map[string]any
+}
+
+// maxPayload is the most a notification's JSON may have.
+const maxPayload = 4096
+
+// payload is the notification's JSON.
+func (alert Alert) payload() ([]byte, error) {
+	aps := map[string]any{
+		"alert":     map[string]string{"title": alert.Title, "body": alert.Body},
+		"badge":     alert.Badge,
+		"sound":     "default",
+		"thread-id": alert.ThreadID,
+	}
+	if alert.MutableContent {
+		aps["mutable-content"] = 1
+	}
+	if alert.Background {
+		aps = map[string]any{"content-available": 1}
+	}
+	payload := map[string]any{"aps": aps}
+	for k, v := range alert.Data {
+		payload[k] = v
+	}
+	return json.Marshal(payload)
 }
 
 // Send delivers one alert to one device token.
@@ -153,25 +180,14 @@ func (a *APNs) Send(ctx context.Context, sandbox bool, deviceToken string, alert
 	if err != nil {
 		return err
 	}
-	aps := map[string]any{
-		"alert":     map[string]string{"title": alert.Title, "body": alert.Body},
-		"badge":     alert.Badge,
-		"sound":     "default",
-		"thread-id": alert.ThreadID,
+	body, err := alert.payload()
+	if err != nil {
+		return err
 	}
 	pushType, priority := "alert", "10"
 	if alert.Background {
 		// Apple requires the low priority for background notifications.
-		aps = map[string]any{"content-available": 1}
 		pushType, priority = "background", "5"
-	}
-	payload := map[string]any{"aps": aps}
-	for k, v := range alert.Data {
-		payload[k] = v
-	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
 	}
 	base := a.cfg.ProductionURL
 	if sandbox {

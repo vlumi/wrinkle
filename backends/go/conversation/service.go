@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"math"
 	"time"
-	"unicode/utf8"
 
 	"github.com/go-sql-driver/mysql"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -23,7 +22,8 @@ import (
 
 const (
 	maxClientMessageID = 64
-	maxTextLength      = 4000
+	nonceBytes         = 12
+	maxCiphertext      = 48 << 10
 	defaultPageSize    = 50
 	maxPageSize        = 500
 	// readSendersWindow bounds the messages a group read event looks at
@@ -40,11 +40,12 @@ type Profiles interface {
 type Service struct {
 	db       *sql.DB
 	profiles Profiles
+	keys     DeviceKeys
 	now      func() time.Time
 }
 
-func New(db *sql.DB, profiles Profiles) *Service {
-	return &Service{db: db, profiles: profiles, now: func() time.Time { return time.Now().UTC() }}
+func New(db *sql.DB, profiles Profiles, keys DeviceKeys) *Service {
+	return &Service{db: db, profiles: profiles, keys: keys, now: func() time.Time { return time.Now().UTC() }}
 }
 
 // Open finds or creates the direct conversation between two users, user_a
@@ -105,14 +106,19 @@ func isDuplicate(err error) bool {
 	return errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey
 }
 
-// Send stores a message, assigning the next sequence number. Resending with
-// the same client message id returns the message stored the first time.
-func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID, text string) (*pb.Message, error) {
+// Send stores a sealed message, assigning the next sequence number.
+// Resending with the same client message id returns the message stored the
+// first time; otherwise the content must be sealed with the current key
+// epoch, and none is current while the conversation needs a new one.
+func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, sealed *pb.Sealed) (*pb.Message, error) {
 	if clientMessageID == "" || len(clientMessageID) > maxClientMessageID {
 		return nil, apierror.InvalidArgument("client_message_id must be 1 to %d bytes", maxClientMessageID)
 	}
-	if text == "" || !utf8.ValidString(text) || utf8.RuneCountInString(text) > maxTextLength {
-		return nil, apierror.InvalidArgument("text must be valid UTF-8 and 1 to %d characters", maxTextLength)
+	if len(sealed.GetNonce()) != nonceBytes {
+		return nil, apierror.InvalidArgument("sealed.nonce must be %d bytes", nonceBytes)
+	}
+	if n := len(sealed.GetCiphertext()); n == 0 || n > maxCiphertext {
+		return nil, apierror.InvalidArgument("sealed.ciphertext must be 1 to %d bytes", maxCiphertext)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -142,7 +148,15 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
-	msg.Content = &pb.Message_Text{Text: text}
+	switch {
+	case st.keyEpoch == 0 || sealed.GetEpoch() != st.keyEpoch:
+		return nil, apierror.FailedPrecondition("stale key epoch: the current one is %d", st.keyEpoch)
+	case st.rotate:
+		return nil, apierror.FailedPrecondition("keys must rotate: the membership changed since epoch %d", st.keyEpoch)
+	}
+	msg.Content = &pb.Message_Sealed{Sealed: &pb.Sealed{
+		Epoch: sealed.GetEpoch(), Nonce: sealed.GetNonce(), Ciphertext: sealed.GetCiphertext(),
+	}}
 	st.lastSeq++
 	if err := s.store(ctx, tx, conversationID, st, msg, st.members, false); err != nil {
 		return nil, err

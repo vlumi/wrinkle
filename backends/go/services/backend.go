@@ -183,7 +183,7 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		msg, err := l.conversations.Send(ctx, userID, conversationID,
-			r.SendMessage.GetClientMessageId(), r.SendMessage.GetText())
+			r.SendMessage.GetClientMessageId(), r.SendMessage.GetSealed())
 		if err != nil {
 			return err
 		}
@@ -229,6 +229,37 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_GetMessages{GetMessages: &pb.GetMessagesResponse{Messages: msgs}}
+	case *pb.Request_SetDeviceKey:
+		if err := l.accounts.SetDeviceKey(ctx, userID, deviceID, r.SetDeviceKey.GetPublicKey()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SetDeviceKey{SetDeviceKey: &pb.SetDeviceKeyResponse{}}
+	case *pb.Request_GetDeviceKeys:
+		users, err := l.accounts.DeviceKeys(ctx, r.GetDeviceKeys.GetUserIds())
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_GetDeviceKeys{GetDeviceKeys: &pb.GetDeviceKeysResponse{Users: users}}
+	case *pb.Request_PublishKeys:
+		conversationID, err := parseConversationID(r.PublishKeys.GetConversationId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.PublishKeys(ctx, userID, deviceID, conversationID,
+			r.PublishKeys.GetEpoch(), r.PublishKeys.GetKeys()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_PublishKeys{PublishKeys: &pb.PublishKeysResponse{}}
+	case *pb.Request_GetConversationKeys:
+		conversationID, err := parseConversationID(r.GetConversationKeys.GetConversationId())
+		if err != nil {
+			return err
+		}
+		keys, err := l.conversations.Keys(ctx, userID, deviceID, conversationID, r.GetConversationKeys.GetAfterEpoch())
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_GetConversationKeys{GetConversationKeys: keys}
 	case *pb.Request_RegisterPushToken:
 		if err := l.users.RegisterPushToken(ctx, userID, deviceID,
 			r.RegisterPushToken.GetService(), r.RegisterPushToken.GetToken()); err != nil {

@@ -65,6 +65,6 @@ func (o *outbox) addDevice(ctx context.Context, deviceID uint64, signedOut bool)
 		return nil, err
 	}
 	return device, o.add(ctx, "device", &pb.Event{
-		Body: &pb.Event_Device{Device: &pb.DeviceEvent{Device: device, SignedOut: signedOut}},
+		Body: &pb.Event_Device{Device: &pb.DeviceEvent{Device: device, SignedOut: signedOut, UserId: o.userID.Bytes()}},
 	})
 }

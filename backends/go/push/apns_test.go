@@ -192,15 +192,6 @@ func TestProviderTokenIsReused(t *testing.T) {
 	}
 }
 
-func TestTruncate(t *testing.T) {
-	if got := truncate("こんにちは世界", 5); got != "こんにち…" {
-		t.Fatalf("got %q", got)
-	}
-	if got := truncate("short", 10); got != "short" {
-		t.Fatalf("got %q", got)
-	}
-}
-
 func TestKeyIDFromFileName(t *testing.T) {
 	if got := keyIDFromFileName("/x/AuthKey_ABCDE12345.p8"); got != "ABCDE12345" {
 		t.Fatalf("got %q", got)

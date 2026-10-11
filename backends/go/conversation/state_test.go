@@ -39,3 +39,16 @@ func TestCheckTopic(t *testing.T) {
 		}
 	}
 }
+
+func TestMembershipChangeRotatesOnlyAfterTheFirstEpoch(t *testing.T) {
+	st := state{}
+	st.membershipChanged()
+	if st.rotate {
+		t.Fatal("rotate before any epoch")
+	}
+	st.keyEpoch = 1
+	st.membershipChanged()
+	if !st.rotate {
+		t.Fatal("no rotate after epoch 1")
+	}
+}

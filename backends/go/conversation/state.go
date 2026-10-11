@@ -31,6 +31,10 @@ type state struct {
 	topic   string
 	members []ids.UUID // sorted bytewise
 	lastSeq uint64
+	// The current key epoch, 0 before the first, and whether the
+	// membership changed since it.
+	keyEpoch uint32
+	rotate   bool
 }
 
 func (st state) has(userID ids.UUID) bool {
@@ -62,7 +66,7 @@ func decodeMembers(b []byte) ([]ids.UUID, error) {
 }
 
 const (
-	selectState          = `SELECT kind, topic, members, last_seq FROM conversation WHERE conversation_id = ?`
+	selectState          = `SELECT kind, topic, members, last_seq, key_epoch, rotate FROM conversation WHERE conversation_id = ?`
 	selectStateForUpdate = selectState + ` FOR UPDATE`
 )
 
@@ -74,7 +78,7 @@ type rowQuerier interface {
 func load(ctx context.Context, q rowQuerier, query string, conversationID ids.UUID) (state, error) {
 	var st state
 	var members []byte
-	err := q.QueryRowContext(ctx, query, conversationID).Scan(&st.kind, &st.topic, &members, &st.lastSeq)
+	err := q.QueryRowContext(ctx, query, conversationID).Scan(&st.kind, &st.topic, &members, &st.lastSeq, &st.keyEpoch, &st.rotate)
 	if errors.Is(err, sql.ErrNoRows) {
 		return st, apierror.NotFound("conversation %s does not exist", conversationID)
 	}
@@ -124,6 +128,14 @@ func encodeBody(msg *pb.Message) ([]byte, error) {
 	return b, nil
 }
 
+// membershipChanged marks that the next send needs a new key epoch, unless
+// there is none yet: the first publish starts one anyway.
+func (st *state) membershipChanged() {
+	if st.keyEpoch > 0 {
+		st.rotate = true
+	}
+}
+
 // decodeBody sets the message's content, or its deletion time, from a
 // stored body.
 func decodeBody(body []byte, msg *pb.Message) error {
@@ -137,7 +149,7 @@ func decodeBody(body []byte, msg *pb.Message) error {
 }
 
 // store saves a message at st.lastSeq, moves the conversation's counter to
-// it, with the topic and members of st when withState, moves the sender's
+// it, with the topic, members and rotate of st when withState, moves the sender's
 // read mark to it, and writes the outbox row for the recipients.
 func (s *Service) store(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, st state, msg *pb.Message, recipients []ids.UUID, withState bool) error {
 	sentAt := s.now()
@@ -149,8 +161,8 @@ func (s *Service) store(ctx context.Context, tx *sql.Tx, conversationID ids.UUID
 	}
 	if withState {
 		_, err = tx.ExecContext(ctx, `
-			UPDATE conversation SET topic = ?, members = ?, last_seq = ? WHERE conversation_id = ?`,
-			st.topic, encodeMembers(st.members), st.lastSeq, conversationID)
+			UPDATE conversation SET topic = ?, members = ?, last_seq = ?, rotate = ? WHERE conversation_id = ?`,
+			st.topic, encodeMembers(st.members), st.lastSeq, st.rotate, conversationID)
 	} else {
 		_, err = tx.ExecContext(ctx, `
 			UPDATE conversation SET last_seq = ? WHERE conversation_id = ?`, st.lastSeq, conversationID)

@@ -37,7 +37,7 @@ func TestParseOutboxRow(t *testing.T) {
 		t.Fatal("peers")
 	}
 	msg := o.event.GetMessage().GetMessage()
-	if msg.GetSeq() != 1 || msg.GetText() != "from b" || string(msg.GetConversationId()) != string(o.conversationID[:]) {
+	if msg.GetSeq() != 1 || string(msg.GetConversationId()) != string(o.conversationID[:]) {
 		t.Fatalf("event %v", o.event)
 	}
 	if _, err := parseOutboxRow([]byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":1,"recipients":"AAEC","member_count":0,"payload":""}`)); err == nil {
@@ -88,7 +88,7 @@ func TestMembership(t *testing.T) {
 		{"promoted", b, left, flag{}, flag{true, true}},
 		{"bystander", c, left, flag{}, flag{}},
 		{"demoted", b, notice(a, &pb.Notice{Kind: &pb.Notice_AdminChanged{AdminChanged: &pb.AdminChanged{User: user(b)}}}), flag{}, flag{true, false}},
-		{"text", b, &pb.Message{SenderUserId: a.Bytes(), Content: &pb.Message_Text{Text: "hi"}}, flag{}, flag{}},
+		{"sealed", b, &pb.Message{SenderUserId: a.Bytes(), Content: &pb.Message_Sealed{Sealed: &pb.Sealed{Epoch: 1}}}, flag{}, flag{}},
 	} {
 		member, admin := membership(tc.user, tc.msg)
 		if member != tc.member || admin != tc.admin {

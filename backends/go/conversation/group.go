@@ -184,6 +184,7 @@ func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUI
 		snapshots = append(snapshots, profiles[id])
 	}
 	st.members = slices.SortedFunc(slices.Values(append(st.members, added...)), compareIDs)
+	st.membershipChanged()
 	notice := &pb.Notice{Kind: &pb.Notice_MembersAdded{MembersAdded: &pb.MembersAdded{Users: snapshots}}}
 	if err := s.notice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
 		return err
@@ -221,6 +222,7 @@ func (s *Service) RemoveMember(ctx context.Context, userID, conversationID, targ
 		return err
 	}
 	st.members = without(st.members, targetID)
+	st.membershipChanged()
 	notice := &pb.Notice{Kind: &pb.Notice_MemberRemoved{MemberRemoved: &pb.MemberRemoved{User: profiles[targetID]}}}
 	if err := s.notice(ctx, tx, conversationID, st, userID, notice, before); err != nil {
 		return err
@@ -250,6 +252,7 @@ func (s *Service) Leave(ctx context.Context, userID, conversationID ids.UUID) er
 		return err
 	}
 	st.members = without(st.members, userID)
+	st.membershipChanged()
 	left := &pb.MemberLeft{}
 	if admin && len(st.members) > 0 {
 		if left.Promoted, err = s.promote(ctx, tx, conversationID); err != nil {

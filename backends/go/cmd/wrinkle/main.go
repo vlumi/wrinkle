@@ -81,10 +81,10 @@ func run() error {
 	// The database is needed by the services (in-process or as a role) and
 	// by fan-out; a gateway forwarding to a services process does without.
 	var local *services.Local
-	var userDB *sql.DB
+	var userDB, conversationDB *sql.DB
 	store := blobs.New(blobs.Config{URL: *blobURL, KeyID: *blobKey, Secret: *blobSec, Region: *blobReg})
 	if want.services || want.fanout || (want.gateway && *svcAddr == "") {
-		conversationDB, err := vtdb.Open(ctx, *mysql, "conversation", *dbConns)
+		conversationDB, err = vtdb.Open(ctx, *mysql, "conversation", *dbConns)
 		if err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func run() error {
 		}
 		defer userDB.Close()
 		accts := accounts.New(userDB, store)
-		conversations := conversation.New(conversationDB, accts)
+		conversations := conversation.New(conversationDB, accts, accts)
 		users := devicesync.New(userDB, accts, conversations)
 		local = services.NewLocal(accts, conversations, users, uploads.New(userDB, store), log.With("role", "services"))
 	}
@@ -153,7 +153,7 @@ func run() error {
 			notifier = n
 			log.Info("push notifications on", "topic", *apnsTop)
 		}
-		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, pres, notifier, log.With("role", "fanout"))
+		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, conversationDB, pres, notifier, log.With("role", "fanout"))
 		if err != nil {
 			return err
 		}

@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"time"
-	"unicode/utf8"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
@@ -32,9 +34,11 @@ type Notifier struct {
 }
 
 const (
-	maxInFlight  = 64
-	maxBodyRunes = 180
-	sendTimeout  = 10 * time.Second
+	maxInFlight = 64
+	sendTimeout = 10 * time.Second
+	// genericBody is what an alert says when the extension cannot decrypt
+	// the message.
+	genericBody = "New message"
 )
 
 func NewNotifier(apns *APNs, userDB *sql.DB, presence Presence, log *slog.Logger) *Notifier {
@@ -94,7 +98,7 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 	if !ok {
 		return fmt.Errorf("message without a conversation id")
 	}
-	title, body, err := n.alertText(ctx, userID, conversationID, msg)
+	title, err := n.alertTitle(ctx, userID, conversationID)
 	if err != nil {
 		return err
 	}
@@ -102,15 +106,37 @@ func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message)
 	if err != nil {
 		return err
 	}
+	return n.sendDisconnected(ctx, userID, regs, messageAlert(title, badge, conversationID, msg))
+}
+
+// messageAlert is the notification of a message: the server cannot read
+// it, so the body is generic and the sealed content rides along, when it
+// fits, for the app's extension to decrypt and show instead.
+func messageAlert(title string, badge int, conversationID ids.UUID, msg *pb.Message) Alert {
 	// Clients find the conversation by the lowercase hex of its id.
 	alert := Alert{
-		Title:    title,
-		Body:     truncate(body, maxBodyRunes),
-		Badge:    badge,
-		ThreadID: conversationID.String(),
-		Data:     map[string]any{"conversation_id": conversationID.String(), "seq": msg.GetSeq()},
+		Title:          title,
+		Body:           genericBody,
+		Badge:          badge,
+		ThreadID:       conversationID.String(),
+		MutableContent: true,
+		Data:           map[string]any{"conversation_id": conversationID.String(), "seq": msg.GetSeq()},
 	}
-	return n.sendDisconnected(ctx, userID, regs, alert)
+	sealed := msg.GetSealed()
+	if sealed == nil {
+		return alert
+	}
+	plain := alert.Data
+	alert.Data = maps.Clone(plain)
+	alert.Data["epoch"] = sealed.GetEpoch()
+	alert.Data["nonce"] = base64.StdEncoding.EncodeToString(sealed.GetNonce())
+	alert.Data["ciphertext"] = base64.StdEncoding.EncodeToString(sealed.GetCiphertext())
+	alert.Data["sender_user_id"] = hex.EncodeToString(msg.GetSenderUserId())
+	alert.Data["client_message_id"] = msg.GetClientMessageId()
+	if b, err := alert.payload(); err != nil || len(b) > maxPayload {
+		alert.Data = plain
+	}
+	return alert
 }
 
 func (n *Notifier) withdraw(ctx context.Context, userID ids.UUID, deleted *pb.MessageDeletedEvent) error {
@@ -144,25 +170,19 @@ func (n *Notifier) sendDisconnected(ctx context.Context, userID ids.UUID, regs [
 	return nil
 }
 
-// alertText is the notification's title and body: in a direct
-// conversation the peer's current name, from the conversation list, and
-// the text; in a group the topic and the text after the sender's name.
-func (n *Notifier) alertText(ctx context.Context, userID, conversationID ids.UUID, msg *pb.Message) (string, string, error) {
+// alertTitle is the notification's title: in a direct conversation the
+// peer's current name, from the conversation list; in a group the topic.
+func (n *Notifier) alertTitle(ctx context.Context, userID, conversationID ids.UUID) (string, error) {
 	var kind, peerName, topic string
 	if err := n.db.QueryRowContext(ctx, `
 		SELECT kind, peer_name, topic FROM user_conversation WHERE user_id = ? AND conversation_id = ?`,
 		userID, conversationID).Scan(&kind, &peerName, &topic); err != nil {
-		return "", "", fmt.Errorf("conversation entry: %w", err)
+		return "", fmt.Errorf("conversation entry: %w", err)
 	}
 	if kind != "group" {
-		return peerName, msg.GetText(), nil
+		return peerName, nil
 	}
-	var sender string
-	err := n.db.QueryRowContext(ctx, `SELECT name FROM user WHERE user_id = ?`, msg.GetSenderUserId()).Scan(&sender)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return "", "", fmt.Errorf("sender name: %w", err)
-	}
-	return topic, sender + ": " + msg.GetText(), nil
+	return topic, nil
 }
 
 func (n *Notifier) send(ctx context.Context, userID ids.UUID, r registration, alert Alert) {
@@ -219,12 +239,4 @@ func (n *Notifier) unregister(ctx context.Context, userID ids.UUID, r registrati
 		WHERE user_id = ? AND device_id = ? AND push_token = ?`,
 		userID, r.deviceID, r.token)
 	return err
-}
-
-func truncate(s string, n int) string {
-	if utf8.RuneCountInString(s) <= n {
-		return s
-	}
-	r := []rune(s)
-	return string(r[:n-1]) + "…"
 }
