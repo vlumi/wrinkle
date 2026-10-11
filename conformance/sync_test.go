@@ -1,7 +1,6 @@
 package conformance
 
 import (
-	"fmt"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -13,13 +12,9 @@ func TestSyncReturnsWhatPushDelivered(t *testing.T) {
 	a, b, conv := pair(t)
 	start := b.cursor
 	var pushed []*pb.Event
+	sendMessages(t, a, conv, 3, "x")
 	for i := 1; i <= 3; i++ {
-		if _, err := a.SendMessage(ctx(t), conv, fmt.Sprintf("m%d", i), "x"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for i := 1; i <= 3; i++ {
-		pushed = append(pushed, nextEvent(t, b, func(ev *pb.Event) bool { return ev.GetMessage() != nil }))
+		pushed = append(pushed, nextEvent(t, b, isMessage))
 	}
 	resp, err := b.Sync(ctx(t), start, 0)
 	if err != nil {
@@ -48,13 +43,9 @@ func TestSyncReturnsWhatPushDelivered(t *testing.T) {
 func TestSyncPaginates(t *testing.T) {
 	a, b, conv := pair(t)
 	start := b.cursor
-	for i := 1; i <= 5; i++ {
-		if _, err := a.SendMessage(ctx(t), conv, fmt.Sprintf("m%d", i), "x"); err != nil {
-			t.Fatal(err)
-		}
-	}
+	sendMessages(t, a, conv, 5, "x")
 	for range 5 {
-		nextEvent(t, b, func(ev *pb.Event) bool { return ev.GetMessage() != nil })
+		nextEvent(t, b, isMessage)
 	}
 	var seen []uint64
 	cursor := start
@@ -94,12 +85,8 @@ func TestSyncFillsGapAfterReconnect(t *testing.T) {
 	a, b, conv := pair(t)
 	cursor := b.cursor
 	b.Close()
-	for i := 1; i <= 3; i++ {
-		if _, err := a.SendMessage(ctx(t), conv, fmt.Sprintf("m%d", i), "while away"); err != nil {
-			t.Fatal(err)
-		}
-	}
-	messageEvent(a, t, conv, 3)
+	sendMessages(t, a, conv, 3, "while away")
+	messageEvent(t, a, conv, 3)
 	back := connectDevice(t, b.user.GetName(), b.deviceID)
 	resp, err := back.Sync(ctx(t), cursor, 0)
 	if err != nil {

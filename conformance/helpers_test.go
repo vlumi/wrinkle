@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -123,7 +124,7 @@ func nextEvent(t *testing.T, d *device, match func(*pb.Event) bool) *pb.Event {
 	}
 }
 
-func messageEvent(d *device, t *testing.T, conversationID, seq uint64) *pb.Message {
+func messageEvent(t *testing.T, d *device, conversationID, seq uint64) *pb.Message {
 	t.Helper()
 	ev := nextEvent(t, d, func(ev *pb.Event) bool {
 		m := ev.GetMessage().GetMessage()
@@ -132,12 +133,24 @@ func messageEvent(d *device, t *testing.T, conversationID, seq uint64) *pb.Messa
 	return ev.GetMessage().GetMessage()
 }
 
-func readEvent(d *device, t *testing.T, conversationID, userID, seq uint64) {
+func readEvent(t *testing.T, d *device, conversationID, userID, seq uint64) {
 	t.Helper()
 	nextEvent(t, d, func(ev *pb.Event) bool {
 		r := ev.GetRead()
 		return r != nil && r.GetConversationId() == conversationID && r.GetUserId() == userID && r.GetSeq() == seq
 	})
+}
+
+func isMessage(ev *pb.Event) bool { return ev.GetMessage() != nil }
+
+// sendMessages sends n messages with client ids m1 to mn.
+func sendMessages(t *testing.T, d *device, conversationID uint64, n int, text string) {
+	t.Helper()
+	for i := 1; i <= n; i++ {
+		if _, err := d.SendMessage(ctx(t), conversationID, fmt.Sprintf("m%d", i), text); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 // noEvent asserts nothing arrives for a while.

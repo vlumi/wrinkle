@@ -66,7 +66,7 @@ func TestAckIsRememberedPerDevice(t *testing.T) {
 	if _, err := b.SendMessage(ctx(t), conv, "m1", "hello"); err != nil {
 		t.Fatal(err)
 	}
-	messageEvent(a, t, conv, 1)
+	messageEvent(t, a, conv, 1)
 	if err := a.Ack(ctx(t), a.cursor); err != nil {
 		t.Fatal(err)
 	}

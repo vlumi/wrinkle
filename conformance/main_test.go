@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestMain(m *testing.M) {
 func waitForDelivery(timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	var last error
-	for attempt := 1; time.Now().Before(deadline); attempt++ {
+	for time.Now().Before(deadline) {
 		if last = probe(); last == nil {
 			return nil
 		}
@@ -33,26 +34,21 @@ func waitForDelivery(timeout time.Duration) error {
 	return last
 }
 
+// probe sends a message between two new users and waits for its event.
 func probe() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
-	a, err := wrinkleclient.Dial(ctx, gatewayURL())
+	suffix := strconv.FormatInt(time.Now().UnixNano(), 10)
+	a, err := probeUser(ctx, "probe-a-"+suffix)
 	if err != nil {
 		return err
 	}
 	defer a.Close()
-	b, err := wrinkleclient.Dial(ctx, gatewayURL())
+	b, err := probeUser(ctx, "probe-b-"+suffix)
 	if err != nil {
 		return err
 	}
 	defer b.Close()
-	if _, err := a.Connect(ctx, &pb.ConnectRequest{UserName: "probe-a-" + suffix}); err != nil {
-		return err
-	}
-	if _, err := b.Connect(ctx, &pb.ConnectRequest{UserName: "probe-b-" + suffix}); err != nil {
-		return err
-	}
 	conv, err := a.OpenConversation(ctx, "probe-b-"+suffix)
 	if err != nil {
 		return err
@@ -66,11 +62,23 @@ func probe() error {
 			if !ok {
 				return fmt.Errorf("connection closed: %w", b.Err())
 			}
-			if ev.GetMessage() != nil {
+			if isMessage(ev) {
 				return nil
 			}
 		case <-ctx.Done():
 			return fmt.Errorf("no event delivered: %w", ctx.Err())
 		}
 	}
+}
+
+func probeUser(ctx context.Context, name string) (*wrinkleclient.Client, error) {
+	c, err := wrinkleclient.Dial(ctx, gatewayURL())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := c.Connect(ctx, &pb.ConnectRequest{UserName: name}); err != nil {
+		c.Close()
+		return nil, err
+	}
+	return c, nil
 }

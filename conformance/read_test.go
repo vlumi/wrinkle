@@ -10,13 +10,9 @@ import (
 func TestMarkRead(t *testing.T) {
 	a, b, conv := pair(t)
 	a2 := connect(t, a.user.GetName())
-	for i := 1; i <= 2; i++ {
-		if _, err := b.SendMessage(ctx(t), conv, string(rune('a'+i)), "hi"); err != nil {
-			t.Fatal(err)
-		}
-	}
+	sendMessages(t, b, conv, 2, "hi")
 	for _, d := range []*device{a, a2, b} {
-		messageEvent(d, t, conv, 2)
+		messageEvent(t, d, conv, 2)
 	}
 
 	if err := a.MarkRead(ctx(t), conv, 2); err != nil {
@@ -24,7 +20,7 @@ func TestMarkRead(t *testing.T) {
 	}
 	// The reader's other device and the peer both learn about it.
 	for _, d := range []*device{a, a2, b} {
-		readEvent(d, t, conv, a.user.GetUserId(), 2)
+		readEvent(t, d, conv, a.user.GetUserId(), 2)
 	}
 
 	// Going backwards or staying put produces nothing.

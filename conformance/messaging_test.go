@@ -102,7 +102,7 @@ func TestSendValidation(t *testing.T) {
 
 func TestMessageIsPushedToEveryDevice(t *testing.T) {
 	a, b, conv := pair(t)
-	a2 := connectDevice(t, a.user.GetName(), 0)
+	a2 := connect(t, a.user.GetName())
 	b2 := connect(t, b.user.GetName())
 
 	sent, err := a.SendMessage(ctx(t), conv, "m1", "hello everyone")
@@ -110,7 +110,7 @@ func TestMessageIsPushedToEveryDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, d := range []*device{a, a2, b, b2} {
-		got := messageEvent(d, t, conv, 1)
+		got := messageEvent(t, d, conv, 1)
 		if got.GetText() != sent.GetText() || got.GetSenderUserId() != a.user.GetUserId() ||
 			got.GetClientMessageId() != "m1" || !got.GetSentAt().AsTime().Equal(sent.GetSentAt().AsTime()) {
 			t.Fatalf("pushed message differs from the sent one: %v vs %v", got, sent)
@@ -121,13 +121,9 @@ func TestMessageIsPushedToEveryDevice(t *testing.T) {
 func TestEventsArriveInSequenceOrder(t *testing.T) {
 	a, b, conv := pair(t)
 	const n = 20
-	for i := 1; i <= n; i++ {
-		if _, err := a.SendMessage(ctx(t), conv, fmt.Sprintf("m%d", i), "x"); err != nil {
-			t.Fatal(err)
-		}
-	}
+	sendMessages(t, a, conv, n, "x")
 	for i := uint64(1); i <= n; i++ {
-		ev := nextEvent(t, b, func(ev *pb.Event) bool { return ev.GetMessage() != nil })
+		ev := nextEvent(t, b, isMessage)
 		if got := ev.GetMessage().GetMessage().GetSeq(); got != i {
 			t.Fatalf("expected seq %d next, got %d", i, got)
 		}
@@ -136,11 +132,7 @@ func TestEventsArriveInSequenceOrder(t *testing.T) {
 
 func TestGetMessages(t *testing.T) {
 	a, b, conv := pair(t)
-	for i := 1; i <= 5; i++ {
-		if _, err := a.SendMessage(ctx(t), conv, fmt.Sprintf("m%d", i), fmt.Sprintf("text %d", i)); err != nil {
-			t.Fatal(err)
-		}
-	}
+	sendMessages(t, a, conv, 5, "text")
 	all, err := b.GetMessages(ctx(t), conv, 0, 0)
 	if err != nil {
 		t.Fatal(err)

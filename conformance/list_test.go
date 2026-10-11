@@ -30,17 +30,15 @@ func TestListConversations(t *testing.T) {
 		t.Fatalf("empty conversation: %v", c)
 	}
 
-	sent, err := a.SendMessage(ctx(t), conv, "m1", "first")
-	if err != nil {
+	if _, err := a.SendMessage(ctx(t), conv, "m1", "first"); err != nil {
 		t.Fatal(err)
 	}
-	messageEvent(b, t, conv, 1)
+	messageEvent(t, b, conv, 1)
 	sent2, err := a.SendMessage(ctx(t), conv, "m2", "second")
 	if err != nil {
 		t.Fatal(err)
 	}
-	messageEvent(b, t, conv, 2)
-	_ = sent
+	messageEvent(t, b, conv, 2)
 
 	// The peer sees it after the first message, with the last message.
 	c = findConversation(t, b, conv)
@@ -57,8 +55,8 @@ func TestListConversations(t *testing.T) {
 	if err := b.MarkRead(ctx(t), conv, 2); err != nil {
 		t.Fatal(err)
 	}
-	readEvent(b, t, conv, b.user.GetUserId(), 2)
-	readEvent(a, t, conv, b.user.GetUserId(), 2)
+	readEvent(t, b, conv, b.user.GetUserId(), 2)
+	readEvent(t, a, conv, b.user.GetUserId(), 2)
 	if c = findConversation(t, b, conv); c.GetReadSeq() != 2 {
 		t.Fatalf("reader's own read_seq: %v", c)
 	}
@@ -82,7 +80,7 @@ func TestListOrdersByActivity(t *testing.T) {
 	if _, err := b.SendMessage(ctx(t), withB.GetConversationId(), "m", "from b"); err != nil {
 		t.Fatal(err)
 	}
-	messageEvent(a, t, withB.GetConversationId(), 1)
+	messageEvent(t, a, withB.GetConversationId(), 1)
 	list, err := a.ListConversations(ctx(t))
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +91,7 @@ func TestListOrdersByActivity(t *testing.T) {
 	if _, err := c.SendMessage(ctx(t), withC.GetConversationId(), "m", "from c"); err != nil {
 		t.Fatal(err)
 	}
-	messageEvent(a, t, withC.GetConversationId(), 1)
+	messageEvent(t, a, withC.GetConversationId(), 1)
 	list, err = a.ListConversations(ctx(t))
 	if err != nil {
 		t.Fatal(err)
