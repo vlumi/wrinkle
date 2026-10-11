@@ -5,27 +5,20 @@ package fanout
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"github.com/twmb/franz-go/pkg/kgo"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 const Topic = "wrinkle.conversation.outbox"
-
-// MySQL error for a unique key violation.
-const duplicateKey = 1062
 
 type Publisher interface {
 	Publish(ctx context.Context, userID uint64, payload []byte) error
@@ -44,9 +37,7 @@ type Worker struct {
 	notifier    Notifier
 	log         *slog.Logger
 	concurrency int
-
-	namesMu sync.Mutex
-	names   map[uint64]string
+	names       nameCache
 }
 
 // New makes a worker that delivers up to concurrency conversations at a time.
@@ -70,7 +61,7 @@ func New(ctx context.Context, brokers []string, group string, concurrency int, d
 		client.Close()
 		return nil, fmt.Errorf("kafka at %v: %w", brokers, err)
 	}
-	return &Worker{db: db, kafka: client, pub: pub, notifier: notifier, log: log, concurrency: max(concurrency, 1), names: map[uint64]string{}}, nil
+	return &Worker{db: db, kafka: client, pub: pub, notifier: notifier, log: log, concurrency: max(concurrency, 1)}, nil
 }
 
 // Close leaves the consumer group. Polling blocks rebalances until the
@@ -89,35 +80,9 @@ func (w *Worker) Run(ctx context.Context) error {
 		fetches.EachError(func(topic string, partition int32, err error) {
 			w.log.Warn("fetch error", "topic", topic, "partition", partition, "err", err)
 		})
-		// Conversations in parallel, a conversation's records in order: that
-		// is the ordering the contract promises, and a user's log is
-		// serialized by its row lock whatever the interleaving.
-		var failed atomic.Bool
-		var wg sync.WaitGroup
-		sem := make(chan struct{}, w.concurrency)
-		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
-			for _, records := range byConversation(p.Records) {
-				wg.Add(1)
-				sem <- struct{}{}
-				go func() {
-					defer wg.Done()
-					defer func() { <-sem }()
-					for _, rec := range records {
-						if failed.Load() {
-							return
-						}
-						if err := w.handleWithRetry(ctx, rec); err != nil {
-							failed.Store(true)
-							w.log.Error("giving up on record", "partition", rec.Partition, "offset", rec.Offset, "err", err)
-							return
-						}
-					}
-				}()
-			}
-		})
-		wg.Wait()
+		ok := w.handleFetches(ctx, fetches)
 		w.kafka.AllowRebalance()
-		if failed.Load() {
+		if !ok {
 			// Leave the offsets where they are and poll again.
 			time.Sleep(time.Second)
 			continue
@@ -126,6 +91,38 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.log.Warn("commit failed", "err", err)
 		}
 	}
+}
+
+// handleFetches handles conversations in parallel and a conversation's
+// records in order: that is the ordering the contract promises, and a
+// user's log is serialized by its row lock whatever the interleaving. It
+// reports whether every record was handled.
+func (w *Worker) handleFetches(ctx context.Context, fetches kgo.Fetches) bool {
+	var failed atomic.Bool
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, w.concurrency)
+	fetches.EachPartition(func(p kgo.FetchTopicPartition) {
+		for _, records := range byConversation(p.Records) {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func() {
+				defer wg.Done()
+				defer func() { <-sem }()
+				for _, rec := range records {
+					if failed.Load() {
+						return
+					}
+					if err := w.handleWithRetry(ctx, rec); err != nil {
+						failed.Store(true)
+						w.log.Error("giving up on record", "partition", rec.Partition, "offset", rec.Offset, "err", err)
+						return
+					}
+				}
+			}()
+		}
+	})
+	wg.Wait()
+	return !failed.Load()
 }
 
 // byConversation groups records by key, the conversation id, keeping each
@@ -162,52 +159,12 @@ func (w *Worker) handleWithRetry(ctx context.Context, rec *kgo.Record) error {
 	return err
 }
 
-// row is the outbox row as Debezium emits it after unwrapping: unsigned
-// bigints as decimal strings, bytes as base64.
-type row struct {
-	ConversationID string `json:"conversation_id"`
-	OutboxID       string `json:"outbox_id"`
-	UserA          string `json:"user_a"`
-	UserB          string `json:"user_b"`
-	Kind           string `json:"kind"`
-	Payload        []byte `json:"payload"`
-}
-
-type outboxRow struct {
-	conversationID, outboxID, userA, userB uint64
-	kind                                   string
-	event                                  *pb.Event
-}
-
-func parse(value []byte) (*outboxRow, error) {
-	var r row
-	if err := json.Unmarshal(value, &r); err != nil {
-		return nil, err
-	}
-	var o outboxRow
-	var err error
-	for _, f := range []struct {
-		dst *uint64
-		src string
-	}{{&o.conversationID, r.ConversationID}, {&o.outboxID, r.OutboxID}, {&o.userA, r.UserA}, {&o.userB, r.UserB}} {
-		if *f.dst, err = strconv.ParseUint(f.src, 10, 64); err != nil {
-			return nil, fmt.Errorf("outbox row id %q: %w", f.src, err)
-		}
-	}
-	o.kind = r.Kind
-	o.event = &pb.Event{}
-	if err := proto.Unmarshal(r.Payload, o.event); err != nil {
-		return nil, fmt.Errorf("outbox payload: %w", err)
-	}
-	return &o, nil
-}
-
 func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 	if len(rec.Value) == 0 {
 		return nil
 	}
 	metrics.FanoutRecords.Inc()
-	o, err := parse(rec.Value)
+	o, err := parseOutboxRow(rec.Value)
 	if err != nil {
 		// A malformed row never gets better; log it and move on.
 		w.log.Error("skipping outbox record", "offset", rec.Offset, "err", err)
@@ -232,126 +189,4 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		joined = errors.Join(joined, <-errs)
 	}
 	return joined
-}
-
-// deliver appends the event to one user's log, in one transaction with the
-// conversation list update, then pushes it.
-func (w *Worker) deliver(ctx context.Context, userID uint64, o *outboxRow) error {
-	peerID := o.userA
-	if userID == o.userA {
-		peerID = o.userB
-	}
-	var peerName string
-	if msg := o.event.GetMessage(); msg != nil {
-		var err error
-		if peerName, err = w.peerName(ctx, peerID); err != nil {
-			return err
-		}
-	}
-
-	tx, err := w.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var head uint64
-	err = tx.QueryRowContext(ctx, `SELECT log_head FROM user WHERE user_id = ? FOR UPDATE`, userID).Scan(&head)
-	if errors.Is(err, sql.ErrNoRows) {
-		w.log.Warn("no such user, dropping event", "user", userID)
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	event := proto.Clone(o.event).(*pb.Event)
-	event.Cursor = head + 1
-	payload, err := proto.Marshal(event)
-	if err != nil {
-		return err
-	}
-	occurredAt := event.GetOccurredAt().AsTime()
-	// The unique key on the source outbox row makes a redelivery fail here.
-	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO user_event (user_id, position, conversation_id, outbox_id, payload, occurred_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		userID, event.Cursor, o.conversationID, o.outboxID, payload, occurredAt); err != nil {
-		var mysqlErr *mysql.MySQLError
-		if errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey {
-			return nil
-		}
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE user SET log_head = ? WHERE user_id = ?`, event.Cursor, userID); err != nil {
-		return err
-	}
-
-	switch body := event.GetBody().(type) {
-	case *pb.Event_Message:
-		msg := body.Message.GetMessage()
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO user_conversation
-				(user_id, conversation_id, peer_user_id, peer_name, last_seq,
-				 last_sender_user_id, last_client_message_id, last_body, last_sent_at,
-				 read_seq, peer_read_seq, updated_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)
-			ON DUPLICATE KEY UPDATE
-				last_seq = GREATEST(last_seq, ?),
-				last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),
-				last_client_message_id = IF(? >= last_seq, ?, last_client_message_id),
-				last_body = IF(? >= last_seq, ?, last_body),
-				last_sent_at = IF(? >= last_seq, ?, last_sent_at),
-				updated_at = GREATEST(updated_at, ?)`,
-			userID, o.conversationID, peerID, peerName, msg.GetSeq(),
-			msg.GetSenderUserId(), msg.GetClientMessageId(), msg.GetText(), msg.GetSentAt().AsTime(),
-			occurredAt,
-			msg.GetSeq(),
-			msg.GetSeq(), msg.GetSenderUserId(),
-			msg.GetSeq(), msg.GetClientMessageId(),
-			msg.GetSeq(), msg.GetText(),
-			msg.GetSeq(), msg.GetSentAt().AsTime(),
-			occurredAt); err != nil {
-			return err
-		}
-	case *pb.Event_Read:
-		column := "peer_read_seq"
-		if body.Read.GetUserId() == userID {
-			column = "read_seq"
-		}
-		if _, err := tx.ExecContext(ctx, `
-			UPDATE user_conversation SET `+column+` = GREATEST(`+column+`, ?)
-			WHERE user_id = ? AND conversation_id = ?`,
-			body.Read.GetSeq(), userID, o.conversationID); err != nil {
-			return err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-	metrics.FanoutDeliveries.Inc()
-	metrics.FanoutLag.Observe(time.Since(occurredAt).Seconds())
-	if err := w.pub.Publish(ctx, userID, payload); err != nil {
-		// The log has it; devices catch up on their next sync.
-		w.log.Warn("publish failed", "user", userID, "err", err)
-	}
-	if msg := event.GetMessage().GetMessage(); msg != nil && w.notifier != nil {
-		w.notifier.MessageDelivered(userID, peerName, msg)
-	}
-	return nil
-}
-
-func (w *Worker) peerName(ctx context.Context, userID uint64) (string, error) {
-	w.namesMu.Lock()
-	name, ok := w.names[userID]
-	w.namesMu.Unlock()
-	if ok {
-		return name, nil
-	}
-	if err := w.db.QueryRowContext(ctx, `SELECT name FROM user WHERE user_id = ?`, userID).Scan(&name); err != nil {
-		return "", fmt.Errorf("name of user %d: %w", userID, err)
-	}
-	w.namesMu.Lock()
-	w.names[userID] = name
-	w.namesMu.Unlock()
-	return name, nil
 }
