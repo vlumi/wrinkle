@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** the Go and Java backends pass the conformance tests, the web and iOS clients work against them, and the first comparison is in `docs/results/`. See [ROADMAP.md](ROADMAP.md).
+**Status:** Go and Java backends and Elixir and Rust gateways pass the same conformance tests; the web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements and the four-way comparison are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
 
 ## How it works
 
@@ -30,24 +30,24 @@ Three ideas carry the design:
 
 Components:
 
-- **Gateway:** holds the WebSocket connections, tracks which device is connected where, forwards requests, pushes events.
+- **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`).
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
-- **Fan-out workers:** read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and push them to connected devices.
-- **Sync service:** incremental sync, conversation lists, device registration.
-- **Presence:** which device is connected to which gateway node.
+- **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
+- **Fan-out workers:** read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
+- **Presence:** which device is connected to which gateway node, and one push channel per user, in Valkey.
 
-Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey.
+Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, and Prometheus with Grafana for the metrics every backend exposes under the same names.
 
 ## Implementations
 
 All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them. A backend can also be split into a gateway and a services process over an internal RPC; the Elixir and Rust implementations are gateways in that shape, run beside the Go services, since connection handling is where the languages differ most.
 
-| Backend | Status |
-|---|---|
-| Go | measured; also as a gateway and a services process |
-| Java | measured |
-| Elixir | gateway, measured |
-| Rust | gateway, measured |
+| Backend | Shape | Push |
+|---|---|---|
+| Go | all roles in one process, or a gateway and a services process | yes |
+| Java | all roles in one process | stores tokens, does not send yet |
+| Elixir | gateway, beside the Go services | through the Go services |
+| Rust | gateway, beside the Go services | through the Go services |
 
 Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
 
@@ -60,7 +60,7 @@ The load generator simulates devices and reports, per backend on the same machin
 - the highest sustained message rate before p99 latency breaks;
 - CPU time per thousand messages.
 
-Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md), and the capacity the design was sized for, with the measurements against it, in [docs/capacity.md](docs/capacity.md).
+Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. In the latest runs ([2026-10-11](docs/results/2026-10-11-gateways.md)), every implementation sustained 500 messages per second with 75 to 110 ms median latency end to end; the Rust gateway was the leanest, holding 4000 idle connections in 78 MiB against 150 to 400 MiB for the others. Above 500 per second the shared database, not a backend, sets the limit on a laptop. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md), and the capacity the design was sized for, with the measurements against it, in [docs/capacity.md](docs/capacity.md).
 
 ## Running
 
@@ -84,15 +84,17 @@ To run it on one Mac and connect from phones and other computers on the same net
 ## Layout
 
 ```text
-proto/        the contract: frames, requests, events
+proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
-infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, metrics
-backends/     go/, java/, elixir/, rust/
-clients/      web/, ios/
-loadgen/      load generator (Go)
+infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Prometheus and Grafana; the arm64 Vitess image
+backends/     go/, java/, elixir/ and rust/ (gateways)
+clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
+loadgen/      load generator and the measurement protocol script (Go)
 conformance/  backend-agnostic tests against the contract
-docs/         design notes and measurement results
+docs/         measuring, metrics, capacity, running on a local network, and results
 ```
+
+Local settings that are not committed, the Apple team and the APNs key, go in `.env` at the root; see `.env.example`.
 
 ## License
 
