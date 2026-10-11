@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import wrinkle.MessageBody;
 import wrinkle.Metrics;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
@@ -21,7 +22,9 @@ import wrinkle.backend.v1.Push;
 import wrinkle.backend.v1.SignedOut;
 import wrinkle.presence.Presence;
 import wrinkle.v1.Event;
+import wrinkle.v1.MemberLeft;
 import wrinkle.v1.Message;
+import wrinkle.v1.Notice;
 import wrinkle.v1.ReadEvent;
 import wrinkle.v1.User;
 
@@ -52,10 +55,13 @@ final class UserLog {
     return db;
   }
 
-  /** Appends a conversation's event to one participant's log, then pushes it. */
+  /** Appends a conversation's event to one recipient's log, then pushes it. */
   void deliver(Uuid userId, OutboxRecord o) throws SQLException {
     Uuid peerId = o.peerOf(userId);
-    User peer = o.event().hasMessage() ? peerForNewEntry(userId, o.conversationId(), peerId) : null;
+    User peer =
+        o.event().hasMessage() && peerId != null
+            ? peerForNewEntry(userId, o.conversationId(), peerId)
+            : null;
     Event event =
         append(
             userId,
@@ -64,8 +70,8 @@ final class UserLog {
             o.event(),
             (c, e) -> {
               switch (e.getBodyCase()) {
-                case MESSAGE -> recordMessage(c, userId, peerId, peer, o.conversationId(), e);
-                case READ -> recordRead(c, userId, o.conversationId(), e.getRead());
+                case MESSAGE -> recordMessage(c, userId, peerId, peer, o, e);
+                case READ -> recordRead(c, userId, o, e.getRead());
                 default -> {}
               }
             });
@@ -195,13 +201,53 @@ final class UserLog {
     }
   }
 
+  /** How a message changes the user's membership flags; null leaves a flag as it is. */
+  record Membership(Boolean member, Boolean admin) {
+    static final Membership UNCHANGED = new Membership(null, null);
+
+    /** From the notice the message carries, for the given recipient. */
+    static Membership of(Uuid userId, Message msg) {
+      if (!msg.hasNotice()) {
+        return UNCHANGED;
+      }
+      boolean sender = userId.matches(msg.getSenderUserId());
+      Notice n = msg.getNotice();
+      return switch (n.getKindCase()) {
+        case GROUP_CREATED -> new Membership(true, sender);
+        case MEMBERS_ADDED ->
+            n.getMembersAdded().getUsersList().stream().anyMatch(u -> userId.matches(u.getUserId()))
+                ? new Membership(true, false)
+                : UNCHANGED;
+        case MEMBER_REMOVED ->
+            userId.matches(n.getMemberRemoved().getUser().getUserId())
+                ? new Membership(false, false)
+                : UNCHANGED;
+        case MEMBER_LEFT -> {
+          if (sender) {
+            yield new Membership(false, false);
+          }
+          MemberLeft left = n.getMemberLeft();
+          yield left.hasPromoted() && userId.matches(left.getPromoted().getUserId())
+              ? new Membership(null, true)
+              : UNCHANGED;
+        }
+        case ADMIN_CHANGED ->
+            userId.matches(n.getAdminChanged().getUser().getUserId())
+                ? new Membership(null, n.getAdminChanged().getAdmin())
+                : UNCHANGED;
+        default -> UNCHANGED;
+      };
+    }
+  }
+
   /**
    * Adds the conversation to the user's list, or makes the message its last unless a later one is
-   * already there. The sender's own read position moves to the message. A new entry takes the
-   * peer's profile; an existing one keeps what profile changes put there.
+   * already there; a group's topic and member count follow the same rule. The sender's own read
+   * position moves to the message. A new direct entry takes the peer's profile; an existing one
+   * keeps what profile changes put there. A group notice about the user changes their membership.
    */
   private static void recordMessage(
-      Connection c, Uuid userId, Uuid peerId, User peer, Uuid conversationId, Event event)
+      Connection c, Uuid userId, Uuid peerId, User peer, OutboxRecord o, Event event)
       throws SQLException {
     Message msg = event.getMessage().getMessage();
     LocalDateTime sentAt = Timestamps.fromProto(msg.getSentAt());
@@ -213,50 +259,80 @@ final class UserLog {
         peer == null || peer.getAvatar().isEmpty() ? null : peer.getAvatar().toByteArray();
     boolean peerDeleted = peer != null && peer.getDeleted();
     byte[] sender = msg.getSenderUserId().toByteArray();
+    byte[] body = MessageBody.encode(msg);
+    Membership m = o.group() ? Membership.of(userId, msg) : Membership.UNCHANGED;
+    long seq = msg.getSeq();
+    // Assignments run in order, so the IFs compare with last_seq already moved forward.
     Sql.update(
         c,
-        "INSERT INTO user_conversation (user_id, conversation_id, peer_user_id, peer_name,"
-            + " peer_icon, peer_avatar, peer_deleted, last_seq, last_sender_user_id,"
-            + " last_client_message_id, last_body, last_sent_at, read_seq, peer_read_seq,"
-            + " updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?) ON DUPLICATE KEY"
+        "INSERT INTO user_conversation (user_id, conversation_id, kind, peer_user_id, peer_name,"
+            + " peer_icon, peer_avatar, peer_deleted, topic, member_count, member, admin,"
+            + " last_seq, last_sender_user_id, last_client_message_id, last_body, last_sent_at,"
+            + " read_seq, peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,"
+            + " ?, ?, ?, ?, ?, ?, 0, ?) ON DUPLICATE KEY"
             + " UPDATE last_seq = GREATEST(last_seq, ?),"
             + " last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),"
             + " last_client_message_id = IF(? >= last_seq, ?, last_client_message_id),"
             + " last_body = IF(? >= last_seq, ?, last_body),"
             + " last_sent_at = IF(? >= last_seq, ?, last_sent_at),"
+            + " topic = IF(? >= last_seq, ?, topic),"
+            + " member_count = IF(? >= last_seq, ?, member_count),"
+            + " member = COALESCE(?, member),"
+            + " admin = COALESCE(?, admin),"
             + " read_seq = GREATEST(read_seq, ?),"
             + " updated_at = GREATEST(updated_at, ?)",
         userId,
-        conversationId,
+        o.conversationId(),
+        o.conversationKind(),
         peerId,
         peerName,
         peerIcon,
         peerAvatar,
         peerDeleted,
-        msg.getSeq(),
+        o.topic(),
+        o.memberCount(),
+        m.member() == null || m.member(),
+        m.admin() != null && m.admin(),
+        seq,
         sender,
         msg.getClientMessageId(),
-        msg.getText(),
+        body,
         sentAt,
         ownReadSeq,
         occurredAt,
-        msg.getSeq(),
-        msg.getSeq(),
+        seq,
+        seq,
         sender,
-        msg.getSeq(),
+        seq,
         msg.getClientMessageId(),
-        msg.getSeq(),
-        msg.getText(),
-        msg.getSeq(),
+        seq,
+        body,
+        seq,
         sentAt,
+        seq,
+        o.topic(),
+        seq,
+        o.memberCount(),
+        m.member(),
+        m.admin(),
         ownReadSeq,
         occurredAt);
   }
 
-  /** Moves the user's own read position or the peer's, whichever the event is about. */
-  private static void recordRead(Connection c, Uuid userId, Uuid conversationId, ReadEvent read)
+  /**
+   * Moves the user's own read position, or in a direct conversation the peer's, whichever the event
+   * is about.
+   */
+  private static void recordRead(Connection c, Uuid userId, OutboxRecord o, ReadEvent read)
       throws SQLException {
-    String column = userId.matches(read.getUserId()) ? "read_seq" : "peer_read_seq";
+    String column;
+    if (userId.matches(read.getUserId())) {
+      column = "read_seq";
+    } else if (!o.group()) {
+      column = "peer_read_seq";
+    } else {
+      return;
+    }
     Sql.update(
         c,
         "UPDATE user_conversation SET "
@@ -266,6 +342,6 @@ final class UserLog {
             + ", ?) WHERE user_id = ? AND conversation_id = ?",
         read.getSeq(),
         userId,
-        conversationId);
+        o.conversationId());
   }
 }

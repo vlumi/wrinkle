@@ -90,8 +90,9 @@ final class NameClaims {
   }
 
   /**
-   * Gives up the claim on the old name after a rename. When the names differ only in case they
-   * share one claim, which takes the new spelling.
+   * Gives up the claim on the old name after a rename. Names differing only in case share one
+   * claim, which stays as it is: claims compare ignoring case, and Vitess cannot change a vindex
+   * column in place.
    */
   void release(Uuid userId, String oldName, String newName) throws SQLException {
     try (Connection c = db.getConnection()) {
@@ -101,14 +102,7 @@ final class NameClaims {
           ResultSet rs = ps.executeQuery()) {
         same = rs.next() && rs.getBoolean(1);
       }
-      if (same) {
-        Sql.update(
-            c,
-            "UPDATE user_name SET name = ? WHERE name = ? AND user_id = ?",
-            newName,
-            oldName,
-            userId);
-      } else {
+      if (!same) {
         Sql.update(c, "DELETE FROM user_name WHERE name = ? AND user_id = ?", oldName, userId);
       }
     }

@@ -3,8 +3,10 @@ package wrinkle;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class UuidTest {
@@ -50,5 +52,15 @@ class UuidTest {
     for (int i = 0; i < 100; i++) {
       assertTrue(Ids.random() > 0);
     }
+  }
+
+  @Test
+  void splitsAndJoinsIdLists() {
+    List<Uuid> ids = List.of(Uuid.random(), Uuid.random(), Uuid.random());
+    byte[] joined = Uuid.join(ids);
+    assertEquals(48, joined.length);
+    assertEquals(ids, Uuid.split(joined));
+    assertEquals(List.of(), Uuid.split(new byte[0]));
+    assertThrows(IllegalArgumentException.class, () -> Uuid.split(new byte[17]));
   }
 }

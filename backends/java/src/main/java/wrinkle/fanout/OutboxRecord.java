@@ -3,6 +3,7 @@ package wrinkle.fanout;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
+import java.util.List;
 import wrinkle.Uuid;
 import wrinkle.v1.Event;
 
@@ -11,22 +12,51 @@ import wrinkle.v1.Event;
  * strings, unsigned bigints as numbers or decimal strings.
  */
 record OutboxRecord(
-    Uuid conversationId, long outboxId, Uuid userA, Uuid userB, String kind, Event event) {
+    Uuid conversationId,
+    long outboxId,
+    List<Uuid> recipients,
+    String conversationKind,
+    String topic,
+    int memberCount,
+    String kind,
+    Event event) {
   private static final ObjectMapper JSON = new ObjectMapper();
 
   static OutboxRecord parse(byte[] value) throws IOException {
     JsonNode n = JSON.readTree(value);
+    List<Uuid> recipients;
+    try {
+      recipients = Uuid.split(field(n, "recipients").binaryValue());
+    } catch (IllegalArgumentException e) {
+      throw new IOException("recipients", e);
+    }
+    JsonNode topic = n.get("topic");
     return new OutboxRecord(
         id(n, "conversation_id"),
         unsigned(n, "outbox_id"),
-        id(n, "user_a"),
-        id(n, "user_b"),
+        recipients,
+        field(n, "conversation_kind").asText(),
+        topic == null || topic.isNull() ? "" : topic.asText(),
+        (int) unsigned(n, "member_count"),
         field(n, "kind").asText(),
         Event.parseFrom(field(n, "payload").binaryValue()));
   }
 
+  boolean group() {
+    return "group".equals(conversationKind);
+  }
+
+  /** In a direct conversation, the other recipient; null in a group. */
   Uuid peerOf(Uuid userId) {
-    return userId.equals(userA) ? userB : userA;
+    if (group()) {
+      return null;
+    }
+    for (Uuid r : recipients) {
+      if (!r.equals(userId)) {
+        return r;
+      }
+    }
+    return null;
   }
 
   static JsonNode field(JsonNode n, String name) throws IOException {

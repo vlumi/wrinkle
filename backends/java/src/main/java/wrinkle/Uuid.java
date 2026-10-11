@@ -1,9 +1,13 @@
 package wrinkle;
 
 import com.google.protobuf.ByteString;
+import java.io.ByteArrayOutputStream;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HexFormat;
+import java.util.List;
 
 /**
  * A user or conversation id: a random version 4 UUID, 16 bytes. Stored as BINARY(16), sent as
@@ -46,6 +50,31 @@ public final class Uuid implements Comparable<Uuid> {
       throw new IllegalArgumentException("uuid of " + (b == null ? "null" : b.length + " bytes"));
     }
     return id;
+  }
+
+  /**
+   * The ids in concatenated 16-byte form, as conversation members and outbox recipients are stored;
+   * anything but a multiple of 16 bytes is a corrupt row.
+   */
+  public static List<Uuid> split(byte[] b) {
+    if (b == null || b.length % LENGTH != 0) {
+      throw new IllegalArgumentException(
+          "id list of " + (b == null ? "null" : b.length + " bytes"));
+    }
+    List<Uuid> ids = new ArrayList<>(b.length / LENGTH);
+    for (int i = 0; i < b.length; i += LENGTH) {
+      ids.add(new Uuid(Arrays.copyOfRange(b, i, i + LENGTH)));
+    }
+    return ids;
+  }
+
+  /** The ids concatenated, in the order given. */
+  public static byte[] join(Collection<Uuid> ids) {
+    ByteArrayOutputStream out = new ByteArrayOutputStream(ids.size() * LENGTH);
+    for (Uuid id : ids) {
+      out.writeBytes(id.bytes);
+    }
+    return out.toByteArray();
   }
 
   /** The id named by its lowercase hex, or null. */

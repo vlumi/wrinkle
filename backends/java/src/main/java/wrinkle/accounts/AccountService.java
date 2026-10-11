@@ -9,7 +9,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
@@ -77,7 +82,7 @@ public final class AccountService {
   }
 
   /** The Unicode White_Space property. */
-  static boolean whiteSpace(int cp) {
+  public static boolean whiteSpace(int cp) {
     return (cp >= 0x09 && cp <= 0x0d)
         || cp == 0x20
         || cp == 0x85
@@ -143,6 +148,37 @@ public final class AccountService {
       }
       return user(userId, rs.getString(1), rs.getString(2), rs.getBytes(3), rs.getBoolean(4));
     }
+  }
+
+  /**
+   * The users' profiles, by id, in one query; a user that does not exist is just the id. Deleted
+   * accounts show as deleted.
+   */
+  public Map<Uuid, User> profiles(Collection<Uuid> userIds) throws SQLException {
+    Map<Uuid, User> out = new HashMap<>();
+    if (userIds.isEmpty()) {
+      return out;
+    }
+    List<Uuid> ids = List.copyOf(new LinkedHashSet<>(userIds));
+    try (Connection c = db.getConnection();
+        PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT user_id, name, icon, avatar, deleted_at IS NOT NULL FROM user WHERE user_id"
+                    + " IN ("
+                    + String.join(", ", Collections.nCopies(ids.size(), "?"))
+                    + ")",
+                ids.toArray());
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        Uuid id = Uuid.of(rs.getBytes(1));
+        out.put(id, user(id, rs.getString(2), rs.getString(3), rs.getBytes(4), rs.getBoolean(5)));
+      }
+    }
+    for (Uuid id : ids) {
+      out.computeIfAbsent(id, k -> User.newBuilder().setUserId(k.toByteString()).build());
+    }
+    return out;
   }
 
   /** The user with the name, ignoring case, or null when no user has it. */
@@ -387,14 +423,22 @@ public final class AccountService {
     }
   }
 
+  /** What deleting an account does first, once the password is checked: leaving its groups. */
+  @FunctionalInterface
+  public interface BeforeDelete {
+    void run() throws Exception;
+  }
+
   /**
    * Deletes the account after checking its password. The user row stays as a tombstone with the
    * profile cleared; every device is signed out; fan-out tells the partners, closes the connections
    * and removes the user's data. The name is free once the transaction commits, since a claim is
    * valid only while the user's name matches it.
    */
-  public void deleteAccount(Uuid userId, DeleteAccountRequest req) throws Exception {
+  public void deleteAccount(Uuid userId, DeleteAccountRequest req, BeforeDelete beforeDelete)
+      throws Exception {
     String verified = verifyPassword(userId, req.getPassword());
+    beforeDelete.run();
     String oldName =
         Devices.inTransaction(
             db,

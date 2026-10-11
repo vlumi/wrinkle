@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
 import org.apache.kafka.clients.consumer.CloseOptions;
@@ -34,8 +35,8 @@ import wrinkle.v1.Event;
 
 /**
  * Turns committed outbox rows, read from Kafka, into entries in the event logs of everyone
- * concerned, and pushes them to connected devices: a conversation's events to both participants, a
- * user's profile changes to the user and every conversation partner.
+ * concerned, and pushes them to connected devices: a conversation's events to the recipients its
+ * outbox row names, a user's profile changes to the user and every direct conversation partner.
  */
 public final class FanoutWorker {
   // The outbox topics: conversations' rows keyed by conversation id, users' by user id.
@@ -44,6 +45,8 @@ public final class FanoutWorker {
   public static final List<String> TOPICS = List.of(CONVERSATION_TOPIC, USER_TOPIC);
   private static final Logger log = LoggerFactory.getLogger(FanoutWorker.class);
   private static final int ATTEMPTS = 5;
+  // How many recipients of one outbox row are delivered to at a time.
+  private static final int RECIPIENT_CONCURRENCY = 16;
   private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(3);
 
   private final KafkaConsumer<byte[], byte[]> consumer;
@@ -191,10 +194,22 @@ public final class FanoutWorker {
       log.error("skipping outbox record without a body, kind {}", o.kind());
       return;
     }
-    Future<?> a = tasks.submit(() -> deliver(o.userA(), o));
-    Future<?> b = tasks.submit(() -> deliver(o.userB(), o));
+    Semaphore slots = new Semaphore(RECIPIENT_CONCURRENCY);
+    List<Future<?>> running = new ArrayList<>();
+    for (Uuid recipient : o.recipients()) {
+      slots.acquire();
+      running.add(
+          tasks.submit(
+              () -> {
+                try {
+                  return deliver(recipient, o);
+                } finally {
+                  slots.release();
+                }
+              }));
+    }
     Exception failure = null;
-    for (Future<?> f : List.of(a, b)) {
+    for (Future<?> f : running) {
       try {
         f.get();
       } catch (ExecutionException e) {

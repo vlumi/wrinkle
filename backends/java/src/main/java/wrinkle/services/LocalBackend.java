@@ -8,21 +8,29 @@ import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
 import wrinkle.conversation.ConversationService;
+import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.uploads.UploadService;
+import wrinkle.v1.AddMembersResponse;
 import wrinkle.v1.ChangePasswordResponse;
+import wrinkle.v1.CreateGroupResponse;
 import wrinkle.v1.DeleteAccountResponse;
+import wrinkle.v1.GetMembersResponse;
 import wrinkle.v1.GetMessagesResponse;
+import wrinkle.v1.LeaveGroupResponse;
 import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
 import wrinkle.v1.OpenConversationResponse;
 import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.RegisterResponse;
+import wrinkle.v1.RemoveMemberResponse;
 import wrinkle.v1.RenameDeviceResponse;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
 import wrinkle.v1.SendMessageResponse;
+import wrinkle.v1.SetAdminResponse;
+import wrinkle.v1.SetTopicResponse;
 import wrinkle.v1.SignInResponse;
 import wrinkle.v1.SignOutDeviceResponse;
 import wrinkle.v1.SignOutResponse;
@@ -36,6 +44,7 @@ public final class LocalBackend implements Backend {
   private final Devices devices;
   private final UploadService uploads;
   private final ConversationService conversations;
+  private final GroupService groups;
   private final DeviceSyncService users;
 
   public LocalBackend(
@@ -43,11 +52,13 @@ public final class LocalBackend implements Backend {
       Devices devices,
       UploadService uploads,
       ConversationService conversations,
+      GroupService groups,
       DeviceSyncService users) {
     this.accounts = accounts;
     this.devices = devices;
     this.uploads = uploads;
     this.conversations = conversations;
+    this.groups = groups;
     this.users = users;
   }
 
@@ -109,7 +120,7 @@ public final class LocalBackend implements Backend {
         yield resp.setSignOutDevice(SignOutDeviceResponse.getDefaultInstance());
       }
       case DELETE_ACCOUNT -> {
-        accounts.deleteAccount(userId, req.getDeleteAccount());
+        accounts.deleteAccount(userId, req.getDeleteAccount(), () -> groups.leaveAll(userId));
         yield resp.setDeleteAccount(DeleteAccountResponse.getDefaultInstance());
       }
       case CREATE_UPLOAD -> resp.setCreateUpload(uploads.create(userId, req.getCreateUpload()));
@@ -117,6 +128,41 @@ public final class LocalBackend implements Backend {
           resp.setOpenConversation(
               OpenConversationResponse.newBuilder()
                   .setConversation(users.open(userId, req.getOpenConversation().getPeerName())));
+      case CREATE_GROUP ->
+          resp.setCreateGroup(
+              CreateGroupResponse.newBuilder()
+                  .setConversation(groups.create(userId, req.getCreateGroup())));
+      case ADD_MEMBERS -> {
+        var r = req.getAddMembers();
+        groups.addMembers(userId, conversationId(r.getConversationId()), r.getMemberNamesList());
+        yield resp.setAddMembers(AddMembersResponse.getDefaultInstance());
+      }
+      case REMOVE_MEMBER -> {
+        var r = req.getRemoveMember();
+        groups.removeMember(userId, conversationId(r.getConversationId()), userIdOf(r.getUserId()));
+        yield resp.setRemoveMember(RemoveMemberResponse.getDefaultInstance());
+      }
+      case LEAVE_GROUP -> {
+        groups.leave(userId, conversationId(req.getLeaveGroup().getConversationId()));
+        yield resp.setLeaveGroup(LeaveGroupResponse.getDefaultInstance());
+      }
+      case SET_TOPIC -> {
+        var r = req.getSetTopic();
+        groups.setTopic(userId, conversationId(r.getConversationId()), r.getTopic());
+        yield resp.setSetTopic(SetTopicResponse.getDefaultInstance());
+      }
+      case SET_ADMIN -> {
+        var r = req.getSetAdmin();
+        groups.setAdmin(
+            userId, conversationId(r.getConversationId()), userIdOf(r.getUserId()), r.getAdmin());
+        yield resp.setSetAdmin(SetAdminResponse.getDefaultInstance());
+      }
+      case GET_MEMBERS ->
+          resp.setGetMembers(
+              GetMembersResponse.newBuilder()
+                  .addAllMembers(
+                      groups.members(
+                          userId, conversationId(req.getGetMembers().getConversationId()))));
       case SEND_MESSAGE -> {
         var r = req.getSendMessage();
         yield resp.setSendMessage(
@@ -170,6 +216,14 @@ public final class LocalBackend implements Backend {
               SignInResponse.newBuilder().setCredentials(accounts.signIn(req.getSignIn())));
       default -> resp.setConnect(accounts.connect(req.getConnect()));
     };
+  }
+
+  private static Uuid userIdOf(ByteString b) {
+    Uuid id = Uuid.parse(b);
+    if (id == null) {
+      throw ApiError.invalidArgument("user_id must be 16 bytes");
+    }
+    return id;
   }
 
   private static Uuid conversationId(ByteString b) {

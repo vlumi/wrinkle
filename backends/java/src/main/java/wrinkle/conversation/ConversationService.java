@@ -1,6 +1,5 @@
 package wrinkle.conversation;
 
-import com.google.protobuf.ByteString;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -8,28 +7,33 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Ids;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
+import wrinkle.conversation.Rows.Header;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
-import wrinkle.v1.MessageEvent;
 import wrinkle.v1.ReadEvent;
 
 /**
- * The conversation service: sending, read marks and history, against the conversation keyspace.
- * Every change is stored with an outbox row in the same transaction, which also deletes it: the
- * change data capture picks up the insert, and the table stays empty.
+ * The conversation service: direct conversations, sending, read marks and history, against the
+ * conversation keyspace. Every change is stored with an outbox row in the same transaction, which
+ * also deletes it: the change data capture picks up the insert, and the table stays empty.
  */
 public final class ConversationService {
   private static final int MAX_CLIENT_MESSAGE_ID = 64;
   private static final int MAX_TEXT_LENGTH = 4000;
   private static final int DEFAULT_PAGE_SIZE = 50;
   private static final int MAX_PAGE_SIZE = 500;
+  // How many of the newest messages a read covers are searched for senders to tell.
+  private static final int READ_SENDERS_WINDOW = 1000;
 
   private final DataSource db;
 
@@ -38,9 +42,9 @@ public final class ConversationService {
   }
 
   /**
-   * Finds or creates the conversation between two users, userA bytewise before userB. The pair row,
-   * on userA's shard, decides between two opening at once; a pair whose conversation row is missing
-   * gets it here.
+   * Finds or creates the direct conversation between two users, userA bytewise before userB. The
+   * pair row, on userA's shard, decides between two opening at once; a pair whose conversation row
+   * is missing gets it here.
    */
   public Uuid open(Uuid userA, Uuid userB) throws SQLException {
     try (Connection c = db.getConnection()) {
@@ -66,14 +70,25 @@ public final class ConversationService {
           }
         }
       }
+      LocalDateTime now = Timestamps.now();
       Sql.update(
           c,
-          "INSERT IGNORE INTO conversation (conversation_id, user_a, user_b, last_seq, created_at)"
-              + " VALUES (?, ?, ?, 0, ?)",
+          "INSERT IGNORE INTO conversation (conversation_id, kind, topic, members, last_seq,"
+              + " created_at) VALUES (?, ?, '', ?, 0, ?)",
+          conversationId,
+          Rows.DIRECT,
+          Uuid.join(List.of(userA, userB)),
+          now);
+      Sql.update(
+          c,
+          "INSERT IGNORE INTO conversation_member (conversation_id, user_id, admin, joined_seq,"
+              + " left_seq, joined_at) VALUES (?, ?, FALSE, 1, NULL, ?), (?, ?, FALSE, 1, NULL, ?)",
           conversationId,
           userA,
+          now,
+          conversationId,
           userB,
-          Timestamps.now());
+          now);
       return conversationId;
     }
   }
@@ -87,45 +102,6 @@ public final class ConversationService {
                 userB);
         ResultSet rs = ps.executeQuery()) {
       return rs.next() ? Uuid.of(rs.getBytes(1)) : null;
-    }
-  }
-
-  private record Header(Uuid userA, Uuid userB, long lastSeq) {
-    boolean includes(Uuid userId) {
-      return userId.equals(userA) || userId.equals(userB);
-    }
-  }
-
-  /** The conversation's header, locked for the transaction, if the user is in it. */
-  private static Header lockHeader(Connection c, Uuid conversationId, Uuid userId)
-      throws SQLException {
-    return header(c, conversationId, userId, " FOR UPDATE");
-  }
-
-  /** The conversation's header, if the user is in it. */
-  private static Header readHeader(Connection c, Uuid conversationId, Uuid userId)
-      throws SQLException {
-    return header(c, conversationId, userId, "");
-  }
-
-  private static Header header(Connection c, Uuid conversationId, Uuid userId, String locking)
-      throws SQLException {
-    try (PreparedStatement ps =
-            Sql.prepare(
-                c,
-                "SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ?"
-                    + locking,
-                conversationId);
-        ResultSet rs = ps.executeQuery()) {
-      if (!rs.next()) {
-        throw ApiError.notFound("conversation " + conversationId + " does not exist");
-      }
-      Header h = new Header(Uuid.of(rs.getBytes(1)), Uuid.of(rs.getBytes(2)), rs.getLong(3));
-      if (!h.includes(userId)) {
-        throw ApiError.permissionDenied(
-            "user " + userId + " is not in conversation " + conversationId);
-      }
-      return h;
     }
   }
 
@@ -146,7 +122,7 @@ public final class ConversationService {
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
       try {
-        Header h = lockHeader(c, conversationId, userId);
+        Header h = Rows.memberHeader(c, conversationId, userId, true);
         Message stored = findSent(c, userId, conversationId, clientMessageId);
         if (stored != null) {
           c.rollback();
@@ -168,22 +144,7 @@ public final class ConversationService {
             "UPDATE conversation SET last_seq = ? WHERE conversation_id = ?",
             seq,
             conversationId);
-        Sql.update(
-            c,
-            "INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id, body,"
-                + " sent_at) VALUES (?, ?, ?, ?, ?, ?)",
-            conversationId,
-            seq,
-            userId,
-            clientMessageId,
-            text,
-            sentAt);
-        Event event =
-            Event.newBuilder()
-                .setOccurredAt(msg.getSentAt())
-                .setMessage(MessageEvent.newBuilder().setMessage(msg))
-                .build();
-        insertOutbox(c, h, conversationId, "message", event, sentAt);
+        Rows.storeMessage(c, msg, h.members(), h.kind(), h.topic(), h.members().size());
         c.commit();
         return msg;
       } catch (SQLException | RuntimeException e) {
@@ -199,23 +160,15 @@ public final class ConversationService {
     try (PreparedStatement ps =
             Sql.prepare(
                 c,
-                "SELECT seq, body, sent_at FROM message WHERE conversation_id = ? AND"
-                    + " sender_user_id = ? AND client_message_id = ?",
+                "SELECT "
+                    + Rows.MESSAGE_COLUMNS
+                    + " FROM message WHERE conversation_id = ? AND sender_user_id = ? AND"
+                    + " client_message_id = ?",
                 conversationId,
                 userId,
                 clientMessageId);
         ResultSet rs = ps.executeQuery()) {
-      if (!rs.next()) {
-        return null;
-      }
-      return Message.newBuilder()
-          .setConversationId(conversationId.toByteString())
-          .setSeq(rs.getLong(1))
-          .setSenderUserId(userId.toByteString())
-          .setClientMessageId(clientMessageId)
-          .setText(rs.getString(2))
-          .setSentAt(Timestamps.toProto(rs.getObject(3, LocalDateTime.class)))
-          .build();
+      return rs.next() ? Rows.message(conversationId, rs) : null;
     }
   }
 
@@ -227,12 +180,13 @@ public final class ConversationService {
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
       try {
-        Header h = lockHeader(c, conversationId, userId);
+        Header h = Rows.memberHeader(c, conversationId, userId, true);
         if (seq > h.lastSeq()) {
           throw ApiError.invalidArgument(
               "seq " + seq + " is beyond the last message " + h.lastSeq());
         }
-        if (lockReadMark(c, userId, conversationId) >= seq) {
+        long previous = lockReadMark(c, userId, conversationId);
+        if (previous >= seq) {
           c.rollback();
           return;
         }
@@ -256,13 +210,55 @@ public final class ConversationService {
                         .setUserId(userId.toByteString())
                         .setSeq(seq))
                 .build();
-        insertOutbox(c, h, conversationId, "read", event, at);
+        Collection<Uuid> recipients =
+            h.group() ? readRecipients(c, h, userId, conversationId, previous, seq) : h.members();
+        Rows.insertOutbox(
+            c,
+            conversationId,
+            Ids.random(),
+            recipients,
+            h.kind(),
+            h.topic(),
+            h.members().size(),
+            "read",
+            event,
+            at);
         c.commit();
       } catch (SQLException | RuntimeException e) {
         c.rollback();
         throw e;
       }
     }
+  }
+
+  /**
+   * Who learns of a read in a group: the reader, and the current members who sent any of the newest
+   * messages it covers.
+   */
+  private static Collection<Uuid> readRecipients(
+      Connection c, Header h, Uuid userId, Uuid conversationId, long from, long to)
+      throws SQLException {
+    Set<Uuid> recipients = new LinkedHashSet<>();
+    recipients.add(userId);
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT DISTINCT sender_user_id FROM (SELECT sender_user_id FROM message WHERE"
+                    + " conversation_id = ? AND seq > ? AND seq <= ? ORDER BY seq DESC LIMIT ?)"
+                    + " AS m",
+                conversationId,
+                from,
+                to,
+                READ_SENDERS_WINDOW);
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        Uuid sender = Uuid.of(rs.getBytes(1));
+        if (h.includes(sender)) {
+          recipients.add(sender);
+        }
+      }
+    }
+    return recipients;
   }
 
   /** The user's read position, locked for the transaction; 0 before the first read mark. */
@@ -279,58 +275,53 @@ public final class ConversationService {
     }
   }
 
-  /** Messages with seq below beforeSeq, newest first. */
+  /**
+   * Messages with seq below beforeSeq, newest first, within the part of the sequence the user may
+   * read: from the notice that added them on, and up to the one that removed them.
+   */
   public List<Message> messages(Uuid userId, Uuid conversationId, long beforeSeq, int limit)
       throws SQLException {
     long before = beforeSeq == 0 ? Long.MAX_VALUE : beforeSeq;
     int pageSize = limit == 0 ? DEFAULT_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE);
     try (Connection c = db.getConnection()) {
-      readHeader(c, conversationId, userId);
+      Rows.header(c, conversationId, false);
+      long from;
+      long to;
       try (PreparedStatement ps =
               Sql.prepare(
                   c,
-                  "SELECT seq, sender_user_id, client_message_id, body, sent_at FROM message WHERE"
-                      + " conversation_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?",
+                  "SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ?"
+                      + " AND user_id = ?",
                   conversationId,
+                  userId);
+          ResultSet rs = ps.executeQuery()) {
+        if (!rs.next()) {
+          throw ApiError.permissionDenied(
+              "user " + userId + " is not in conversation " + conversationId);
+        }
+        from = rs.getLong(1);
+        long left = rs.getLong(2);
+        to = rs.wasNull() ? Long.MAX_VALUE : left;
+      }
+      try (PreparedStatement ps =
+              Sql.prepare(
+                  c,
+                  "SELECT "
+                      + Rows.MESSAGE_COLUMNS
+                      + " FROM message WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq"
+                      + " < ? ORDER BY seq DESC LIMIT ?",
+                  conversationId,
+                  from,
+                  to,
                   before,
                   pageSize);
           ResultSet rs = ps.executeQuery()) {
         List<Message> out = new ArrayList<>();
         while (rs.next()) {
-          out.add(
-              Message.newBuilder()
-                  .setConversationId(conversationId.toByteString())
-                  .setSeq(rs.getLong(1))
-                  .setSenderUserId(ByteString.copyFrom(rs.getBytes(2)))
-                  .setClientMessageId(rs.getString(3))
-                  .setText(rs.getString(4))
-                  .setSentAt(Timestamps.toProto(rs.getObject(5, LocalDateTime.class)))
-                  .build());
+          out.add(Rows.message(conversationId, rs));
         }
         return out;
       }
     }
-  }
-
-  private static void insertOutbox(
-      Connection c, Header h, Uuid conversationId, String kind, Event event, LocalDateTime at)
-      throws SQLException {
-    long outboxId = Ids.random();
-    Sql.update(
-        c,
-        "INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload,"
-            + " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        conversationId,
-        outboxId,
-        h.userA(),
-        h.userB(),
-        kind,
-        event.toByteArray(),
-        at);
-    Sql.update(
-        c,
-        "DELETE FROM outbox WHERE conversation_id = ? AND outbox_id = ?",
-        conversationId,
-        outboxId);
   }
 }

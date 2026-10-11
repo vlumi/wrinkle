@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
 import wrinkle.conversation.ConversationService;
+import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.fanout.FanoutWorker;
 import wrinkle.gateway.Gateway;
@@ -70,6 +71,7 @@ public final class Main {
               new Devices(userDb),
               uploads,
               conversations,
+              new GroupService(conversationDb, userDb, accounts),
               new DeviceSyncService(userDb, accounts, conversations));
     }
     Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;

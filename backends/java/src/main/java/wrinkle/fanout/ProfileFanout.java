@@ -16,8 +16,8 @@ import wrinkle.backend.v1.SignedOut;
 import wrinkle.v1.User;
 
 /**
- * Delivers a profile change to the user's own log, then to each conversation partner's, with the
- * partner's list entry updated in the same transaction. A deleted account's change goes to the
+ * Delivers a profile change to the user's own log, then to each direct conversation partner's, with
+ * the partner's list entry updated in the same transaction. A deleted account's change goes to the
  * partners alike; then its devices are signed out and its data removed.
  */
 final class ProfileFanout {
@@ -114,14 +114,15 @@ final class ProfileFanout {
     }
   }
 
-  /** A page of the user's conversations after the given one, in id order. */
+  /** A page of the user's direct conversations after the given one, in id order. */
   private List<Partner> partners(Uuid userId, Uuid after) throws SQLException {
     try (Connection c = userLog.db().getConnection();
         PreparedStatement ps =
             Sql.prepare(
                 c,
                 "SELECT conversation_id, peer_user_id FROM user_conversation WHERE user_id = ? AND"
-                    + " conversation_id > ? ORDER BY conversation_id LIMIT ?",
+                    + " conversation_id > ? AND peer_user_id IS NOT NULL ORDER BY conversation_id"
+                    + " LIMIT ?",
                 userId,
                 after == null ? new byte[Uuid.LENGTH] : after.bytes(),
                 PAGE);

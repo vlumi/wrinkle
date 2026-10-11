@@ -12,12 +12,14 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
+import wrinkle.MessageBody;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
 import wrinkle.conversation.ConversationService;
 import wrinkle.v1.Conversation;
+import wrinkle.v1.ConversationKind;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.PushService;
@@ -37,7 +39,7 @@ public final class DeviceSyncService {
   private static final String SELECT_CONVERSATIONS =
       "SELECT conversation_id, peer_user_id, peer_name, peer_icon, last_seq,"
           + " last_sender_user_id, last_client_message_id, last_body, last_sent_at, read_seq,"
-          + " peer_read_seq, peer_avatar, peer_deleted"
+          + " peer_read_seq, peer_avatar, peer_deleted, kind, topic, member_count, member, admin"
           + " FROM user_conversation";
 
   private final DataSource db;
@@ -123,7 +125,7 @@ public final class DeviceSyncService {
     return resp.build();
   }
 
-  /** Finds or creates the conversation with the named peer. */
+  /** Finds or creates the direct conversation with the named peer. */
   public Conversation open(Uuid userId, String peerName) throws SQLException {
     if (!AccountService.validName(peerName)) {
       throw ApiError.invalidArgument("peer_name is not a valid name");
@@ -144,9 +146,10 @@ public final class DeviceSyncService {
     try (Connection c = db.getConnection()) {
       Sql.update(
           c,
-          "INSERT IGNORE INTO user_conversation (user_id, conversation_id, peer_user_id,"
-              + " peer_name, peer_icon, peer_avatar, peer_deleted, last_seq, read_seq,"
-              + " peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)",
+          "INSERT IGNORE INTO user_conversation (user_id, conversation_id, kind, peer_user_id,"
+              + " peer_name, peer_icon, peer_avatar, peer_deleted, member, last_seq, read_seq,"
+              + " peer_read_seq, updated_at) VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, TRUE, 0, 0, 0,"
+              + " ?)",
           userId,
           conversationId,
           peerId,
@@ -197,26 +200,34 @@ public final class DeviceSyncService {
     Conversation.Builder c =
         Conversation.newBuilder()
             .setConversationId(conversationId)
-            .setPeer(
-                AccountService.user(
-                    Uuid.of(rs.getBytes(2)),
-                    rs.getString(3),
-                    rs.getString(4),
-                    rs.getBytes(12),
-                    rs.getBoolean(13)))
+            .setKind(
+                "group".equals(rs.getString(14))
+                    ? ConversationKind.CONVERSATION_KIND_GROUP
+                    : ConversationKind.CONVERSATION_KIND_DIRECT)
             .setLastSeq(lastSeq)
             .setReadSeq(rs.getLong(10))
-            .setPeerReadSeq(rs.getLong(11));
+            .setPeerReadSeq(rs.getLong(11))
+            .setTopic(rs.getString(15))
+            .setMemberCount(rs.getInt(16))
+            .setMember(rs.getBoolean(17))
+            .setAdmin(rs.getBoolean(18));
+    byte[] peer = rs.getBytes(2);
+    if (peer != null) {
+      c.setPeer(
+          AccountService.user(
+              Uuid.of(peer), rs.getString(3), rs.getString(4), rs.getBytes(12), rs.getBoolean(13)));
+    }
     byte[] sender = rs.getBytes(6);
-    if (lastSeq > 0 && sender != null) {
-      c.setLastMessage(
+    byte[] body = rs.getBytes(8);
+    if (lastSeq > 0 && sender != null && body != null) {
+      Message.Builder m =
           Message.newBuilder()
               .setConversationId(conversationId)
               .setSeq(lastSeq)
               .setSenderUserId(ByteString.copyFrom(sender))
               .setClientMessageId(rs.getString(7))
-              .setText(rs.getString(8))
-              .setSentAt(Timestamps.toProto(rs.getObject(9, LocalDateTime.class))));
+              .setSentAt(Timestamps.toProto(rs.getObject(9, LocalDateTime.class)));
+      c.setLastMessage(MessageBody.decode(m, body));
     }
     return c.build();
   }
