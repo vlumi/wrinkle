@@ -10,6 +10,7 @@ struct ConversationListView: View {
     @State private var peerName = ""
     @State private var path: [IDHex] = []
     @State private var showProfile = false
+    @State private var showNewGroup = false
     @State private var error: String?
 
     var body: some View {
@@ -29,7 +30,7 @@ struct ConversationListView: View {
                 Section {
                     ForEach(conversations) { c in
                         NavigationLink(value: c.id) {
-                            ConversationRow(conversation: c, me: app.myUserID)
+                            ConversationRow(conversation: c)
                         }
                     }
                 }
@@ -52,11 +53,27 @@ struct ConversationListView: View {
                 }
                 ToolbarItem(placement: Toolbar.trailing) {
                     Button {
+                        showNewGroup = true
+                    } label: {
+                        Image(systemName: "person.2.badge.plus")
+                    }
+                    .accessibilityLabel("New group")
+                }
+                ToolbarItem(placement: Toolbar.trailing) {
+                    Button {
                         showProfile = true
                     } label: {
                         Avatar(user: app.me ?? Wrinkle_V1_User(), size: 30)
                     }
                     .accessibilityLabel("Profile")
+                }
+            }
+            .sheet(isPresented: $showNewGroup) {
+                NavigationStack {
+                    NewGroupView { id in
+                        showNewGroup = false
+                        path = [id]
+                    }
                 }
             }
             .sheet(isPresented: $showProfile) {

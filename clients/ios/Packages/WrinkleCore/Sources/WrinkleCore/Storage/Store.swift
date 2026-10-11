@@ -2,35 +2,62 @@ import Foundation
 import SwiftData
 
 /// A conversation as the device last saw it. Ids are the lowercase hex of the 16-byte ids.
+/// The peer fields are for direct conversations; topic, member count and the member and admin
+/// flags for groups.
 @Model
 public final class StoredConversation {
     @Attribute(.unique) public var id: IDHex
+    /// The ConversationKind's raw value.
+    public var kind: Int
     public var peerID: IDHex
     public var peerName: String
     public var peerIcon: String
     /// The peer's avatar blob id as hex; empty for none.
     public var peerAvatar: String
     public var peerDeleted: Bool
+    public var topic: String
+    public var memberCount: Int
+    /// Groups: the user is still a member; false once they left or were removed.
+    public var member: Bool
+    public var admin: Bool
     public var lastSeq: Int64
     public var lastSenderID: IDHex?
     public var lastText: String?
+    /// The serialized Notice when the latest message is one.
+    public var lastNotice: Data?
     public var lastSentAt: Date?
     public var readSeq: Int64
     public var peerReadSeq: Int64
     public var updatedAt: Date
+    /// History has been fetched back to the first message the user may see.
+    public var historyComplete: Bool
 
     public init(id: IDHex, peer: Wrinkle_V1_User) {
         self.id = id
+        self.kind = Wrinkle_V1_ConversationKind.direct.rawValue
         self.peerID = peer.userID.hex
         self.peerName = peer.name
         self.peerIcon = peer.icon
         self.peerAvatar = peer.avatar.hex
         self.peerDeleted = peer.deleted
+        self.topic = ""
+        self.memberCount = 0
+        self.member = true
+        self.admin = false
         self.lastSeq = 0
         self.readSeq = 0
         self.peerReadSeq = 0
         self.updatedAt = Date()
+        self.historyComplete = false
     }
+
+    public var isGroup: Bool { kind == Wrinkle_V1_ConversationKind.group.rawValue }
+
+    /// A group the user left or was removed from: its history stays, read-only.
+    public var isFormer: Bool { isGroup && !member }
+
+    /// The name shown for the conversation: the topic of a group, else the peer's name.
+    public var title: String { isGroup ? topic : peerDisplayName }
 
     public var unread: Int64 { max(0, lastSeq - readSeq) }
 
@@ -38,8 +65,19 @@ public final class StoredConversation {
     public var peerDisplayName: String { UserDisplay.name(peerName, deleted: peerDeleted) }
 
     public func apply(_ c: Wrinkle_V1_Conversation) {
-        peerID = c.peer.userID.hex
-        showPeer(c.peer)
+        if c.kind == .group {
+            kind = Wrinkle_V1_ConversationKind.group.rawValue
+        } else {
+            peerID = c.peer.userID.hex
+            showPeer(c.peer)
+        }
+        // Group state from a response older than what events have shown is stale.
+        if Int64(c.lastSeq) >= lastSeq {
+            topic = c.topic
+            memberCount = Int(c.memberCount)
+            member = c.member
+            admin = c.admin
+        }
         lastSeq = max(lastSeq, Int64(c.lastSeq))
         if c.hasLastMessage { showLast(c.lastMessage) }
         readSeq = max(readSeq, Int64(c.readSeq))
@@ -62,9 +100,55 @@ public final class StoredConversation {
         peerDeleted = peer.deleted
     }
 
+    /// Follows a group notice that is the conversation's latest message: the topic, the
+    /// member count, and whether the user is a member and an admin.
+    func follow(_ notice: Wrinkle_V1_Notice, sender: IDHex, me: IDHex) {
+        switch notice.kind {
+        case .groupCreated(let g):
+            topic = g.topic
+            memberCount = g.members.count + 1
+            member = true
+            admin = sender == me
+        case .membersAdded(let a):
+            joined(a.users, me: me)
+        case .memberRemoved(let r):
+            departed(r.user.userID.hex == me)
+        case .memberLeft(let l):
+            departed(sender == me)
+            admin = admin || (l.hasPromoted && l.promoted.userID.hex == me)
+        case .topicChanged(let t):
+            topic = t.topic
+        case .adminChanged(let a):
+            admin = a.user.userID.hex == me ? a.admin : admin
+        case nil:
+            break
+        }
+    }
+
+    private func joined(_ users: [Wrinkle_V1_User], me: IDHex) {
+        memberCount += users.count
+        if users.contains(where: { $0.userID.hex == me }) {
+            member = true
+            admin = false
+        }
+    }
+
+    private func departed(_ isMe: Bool) {
+        memberCount = max(0, memberCount - 1)
+        if isMe {
+            member = false
+            admin = false
+        }
+    }
+
     private func showLast(_ m: Wrinkle_V1_Message) {
         lastSenderID = m.senderUserID.hex
         lastText = m.text
+        if case .notice(let n) = m.content {
+            lastNotice = try? n.serializedData()
+        } else {
+            lastNotice = nil
+        }
         lastSentAt = m.sentAt.date
         updatedAt = m.sentAt.date
     }
@@ -77,7 +161,10 @@ public final class StoredMessage {
     public var seq: Int64
     public var senderID: IDHex
     public var clientMessageID: String
+    /// Empty for a notice.
     public var text: String
+    /// The serialized Notice, for a group notice.
+    public var notice: Data?
     public var sentAt: Date
 
     public init(_ m: Wrinkle_V1_Message) {
@@ -86,7 +173,12 @@ public final class StoredMessage {
         senderID = m.senderUserID.hex
         clientMessageID = m.clientMessageID
         text = m.text
+        if case .notice(let n) = m.content { notice = try? n.serializedData() }
         sentAt = m.sentAt.date
+    }
+
+    public var noticeContent: Wrinkle_V1_Notice? {
+        notice.flatMap { try? Wrinkle_V1_Notice(serializedBytes: $0) }
     }
 }
 
@@ -99,13 +191,13 @@ public struct Store {
     public init(context: ModelContext) { self.context = context }
 
     public static let models: [any PersistentModel.Type] = [
-        StoredConversation.self, StoredMessage.self,
+        StoredConversation.self, StoredMessage.self, StoredMember.self,
     ]
     public static let schema = Schema(models)
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 3
+    static let version = 4
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {
@@ -130,6 +222,7 @@ public struct Store {
     /// Forgets everything stored, as on signing out.
     public func reset() {
         try? context.delete(model: StoredMessage.self)
+        try? context.delete(model: StoredMember.self)
         try? context.delete(model: StoredConversation.self)
         save()
     }
@@ -153,14 +246,17 @@ public struct Store {
         return stored
     }
 
-    public func insert(_ m: Wrinkle_V1_Message) {
+    /// Stores a message unless it is already; returns whether it was new.
+    @discardableResult
+    public func insert(_ m: Wrinkle_V1_Message) -> Bool {
         let id = m.conversationID.hex
         let seq = Int64(m.seq)
         var d = FetchDescriptor<StoredMessage>(
             predicate: #Predicate { $0.conversationID == id && $0.seq == seq })
         d.fetchLimit = 1
-        if (try? context.fetch(d).first) != nil { return }
+        if (try? context.fetch(d).first) != nil { return false }
         context.insert(StoredMessage(m))
+        return true
     }
 
     public func oldestSeq(in conversationID: IDHex) -> Int64? {
@@ -176,6 +272,8 @@ public struct Store {
         let peer = user.userID.hex
         let d = FetchDescriptor<StoredConversation>(predicate: #Predicate { $0.peerID == peer })
         for c in (try? context.fetch(d)) ?? [] { c.showPeer(user) }
+        let m = FetchDescriptor<StoredMember>(predicate: #Predicate { $0.userID == peer })
+        for row in (try? context.fetch(m)) ?? [] { row.show(user) }
     }
 
     /// Applies one event from the user's log; returns the conversation it touched, if known.
@@ -183,28 +281,42 @@ public struct Store {
     public func apply(_ event: Wrinkle_V1_Event, me: IDHex) -> StoredConversation? {
         switch event.body {
         case .message(let e):
-            let m = e.message
-            insert(m)
-            guard let c = conversation(m.conversationID.hex) else { return nil }
-            c.noteLatest(m)
-            if m.senderUserID.hex == me {
-                c.readSeq = max(c.readSeq, Int64(m.seq))
-            }
-            return c
+            return apply(e.message, me: me)
         case .read(let r):
-            guard let c = conversation(r.conversationID.hex) else { return nil }
-            if r.userID.hex == me {
-                c.readSeq = max(c.readSeq, Int64(r.seq))
-            } else {
-                c.peerReadSeq = max(c.peerReadSeq, Int64(r.seq))
-            }
-            return c
+            return apply(r, me: me)
         case .profile(let p):
             if p.user.userID.hex != me { updatePeer(p.user) }
             return nil
         default:
             return nil
         }
+    }
+
+    private func apply(_ m: Wrinkle_V1_Message, me: IDHex) -> StoredConversation? {
+        let new = insert(m)
+        if new, case .notice(let n) = m.content { followMembers(n, in: m) }
+        guard let c = conversation(m.conversationID.hex) else { return nil }
+        if c.noteLatest(m), case .notice(let n) = m.content {
+            c.follow(n, sender: m.senderUserID.hex, me: me)
+        }
+        if m.senderUserID.hex == me {
+            c.readSeq = max(c.readSeq, Int64(m.seq))
+        }
+        return c
+    }
+
+    private func apply(_ r: Wrinkle_V1_ReadEvent, me: IDHex) -> StoredConversation? {
+        guard let c = conversation(r.conversationID.hex) else { return nil }
+        if r.userID.hex == me {
+            c.readSeq = max(c.readSeq, Int64(r.seq))
+        } else if c.isGroup {
+            if let row = member(r.userID.hex, in: c.id) {
+                row.readSeq = max(row.readSeq, Int64(r.seq))
+            }
+        } else {
+            c.peerReadSeq = max(c.peerReadSeq, Int64(r.seq))
+        }
+        return c
     }
 
     public func save() {

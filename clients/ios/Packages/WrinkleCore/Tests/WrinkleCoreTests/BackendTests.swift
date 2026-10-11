@@ -4,7 +4,7 @@ import XCTest
 
 /// Against a live backend at ws://localhost:8080/v1/ws: accounts, a message each way, a read
 /// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
-/// deletion. Skipped when nothing listens, unless
+/// deletion, a group of three (GroupBackendTests.swift). Skipped when nothing listens, unless
 /// WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {
     private let url = URL(
@@ -23,7 +23,7 @@ final class BackendTests: XCTestCase {
         return c
     }
 
-    private func next(
+    func next(
         _ events: AsyncStream<Wrinkle_V1_Event>,
         where match: @escaping @Sendable (Wrinkle_V1_Event) -> Bool
     ) async throws -> Wrinkle_V1_Event {
@@ -42,16 +42,15 @@ final class BackendTests: XCTestCase {
         }
     }
 
-    private static let password = "correct horse"
+    static let password = "correct horse"
 
     /// A name no earlier run used.
-    private func unique(_ prefix: String) -> String {
+    func unique(_ prefix: String) -> String {
         "\(prefix)-\(UUID().uuidString.prefix(8).lowercased())"
     }
 
     /// Registers a new user on a fresh connection and connects it.
-    private func registered(_ name: String) async throws -> (Connection, Wrinkle_V1_ConnectResponse)
-    {
+    func registered(_ name: String) async throws -> (Connection, Wrinkle_V1_ConnectResponse) {
         let c = try await dial()
         let creds = try await c.register(name: name, password: Self.password, deviceName: "test")
         XCTAssertEqual(creds.userID.count, 16)
@@ -61,7 +60,7 @@ final class BackendTests: XCTestCase {
         return (c, resp)
     }
 
-    private func code(_ work: () async throws -> some Any) async -> Wrinkle_V1_ErrorCode? {
+    func code(_ work: () async throws -> some Any) async -> Wrinkle_V1_ErrorCode? {
         do {
             _ = try await work()
             return nil

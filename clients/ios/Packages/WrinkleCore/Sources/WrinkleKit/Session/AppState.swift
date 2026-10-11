@@ -33,7 +33,7 @@ public final class AppState {
 
     private var credentials: Credentials?
     private var connection: Connection?
-    private var store: Store?
+    private(set) var store: Store?
     private var cursor: UInt64 = 0
     private var sessionTask: Task<Void, Never>?
     private var pushToken: (service: Wrinkle_V1_PushService, token: String)?
@@ -274,6 +274,7 @@ public final class AppState {
             let resp = try await conn.sync(cursor: cursor, limit: Self.syncLimit)
             for e in resp.events { apply(e, store) }
             store.save()
+            refreshMembers(after: resp.events, store)
             advanceCursor(to: resp.cursor)
             if !resp.hasMore_p { break }
         }
@@ -307,6 +308,7 @@ public final class AppState {
             try? await refreshConversations(conn)
         }
         store.save()
+        refreshMembers(after: [event], store)
         advanceCursor(to: event.cursor)
         try? await conn.ack(cursor: cursor)
     }
@@ -320,7 +322,7 @@ extension AppState {
         return (connection, store)
     }
 
-    private func wireID(_ hex: IDHex) throws -> Data {
+    func wireID(_ hex: IDHex) throws -> Data {
         guard let id = Data.id(hex: hex) else { throw AccountError("Unknown conversation.") }
         return id
     }
@@ -339,6 +341,9 @@ extension AppState {
             conversationID: try wireID(conversationID), beforeSeq: UInt64(before ?? 0),
             limit: Self.historyPage)
         for m in messages { store.insert(m) }
+        if messages.count < Self.historyPage, let c = store.conversation(conversationID) {
+            c.historyComplete = true
+        }
         store.save()
     }
 

@@ -62,3 +62,33 @@ struct Avatar: View {
 
     private var initial: String { name.first.map { String($0).uppercased() } ?? "" }
 }
+
+/// A group's picture: a people glyph in a circle.
+struct GroupAvatar: View {
+    var size: CGFloat = 40
+
+    var body: some View {
+        ZStack {
+            Circle().fill(Color.accentColor.opacity(0.15))
+            Image(systemName: "person.3.fill")
+                .font(.system(size: size * 0.35))
+                .foregroundStyle(.tint)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
+/// A conversation's picture: the group's, or the peer's.
+struct ConversationAvatar: View {
+    let conversation: StoredConversation
+    var size: CGFloat = 40
+
+    var body: some View {
+        if conversation.isGroup {
+            GroupAvatar(size: size)
+        } else {
+            Avatar(peerOf: conversation, size: size)
+        }
+    }
+}
