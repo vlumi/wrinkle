@@ -67,13 +67,15 @@ run-java-mono: build-java  ## Java, all roles in one process
 	backends/ports-free.sh 8080
 	$(JAVA_BACKEND) $(ARGS)
 
-##@ Gateways side by side (one services process, a gateway per language on its own port)
-##~ Start run-go-services first, then any of the gateways in other terminals. PORT=... overrides the port.
+##@ Side by side (services instances and gateways behind the balancers)
+##~ make lb-up, then services instances and gateways in other terminals, in any number and language.
+##~ INSTANCE=2 (up to 4) runs another services instance; PORT=... moves a gateway.
+
+INSTANCE ?= 1
 
 .PHONY: run-go-services run-go-gw run-elixir-gw run-rust-gw
-run-go-services: build-go  ## Go services and fan-out alone, for the gateways below
-	backends/ports-free.sh 8090 9000
-	backends/go/services.sh $(ARGS)
+run-go-services: build-go  ## Go services and fan-out, instance INSTANCE (RPC on :9100+n)
+	INSTANCE=$(INSTANCE) backends/go/services.sh $(ARGS)
 
 run-go-gw: build-go  ## Go gateway on :8180
 	backends/gateway.sh go $(PORT)
@@ -85,11 +87,11 @@ run-rust-gw: build-rust  ## Rust gateway on :8182
 	backends/gateway.sh rust $(PORT)
 
 .PHONY: lb-up lb-down
-lb-up:  ## Load balancer on :8080 across the gateways above; statistics on localhost:8404
+lb-up:  ## The balancers: devices on :8080 to the gateways, gateways on :9100 to the services; statistics on localhost:8404
 	backends/ports-free.sh 8080
 	$(COMPOSE) --profile lb up -d --wait haproxy
 
-lb-down:  ## Stop the load balancer
+lb-down:  ## Stop the balancers
 	$(COMPOSE) --profile lb stop haproxy
 
 ##@ Clients

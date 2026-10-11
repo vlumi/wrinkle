@@ -8,7 +8,7 @@ const services = [
     items: [
       { name: "Grafana", probe: "http://127.0.0.1:3000/api/health", links: [["dashboard", "http://localhost:3000/d/wrinkle"], ["home", "http://localhost:3000/"]] },
       { name: "Prometheus", probe: "http://127.0.0.1:9090/-/healthy", links: [["targets", "http://localhost:9090/targets"], ["query", "http://localhost:9090/query"]] },
-      { name: "Load balancer (HAProxy)", probe: "http://127.0.0.1:8404/", links: [["statistics", "http://localhost:8404/"]], note: "make lb-up" },
+      { name: "Balancers (HAProxy)", probe: "http://127.0.0.1:8404/", links: [["statistics", "http://localhost:8404/"]], note: "make lb-up" },
       { name: "Kafka Connect (Debezium)", probe: "http://127.0.0.1:8083/connectors", links: [["outbox connector", "http://localhost:8083/connectors/wrinkle-outbox/status"], ["connectors", "http://localhost:8083/connectors"]] },
       { name: "Vitess (vtcombo)", probe: "http://127.0.0.1:15000/debug/status", links: [["status", "http://localhost:15000/debug/status"], ["variables", "http://localhost:15000/debug/vars"]] },
     ],
@@ -17,17 +17,23 @@ const services = [
     group: "Backends",
     items: [
       { name: "Backend or load balancer :8080", probe: "http://127.0.0.1:8080/healthz", links: backendLinks(8080), note: "make run-go-mono, run-java-mono or lb-up" },
-      { name: "Go services :8090", probe: "http://127.0.0.1:8090/healthz", links: backendLinks(8090), note: "make run-go-services" },
+      ...[1, 2, 3, 4].map((n) => ({
+        name: `Services instance ${n} :${9100 + n}`,
+        probe: `http://127.0.0.1:${8190 + n}/healthz`,
+        links: backendLinks(8190 + n),
+        note: n === 1 ? "make run-go-services or run-java-services" : `INSTANCE=${n}`,
+      })),
       { name: "Go gateway :8180", probe: "http://127.0.0.1:8180/healthz", links: backendLinks(8180), note: "make run-go-gw" },
       { name: "Elixir gateway :8181", probe: "http://127.0.0.1:8181/healthz", links: backendLinks(8181, false), note: "make run-elixir-gw" },
       { name: "Rust gateway :8182", probe: "http://127.0.0.1:8182/healthz", links: backendLinks(8182, false), note: "make run-rust-gw" },
+      { name: "Java gateway :8183", probe: "http://127.0.0.1:8183/healthz", links: backendLinks(8183, false), note: "make run-java-gw" },
     ],
   },
 ];
 
 function backendLinks(port, pprof = true) {
   const links = [["metrics", `http://localhost:${port}/metrics`]];
-  if (pprof) links.push(["pprof (Go)", `http://localhost:${port}/debug/pprof/`]);
+  if (pprof) links.push(["pprof (if Go)", `http://localhost:${port}/debug/pprof/`]);
   return links;
 }
 

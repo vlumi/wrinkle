@@ -107,7 +107,8 @@ services:
           memory: 256M
 
   # Only with the lb profile (make lb-up): one address in front of the
-  # side-by-side gateways, facing the network like a gateway does.
+  # side-by-side gateways, facing the network like a gateway does, and one
+  # in front of the services instances, for the gateways.
   haproxy:
     image: haproxy:3.4.6
     profiles: [lb]
@@ -115,6 +116,7 @@ services:
       - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
     ports:
       - "${LB_BIND:-0.0.0.0}:8080:8080"
+      - "127.0.0.1:9100:9100" # the services, for the gateways on this host
       - "127.0.0.1:8404:8404" # statistics
     extra_hosts:
       - "host.docker.internal:host-gateway"
