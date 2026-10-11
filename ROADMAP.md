@@ -117,6 +117,7 @@ Notes:
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
 - [x] APNs from the Go fan-out to devices that are not connected; the iOS app registers, closes its connection in the background and opens a tapped conversation.
+- [ ] After a Valkey restart, devices that stayed connected have no presence entry until they reconnect, so they may get notifications while connected. Gateways could rewrite their devices' entries when they reconnect to Valkey.
 - [ ] Pending: the Java backend's fan-out sends no pushes yet. In a pool of Go and Java services instances, the partitions a Java instance consumes get no pushes.
 - Presence entries name the gateway process holding the device, and each process keeps a key with a 90 s expiry alive while it runs; the push notifier ignores entries of processes whose key has expired, so devices of a gateway that died get pushes again within 90 s.
 

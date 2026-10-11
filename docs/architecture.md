@@ -167,7 +167,7 @@ Each gateway keeps one HTTP/2 connection to the services balancer, which spreads
 | A gateway | its devices disconnect | they reconnect through the balancer to another gateway and sync; presence entries expire within 90 s |
 | A services instance | requests in flight on it fail with `UNAVAILABLE` | the balancer drops it within 2 s; Kafka moves its fan-out partitions to the other instances |
 | Kafka or Debezium | sends still succeed; nothing is fanned out | the stream resumes from where it was; the logs catch up and devices get the events then |
-| Valkey | no pushes; presence unknown | devices still sync; pushes resume when it is back, and gateways announce themselves again |
+| Valkey | no pushes; presence unknown | devices still sync; when it is back, gateways resubscribe and announce themselves again, but devices that stayed connected have no presence entry until they reconnect, so they may get notifications meanwhile |
 | APNs | no notifications | none needed; devices sync when opened |
 | A conversation shard | sends and reads in its conversations fail | the shard's replica takes over (a real Vitess topology; the prototype runs one process) |
 | A user shard | Connect, Sync and fan-out to its users fail | fan-out retries the batch until the shard is back |
