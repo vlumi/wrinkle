@@ -18,7 +18,7 @@ Three ideas carry the design:
 
 ```mermaid
 flowchart LR
-  devices["Devices<br/><small>web · iOS</small>"]
+  devices(["📱 Devices<br/><small>web · iOS</small>"])
   lb["Load balancer"]
   gw["Gateways<br/><small>WebSocket connections</small>"]
   subgraph services ["Services"]
@@ -30,7 +30,7 @@ flowchart LR
   kafka[["Kafka"]]
   fanout["Fan-out workers"]
   valkey[("Valkey<br/><small>presence ·<br/>a channel per user</small>")]
-  apns["APNs"]
+  apns["APNs<br/><small>to iOS devices<br/>not connected</small>"]
 
   devices <-- "WebSocket" --> lb <--> gw
   gw -- "gRPC or<br/>in-process" --> conv & sync
@@ -40,8 +40,10 @@ flowchart LR
   fanout -- "append" --> userdb
   fanout -- "publish" --> valkey
   valkey -- "push" --> gw
-  fanout -- "not connected" --> apns
-  apns -.-> devices
+  fanout --> apns
+
+  classDef user fill:#2f7d4a,stroke:#2f7d4a,color:#fff,font-weight:bold
+  class devices user
 ```
 
 Components:
