@@ -60,18 +60,23 @@ reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backen
 
 .PHONY: run-go run-go-split run-java run-elixir run-rust
 run-go: build-go  ## Go, all roles in one process
+	backends/ports-free.sh 8080
 	$(GO_BACKEND) $(ARGS)
 
 run-go-split: build-go  ## Go as a gateway and a services process over the internal RPC
+	backends/ports-free.sh 8080 8090 9000
 	backends/go/split.sh $(ARGS)
 
 run-java: build-java  ## Java, all roles in one process
+	backends/ports-free.sh 8080
 	$(JAVA_BACKEND) $(ARGS)
 
 run-elixir: build-go build-elixir  ## Elixir gateway, with the Go services beside it
+	backends/ports-free.sh 8080 8090 9000
 	backends/elixir/run.sh
 
 run-rust: build-go build-rust  ## Rust gateway, with the Go services beside it
+	backends/ports-free.sh 8080 8090 9000
 	backends/rust/run.sh
 
 ##@ Clients
