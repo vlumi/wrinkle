@@ -41,6 +41,10 @@ public final class ApiError extends RuntimeException {
     return new ApiError(ErrorCode.ERROR_CODE_UNAVAILABLE, message);
   }
 
+  public static ApiError resourceExhausted(String message) {
+    return new ApiError(ErrorCode.ERROR_CODE_RESOURCE_EXHAUSTED, message);
+  }
+
   /** The wire form of any error; internal ones keep their detail out of the response. */
   public static wrinkle.v1.Error toProto(Throwable t) {
     if (t instanceof ApiError e) {

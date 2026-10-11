@@ -1,6 +1,7 @@
 package wrinkle.devicesync;
 
 import com.google.protobuf.InvalidProtocolBufferException;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -135,7 +136,7 @@ public final class DeviceSyncService {
           && service != PushService.PUSH_SERVICE_APNS_SANDBOX) {
         throw ApiError.invalidArgument("unknown push service " + service);
       }
-      if (token.length() > MAX_PUSH_TOKEN) {
+      if (token.getBytes(StandardCharsets.UTF_8).length > MAX_PUSH_TOKEN) {
         throw ApiError.invalidArgument("push token is longer than " + MAX_PUSH_TOKEN + " bytes");
       }
     }

@@ -1,12 +1,15 @@
 package wrinkle;
 
 import com.linecorp.armeria.common.HttpResponse;
+import com.linecorp.armeria.common.HttpStatus;
 import com.linecorp.armeria.server.Server;
 import com.linecorp.armeria.server.ServerBuilder;
 import com.linecorp.armeria.server.grpc.GrpcService;
 import com.linecorp.armeria.server.prometheus.PrometheusExpositionService;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +32,8 @@ import wrinkle.services.RpcServer;
 public final class Main {
   private static final Logger log = LoggerFactory.getLogger(Main.class);
   private static final String FANOUT_GROUP = "wrinkle-fanout";
+  // A drain that has not finished by then exits anyway.
+  private static final long SHUTDOWN_LIMIT_MILLIS = 9500;
 
   private Main() {}
 
@@ -46,14 +51,15 @@ public final class Main {
     }
     Presence presence = new Presence(cfg.valkey(), cfg.node());
 
+    AtomicBoolean draining = new AtomicBoolean();
     ServerBuilder sb = Server.builder().http(cfg.listen());
-    addOperationalEndpoints(sb);
+    addOperationalEndpoints(sb, draining);
 
     Gateway gateway = null;
     if (cfg.runsGateway()) {
       Backend backend = cfg.forwardsToServices() ? new RpcClient(cfg.services()) : local;
       gateway = new Gateway(backend, presence);
-      gateway.register(sb);
+      gateway.register(sb, draining::get);
       if (cfg.forwardsToServices()) {
         log.info("gateway forwarding to services at {}", cfg.services());
       }
@@ -73,14 +79,28 @@ public final class Main {
     }
 
     Server server = sb.build();
+    if (gateway != null) {
+      gateway.start();
+    }
     server.start().join();
     log.info("listening on {}", cfg.listen());
 
-    awaitShutdown(server, gateway, fanout, presence);
+    Gateway g = gateway;
+    FanoutWorker f = fanout;
+    Runtime.getRuntime()
+        .addShutdownHook(
+            Thread.ofPlatform().unstarted(() -> shutDown(draining, server, g, f, presence)));
+    // Until the shutdown hook halts the process.
+    new CountDownLatch(1).await();
   }
 
-  private static void addOperationalEndpoints(ServerBuilder sb) {
-    sb.service("/healthz", (ctx, req) -> HttpResponse.of("ok\n"));
+  private static void addOperationalEndpoints(ServerBuilder sb, AtomicBoolean draining) {
+    sb.service(
+        "/healthz",
+        (ctx, req) ->
+            draining.get()
+                ? HttpResponse.of(HttpStatus.SERVICE_UNAVAILABLE)
+                : HttpResponse.of("ok\n"));
     sb.service("/metrics", PrometheusExpositionService.of(PrometheusRegistry.defaultRegistry));
     // Lets a measurement collect garbage before sampling memory.
     sb.service(
@@ -89,26 +109,53 @@ public final class Main {
           System.gc();
           return HttpResponse.of("ok\n");
         });
+    sb.decorator(
+        "prefix:/debug/",
+        (delegate, ctx, req) ->
+            ctx.remoteAddress().getAddress().isLoopbackAddress()
+                ? delegate.serve(ctx, req)
+                : HttpResponse.of(HttpStatus.FORBIDDEN));
   }
 
-  /** Blocks until the process is told to stop, then stops the roles that run. */
-  private static void awaitShutdown(
-      Server server, Gateway gateway, FanoutWorker fanout, Presence presence) {
-    CompletableFuture<Void> stopped = new CompletableFuture<>();
-    Runnable shutDown =
-        () -> {
-          log.info("shutting down");
-          if (fanout != null) {
-            fanout.stop();
-          }
-          server.stop().join();
-          if (gateway != null) {
-            gateway.close();
-          }
-          presence.close();
-          stopped.complete(null);
-        };
-    Runtime.getRuntime().addShutdownHook(Thread.ofPlatform().unstarted(shutDown));
-    stopped.join();
+  /**
+   * Drains on SIGTERM or SIGINT: refuses new work, closes the connections and lets requests in
+   * flight finish, stops the roles that run, and exits 0 within the limit.
+   */
+  private static void shutDown(
+      AtomicBoolean draining,
+      Server server,
+      Gateway gateway,
+      FanoutWorker fanout,
+      Presence presence) {
+    log.info("shutting down");
+    draining.set(true);
+    Thread.ofPlatform()
+        .daemon()
+        .start(
+            () -> {
+              try {
+                TimeUnit.MILLISECONDS.sleep(SHUTDOWN_LIMIT_MILLIS);
+              } catch (InterruptedException e) {
+                return;
+              }
+              log.warn("shutdown took too long");
+              Runtime.getRuntime().halt(0);
+            });
+    try {
+      if (fanout != null) {
+        fanout.stop();
+      }
+      if (gateway != null) {
+        gateway.drain();
+      }
+      server.stop().join();
+      presence.close();
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } catch (RuntimeException e) {
+      log.error("shutdown failed", e);
+    }
+    // A signal would otherwise make the exit status 128 plus its number.
+    Runtime.getRuntime().halt(0);
   }
 }
