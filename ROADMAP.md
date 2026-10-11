@@ -65,6 +65,7 @@ Notes:
 - Ids are computed by an own xxhash64 that matches the Go backend bit for bit (a unit test holds Go's values), so both backends run on one database.
 - The JVM exporter reports no resident memory on macOS; the load generator reads it with `ps` instead.
 - First comparison in `docs/results/2026-10-10-go-vs-java.md`: both sustain 500/s, Go's tail is tighter, baselines differ by 200 MiB, CPU per message within 10 %. The per-connection memory figures need repetitions and a fixed JVM heap before they mean anything.
+- Later split like Go, into a services role over the internal RPC (gRPC through Armeria) and a gateway that forwards to it; `services.Local` holds the request handling behind the same `Backend` interface as in Go.
 
 ## 6. iOS client
 
@@ -81,22 +82,34 @@ Notes:
 
 - [x] Gateway first in each, since connection handling is where they differ most; then the full backend if worthwhile.
 - [x] Four-way comparison.
+- [ ] Open: services in Elixir and Rust. They were left out because the services are SQL and a Kafka consumer, where the languages differ least; a full implementation in each would complete the matrix.
 
 Notes:
 
-- An internal RPC between gateway and services (`proto/wrinkle/backend/v1`): the gateway forwards a device's request with its identity and gets back the response as it goes to the device; pushes keep going through Valkey. The Go and Java backends have a `services` role and a forwarding mode for their gateways (`split.sh` in each runs the pair for conformance and measurement). The Elixir and Rust implementations are gateways only, run beside Go or Java services (`run.sh` in each).
+- An internal RPC between gateway and services (`proto/wrinkle/backend/v1`): the gateway forwards a device's request with its identity and gets back the response as it goes to the device; pushes keep going through Valkey. The Go and Java backends have a `services` role and a forwarding mode for their gateways (`split.sh` in each runs the pair for conformance and measurement). The Elixir and Rust implementations are gateways only, run beside Go or Java services (`run.sh` in each runs one beside a Go services process for conformance and measurement).
 - Elixir: Bandit, a process per connection, requests in a task each, elixir-grpc over Mint. Rust: axum over tokio, a task per connection, tonic. Both pass the conformance tests.
 - Comparison in `docs/results/2026-10-11-gateways.md`: all three gateways within 15 ms at p50; Rust a fifth of Go's memory at 4000 connections and 60 % of its CPU per message, with the tightest tail; Elixir's per-connection memory the highest, its baseline above 100 MiB.
 - Two protocol flaws found: the stack degrades as it grows (1.4 s against 94 ms p50 at 500/s), so each backend now runs from a fresh stack; and grpc-go's default of 100 concurrent streams per connection broke the Elixir client under a connect storm.
+
+## Scaling out
+
 - [x] Side by side, the shape the design scales in: services instances and gateways in any number and language behind two HAProxy balancers (`make lb-up`). Devices' connections go to the gateway with the fewest; each gateway keeps one HTTP/2 connection to the services balancer, which spreads requests, not connections, over the instances. Go and Java instances share one pool and one fan-out consumer group.
-- [x] The same in containers (`make cluster-up`): an image per backend, counts per language and role, replicas found by HAProxy through Docker's DNS, rescaled in place. For trying the scaled shape; measurements stay native. Images are not built by `make ci`.
-- [ ] Open: services in Elixir and Rust. They were left out because the services are SQL and a Kafka consumer, where the languages differ least; a full implementation in each would complete the matrix.
+- [x] The same in containers (`make cluster-up`): an image per backend, counts per language and role, replicas found by HAProxy through Docker's DNS, rescaled in place. For trying the scaled shape; measurements stay native.
+
+Notes:
+
+- A plain connection balancer in front of the services would pin each gateway's one gRPC connection to one instance; HAProxy in HTTP/2 mode balances per request instead. Client-side balancing in each gateway would save the hop but needs doing in three gRPC clients of uneven support.
+- The services balancer checks an instance by connecting to its RPC port: a stopped instance drops out, a hung one does not.
+- In the cluster, HAProxy keeps a removed replica's address only a second, since Docker hands addresses to new containers: with the default holds, a slot of a kind scaled to zero kept passing checks against a container of another kind.
+- Kubernetes was considered and left out: its Services balance connections too, so it would not replace HAProxy for the RPC, and it would add image builds and networking layers to a project whose point is comparing processes measured natively.
+- [ ] Images are not built by `make ci`, to keep it quick; a broken Dockerfile shows at `make cluster-up`.
+- [ ] Neither the side-by-side processes nor the cluster are scraped by Prometheus; the monitoring page links the native processes' metrics.
 
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
 - [x] APNs from the Go fan-out to devices that are not connected; the iOS app registers, closes its connection in the background and opens a tapped conversation.
-- [ ] Pending: the Java backend's fan-out sends no pushes yet.
+- [ ] Pending: the Java backend's fan-out sends no pushes yet. In a pool of Go and Java services instances, the partitions a Java instance consumes get no pushes.
 - Presence entries have no expiry, so a gateway that dies without cleaning up leaves its devices marked connected, and they get no pushes until they reconnect. The design's 90 s TTL with heartbeats would fix it.
 
 ## Database ceiling

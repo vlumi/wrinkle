@@ -18,4 +18,4 @@ Wrinkle is a prototype one-to-one messaging backend, implemented in several lang
 
 ## Toolchains
 
-Latest stable or LTS of everything: Go, JDK 25 (Homebrew `openjdk@25`, found through `java_home`), Elixir on current OTP, Rust through rustup, Node 22 or later, Xcode 26 with Swift 6. `make tools` installs the code generators and linters. Docker Desktop needs at least 8 GB of memory; 12 GB to run two backends side by side.
+Latest stable or LTS of everything: Go, JDK 25 (Homebrew `openjdk@25`, found through `java_home`), Elixir on current OTP, Rust through rustup, Node 22 or later, Xcode 26 with Swift 6. `make tools` installs the code generators and linters. Docker Desktop needs at least 8 GB of memory; 12 GB for the cluster or several backends side by side. Each backend has a Dockerfile for the cluster; `make ci` does not build them, so check `make cluster-up` after changing a backend's build.
