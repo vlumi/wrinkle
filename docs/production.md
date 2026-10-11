@@ -8,14 +8,7 @@ In rough order; each step assumes the ones before it.
 
 ### 1. Hardening
 
-The planned hardening round, without authentication or encryption:
-
-- Limits on everything a device sends: frame and message size, requests in flight per connection, request rate per device and per user, connections per address.
-- Timeouts on every call between processes; a full outbound queue closes the connection instead of growing or dropping silently.
-- Presence entries with a TTL refreshed by heartbeats, so a gateway that dies does not leave devices marked connected.
-- Outbox rows pruned once fanned out.
-- Gateways drain on shutdown: stop accepting, close connections with a code that tells clients to reconnect elsewhere, then exit. The clients already reconnect through the balancer.
-- The known defects in the Rust gateway (close frames, the pushed-events metric, timeout responses).
+Done, without authentication or encryption (ROADMAP.md, "Hardening"): limits on frames, requests and rates per connection, a deadline for Connect, keepalive and idle timeouts, close codes, presence that expires with its gateway, outbox rows deleted once streamed, and gateways that drain on shutdown. Still open for a public service: limits per user across devices and per address.
 
 ### 2. Encryption in transit
 

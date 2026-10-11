@@ -52,12 +52,12 @@ The diagram shows the split shape, which scales by adding gateways and services 
 Components:
 
 - **Load balancers:** one spreads devices' connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy.
-- **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`).
+- **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`). It enforces the limits the contract sets per connection and drains on shutdown, closing connections so devices reconnect elsewhere.
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
 - **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
 - **Fan-out workers:** run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
 - **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.
-- **Presence:** which device is connected to which gateway node, and one push channel per user, in Valkey.
+- **Presence:** which device is connected to which gateway process, kept only while that process keeps announcing itself, and one push channel per user, in Valkey.
 
 Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, and Prometheus with Grafana for the metrics every backend exposes under the same names.
 

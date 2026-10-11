@@ -15,9 +15,9 @@ Resolved:
 - Vitess publishes x86 images only ([vitessio/vitess#17225](https://github.com/vitessio/vitess/issues/17225), [#15034](https://github.com/vitessio/vitess/issues/15034)). `infra/vitess/` builds `vttestserver` natively from the Vitess sources at a release tag, with MySQL 8.4 LTS from the multi-arch `mysql` image since there are no arm64 MySQL packages for Debian. The first build takes a few minutes; Compose caches it.
 - Debezium's Vitess connector streams from `vttestserver` (vtcombo) over VStream. Its initial snapshot, a VStream copy, fails against vtcombo with duplicate BEGIN events, so the connector runs with `snapshot.mode=never`; the outbox only needs streaming. `BIGINT UNSIGNED` columns arrive as decimal strings in the JSON records.
 
-Left for later:
+Resolved later:
 
-- Outbox rows are never deleted. Prune them once the fan-out workers exist, or delete in the same transaction as Debezium's outbox pattern suggests.
+- Outbox rows are deleted in the transaction that inserts them, as in Debezium's outbox pattern: the connector streams the insert and skips the delete, so the table stays empty.
 
 ## 2. Go backend
 
@@ -105,12 +105,19 @@ Notes:
 - [ ] Images are not built by `make ci`, to keep it quick; a broken Dockerfile shows at `make cluster-up`.
 - [ ] Neither the side-by-side processes nor the cluster are scraped by Prometheus; the monitoring page links the native processes' metrics.
 
+## Hardening
+
+- [x] Limits and liveness in every gateway, the same everywhere and documented in the contract: frame size, a deadline for Connect, a rate and an in-flight limit per connection (`ERROR_CODE_RESOURCE_EXHAUSTED`), one ack write at a time, pings and an idle timeout, close codes for every way a connection ends. The conformance tests cover the limits that show within seconds.
+- [x] Graceful drain: on SIGTERM a gateway fails its health check, refuses new connections, closes the open ones with 1001 so the devices reconnect elsewhere, and exits.
+- [x] The debug endpoints (profiles, forced garbage collection) answer only on the host; the device balancer passes only the WebSocket endpoint.
+- [ ] Limits per user across devices and per address need shared state (Valkey, or the balancer's stick tables); left for a public deployment.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
 - [x] APNs from the Go fan-out to devices that are not connected; the iOS app registers, closes its connection in the background and opens a tapped conversation.
 - [ ] Pending: the Java backend's fan-out sends no pushes yet. In a pool of Go and Java services instances, the partitions a Java instance consumes get no pushes.
-- Presence entries have no expiry, so a gateway that dies without cleaning up leaves its devices marked connected, and they get no pushes until they reconnect. The design's 90 s TTL with heartbeats would fix it.
+- Presence entries name the gateway process holding the device, and each process keeps a key with a 90 s expiry alive while it runs; the push notifier ignores entries of processes whose key has expired, so devices of a gateway that died get pushes again within 90 s.
 
 ## Database ceiling
 
