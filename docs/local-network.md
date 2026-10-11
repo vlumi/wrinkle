@@ -104,7 +104,7 @@ backends/rust/run.sh
 python3 -m http.server 8081 --directory . --bind 0.0.0.0
 ```
 
-Open `http://<address>:8081/clients/web/` on the device, and on the sign-in form change the gateway from `localhost` to the host's address. The page loads protobuf.js from a CDN, so devices need internet access as well as the local network. Each browser is a separate device; a private window is a quick second one.
+Open `http://<address>:8081/clients/web/` on the device. The gateway field defaults to the same host on port 8080; a browser that signed in before remembers the address it used. The page loads protobuf.js from a CDN, so devices need internet access as well as the local network. Each browser is a separate device; a private window is a quick second one.
 
 ### iOS client in the simulator
 

@@ -286,7 +286,7 @@ async function sendMessage(text) {
   const id = state.current;
   const optimistic = {
     conversation_id: id,
-    client_message_id: crypto.randomUUID(),
+    client_message_id: newMessageId(),
     sender_user_id: state.me.user_id,
     text,
     pending: true,
@@ -313,6 +313,19 @@ async function sendMessage(text) {
     renderMessages();
     throw err;
   }
+}
+
+// The gateway on the host that served this page, port 8080.
+function defaultGatewayURL() {
+  const scheme = location.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${location.hostname || "localhost"}:8080/v1/ws`;
+}
+
+// 128 random bits in hex. crypto.randomUUID exists only on secure pages
+// (HTTPS or localhost), and the page is served over plain HTTP on a LAN.
+function newMessageId() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 function dropPending(m) {
@@ -419,10 +432,8 @@ window.addEventListener("DOMContentLoaded", async () => {
     return;
   }
   const last = JSON.parse(localStorage.getItem("wrinkle.last") || "null");
-  if (last) {
-    document.getElementById("name").value = last.name;
-    document.getElementById("url").value = last.url;
-  }
+  document.getElementById("url").value = last ? last.url : defaultGatewayURL();
+  if (last) document.getElementById("name").value = last.name;
   ui.signout.addEventListener("click", () => {
     localStorage.removeItem("wrinkle.last");
     location.reload();

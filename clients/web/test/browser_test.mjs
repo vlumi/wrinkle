@@ -10,12 +10,15 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9333;
-const PAGE = process.env.WEB_URL || "http://localhost:8081/clients/web/";
+// A name Chrome maps to loopback: unlike localhost, it is not a secure
+// context, which is how the page is served on a LAN, so APIs that need one
+// fail here too.
+const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/clients/web/";
 
 const profile = mkdtempSync(join(tmpdir(), "wrinkle-web-test-"));
 const chrome = spawn(CHROME, [
   "--headless=new", `--remote-debugging-port=${PORT}`, "--no-first-run", "--no-default-browser-check",
-  `--user-data-dir=${profile}`, "about:blank",
+  `--user-data-dir=${profile}`, "--host-resolver-rules=MAP wrinkle.test 127.0.0.1", "about:blank",
 ], { stdio: "ignore" });
 process.on("exit", () => rmSync(profile, { recursive: true, force: true }));
 process.on("exit", () => chrome.kill());
@@ -38,6 +41,12 @@ class Page {
       if (m.id && this.pending.has(m.id)) { this.pending.get(m.id)(m); this.pending.delete(m.id); }
       if (m.method === "Runtime.consoleAPICalled") this.logs.push(m.params.args.map((a) => a.value ?? a.description).join(" "));
       if (m.method === "Runtime.exceptionThrown") this.logs.push("EXCEPTION " + m.params.exceptionDetails.text + " " + (m.params.exceptionDetails.exception?.description ?? ""));
+      // The page reports errors with alert(), which blocks all scripting
+      // until dismissed: record it as a failure and dismiss it.
+      if (m.method === "Page.javascriptDialogOpening") {
+        this.logs.push("DIALOG " + m.params.message);
+        this.ws.send(JSON.stringify({ id: ++this.id, method: "Page.handleJavaScriptDialog", params: { accept: true } }));
+      }
     };
     await this.send("Runtime.enable");
     await this.send("Page.enable");
@@ -60,7 +69,7 @@ class Page {
       if (await this.eval(expression)) return;
       await sleep(200);
     }
-    throw new Error(`${this.name}: timed out waiting for ${expression}\nlogs: ${this.logs.join("\n")}`);
+    throw new Error(`${this.name}: timed out waiting for ${expression}\nlogs:\n${this.logs.join("\n")}`);
   }
 }
 
@@ -70,6 +79,12 @@ await waitForChrome();
 const suffix = Date.now().toString(36);
 const alice = new Page("alice"), bob = new Page("bob");
 await alice.open(); await bob.open();
+
+check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
+check(
+  (await alice.eval(`document.getElementById("url").value`)) === "ws://wrinkle.test:8080/v1/ws",
+  "the gateway defaults to the page's host",
+);
 
 for (const [p, name] of [[alice, "web-alice-" + suffix], [bob, "web-bob-" + suffix]]) {
   await p.waitFor(`typeof T !== "undefined" && T.Frame !== undefined`);
@@ -120,8 +135,8 @@ if (process.env.SCREENSHOT) {
 }
 
 for (const p of [alice, bob]) {
-  const errors = p.logs.filter((l) => l.startsWith("EXCEPTION"));
-  check(errors.length === 0, `${p.name} had no exceptions`);
+  const errors = p.logs.filter((l) => l.startsWith("EXCEPTION") || l.startsWith("DIALOG"));
+  check(errors.length === 0, `${p.name} had no exceptions or error dialogs${errors.length ? ": " + errors.join("; ") : ""}`);
 }
 console.log("web client test passed");
 process.exit(0);
