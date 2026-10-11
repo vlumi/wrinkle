@@ -1,14 +1,15 @@
 // Command loadgen simulates devices against a backend and reports latency,
 // throughput and the backend's resource use. Devices belong to users, users
 // are paired into conversations, and messages flow at a fixed rate; see
-// docs/measuring.md for how runs are combined into results.
+// docs/measuring.md for how runs are combined into results. Users are
+// lg-0, lg-1, ... with a fixed password: registered on first use, signed in
+// to on later runs, before anything is measured.
 package main
 
 import (
 	"context"
 	"flag"
 	"fmt"
-	"math/rand/v2"
 	"os"
 	"os/signal"
 	"sync"
@@ -61,8 +62,12 @@ func run(cfg config) error {
 
 	stats := &stats{}
 	devices := newDevices(cfg, stats)
-	fmt.Fprintf(os.Stderr, "connecting %d devices (%d users) at %d/s\n", cfg.connections, cfg.connections/cfg.devicesPerUser, cfg.ramp)
+	fmt.Fprintf(os.Stderr, "signing in %d devices (%d users)\n", cfg.connections, cfg.connections/cfg.devicesPerUser)
 	start := time.Now()
+	signInAll(ctx, devices, cfg.url, cfg.devicesPerUser, stats)
+	fmt.Fprintf(os.Stderr, "signed in in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
+	fmt.Fprintf(os.Stderr, "connecting %d devices at %d/s\n", cfg.connections, cfg.ramp)
+	start = time.Now()
 	connectAll(ctx, devices, cfg.url, cfg.ramp, stats)
 	fmt.Fprintf(os.Stderr, "connected in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
 	ready := openAll(ctx, devices, stats)
@@ -99,15 +104,14 @@ func run(cfg config) error {
 }
 
 // newDevices makes the devices of users paired into conversations: user
-// 2n talks to user 2n+1. Names carry a run id so runs do not share data.
+// 2n talks to user 2n+1.
 func newDevices(cfg config, stats *stats) []*device {
-	runID := fmt.Sprintf("%06x", rand.IntN(1<<24))
 	devices := make([]*device, 0, cfg.connections)
 	for i := range cfg.connections {
 		user := i / cfg.devicesPerUser
 		devices = append(devices, &device{
-			userName: fmt.Sprintf("load-%s-u%d", runID, user),
-			peerName: fmt.Sprintf("load-%s-u%d", runID, user^1),
+			userName: fmt.Sprintf("lg-%d", user),
+			peerName: fmt.Sprintf("lg-%d", user^1),
 			stats:    stats,
 			markRead: cfg.markRead,
 		})
@@ -115,11 +119,14 @@ func newDevices(cfg config, stats *stats) []*device {
 	return devices
 }
 
-// connectAll connects the devices, ramp per second, and waits for all of
-// them; a device that fails is left without a client.
+// connectAll connects the signed-in devices, ramp per second, and waits
+// for all of them; a device that fails is left without a client.
 func connectAll(ctx context.Context, devices []*device, url string, ramp int, stats *stats) {
 	var wg sync.WaitGroup
 	for i, d := range devices {
+		if d.token == "" {
+			continue
+		}
 		if i > 0 {
 			time.Sleep(time.Second / time.Duration(ramp))
 		}
@@ -155,7 +162,7 @@ func openAll(ctx context.Context, devices []*device, stats *stats) []*device {
 	wg.Wait()
 	var ready []*device
 	for _, d := range devices {
-		if d.client != nil && d.conversationID != 0 {
+		if d.client != nil && d.conversationID != nil {
 			ready = append(ready, d)
 		}
 	}

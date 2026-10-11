@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"time"
 
 	wrinkleclient "github.com/vlumi/wrinkle/clients/go"
-	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 const callTimeout = 10 * time.Second
@@ -25,24 +25,27 @@ type device struct {
 	stats          *stats
 	markRead       bool
 	client         *wrinkleclient.Client
-	userID         uint64
-	conversationID uint64
+	token          string
+	userID         []byte
+	conversationID []byte
 }
 
+// connect connects the device with the token it signed in with.
 func (d *device) connect(ctx context.Context, url string) error {
+	if d.token == "" {
+		return fmt.Errorf("not signed in")
+	}
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	c, err := wrinkleclient.Dial(cctx, url)
 	if err != nil {
 		return err
 	}
-	resp, err := c.Connect(cctx, &pb.ConnectRequest{UserName: d.userName, DeviceName: "loadgen"})
-	if err != nil {
+	if _, err := c.Connect(cctx, d.token); err != nil {
 		c.Close()
 		return err
 	}
 	d.client = c
-	d.userID = resp.GetUser().GetUserId()
 	return nil
 }
 
@@ -96,7 +99,7 @@ func (d *device) receive(ctx context.Context) {
 			}
 			cursor = ev.GetCursor()
 			msg := ev.GetMessage().GetMessage()
-			if msg == nil || msg.GetSenderUserId() == d.userID {
+			if msg == nil || bytes.Equal(msg.GetSenderUserId(), d.userID) {
 				continue
 			}
 			if sentAt, ok := sentTime(msg.GetClientMessageId()); ok {
