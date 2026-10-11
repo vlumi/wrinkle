@@ -35,14 +35,14 @@ The generated code is committed, so the code generators (`make tools`) are not n
 
 ## Backends
 
-`make run-go` and `make run-java` each run a whole backend on port 8080, so one at a time; Ctrl-C stops one. The Go, Elixir and Rust gateways instead run beside the Go services, described below. All of them share the database, so users and conversations carry over. `make` lists every target.
+`make run-go-mono` and `make run-java-mono` each run a whole backend on port 8080, so one at a time; Ctrl-C stops one. The Go, Elixir and Rust gateways instead run beside the Go services, described below. All of them share the database, so users and conversations carry over. `make` lists every target.
 
 The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
 ### Go
 
 ```sh
-make run-go
+make run-go-mono
 ```
 
 The Go gateway can also run as a separate process beside the Go services, as the Elixir and Rust gateways do; see [Gateways side by side](#gateways-side-by-side).
@@ -54,7 +54,7 @@ brew install openjdk@25
 mkdir -p ~/Library/Java/JavaVirtualMachines
 ln -sfn /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk ~/Library/Java/JavaVirtualMachines/openjdk-25.jdk
 
-make run-java
+make run-java-mono
 ```
 
 The symlink lets `java_home` find the Homebrew JDK, which the Makefile uses. The first build downloads Gradle and the dependencies.
@@ -90,7 +90,7 @@ make run-elixir-gw         # ws://<address>:8181/v1/ws
 make run-rust-gw           # ws://<address>:8182/v1/ws
 ```
 
-Stop `run-go` or `run-java` first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
+Stop `run-go-mono` or `run-java-mono` first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
 
 To connect to one particular gateway, put its port in the client's gateway field. Or put a load balancer in front of them all on port 8080, where the clients connect by default:
 
@@ -99,7 +99,7 @@ make lb-up                 # HAProxy on ws://<address>:8080/v1/ws
 make lb-down
 ```
 
-Each new connection goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds. Its devices reconnect and land on the others, then come back to it as new connections once it is running again. `http://localhost:8404/` on the host shows each gateway's state and connections. The balancer holds port 8080, so stop it before `run-go` or `run-java`.
+Each new connection goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds. Its devices reconnect and land on the others, then come back to it as new connections once it is running again. `http://localhost:8404/` on the host shows each gateway's state and connections. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`.
 
 ## Clients
 

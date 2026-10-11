@@ -55,15 +55,15 @@ infra-logs:  ## Follow the stack's logs (SERVICE=vitess|kafka|connect|... for on
 reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backend first)
 	infra/reset-fanout.sh
 
-##@ Run a backend (gateway on :8080; one at a time; Ctrl-C stops it)
+##@ Monoliths (all roles in one process, on :8080; one at a time; Ctrl-C stops it)
 ##~ Settings for push and the iOS team come from .env (see .env.example). ARGS=... passes flags.
 
-.PHONY: run-go run-java
-run-go: build-go  ## Go, all roles in one process
+.PHONY: run-go-mono run-java-mono
+run-go-mono: build-go  ## Go, all roles in one process
 	backends/ports-free.sh 8080
 	$(GO_BACKEND) $(ARGS)
 
-run-java: build-java  ## Java, all roles in one process
+run-java-mono: build-java  ## Java, all roles in one process
 	backends/ports-free.sh 8080
 	$(JAVA_BACKEND) $(ARGS)
 
@@ -192,27 +192,27 @@ CONNECTIONS ?= 1000
 RATE ?= 500
 DURATION ?= 30s
 
-.PHONY: load measure-go measure-go-split measure-java measure-elixir measure-rust measure-all
+.PHONY: load measure-go-mono measure-go-gw measure-java-mono measure-elixir-gw measure-rust-gw measure-all
 load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s)
 	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s
 
-measure-all: measure-go measure-go-split measure-java measure-elixir measure-rust  ## The protocol against every backend, each from a fresh stack (about 50 minutes)
+measure-all: measure-go-mono measure-go-gw measure-java-mono measure-elixir-gw measure-rust-gw  ## The protocol against every backend, each from a fresh stack (about 50 minutes)
 
-##~ measure-go, -go-split, -java, -elixir, -rust run the protocol for one (about 10 minutes each).
+##~ measure-go-mono, -java-mono, -go-gw, -elixir-gw, -rust-gw run the protocol for one (about 10 minutes each).
 
-measure-go: infra-up build-go
+measure-go-mono: infra-up build-go
 	FRESH=1 LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(GO_BACKEND)
 
-measure-go-split: infra-up build-go
+measure-go-gw: infra-up build-go
 	FRESH=1 LABEL=go-gateway loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go-gateway.jsonl $(CURDIR)/backends/go/split.sh
 
-measure-java: infra-up build-java
+measure-java-mono: infra-up build-java
 	FRESH=1 LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
 
-measure-elixir: infra-up build-go elixir-deps
+measure-elixir-gw: infra-up build-go elixir-deps
 	FRESH=1 LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh
 
-measure-rust: infra-up build-go build-rust
+measure-rust-gw: infra-up build-go build-rust
 	FRESH=1 LABEL=rust loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-rust.jsonl $(CURDIR)/backends/rust/run.sh
 
 ##@ Contract

@@ -16,7 +16,7 @@ const services = [
   {
     group: "Backends",
     items: [
-      { name: "Backend or load balancer :8080", probe: "http://127.0.0.1:8080/healthz", links: backendLinks(8080), note: "make run-go, run-java or lb-up" },
+      { name: "Backend or load balancer :8080", probe: "http://127.0.0.1:8080/healthz", links: backendLinks(8080), note: "make run-go-mono, run-java-mono or lb-up" },
       { name: "Go services :8090", probe: "http://127.0.0.1:8090/healthz", links: backendLinks(8090), note: "make run-go-services" },
       { name: "Go gateway :8180", probe: "http://127.0.0.1:8180/healthz", links: backendLinks(8180), note: "make run-go-gw" },
       { name: "Elixir gateway :8181", probe: "http://127.0.0.1:8181/healthz", links: backendLinks(8181, false), note: "make run-elixir-gw" },
