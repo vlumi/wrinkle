@@ -13,7 +13,7 @@ const PORT = 9333;
 // A name Chrome maps to loopback: unlike localhost, it is not a secure
 // context, which is how the page is served on a LAN, so APIs that need one
 // fail here too.
-const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/clients/web/";
+const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/";
 
 const profile = mkdtempSync(join(tmpdir(), "wrinkle-web-test-"));
 const chrome = spawn(CHROME, [
@@ -31,9 +31,14 @@ async function waitForChrome() {
 }
 
 class Page {
-  constructor(name) { this.name = name; this.id = 0; this.pending = new Map(); this.logs = []; }
+  constructor(name, width = 1100) { this.name = name; this.width = width; this.id = 0; this.pending = new Map(); this.logs = []; }
   async open() {
-    const target = await (await fetch(`http://localhost:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
+    // Each user in a browser context of their own, so localStorage, where
+    // the client remembers its session, is not shared.
+    const context = await browser.send("Target.createBrowserContext", { disposeOnDetach: false });
+    const { targetId } = (await browser.send("Target.createTarget", { url: "about:blank", browserContextId: context.browserContextId }));
+    const targets = await (await fetch(`http://localhost:${PORT}/json/list`)).json();
+    const target = targets.find((t) => t.id === targetId);
     this.ws = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((r) => (this.ws.onopen = r));
     this.ws.onmessage = (e) => {
@@ -51,6 +56,7 @@ class Page {
     await this.send("Runtime.enable");
     await this.send("Page.enable");
     await this.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+    await this.send("Emulation.setDeviceMetricsOverride", { width: this.width, height: 800, deviceScaleFactor: 2, mobile: this.width < 720 });
     await this.send("Page.navigate", { url: PAGE });
     await sleep(1500);
   }
@@ -75,63 +81,89 @@ class Page {
 
 function check(cond, msg) { if (!cond) throw new Error("FAIL: " + msg); console.log("ok  ", msg); }
 
-await waitForChrome();
+const version = await waitForChrome();
+const browser = await (async () => {
+  const ws = new WebSocket(version.webSocketDebuggerUrl);
+  await new Promise((r) => (ws.onopen = r));
+  let id = 0;
+  const pending = new Map();
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.id && pending.has(m.id)) { pending.get(m.id)(m.result); pending.delete(m.id); }
+  };
+  return { send: (method, params = {}) => new Promise((resolve) => { const i = ++id; pending.set(i, resolve); ws.send(JSON.stringify({ id: i, method, params })); }) };
+})();
 const suffix = Date.now().toString(36);
-const alice = new Page("alice"), bob = new Page("bob");
+// Alice on a phone-sized screen, Bob on a desktop one.
+const alice = new Page("alice", 390), bob = new Page("bob", 1100);
 await alice.open(); await bob.open();
 
+const q = (testid) => `document.querySelector('[data-testid="${testid}"]')`;
+const qa = (testid) => `[...document.querySelectorAll('[data-testid="${testid}"]')]`;
+// React tracks input values; set them through the native setter so it sees the change.
+const type = (testid, value) => `(() => { const el = ${q(testid)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`;
+const submit = (testid) => `(${q(testid)}.form.requestSubmit(), true)`;
+const visible = (sel) => `(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && el.getClientRects().length > 0; })()`;
+
 check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
-check(
-  (await alice.eval(`document.getElementById("url").value`)) === "ws://wrinkle.test:8080/v1/ws",
-  "the gateway defaults to the page's host",
-);
+await alice.waitFor(`!!${q("url")}`);
+check((await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8080/v1/ws", "the gateway defaults to the page's host");
 
 for (const [p, name] of [[alice, "web-alice-" + suffix], [bob, "web-bob-" + suffix]]) {
-  await p.waitFor(`typeof T !== "undefined" && T.Frame !== undefined`);
-  await p.eval(`document.getElementById("name").value = ${JSON.stringify(name)}; document.getElementById("signin-form").requestSubmit(); true`);
-  await p.waitFor(`document.getElementById("status").textContent === "connected" && state.me !== null`);
-  check((await p.eval(`state.me.name`)) === name, `${p.name} signed in as ${name}`);
+  await p.eval(type("name", name));
+  await p.eval(submit("name"));
+  await p.waitFor(`${q("status")}?.textContent === "online" && ${q("me")}?.textContent === ${JSON.stringify(name)}`);
+  check(true, `${p.name} signed in as ${name}`);
 }
 
 // Alice opens a conversation with Bob and sends.
-await alice.eval(`document.getElementById("peer").value = ${JSON.stringify("web-bob-" + suffix)}; document.getElementById("open-form").requestSubmit(); true`);
-await alice.waitFor(`document.getElementById("peer-name").textContent === ${JSON.stringify("web-bob-" + suffix)}`);
-check(true, "alice opened the conversation");
-await alice.eval(`document.getElementById("text").value = "hello bob"; document.getElementById("send-form").requestSubmit(); true`);
-await alice.waitFor(`[...document.querySelectorAll("#messages li:not(.pending)")].some(li => li.textContent.startsWith("hello bob"))`);
+await alice.eval(type("peer", "web-bob-" + suffix));
+await alice.eval(submit("peer"));
+await alice.waitFor(`${q("peer-name")}?.textContent === ${JSON.stringify("web-bob-" + suffix)}`);
+check(await alice.eval(`!${visible(".list")}`), "on a phone, the conversation replaces the list");
+await alice.eval(type("text", "hello bob"));
+await alice.eval(submit("text"));
+await alice.waitFor(`${qa("message")}.some(li => li.textContent.startsWith("hello bob"))`);
 check(true, "alice sees her sent message confirmed");
 
 // Bob sees it in the list with an unread badge, opens it, which marks it read.
-await bob.waitFor(`[...document.querySelectorAll("#conversations li")].some(li => li.textContent.includes("hello bob") && li.querySelector(".unread")?.textContent === "1")`);
+await bob.waitFor(`[...document.querySelectorAll(".row")].some(r => r.textContent.includes("hello bob") && r.querySelector('[data-testid="unread"]')?.textContent === "1")`);
 check(true, "bob's list shows the conversation with 1 unread");
-await bob.eval(`document.querySelector("#conversations li").click(); true`);
-await bob.waitFor(`[...document.querySelectorAll("#messages li")].some(li => li.textContent.startsWith("hello bob"))`);
-check(true, "bob sees the message in the conversation");
-await bob.waitFor(`!document.querySelector("#conversations .unread")`);
+await bob.eval(`(document.querySelector(".row").click(), true)`);
+await bob.waitFor(`${qa("message")}.some(li => li.textContent.startsWith("hello bob"))`);
+check(await bob.eval(visible(".list")), "on a desktop, the list stays beside the conversation");
+await bob.waitFor(`!${q("unread")}`);
 check(true, "bob's unread badge cleared");
-await alice.waitFor(`[...document.querySelectorAll("#messages li.mine .meta")].some(m => m.textContent.endsWith("read"))`);
+await alice.waitFor(`${qa("message")}.some(li => li.classList.contains("mine") && li.querySelector(".meta").textContent.endsWith("read"))`);
 check(true, "alice sees the read receipt");
 
-// Bob replies; Alice gets it pushed.
-await bob.eval(`document.getElementById("text").value = "hi alice"; document.getElementById("send-form").requestSubmit(); true`);
-await alice.waitFor(`[...document.querySelectorAll("#messages li:not(.mine)")].some(li => li.textContent.startsWith("hi alice"))`);
+// Bob replies; Alice gets it pushed and marks it read while viewing.
+await bob.eval(type("text", "hi alice"));
+await bob.eval(submit("text"));
+await alice.waitFor(`${qa("message")}.some(li => !li.classList.contains("mine") && li.textContent.startsWith("hi alice"))`);
 check(true, "alice received bob's reply");
-await alice.waitFor(`state.conversations.values().next().value.read_seq === "2"`);
+await bob.waitFor(`${qa("message")}.some(li => li.classList.contains("mine") && li.textContent.startsWith("hi alice") && li.querySelector(".meta").textContent.endsWith("read"))`);
 check(true, "alice marked the reply read while viewing");
 
-// Reload Alice: the device id and cursor persist, history comes back.
+// Back to the list on the phone.
+await alice.eval(`(document.querySelector(".back").click(), true)`);
+await alice.waitFor(visible(".list"));
+check(await alice.eval(`!${q("peer-name")}`), "the back button returns to the list");
+
+// Reload Alice: the session resumes and history comes back.
 await alice.send("Page.reload");
 await sleep(1500);
-await alice.waitFor(`typeof state !== "undefined" && state.me !== null && document.getElementById("status").textContent === "connected"`);
-await alice.eval(`document.querySelector("#conversations li").click(); true`);
-await alice.waitFor(`document.querySelectorAll("#messages li").length === 2`);
-check(true, "alice reloaded and sees both messages from history");
+await alice.waitFor(`${q("status")}?.textContent === "online"`);
+await alice.eval(`(document.querySelector(".row").click(), true)`);
+await alice.waitFor(`${qa("message")}.length === 2`);
+check((await alice.eval(`${q("me")}.textContent`)) === "web-alice-" + suffix, "alice reloaded as herself and sees both messages from history");
 
 if (process.env.SCREENSHOT) {
   const { writeFileSync } = await import("node:fs");
-  await alice.send("Emulation.setDeviceMetricsOverride", { width: 1100, height: 700, deviceScaleFactor: 1, mobile: false });
-  const shot = await alice.send("Page.captureScreenshot", { format: "png" });
-  writeFileSync(process.env.SCREENSHOT, Buffer.from(shot.result.data, "base64"));
+  for (const p of [alice, bob]) {
+    const shot = await p.send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(process.env.SCREENSHOT.replace(/\.png$/, `-${p.name}.png`), Buffer.from(shot.result.data, "base64"));
+  }
 }
 
 for (const p of [alice, bob]) {
