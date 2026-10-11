@@ -18,7 +18,11 @@ struct MessageBubble: View {
                     Text(senderName(sender))
                         .font(.caption).bold().foregroundStyle(.tint)
                 }
-                Text(message.text)
+                if message.isDeleted {
+                    Text("Message removed").italic().foregroundStyle(.secondary)
+                } else {
+                    Text(message.text)
+                }
                 Text(
                     message.sentAt.formatted(date: .omitted, time: .shortened)
                         + (receipt.map { " · " + $0 } ?? "")

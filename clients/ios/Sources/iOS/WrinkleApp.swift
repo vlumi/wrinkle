@@ -41,6 +41,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
         center.delegate = self
+        app.onMessageDeleted = { id, seq in
+            Task { await Self.withdraw(conversationID: id, seq: seq) }
+        }
         Task {
             let granted =
                 (try? await center.requestAuthorization(options: [.alert, .badge, .sound]))
@@ -67,6 +70,37 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFailToRegisterForRemoteNotificationsWithError error: Error
     ) {
         // The simulator and unsigned builds land here; the app works without push.
+    }
+
+    /// A background push: a message was deleted, so its notification goes, without the UI.
+    /// The store catches up on the next sync.
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any]
+    ) async -> UIBackgroundFetchResult {
+        guard (userInfo["deleted"] as? Bool) == true,
+            let id = userInfo["conversation_id"] as? String, let seq = Self.seq(userInfo)
+        else { return .noData }
+        await Self.withdraw(conversationID: id, seq: seq)
+        return .newData
+    }
+
+    /// Removes the delivered notifications of one message.
+    nonisolated static func withdraw(conversationID: IDHex, seq: UInt64) async {
+        let center = UNUserNotificationCenter.current()
+        let ids = await center.deliveredNotifications()
+            .filter {
+                let info = $0.request.content.userInfo
+                return info["conversation_id"] as? String == conversationID
+                    && Self.seq(info) == seq
+            }
+            .map(\.request.identifier)
+        if !ids.isEmpty { center.removeDeliveredNotifications(withIdentifiers: ids) }
+    }
+
+    /// The payload's seq, a JSON number.
+    nonisolated private static func seq(_ info: [AnyHashable: Any]) -> UInt64? {
+        (info["seq"] as? NSNumber)?.uint64Value
     }
 
     /// A tapped notification opens its conversation.

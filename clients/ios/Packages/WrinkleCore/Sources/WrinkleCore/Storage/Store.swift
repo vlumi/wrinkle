@@ -25,6 +25,8 @@ public final class StoredConversation {
     public var lastText: String?
     /// The serialized Notice when the latest message is one.
     public var lastNotice: Data?
+    /// The latest message was deleted by its sender.
+    public var lastDeleted: Bool
     public var lastSentAt: Date?
     public var readSeq: Int64
     public var peerReadSeq: Int64
@@ -45,6 +47,7 @@ public final class StoredConversation {
         self.member = true
         self.admin = false
         self.lastSeq = 0
+        self.lastDeleted = false
         self.readSeq = 0
         self.peerReadSeq = 0
         self.updatedAt = Date()
@@ -141,9 +144,17 @@ public final class StoredConversation {
         }
     }
 
+    /// The latest message was deleted: its text goes.
+    func lastWasDeleted() {
+        lastText = ""
+        lastNotice = nil
+        lastDeleted = true
+    }
+
     private func showLast(_ m: Wrinkle_V1_Message) {
         lastSenderID = m.senderUserID.hex
         lastText = m.text
+        lastDeleted = m.hasDeletedAt
         if case .notice(let n) = m.content {
             lastNotice = try? n.serializedData()
         } else {
@@ -166,6 +177,8 @@ public final class StoredMessage {
     /// The serialized Notice, for a group notice.
     public var notice: Data?
     public var sentAt: Date
+    /// When the sender deleted it; the text is then empty.
+    public var deletedAt: Date?
 
     public init(_ m: Wrinkle_V1_Message) {
         conversationID = m.conversationID.hex
@@ -175,6 +188,22 @@ public final class StoredMessage {
         text = m.text
         if case .notice(let n) = m.content { notice = try? n.serializedData() }
         sentAt = m.sentAt.date
+        if m.hasDeletedAt { deletedAt = m.deletedAt.date }
+    }
+
+    public var isDeleted: Bool { deletedAt != nil }
+
+    /// Whether the user may delete it: their own text, not yet deleted.
+    public func deletable(by userID: IDHex) -> Bool {
+        senderID == userID && notice == nil && deletedAt == nil
+    }
+
+    /// Forgets the content of a message its sender deleted.
+    func delete(at date: Date) {
+        guard deletedAt == nil else { return }
+        text = ""
+        notice = nil
+        deletedAt = date
     }
 
     public var noticeContent: Wrinkle_V1_Notice? {
@@ -197,7 +226,7 @@ public struct Store {
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 4
+    static let version = 5
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {
@@ -246,17 +275,34 @@ public struct Store {
         return stored
     }
 
-    /// Stores a message unless it is already; returns whether it was new.
+    public func message(_ seq: Int64, in conversationID: IDHex) -> StoredMessage? {
+        var d = FetchDescriptor<StoredMessage>(
+            predicate: #Predicate { $0.conversationID == conversationID && $0.seq == seq })
+        d.fetchLimit = 1
+        return try? context.fetch(d).first
+    }
+
+    /// Stores a message unless it is already; returns whether it was new. A stored message
+    /// that has since been deleted loses its content.
     @discardableResult
     public func insert(_ m: Wrinkle_V1_Message) -> Bool {
-        let id = m.conversationID.hex
-        let seq = Int64(m.seq)
-        var d = FetchDescriptor<StoredMessage>(
-            predicate: #Predicate { $0.conversationID == id && $0.seq == seq })
-        d.fetchLimit = 1
-        if (try? context.fetch(d).first) != nil { return false }
+        if let stored = message(Int64(m.seq), in: m.conversationID.hex) {
+            if m.hasDeletedAt { stored.delete(at: m.deletedAt.date) }
+            return false
+        }
         context.insert(StoredMessage(m))
         return true
+    }
+
+    /// Applies a deletion to the message and, when it is the latest, to the list.
+    @discardableResult
+    public func markDeleted(_ seq: Int64, in conversationID: IDHex, at date: Date)
+        -> StoredConversation?
+    {
+        message(seq, in: conversationID)?.delete(at: date)
+        guard let c = conversation(conversationID) else { return nil }
+        if c.lastSeq == seq { c.lastWasDeleted() }
+        return c
     }
 
     public func oldestSeq(in conversationID: IDHex) -> Int64? {
@@ -284,6 +330,9 @@ public struct Store {
             return apply(e.message, me: me)
         case .read(let r):
             return apply(r, me: me)
+        case .messageDeleted(let d):
+            return markDeleted(
+                Int64(d.seq), in: d.conversationID.hex, at: d.deletedAt.date)
         case .profile(let p):
             if p.user.userID.hex != me { updatePeer(p.user) }
             return nil

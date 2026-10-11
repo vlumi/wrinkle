@@ -50,6 +50,9 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        # Silent pushes withdraw the notification of a message deleted by its sender.
+        UIBackgroundModes:
+          - remote-notification
         # A universal app must support all four for iPad multitasking.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

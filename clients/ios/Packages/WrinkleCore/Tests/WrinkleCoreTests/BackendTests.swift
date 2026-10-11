@@ -4,7 +4,8 @@ import XCTest
 
 /// Against a live backend at ws://localhost:8080/v1/ws: accounts, a message each way, a read
 /// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
-/// deletion, a group of three (GroupBackendTests.swift). Skipped when nothing listens, unless
+/// deletion, a group of three (GroupBackendTests.swift), deleting a message
+/// (DeletionBackendTests.swift). Skipped when nothing listens, unless
 /// WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {
     private let url = URL(

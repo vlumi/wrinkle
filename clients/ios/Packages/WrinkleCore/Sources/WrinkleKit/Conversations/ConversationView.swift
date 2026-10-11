@@ -11,6 +11,8 @@ struct ConversationView: View {
     @State private var text = ""
     @State private var error: String?
     @State private var showInfo = false
+    /// The seq of the user's own message awaiting confirmation of its deletion.
+    @State private var deleting: Int64?
 
     init(conversationID: IDHex) {
         self.conversationID = conversationID
@@ -86,6 +88,15 @@ struct ConversationView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Delete this message for everyone?",
+            isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete for Everyone", role: .destructive) {
+                if let seq = deleting { delete(seq) }
+            }
+        }
         .sheet(isPresented: $showInfo) {
             NavigationStack {
                 GroupInfoView(conversationID: conversationID) { showInfo = false }
@@ -128,7 +139,15 @@ struct ConversationView: View {
             let mine = m.senderID == app.myUserID
             MessageBubble(
                 message: m, mine: mine, sender: isGroup && !mine ? sender(m.senderID) : nil,
-                receipt: mine ? receipt(m) : nil)
+                receipt: mine ? receipt(m) : nil
+            )
+            .contextMenu {
+                if m.deletable(by: app.myUserID) {
+                    Button("Delete for Everyone", systemImage: "trash", role: .destructive) {
+                        deleting = m.seq
+                    }
+                }
+            }
         }
     }
 
@@ -148,6 +167,18 @@ struct ConversationView: View {
         let n = members.filter { $0.current && $0.userID != app.myUserID && $0.readSeq >= m.seq }
             .count
         return n > 0 ? "Read by \(n)" : nil
+    }
+
+    private func delete(_ seq: Int64) {
+        deleting = nil
+        Task {
+            do {
+                try await app.deleteMessage(seq, in: conversationID)
+                error = nil
+            } catch {
+                self.error = errorText(error)
+            }
+        }
     }
 
     private func send() {

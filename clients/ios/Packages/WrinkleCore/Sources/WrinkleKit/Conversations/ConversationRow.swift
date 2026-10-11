@@ -10,7 +10,10 @@ struct ConversationRow: View {
             ConversationAvatar(conversation: conversation)
             VStack(alignment: .leading) {
                 Text(conversation.title).font(.headline)
-                if let preview {
+                if conversation.lastDeleted {
+                    Text("Message removed")
+                        .font(.subheadline).italic().foregroundStyle(.secondary).lineLimit(1)
+                } else if let preview {
                     Text(preview)
                         .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
                 } else {

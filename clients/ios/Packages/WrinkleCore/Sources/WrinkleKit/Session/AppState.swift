@@ -26,6 +26,9 @@ public final class AppState {
     public var notice: String?
     /// A conversation to show, set when a notification is tapped.
     public var pendingConversation: IDHex?
+    /// Told of each message deleted, by conversation id and seq, so the app can withdraw a
+    /// notification already shown for it.
+    public var onMessageDeleted: (@MainActor (IDHex, UInt64) -> Void)?
     /// The account's signed-in devices, once listed; kept current by device events.
     public internal(set) var devices: [Wrinkle_V1_Device] = []
     /// Avatars decoded so far, by blob id as hex.
@@ -288,6 +291,11 @@ public final class AppState {
             me = p.user
         case .device(let d):
             applyDevice(d)
+        case .messageDeleted(let d):
+            onMessageDeleted?(d.conversationID.hex, d.seq)
+        // Synced from before the deletion: the message arrives already deleted.
+        case .message(let m) where m.message.hasDeletedAt:
+            onMessageDeleted?(m.message.conversationID.hex, m.message.seq)
         default:
             break
         }
@@ -356,6 +364,16 @@ extension AppState {
         if let c = store.conversation(conversationID), c.noteLatest(m) {
             c.readSeq = Int64(m.seq)
         }
+        store.save()
+    }
+
+    /// Deletes one of the user's own messages for everyone; the event that follows changes
+    /// nothing more.
+    public func deleteMessage(_ seq: Int64, in conversationID: IDHex) async throws {
+        let (connection, store) = try connected()
+        try await connection.deleteMessage(
+            conversationID: try wireID(conversationID), seq: UInt64(seq))
+        store.markDeleted(seq, in: conversationID, at: Date())
         store.save()
     }
 
