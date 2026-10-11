@@ -33,9 +33,11 @@ defmodule Wrinkle.Socket do
   @doc "The number of open connections on this node."
   def count, do: Registry.count(Wrinkle.Sockets)
 
-  # device is nil until Connect succeeds, then {user_id, device_id}; connect
-  # is :none, :pending while a Connect is forwarded, {:subscribing, ...} while
-  # its response waits for the push subscription, then :done; tasks maps each
+  # device is nil until Connect succeeds, then {user_id, device_id}, the user
+  # id being 16 bytes; connect is :none, :pending while a Connect is
+  # forwarded, {:subscribing, ...} while its response waits for the push
+  # subscription, then :done; deadline names the connect deadline running, so
+  # a restarted one makes the earlier message stale; tasks maps each
   # task's monitor to {:request, id, type, started} or :ack; seen_at is when a
   # frame last arrived, in monotonic milliseconds; ack is the AckWriter state;
   # push monitors Wrinkle.Push once attached.
@@ -43,13 +45,13 @@ defmodule Wrinkle.Socket do
   def init(_opts) do
     Metrics.connection(+1)
     {:ok, _} = Registry.register(Wrinkle.Sockets, :socket, nil)
-    Process.send_after(self(), :connect_deadline, @connect_deadline)
     now = System.monotonic_time(:millisecond)
 
     {:ok,
-     %{
+     restart_deadline(%{
        device: nil,
        connect: :none,
+       deadline: nil,
        tasks: %{},
        push: nil,
        bucket: TokenBucket.new(now),
@@ -57,7 +59,7 @@ defmodule Wrinkle.Socket do
        ack: nil,
        seen_at: now,
        draining: false
-     }}
+     })}
   end
 
   @impl true
@@ -116,13 +118,13 @@ defmodule Wrinkle.Socket do
         :subscribe_deadline,
         %{connect: {:subscribing, id, _, started}, device: {user_id, device_id}} = state
       ) do
-    Logger.warning("push subscription of user #{user_id} not ready, connect refused")
+    Logger.warning("push subscription of user #{Push.hex(user_id)} not ready, connect refused")
     Push.detach()
     Presence.delete(user_id, device_id)
     Process.demonitor(state.push, [:flush])
-    Process.send_after(self(), :connect_deadline, @connect_deadline)
     response = error(id, :ERROR_CODE_UNAVAILABLE, "push channel unavailable")
-    respond({id, "connect", started}, response, %{state | device: nil, connect: :none, push: nil})
+    state = restart_deadline(%{state | device: nil, connect: :none, push: nil})
+    respond({id, "connect", started}, response, state)
   end
 
   def handle_info({:push, frame}, state) do
@@ -134,7 +136,7 @@ defmodule Wrinkle.Socket do
     end
   end
 
-  def handle_info(:connect_deadline, %{device: nil} = state) do
+  def handle_info({:connect_deadline, ref}, %{device: nil, deadline: ref} = state) do
     {:stop, :normal, {1008, "connect first"}, state}
   end
 
@@ -193,9 +195,10 @@ defmodule Wrinkle.Socket do
     refuse(request, :ERROR_CODE_RESOURCE_EXHAUSTED, "too many requests in flight", state)
   end
 
-  # One Connect per connection, also while the first is still forwarded.
-  defp inbound({:request, %Request{body: {:connect, _}} = request}, :ok, %{connect: c} = state)
-       when c != :none do
+  # One Connect per connection, also while the first is still forwarded; no
+  # Register or SignIn once one is.
+  defp inbound({:request, %Request{body: {kind, _}} = request}, :ok, %{connect: c} = state)
+       when kind in [:register, :sign_in, :connect] and c != :none do
     refuse(request, :ERROR_CODE_FAILED_PRECONDITION, "already connected", state)
   end
 
@@ -248,7 +251,7 @@ defmodule Wrinkle.Socket do
   end
 
   defp finished({:request, id, type, started}, {response, nil}, state) do
-    respond({id, type, started}, response, connect_failed(type, state))
+    respond({id, type, started}, response, after_request(type, state))
   end
 
   defp finished(:ack, _result, state), do: ack_done(state)
@@ -256,13 +259,25 @@ defmodule Wrinkle.Socket do
   # A task that crashed: its request is answered, an ack write is done.
   defp crashed({:request, id, type, started}, state) do
     response = error(id, :ERROR_CODE_INTERNAL, "internal error")
-    respond({id, type, started}, response, connect_failed(type, state))
+    respond({id, type, started}, response, after_request(type, state))
   end
 
   defp crashed(:ack, state), do: ack_done(state)
 
-  defp connect_failed("connect", state), do: %{state | connect: :none}
-  defp connect_failed(_type, state), do: state
+  # A Connect that failed may be retried. Hashing a password may have taken
+  # a while, so a Register or SignIn answered gives Connect a fresh deadline.
+  defp after_request("connect", state), do: %{state | connect: :none}
+
+  defp after_request(type, state) when type in ["register", "sign_in"],
+    do: restart_deadline(state)
+
+  defp after_request(_type, state), do: state
+
+  defp restart_deadline(state) do
+    ref = make_ref()
+    Process.send_after(self(), {:connect_deadline, ref}, @connect_deadline)
+    %{state | deadline: ref}
+  end
 
   defp respond({_id, type, started}, response, state) do
     Metrics.request(type, response_code(response), System.monotonic_time() - started)
@@ -303,7 +318,7 @@ defmodule Wrinkle.Socket do
   # device to bind to.
   defp dispatch(device, %Request{id: id} = request) do
     case {request.body, device} do
-      {{:connect, _}, _} -> forward({0, 0}, request)
+      {{kind, _}, nil} when kind in [:register, :sign_in, :connect] -> forward({<<>>, 0}, request)
       {_, nil} -> {error(id, :ERROR_CODE_UNAUTHENTICATED, "connect first"), nil}
       {_, device} -> forward(device, request)
     end
@@ -311,8 +326,13 @@ defmodule Wrinkle.Socket do
 
   defp forward({user_id, device_id}, %Request{id: id} = request) do
     case Backend.call(user_id, device_id, request) do
-      {:ok, %Response{body: {:connect, c}} = response} ->
-        {response, {c.user.user_id, c.device_id}}
+      {:ok,
+       %Response{body: {:connect, %{user: %{user_id: <<_::binary-size(16)>> = user_id}} = c}} =
+           response} ->
+        {response, {user_id, c.device_id}}
+
+      {:ok, %Response{body: {:connect, _}}} ->
+        {error(id, :ERROR_CODE_INTERNAL, "connect returned no user id"), nil}
 
       {:ok, response} ->
         {response, nil}

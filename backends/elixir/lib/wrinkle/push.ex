@@ -25,6 +25,9 @@ defmodule Wrinkle.Push do
   @doc "Detaches the calling connection process; the last one unsubscribes."
   def detach, do: GenServer.cast(__MODULE__, {:detach, self()})
 
+  @doc "The lowercase hex of a user id, naming the user in Valkey keys and channels."
+  def hex(user_id), do: Base.encode16(user_id, case: :lower)
+
   @doc "Wraps an already serialized Event in a Frame without decoding it: Frame.event is field 3."
   def event_frame(payload) do
     <<0x1A, varint(byte_size(payload))::binary, payload::binary>>
@@ -75,7 +78,8 @@ defmodule Wrinkle.Push do
          %{channel: @channel_prefix <> id, payload: payload}},
         state
       ) do
-    with %{pids: pids} <- state.users[String.to_integer(id)] do
+    with {:ok, user_id} <- Base.decode16(id, case: :lower),
+         %{pids: pids} <- state.users[user_id] do
       frame = event_frame(payload)
       for pid <- pids, do: send(pid, {:push, frame})
     end
@@ -87,15 +91,9 @@ defmodule Wrinkle.Push do
         {:redix_pubsub, _pid, _ref, :subscribed, %{channel: @channel_prefix <> id}},
         state
       ) do
-    user_id = String.to_integer(id)
-
-    case state.users do
-      %{^user_id => %{confirmed: false} = user} ->
-        for pid <- user.pids, do: send(pid, {:subscribed, user_id})
-        {:noreply, put_in(state.users[user_id], %{user | confirmed: true})}
-
-      _ ->
-        {:noreply, state}
+    case Base.decode16(id, case: :lower) do
+      {:ok, user_id} -> confirm(state, user_id)
+      :error -> {:noreply, state}
     end
   end
 
@@ -113,6 +111,17 @@ defmodule Wrinkle.Push do
 
   def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
     {:noreply, remove(state, pid)}
+  end
+
+  defp confirm(state, user_id) do
+    case state.users do
+      %{^user_id => %{confirmed: false} = user} ->
+        for pid <- user.pids, do: send(pid, {:subscribed, user_id})
+        {:noreply, put_in(state.users[user_id], %{user | confirmed: true})}
+
+      _ ->
+        {:noreply, state}
+    end
   end
 
   defp remove(state, pid) do
@@ -153,5 +162,5 @@ defmodule Wrinkle.Push do
     end
   end
 
-  defp channel(user_id), do: @channel_prefix <> Integer.to_string(user_id)
+  defp channel(user_id), do: @channel_prefix <> hex(user_id)
 end

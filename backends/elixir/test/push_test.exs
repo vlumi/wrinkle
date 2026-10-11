@@ -6,7 +6,8 @@ defmodule Wrinkle.PushTest do
   defp wrapped(event), do: Frame.decode(Wrinkle.Push.event_frame(Event.encode(event)))
 
   test "event_frame wraps a serialized event without decoding it" do
-    event = %Event{cursor: 1, body: {:read, %ReadEvent{conversation_id: 7, user_id: 1, seq: 1}}}
+    id = :binary.copy(<<7>>, 16)
+    event = %Event{cursor: 1, body: {:read, %ReadEvent{conversation_id: id, user_id: id, seq: 1}}}
     assert %Frame{kind: {:event, ^event}} = wrapped(event)
   end
 
@@ -16,10 +17,18 @@ defmodule Wrinkle.PushTest do
         cursor: len,
         body:
           {:message_failed,
-           %MessageFailedEvent{conversation_id: 7, client_message_id: String.duplicate("x", len)}}
+           %MessageFailedEvent{
+             conversation_id: :binary.copy(<<7>>, 16),
+             client_message_id: String.duplicate("x", len)
+           }}
       }
 
       assert %Frame{kind: {:event, ^event}} = wrapped(event)
     end
+  end
+
+  test "hex names a user by the lowercase hex of the 16-byte id" do
+    id = <<0xFF, 0::size(14)-unit(8), 0x01>>
+    assert Wrinkle.Push.hex(id) == "ff000000000000000000000000000001"
   end
 end

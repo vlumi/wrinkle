@@ -54,7 +54,7 @@ defmodule Wrinkle.Presence do
   @doc "Stops refreshing this instance's key and deletes it, on drain."
   def stop, do: GenServer.call(__MODULE__, :stop)
 
-  defp key(user_id), do: "presence:#{user_id}"
+  defp key(user_id), do: "presence:" <> Wrinkle.Push.hex(user_id)
   defp instance_key, do: "gateway:" <> instance()
 
   @impl true
