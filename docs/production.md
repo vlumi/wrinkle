@@ -12,18 +12,18 @@ Done, without authentication or encryption (ROADMAP.md, "Hardening"): limits on 
 
 ### 2. Encryption in transit
 
-- **Devices to the edge**: TLS at the device balancer, `wss://` only, certificates from Let's Encrypt (HAProxy or Caddy renew them; a cloud load balancer manages its own). HTTP Strict Transport Security for the web client.
+- **Devices to the edge**: TLS at the device balancer, `wss://` only, certificates from Let's Encrypt (HAProxy or Caddy renew them; a cloud load balancer manages its own). HTTP Strict Transport Security for the web client. Locally this is already in place, with a certificate from mkcert ([local-network.md](local-network.md)).
 - **Inside**: start on a private network that only the edge is exposed from; then TLS with client certificates (mTLS) between gateways, services and the infrastructure, which all support it.
 - **At rest**: encrypted disks and backups. Managed databases do it by default; on own hardware, full-disk encryption.
 - **End to end**: a separate feature with consequences for the whole design, [#6](https://github.com/vlumi/wrinkle/issues/6).
 
 ### 3. Authentication
 
-Today anyone can sign in as anyone by typing a name. In its place:
+Done: accounts with random ids and changeable names, passwords hashed with argon2id, and a token per device that Connect carries ([architecture](architecture.md#accounts)). For a public service:
 
-- **Accounts** with stable ids and changeable handles ([#1](https://github.com/vlumi/wrinkle/issues/1)).
 - **Sign-in** with passkeys (WebAuthn, supported by both the browsers and iOS) as the main method, or an identity provider over OpenID Connect. An iOS app that offers third-party sign-in must offer Sign in with Apple too.
-- **Sessions per device**: sign-in over HTTPS issues a refresh token kept by the device and short-lived signed access tokens. `ConnectRequest` carries the access token instead of a name; a gateway verifies its signature without a database read. Signing a device out revokes its refresh token and closes its connection.
+- **Sessions per device**: the device tokens could become refresh tokens, with short-lived signed access tokens that a gateway verifies without a database read. Signing a device out, or changing the password, should close its open connection at once; today it lasts until the device reconnects.
+- **Password recovery** by email, if passwords stay, and account deletion.
 - **Never a token in the URL**: the first frame already has to be the connect request, which keeps tokens out of logs. Browsers' WebSocket handshakes are checked against an allowed `Origin`.
 - Sign-in is rate limited per account and per address.
 

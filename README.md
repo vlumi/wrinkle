@@ -51,10 +51,10 @@ The diagram shows the split shape, which scales by adding gateways and services 
 
 Components:
 
-- **Load balancers:** one spreads devices' connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy.
+- **Load balancers:** one terminates TLS for devices and spreads their connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy.
 - **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`). It enforces the limits the contract sets per connection and drains on shutdown, closing connections so devices reconnect elsewhere.
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
-- **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
+- **Sync service:** accounts (registration and sign-in with passwords, a token per device, profiles), incremental sync, conversation lists, push token registration.
 - **Fan-out workers:** run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
 - **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.
 - **Presence:** which device is connected to which gateway process, kept only while that process keeps announcing itself, and one push channel per user, in Valkey.
@@ -87,14 +87,15 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters. The cluster alone needs only Docker. Plain `make` lists every routine operation, grouped; the common ones:
+Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, mkcert for TLS on the local network, and `make tools` once for the code generators and linters. The cluster alone needs only Docker. Plain `make` lists every routine operation, grouped; the common ones:
 
 ```sh
 make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
 make run-go-mono       # a whole backend on ws://localhost:8080/v1/ws; also run-java-mono
 make lb-up             # or side by side: balancers, then run-go-services or run-java-services, and gateways run-*-gw
 make cluster-up        # or all of that in containers, any number of each: GO_GW=3 JAVA_SERVICES=0 ...
-make web               # the web client, built and served on port 8081
+make tls-up            # TLS for phones and other computers: wss://<host>:8443/v1/ws (mkcert; docs/local-network.md)
+make web               # the web client, built and served on port 8081, over HTTPS with make certs
 make ios-sim           # the iOS app in a simulator; ios-device on a paired iPhone
 make load              # a quick load run against the running backend
 make ci                # the gate before every push: lint, tests, conformance against every backend

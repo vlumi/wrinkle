@@ -29,7 +29,7 @@ Notes:
 
 - The roles are `gateway`, `services` and `fanout`. By default the gateway runs the conversation and sync services in-process; with `--services` it forwards to a `services` process over the internal RPC added in phase 7.
 - Push goes from fan-out workers to gateways through Valkey pub/sub, one channel per user; a gateway subscribes to a user's channel while it holds one of that user's connections. The presence hash (device to node) tells the push notifier which devices are not connected.
-- Ids are derived, not allocated: user id from the name, conversation id from the user pair, both within 63 bits. Sign-in and opening a conversation need no lookup table.
+- Ids were derived, not allocated: user id from the name, conversation id from the user pair, both within 63 bits, so sign-in and opening a conversation needed no lookup table. Replaced by random UUIDs with accounts; see Accounts.
 - `MessageFailedEvent` is in the contract but nothing produces it yet; the synchronous path has no asynchronous failure to report.
 
 ## 3. Web client
@@ -63,7 +63,7 @@ Notes:
 Notes:
 
 - Armeria's WebSocket service over Netty; request handling and fan-out on virtual threads; HikariCP over Connector/J, the Kafka consumer, Lettuce for Valkey. Gradle with a JDK 25 toolchain, google-java-format through Spotless as the format check, `-Xlint:all -Werror`.
-- Ids are computed by an own xxhash64 that matches the Go backend bit for bit (a unit test holds Go's values), so both backends run on one database.
+- Ids were computed by an own xxhash64 matching the Go backend bit for bit, so both backends ran on one database; since accounts, ids are random UUIDs and the shared vectors are the password and token formats.
 - The JVM exporter reports no resident memory on macOS; the load generator reads it with `ps` instead.
 - First comparison in `docs/results/2026-10-10-go-vs-java.md`: both sustain 500/s, Go's tail is tighter, baselines differ by 200 MiB, CPU per message within 10 %. The per-connection memory figures need repetitions and a fixed JVM heap before they mean anything.
 - Later split like Go, into a services role over the internal RPC (gRPC through Armeria) and a gateway that forwards to it; `services.Local` holds the request handling behind the same `Backend` interface as in Go.
@@ -113,6 +113,16 @@ Notes:
 - [x] The debug endpoints (profiles, forced garbage collection) answer only on the host; the device balancer passes only the WebSocket endpoint.
 - [ ] Limits per user across devices and per address need shared state (Valkey, or the balancer's stick tables); left for a public deployment.
 
+## Accounts
+
+- [x] Accounts with passwords: Register and SignIn return a device token, and Connect carries the token. Names are unique ignoring case and can change; ids are random UUIDs, for users and conversations both, so groups (#2) fit later. Profiles have a name and one of a fixed set of icons, and changes reach the user's devices and conversation partners through a second outbox, in the user keyspace, and its own Debezium connector.
+- [x] TLS for devices on the network: an HAProxy edge with a certificate from mkcert, in front of whatever serves port 8080, which listens on loopback only. The web client is served over HTTPS likewise.
+- [ ] A device signed out by a password change elsewhere, or by SignOut, keeps its open connection until it reconnects; its token stops working then. Closing it at once needs a notice to the gateways holding it, through the user's push channel.
+- [ ] No limit on sign-in attempts per account or per address, no password recovery, no account deletion; all needed for a public service (`docs/production.md`).
+- [ ] Uploaded icons, through object storage shared with attachments (#7); the fixed set stands in until then.
+- A conversation list entry the fan-out creates while the peer renames may keep the old name until the peer's next change: the entry reads the peer's profile when it is created, and the rename's fan-out pages through the lists that exist when it runs.
+- Hashing a password takes about 19 MiB and tens of milliseconds, so the services run at most as many hashes at once as they have cores. A burst of sign-ins, as the load generator makes before a run, raises the services' resident memory; measurements force a garbage collection before sampling.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -137,7 +147,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1), group conversations (#2), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, accounts and profiles with standard icons done; uploads and devices open), group conversations (#2), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6), image and file attachments (#7). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 

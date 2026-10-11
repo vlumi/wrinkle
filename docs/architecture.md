@@ -18,7 +18,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 | Fan-out | the outbox stream from Kafka | consumer offsets in Kafka | partitions of the topic, shared by one consumer group |
 | Conversation DB | conversations, messages, read marks, the outbox | sharded by conversation id | Vitess shards |
 | User DB | users, devices, event logs, conversation lists | sharded by user id | Vitess shards |
-| Kafka and Debezium | committed outbox rows, in commit order per conversation | the topic | partitions |
+| Kafka and Debezium | committed outbox rows of both keyspaces, in commit order per conversation or user | the topics | partitions |
 | Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
 
 The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
@@ -34,31 +34,47 @@ The fan-out runs inside the services processes. A gateway, the services and the 
 
 ## Data model
 
-Two Vitess keyspaces, each sharded by the id that every query of it carries, so a request touches one shard of each keyspace it needs. The schemas are in [`schema/`](../schema).
+Two Vitess keyspaces, each sharded by the id that every query of it carries, so a request touches one shard of each keyspace it needs. Two claim tables are sharded by what they are looked up by instead: names, and pairs of users. The schemas are in [`schema/`](../schema).
 
 ```mermaid
 flowchart TB
   subgraph conv ["Conversation keyspace, by conversation_id"]
     c["conversation: participants, last_seq"]
+    p["conversation_pair: claim of a pair, by user_a"]
     m["message: seq, sender, client id, body"]
     r["read_mark: per participant"]
     o["outbox: change events, deleted on insert"]
   end
   subgraph user ["User keyspace, by user_id"]
-    u["user: name, log_head"]
-    d["device: acked position, push token"]
+    u["user: name, icon, password hash, log_head"]
+    n["user_name: claim of a name, by name"]
+    d["device: token hash, acked position, push token"]
     e["user_event: the log, by position"]
-    l["user_conversation: the list"]
+    l["user_conversation: the list, with peers' profiles"]
+    uo["user_outbox: profile changes, deleted on insert"]
   end
 ```
 
-Ids are derived, not allocated, so that sign-in and opening a conversation need no lookup table:
+Ids:
 
-- **User id**: a 63-bit xxhash64 of the name.
-- **Conversation id**: a 63-bit hash of the two user ids, smaller first; both participants derive the same id.
+- **User and conversation ids**: random UUIDs, 16 bytes. Nothing about a user or a conversation is derived from its name or members, so names change freely and a conversation can later have more than two members.
 - **Device and outbox ids**: random 63-bit numbers.
+- **Valkey keys** name a user by the lowercase hex of the id.
 
-Go and Java compute the hashes bit for bit alike (Java's unit test holds Go's values), so both work on the same data; the Elixir and Rust gateways never compute ids.
+Claims make the lookups that ids no longer answer, each sharded by its own key, without a transaction across shards:
+
+- **Names.** `user_name` maps a name to its user, unique ignoring case: the column's collation compares case-insensitively and its vindex hashes case-insensitively, so "Bob" and "bob" meet on one shard and collide. A claim counts only while its user's row still has that name; one left behind by an interrupted registration or rename is stale, and the next claimant takes it over. Registering writes the user first, then the claim; renaming claims the new name, commits the change, then releases the old one. Every step can be interrupted without leaving a name owned twice or a user without a valid claim to their current name.
+- **Pairs.** `conversation_pair` maps two users, smaller id first bytewise, to their conversation, sharded by the first user. The first opener's insert claims the pair; both opening at once end up with the same conversation. A claim whose conversation row is missing is completed by the next open.
+
+Go and Java implement both, and the password and token formats, alike (unit tests in each hold the same vectors), so both work on the same data; the Elixir and Rust gateways only carry ids.
+
+## Accounts
+
+- **Register** takes a name, a password and a device name; **SignIn** the same for an existing account, matching the name ignoring case. Both return the device's credentials: user id, device id and a device token. Only they and Connect are allowed before Connect.
+- **Passwords** are stored as argon2id hashes (19 MiB, 2 passes) in the standard string form, which records its parameters, so they can be raised later. A wrong name and a wrong password get the same answer, in the same time.
+- **Device tokens** are `v1.` and the base64url of the user id, the device id and a 32-byte secret; the device row keeps a SHA-256 of the secret. Connect with a token is one indexed read on the user's shard, so the cost of a password is paid at sign-in only, not on every reconnect.
+- **ChangePassword** signs out every other device of the account, clearing their tokens and push registrations; **SignOut** does the same for the calling device.
+- **Profiles** are the name and one of a fixed set of icons, changed with UpdateProfile. A change goes through the user keyspace's outbox like a message through the conversation keyspace's: the fan-out appends a `ProfileEvent` to the user's own log and to the log of everyone they have a conversation with, updating each partner's conversation list in the same transaction.
 
 ## Flows
 
@@ -70,9 +86,15 @@ sequenceDiagram
   participant G as Gateway
   participant S as Services
   participant U as User DB
-  D->>G: Connect(name, device id)
+  opt first time on this device
+    D->>G: SignIn(name, password) or Register
+    G->>S: Call
+    S->>U: name claim, password hash, new device
+    S-->>D: user id, device id, device token
+  end
+  D->>G: Connect(device token)
   G->>S: Call
-  S->>U: user and device, upserted
+  S->>U: device by token
   S-->>G: user, device, acked cursor, log head
   G->>G: attach: subscribe, presence
   G-->>D: ConnectResponse
@@ -83,7 +105,7 @@ sequenceDiagram
   D->>G: Ack(cursor)
 ```
 
-Connect must be the first request; until it completes, the gateway answers anything else with `UNAUTHENTICATED`, and after 5 seconds without it the gateway closes the connection. The gateway answers Connect only once the user's push channel is subscribed, so no push that follows is missed; if that does not happen within 5 seconds (Valkey unreachable), Connect fails with `UNAVAILABLE` and may be retried. The response carries the cursor the device last acked and the head of the user's log, so a device knows at once how far behind it is. Sync pages through the log, up to 1000 events at a time.
+Until Connect completes, the gateway answers anything but Register, SignIn and Connect with `UNAUTHENTICATED`, and closes a connection that has not connected within 5 seconds of opening or of its last Register or SignIn. The gateway answers Connect only once the user's push channel is subscribed, so no push that follows is missed; if that does not happen within 5 seconds (Valkey unreachable), Connect fails with `UNAVAILABLE` and may be retried. The response carries the cursor the device last acked and the head of the user's log, so a device knows at once how far behind it is. Sync pages through the log, up to 1000 events at a time.
 
 ### Sending a message
 
@@ -134,11 +156,35 @@ A device acks the cursor it has processed. The gateway writes it to the device's
 - **Nothing lost to a missed push.** Pushes go only to devices connected at the moment; anything a device did not receive is in its log, and Sync from its cursor returns it.
 - **Monotonic positions.** Read positions and acked cursors only move forward.
 
+### Profile changes
+
+```mermaid
+sequenceDiagram
+  participant A as User
+  participant S as Services
+  participant N as Name claims
+  participant U as User DB
+  participant K as Kafka
+  participant F as Fan-out
+  participant P as Partners' shards
+  A->>S: UpdateProfile(name, icon)
+  S->>N: claim the new name
+  S->>U: user row, outbox row
+  S->>N: release the old name
+  S-->>A: User
+  U-->>K: Debezium streams the outbox insert
+  K->>F: record, keyed by user
+  F->>U: append to the user's own log
+  F->>P: per partner: append, update their list's entry
+```
+
+A user with many conversations makes one change fan out to many logs; the fan-out pages through the user's list and appends to several partners at once.
+
 ## Connections
 
-The rules every gateway enforces are in the contract, in [`frame.proto`](../proto/wrinkle/v1/frame.proto):
+Devices connect over TLS, terminated at the device balancer, since they send passwords; plain WebSocket is only for loopback. The rules every gateway enforces are in the contract, in [`frame.proto`](../proto/wrinkle/v1/frame.proto):
 
-- Frames up to 64 KiB; Connect within 5 seconds.
+- Frames up to 64 KiB; Connect within 5 seconds of opening, or of the last Register or SignIn.
 - Per connection, 50 frames a second on average in bursts of 100, and 32 requests in flight. Requests beyond the limits get `RESOURCE_EXHAUSTED`; other frames beyond them are dropped.
 - WebSocket pings every 30 seconds; a connection silent for 90 seconds is closed.
 - Each way a connection ends has a close code, and clients reconnect with backoff after any of them, then sync.
