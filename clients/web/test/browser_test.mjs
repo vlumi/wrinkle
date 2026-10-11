@@ -51,50 +51,48 @@ async function waitForChrome() {
   throw new Error("chrome did not start");
 }
 
+/**
+ * A DevTools protocol session over the given socket. Returns send, which
+ * resolves with the whole reply; events go to onEvent.
+ */
+async function devtools(url, onEvent = () => {}) {
+  const ws = new WebSocket(url);
+  await new Promise((r) => (ws.onopen = r));
+  let id = 0;
+  const pending = new Map();
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.id && pending.has(m.id)) {
+      pending.get(m.id)(m);
+      pending.delete(m.id);
+    }
+    if (m.method) onEvent(m);
+  };
+  return (method, params = {}) =>
+    new Promise((resolve) => {
+      const i = ++id;
+      pending.set(i, resolve);
+      ws.send(JSON.stringify({ id: i, method, params }));
+    });
+}
+
 class Page {
   constructor(name, width = 1100) {
     this.name = name;
     this.width = width;
-    this.id = 0;
-    this.pending = new Map();
     this.logs = [];
   }
   async open() {
     // Each user in a browser context of their own, so localStorage, where
     // the client remembers its session, is not shared.
-    const context = await browser.send("Target.createBrowserContext", { disposeOnDetach: false });
-    const { targetId } = await browser.send("Target.createTarget", {
+    const context = await browser("Target.createBrowserContext", { disposeOnDetach: false });
+    const { targetId } = await browser("Target.createTarget", {
       url: "about:blank",
       browserContextId: context.browserContextId,
     });
     const targets = await (await fetch(`http://localhost:${PORT}/json/list`)).json();
     const target = targets.find((t) => t.id === targetId);
-    this.ws = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((r) => (this.ws.onopen = r));
-    this.ws.onmessage = (e) => {
-      const m = JSON.parse(e.data);
-      if (m.id && this.pending.has(m.id)) {
-        this.pending.get(m.id)(m);
-        this.pending.delete(m.id);
-      }
-      if (m.method === "Runtime.consoleAPICalled")
-        this.logs.push(m.params.args.map((a) => a.value ?? a.description).join(" "));
-      if (m.method === "Runtime.exceptionThrown")
-        this.logs.push(
-          "EXCEPTION " +
-            m.params.exceptionDetails.text +
-            " " +
-            (m.params.exceptionDetails.exception?.description ?? ""),
-        );
-      // The page reports errors with alert(), which blocks all scripting
-      // until dismissed: record it as a failure and dismiss it.
-      if (m.method === "Page.javascriptDialogOpening") {
-        this.logs.push("DIALOG " + m.params.message);
-        this.ws.send(
-          JSON.stringify({ id: ++this.id, method: "Page.handleJavaScriptDialog", params: { accept: true } }),
-        );
-      }
-    };
+    this.send = await devtools(target.webSocketDebuggerUrl, (m) => this.observe(m));
     await this.send("Runtime.enable");
     await this.send("Page.enable");
     await this.send("Emulation.setFocusEmulationEnabled", { enabled: true });
@@ -107,12 +105,19 @@ class Page {
     await this.send("Page.navigate", { url: PAGE });
     await sleep(1500);
   }
-  send(method, params = {}) {
-    const id = ++this.id;
-    return new Promise((resolve) => {
-      this.pending.set(id, resolve);
-      this.ws.send(JSON.stringify({ id, method, params }));
-    });
+  observe(m) {
+    if (m.method === "Runtime.consoleAPICalled")
+      this.logs.push(m.params.args.map((a) => a.value ?? a.description).join(" "));
+    if (m.method === "Runtime.exceptionThrown")
+      this.logs.push(
+        "EXCEPTION " + m.params.exceptionDetails.text + " " + (m.params.exceptionDetails.exception?.description ?? ""),
+      );
+    // An alert() blocks all scripting until dismissed: record it as a
+    // failure and dismiss it.
+    if (m.method === "Page.javascriptDialogOpening") {
+      this.logs.push("DIALOG " + m.params.message);
+      this.send("Page.handleJavaScriptDialog", { accept: true });
+    }
   }
   async eval(expression) {
     const r = await this.send("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
@@ -138,27 +143,8 @@ function check(cond, msg) {
 }
 
 const version = await waitForChrome();
-const browser = await (async () => {
-  const ws = new WebSocket(version.webSocketDebuggerUrl);
-  await new Promise((r) => (ws.onopen = r));
-  let id = 0;
-  const pending = new Map();
-  ws.onmessage = (e) => {
-    const m = JSON.parse(e.data);
-    if (m.id && pending.has(m.id)) {
-      pending.get(m.id)(m.result);
-      pending.delete(m.id);
-    }
-  };
-  return {
-    send: (method, params = {}) =>
-      new Promise((resolve) => {
-        const i = ++id;
-        pending.set(i, resolve);
-        ws.send(JSON.stringify({ id: i, method, params }));
-      }),
-  };
-})();
+const browserSend = await devtools(version.webSocketDebuggerUrl);
+const browser = async (method, params) => (await browserSend(method, params)).result;
 const suffix = Date.now().toString(36);
 // Alice on a phone-sized screen, Bob on a desktop one.
 const alice = new Page("alice", 390),
