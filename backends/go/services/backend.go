@@ -13,6 +13,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/stickers"
 	"github.com/vlumi/wrinkle/backends/go/uploads"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -32,11 +33,12 @@ type Local struct {
 	conversations *conversation.Service
 	users         *devicesync.Service
 	uploads       *uploads.Service
+	stickers      *stickers.Service
 	log           *slog.Logger
 }
 
-func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, uploads *uploads.Service, log *slog.Logger) *Local {
-	return &Local{accounts: accounts, conversations: conversations, users: users, uploads: uploads, log: log}
+func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, uploads *uploads.Service, stickers *stickers.Service, log *slog.Logger) *Local {
+	return &Local{accounts: accounts, conversations: conversations, users: users, uploads: uploads, stickers: stickers, log: log}
 }
 
 func (l *Local) Call(ctx context.Context, userID ids.UUID, deviceID uint64, req *pb.Request) (*pb.Response, error) {
@@ -114,6 +116,39 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_CreateUpload{CreateUpload: upload}
+	case *pb.Request_CreateSticker:
+		sticker, err := l.stickers.Create(ctx, userID, r.CreateSticker.GetBlobId())
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_CreateSticker{CreateSticker: &pb.CreateStickerResponse{Sticker: sticker}}
+	case *pb.Request_GetStickers:
+		list, err := l.stickers.Get(ctx, r.GetStickers.GetStickerIds())
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_GetStickers{GetStickers: &pb.GetStickersResponse{Stickers: list}}
+	case *pb.Request_GetPalette:
+		list, err := l.stickers.Palette(ctx, userID)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_GetPalette{GetPalette: &pb.GetPaletteResponse{Stickers: list}}
+	case *pb.Request_SaveSticker:
+		if err := l.stickers.Save(ctx, userID, r.SaveSticker.GetStickerId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SaveSticker{SaveSticker: &pb.SaveStickerResponse{}}
+	case *pb.Request_RemoveSticker:
+		if err := l.stickers.Remove(ctx, userID, r.RemoveSticker.GetStickerId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_RemoveSticker{RemoveSticker: &pb.RemoveStickerResponse{}}
+	case *pb.Request_MoveSticker:
+		if err := l.stickers.Move(ctx, userID, r.MoveSticker.GetStickerId(), r.MoveSticker.GetBeforeStickerId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_MoveSticker{MoveSticker: &pb.MoveStickerResponse{}}
 	case *pb.Request_OpenConversation:
 		conv, err := l.users.Open(ctx, userID, r.OpenConversation.GetPeerName())
 		if err != nil {

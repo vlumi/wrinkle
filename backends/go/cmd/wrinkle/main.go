@@ -29,6 +29,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/presence"
 	"github.com/vlumi/wrinkle/backends/go/push"
 	"github.com/vlumi/wrinkle/backends/go/services"
+	"github.com/vlumi/wrinkle/backends/go/stickers"
 	"github.com/vlumi/wrinkle/backends/go/uploads"
 )
 
@@ -97,7 +98,7 @@ func run() error {
 		accts := accounts.New(userDB, store)
 		conversations := conversation.New(conversationDB, accts, accts)
 		users := devicesync.New(userDB, accts, conversations)
-		local = services.NewLocal(accts, conversations, users, uploads.New(userDB, store), log.With("role", "services"))
+		local = services.NewLocal(accts, conversations, users, uploads.New(userDB, store), stickers.New(userDB, store), log.With("role", "services"))
 	}
 	// Valkey carries presence and pushes, from fan-out to gateways.
 	var pres *presence.Client

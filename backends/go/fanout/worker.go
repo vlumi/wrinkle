@@ -251,7 +251,13 @@ func (w *Worker) handleUserRecord(ctx context.Context, rec *kgo.Record) error {
 		if body.Device.GetDevice() != nil {
 			return w.deliverDevice(ctx, o)
 		}
+	case *pb.Event_Palette:
+		// To the user's own devices only.
+		if _, err := w.append(ctx, o.userID, o.userID, o.outboxID, o.event, nil); err != nil {
+			return fmt.Errorf("deliver to user %s: %w", o.userID, err)
+		}
+		return nil
 	}
-	w.log.Error("skipping user outbox record without a profile or device", "kind", o.kind, "offset", rec.Offset)
+	w.log.Error("skipping user outbox record without a profile, device or palette", "kind", o.kind, "offset", rec.Offset)
 	return nil
 }
