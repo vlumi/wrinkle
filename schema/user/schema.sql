@@ -112,12 +112,31 @@ CREATE TABLE user_outbox (
   user_id BINARY(16) NOT NULL,
   -- From user.last_outbox_id.
   outbox_id BIGINT UNSIGNED NOT NULL,
-  -- Event body type: profile, device.
+  -- Event body type: profile, device, palette.
   kind VARCHAR(32) NOT NULL,
   -- Serialized wrinkle.v1.Event without a cursor.
   payload BLOB NOT NULL,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, outbox_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- Stickers, public and permanent, sharded by their id (their blob's id). A
+-- sticker outlives its creator's account.
+CREATE TABLE sticker (
+  sticker_id BINARY(16) NOT NULL,
+  creator_user_id BINARY(16) NOT NULL,
+  media_type VARCHAR(100) NOT NULL,
+  created_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (sticker_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- Each user's saved stickers, in their order.
+CREATE TABLE palette_sticker (
+  user_id BINARY(16) NOT NULL,
+  sticker_id BINARY(16) NOT NULL,
+  position INT UNSIGNED NOT NULL,
+  saved_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (user_id, sticker_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- Uploaded blobs, by uploader. The bytes are in object storage under the

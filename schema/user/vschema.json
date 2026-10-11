@@ -27,6 +27,12 @@
     "user_outbox": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
     },
+    "sticker": {
+      "column_vindexes": [{ "column": "sticker_id", "name": "xxhash" }]
+    },
+    "palette_sticker": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
     "upload": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
     }
