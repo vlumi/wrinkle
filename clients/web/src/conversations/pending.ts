@@ -1,6 +1,7 @@
 // Messages sent but not yet confirmed, by conversation id, shown below the
 // confirmed ones until the backend's copy arrives.
 
+import { hex } from "../ids";
 import { key } from "./model";
 
 export interface Pending {
@@ -16,8 +17,7 @@ export type PendingByConversation = Record<string, Pending[]>;
  * only on secure pages (HTTPS or localhost), and on a LAN the page is plain HTTP.
  */
 export function newMessageId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return hex(crypto.getRandomValues(new Uint8Array(16)));
 }
 
 export function addPending(pending: PendingByConversation, conversationId: string, p: Pending): PendingByConversation {
@@ -27,7 +27,7 @@ export function addPending(pending: PendingByConversation, conversationId: strin
 /** Drops the pending copy of a confirmed message; unchanged if there is none. */
 export function confirmPending(
   pending: PendingByConversation,
-  conversationId: bigint,
+  conversationId: Uint8Array,
   clientMessageId: string,
 ): PendingByConversation {
   const id = key(conversationId);

@@ -20,6 +20,12 @@ export class BackendError extends Error {
   }
 }
 
+/** A message for the user: the one given for the error's code, or else the error's own. */
+export function errorText(err: unknown, byCode: Partial<Record<ErrorCode, string>> = {}): string {
+  if (err instanceof BackendError && byCode[err.code]) return byCode[err.code]!;
+  return err instanceof Error ? err.message : String(err);
+}
+
 type RequestBody = MessageInitShape<typeof RequestSchema>["body"];
 type ResponseBody = Response["body"];
 
@@ -80,6 +86,11 @@ export class Connection {
     if (this.retry) clearTimeout(this.retry);
     this.backoff = RECONNECT_MIN_MS;
     this.open();
+  }
+
+  /** Drops the socket and reconnects with backoff. */
+  restart(): void {
+    this.ws?.close();
   }
 
   close(): void {

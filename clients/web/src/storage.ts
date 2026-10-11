@@ -21,4 +21,15 @@ export const storage = {
       // Nothing was remembered.
     }
   },
+  /** Removes every setting but those kept. */
+  clear(keep: string[]): void {
+    try {
+      const keys = Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i) ?? "");
+      for (const k of keys) {
+        if (k.startsWith("wrinkle.") && !keep.includes(k.slice("wrinkle.".length))) localStorage.removeItem(k);
+      }
+    } catch {
+      // Nothing was remembered.
+    }
+  },
 };

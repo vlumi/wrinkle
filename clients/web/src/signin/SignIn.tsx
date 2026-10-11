@@ -1,19 +1,72 @@
 import { useState } from "react";
+import { NAME_RULES, PASSWORD_RULES, nameProblem, passwordProblem } from "../account/rules";
+import { errorText } from "../connection/connection";
+import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { useSession } from "../session/session";
+import type { AuthMode } from "../session/session";
 import { defaultGatewayURL, forgetGateway, gatewayLabel, loadGateways } from "./gateways";
 
-export function SignIn({ initialName, initialURL }: { initialName?: string; initialURL?: string }) {
-  const signIn = useSession((s) => s.signIn);
-  const [name, setName] = useState(initialName ?? "");
-  const [url, setURL] = useState(initialURL ?? defaultGatewayURL());
+const modes: [AuthMode, string][] = [
+  ["signIn", "Sign in"],
+  ["register", "Create account"],
+];
+
+export function SignIn() {
+  const authenticate = useSession((s) => s.authenticate);
+  const notice = useSession((s) => s.notice);
+  const [mode, setMode] = useState<AuthMode>("signIn");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [url, setURL] = useState(() => loadGateways()[0] ?? defaultGatewayURL());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const register = mode === "register";
+
+  function problem(): string | null {
+    if (!register) return name && password ? null : "Enter your name and password.";
+    return nameProblem(name) ?? passwordProblem(password) ?? (password !== confirm ? "The passwords differ." : null);
+  }
 
   return (
     <main className="signin">
       <h1>Wrinkle</h1>
+      <div className="tabs" role="tablist">
+        {modes.map(([m, label]) => (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            data-testid={`mode-${m}`}
+            aria-selected={m === mode}
+            onClick={() => {
+              setMode(m);
+              setError(null);
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {notice && !error && <p className="notice">{notice}</p>}
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (name.trim()) signIn(name.trim(), url.trim());
+          const p = problem();
+          setError(p);
+          if (p) return;
+          setBusy(true);
+          authenticate(mode, name, password, url.trim())
+            .catch((err) =>
+              setError(
+                errorText(err, {
+                  [ErrorCode.ALREADY_EXISTS]: "That name is taken.",
+                  [ErrorCode.UNAUTHENTICATED]: "Wrong name or password.",
+                  [ErrorCode.INVALID_ARGUMENT]: `${NAME_RULES} ${PASSWORD_RULES}`,
+                }),
+              ),
+            )
+            .finally(() => setBusy(false));
         }}
       >
         <label>
@@ -29,6 +82,35 @@ export function SignIn({ initialName, initialURL }: { initialName?: string; init
           />
         </label>
         <label>
+          Password
+          <input
+            data-testid="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete={register ? "new-password" : "current-password"}
+            required
+          />
+        </label>
+        {register && (
+          <label>
+            Confirm password
+            <input
+              data-testid="confirm"
+              type="password"
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </label>
+        )}
+        {register && (
+          <p className="hint">
+            {NAME_RULES} {PASSWORD_RULES}
+          </p>
+        )}
+        <label>
           Gateway
           <input
             data-testid="url"
@@ -40,7 +122,14 @@ export function SignIn({ initialName, initialURL }: { initialName?: string; init
           />
         </label>
         <RememberedGateways chosen={url.trim()} onPick={setURL} />
-        <button type="submit">Sign in</button>
+        {error && (
+          <p className="error" role="alert" data-testid="signin-error">
+            {error}
+          </p>
+        )}
+        <button type="submit" disabled={busy}>
+          {register ? "Create account" : "Sign in"}
+        </button>
       </form>
     </main>
   );

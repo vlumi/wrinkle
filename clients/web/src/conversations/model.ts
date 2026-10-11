@@ -2,7 +2,8 @@
 // functions over plain data, so they are tested without a connection.
 
 import type { Event } from "../gen/wrinkle/v1/event_pb";
-import type { Conversation, Message } from "../gen/wrinkle/v1/model_pb";
+import type { Conversation, Message, User } from "../gen/wrinkle/v1/model_pb";
+import { hex, sameId } from "../ids";
 
 export interface Data {
   conversations: Record<string, Conversation>;
@@ -10,7 +11,8 @@ export interface Data {
   messages: Record<string, Record<string, Message>>;
 }
 
-export const key = (id: bigint): string => id.toString();
+/** The key of a conversation, or of a message by its seq. */
+export const key = (id: Uint8Array | bigint): string => (typeof id === "bigint" ? id.toString() : hex(id));
 
 const max = (a: bigint, b: bigint): bigint => (a > b ? a : b);
 const compare = (a: bigint, b: bigint): number => (a < b ? -1 : a > b ? 1 : 0);
@@ -35,7 +37,7 @@ export function upsertConversation(data: Data, c: Conversation): Data {
   });
 }
 
-export function addMessages(data: Data, conversationId: bigint, messages: Message[]): Data {
+export function addMessages(data: Data, conversationId: Uint8Array, messages: Message[]): Data {
   if (messages.length === 0) return data;
   const id = key(conversationId);
   const known = { ...(data.messages[id] ?? {}) };
@@ -62,27 +64,41 @@ export interface Applied {
 }
 
 /** Applies one event from the user's log. */
-export function applyEvent(data: Data, event: Event, me: bigint): Applied {
+export function applyEvent(data: Data, event: Event, me: Uint8Array): Applied {
   switch (event.body.case) {
     case "message": {
       const m = event.body.value.message;
       if (!m) return { data, unknownConversation: false };
       let next = addMessages(data, m.conversationId, [m]);
       if (!next.conversations[key(m.conversationId)]) return { data: next, unknownConversation: true };
-      next = noteLatest(next, m, m.senderUserId === me);
+      next = noteLatest(next, m, sameId(m.senderUserId, me));
       return { data: next, unknownConversation: false };
     }
     case "read": {
       const r = event.body.value;
       const c = data.conversations[key(r.conversationId)];
       if (!c) return { data, unknownConversation: true };
-      const next: Conversation =
-        r.userId === me ? { ...c, readSeq: max(r.seq, c.readSeq) } : { ...c, peerReadSeq: max(r.seq, c.peerReadSeq) };
+      const next: Conversation = sameId(r.userId, me)
+        ? { ...c, readSeq: max(r.seq, c.readSeq) }
+        : { ...c, peerReadSeq: max(r.seq, c.peerReadSeq) };
       return { data: withConversation(data, next), unknownConversation: false };
+    }
+    case "profile": {
+      const u = event.body.value.user;
+      return { data: u ? withPeer(data, u) : data, unknownConversation: false };
     }
     default:
       return { data, unknownConversation: false };
   }
+}
+
+/** Updates the user's name and icon in the conversations with them. */
+export function withPeer(data: Data, user: User): Data {
+  let next = data;
+  for (const c of Object.values(data.conversations)) {
+    if (sameId(c.peer?.userId, user.userId)) next = withConversation(next, { ...c, peer: user });
+  }
+  return next;
 }
 
 /** Conversations with the most recently active first. */

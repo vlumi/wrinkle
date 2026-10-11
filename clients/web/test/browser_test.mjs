@@ -1,5 +1,6 @@
 // Drives the web client in headless Chrome over the DevTools protocol:
-// two users in two pages, a message each way, a read receipt, a reload.
+// two users register in two pages, send a message each way, see a read
+// receipt and a rename, reload, sign out and in again.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -178,6 +179,9 @@ async function fill(p, testid, value) {
 const visible = (sel) =>
   `(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && el.getClientRects().length > 0; })()`;
 
+const click = (sel) => `(document.querySelector(${JSON.stringify(sel)}).click(), true)`;
+const text = (testid) => `${q(testid)}?.textContent`;
+
 check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
 await alice.waitFor(`!!${q("url")}`);
 check(
@@ -187,22 +191,44 @@ check(
 check((await alice.eval(`${qa("gateway")}.length`)) === 0, "no gateways are remembered before the first sign-in");
 
 const GATEWAY = "ws://wrinkle.test:8080/v1/ws";
-for (const [p, name] of [
-  [alice, "web-alice-" + suffix],
-  [bob, "web-bob-" + suffix],
-]) {
+const PASSWORD = "correct horse";
+const aliceName = "web-alice-" + suffix;
+const bobName = "web-bob-" + suffix;
+const robertName = "web-robert-" + suffix;
+
+/** Fills the sign-in form in the given mode and submits it. */
+async function authenticate(p, mode, name, password) {
   await p.waitFor(`!!${q("url")}`);
-  await p.eval(type("url", GATEWAY));
-  await p.waitFor(`${q("url")}.value === ${JSON.stringify(GATEWAY)}`);
-  await fill(p, "name", name);
-  await p.waitFor(`${q("status")}?.textContent === "online" && ${q("me")}?.textContent === ${JSON.stringify(name)}`);
-  check(true, `${p.name} signed in as ${name}`);
+  await p.eval(click(`[data-testid="mode-${mode}"]`));
+  await p.waitFor(`${q(`mode-${mode}`)}.getAttribute("aria-selected") === "true"`);
+  const fields = [
+    ["url", GATEWAY],
+    ["name", name],
+    ["password", password],
+  ];
+  if (mode === "register") fields.push(["confirm", password]);
+  for (const [testid, value] of fields.slice(0, -1)) {
+    await p.eval(type(testid, value));
+    await p.waitFor(`${q(testid)}.value === ${JSON.stringify(value)}`);
+  }
+  const [testid, value] = fields[fields.length - 1];
+  await fill(p, testid, value);
 }
 
-// Alice opens a conversation with Bob and sends.
-await fill(alice, "peer", "web-bob-" + suffix);
-await alice.waitFor(`${q("peer-name")}?.textContent === ${JSON.stringify("web-bob-" + suffix)}`);
+for (const [p, name] of [
+  [alice, aliceName],
+  [bob, bobName],
+]) {
+  await authenticate(p, "register", name, PASSWORD);
+  await p.waitFor(`${text("status")} === "online" && ${text("me")} === ${JSON.stringify(name)}`);
+  check(true, `${p.name} registered as ${name}`);
+}
+
+// Alice opens a conversation with Bob, his name in another case, and sends.
+await fill(alice, "peer", bobName.toUpperCase());
+await alice.waitFor(`${text("peer-name")} === ${JSON.stringify(bobName)}`);
 check(await alice.eval(`!${visible(".list")}`), "on a phone, the conversation replaces the list");
+check((await alice.eval(`document.querySelector(".conversation .avatar").textContent`)) === "W", "no icon: an initial");
 await fill(alice, "text", "hello bob");
 await alice.waitFor(`${qa("message")}.some(li => li.textContent.startsWith("hello bob"))`);
 check(true, "alice sees her sent message confirmed");
@@ -212,7 +238,7 @@ await bob.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.textContent.includes("hello bob") && r.querySelector('[data-testid="unread"]')?.textContent === "1")`,
 );
 check(true, "bob's list shows the conversation with 1 unread");
-await bob.eval(`(document.querySelector(".row").click(), true)`);
+await bob.eval(click(".row"));
 await bob.waitFor(`${qa("message")}.some(li => li.textContent.startsWith("hello bob"))`);
 check(await bob.eval(visible(".list")), "on a desktop, the list stays beside the conversation");
 await bob.waitFor(`!${q("unread")}`);
@@ -234,38 +260,86 @@ await bob.waitFor(
 check(true, "alice marked the reply read while viewing");
 
 // Back to the list on the phone.
-await alice.eval(`(document.querySelector(".back").click(), true)`);
+await alice.eval(click(".back"));
 await alice.waitFor(visible(".list"));
 check(await alice.eval(`!${q("peer-name")}`), "the back button returns to the list");
 
-// Reload Alice: the session resumes and history comes back.
+// Bob renames himself and picks an icon; Alice sees both.
+await bob.eval(click('[data-testid="open-settings"]'));
+await bob.waitFor(`${text("profile-name")} === ${JSON.stringify(bobName)}`);
+await fill(bob, "new-name", robertName);
+await bob.waitFor(`${text("me")} === ${JSON.stringify(robertName)} && ${text("settings-done")} === "Name changed."`);
+check(true, "bob renamed himself");
+await bob.eval(click('[data-testid="icon-fox"]'));
+await bob.waitFor(`${q("icon-fox")}.getAttribute("aria-checked") === "true" && ${text("avatar")} === "🦊"`);
+check(true, "bob picked an icon");
+await alice.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(robertName)} && r.querySelector(".avatar").textContent === "🦊")`,
+);
+check(true, "alice's list shows bob's new name and icon");
+await alice.eval(click(".row"));
+await alice.waitFor(`${text("peer-name")} === ${JSON.stringify(robertName)}`);
+check(true, "the conversation header shows the new name");
+
+// Bob changes his password; his other devices, none here, are signed out.
+await bob.eval(type("current-password", PASSWORD));
+await bob.eval(type("new-password", PASSWORD + "!"));
+await bob.waitFor(`${q("new-password")}.value === ${JSON.stringify(PASSWORD + "!")}`);
+await fill(bob, "confirm-password", PASSWORD + "!");
+await bob.waitFor(`${qa("settings-done")}.some(p => p.textContent.includes("other devices were signed out"))`);
+check(true, "bob changed his password and is told his other devices were signed out");
+
+// Reload Alice: the session resumes with the device token and history comes back.
 await alice.send("Page.reload");
 await sleep(1500);
-await alice.waitFor(`${q("status")}?.textContent === "online"`);
-await alice.eval(`(document.querySelector(".row").click(), true)`);
+await alice.waitFor(`${text("status")} === "online"`);
+await alice.eval(click(".row"));
 await alice.waitFor(`${qa("message")}.length === 2`);
-check(
-  (await alice.eval(`${q("me")}.textContent`)) === "web-alice-" + suffix,
-  "alice reloaded as herself and sees both messages from history",
-);
+check((await alice.eval(text("me"))) === aliceName, "alice reloaded as herself and sees both messages from history");
+const revoked = await alice.eval(`localStorage.getItem("wrinkle.credentials")`);
 
-// Signed out, Alice can pick the gateway she used with one click, and forget it.
-await alice.eval(`(document.querySelector(".signout").click(), true)`);
+// Signed out, Alice can pick the gateway she used with one click.
+await alice.eval(click('[data-testid="open-settings"]'));
+await alice.waitFor(`!!${q("signout")}`);
+await alice.eval(click('[data-testid="signout"]'));
 await alice.waitFor(`${qa("gateway")}.length === 1`);
-check(
-  (await alice.eval(`${q("gateway")}.textContent`)) === "wrinkle.test:8080",
-  "the gateway she signed in through is remembered",
-);
+check((await alice.eval(text("gateway"))) === "wrinkle.test:8080", "the gateway she signed in through is remembered");
 await alice.eval(type("url", "ws://elsewhere.test:1/v1/ws"));
 await alice.waitFor(`${q("url")}.value === "ws://elsewhere.test:1/v1/ws"`);
 await alice.eval(`(${q("gateway")}.click(), true)`);
 await alice.waitFor(`${q("url")}.value === ${JSON.stringify(GATEWAY)}`);
 check(true, "one click on a remembered gateway fills the field");
+
+// Taken names and wrong passwords are told apart from other errors.
+await authenticate(alice, "register", robertName.toUpperCase(), PASSWORD);
+await alice.waitFor(`${text("signin-error")} === "That name is taken."`);
+check(true, "registering a taken name, in another case, says it is taken");
+await authenticate(alice, "register", " " + aliceName, PASSWORD);
+await alice.waitFor(`${text("signin-error")}?.includes("start or end with a space")`);
+check(true, "an invalid name is explained");
+await authenticate(alice, "signIn", aliceName, PASSWORD + "?");
+await alice.waitFor(`${text("signin-error")} === "Wrong name or password."`);
+check(true, "a wrong password says so");
+
 await alice.eval(`(${q("forget-gateway")}.click(), true)`);
 await alice.waitFor(`${qa("gateway")}.length === 0`);
 await alice.send("Page.reload");
 await alice.waitFor(`!!${q("url")}`);
 check((await alice.eval(`${qa("gateway")}.length`)) === 0, "a forgotten gateway stays forgotten");
+
+// Signing in again is a new device, with the conversation there.
+await authenticate(alice, "signIn", aliceName.toUpperCase(), PASSWORD);
+await alice.waitFor(`${text("status")} === "online" && ${text("me")} === ${JSON.stringify(aliceName)}`);
+await alice.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.textContent.includes(${JSON.stringify(robertName)}))`,
+);
+check(true, "alice signed in again, her name in another case, and sees the conversation");
+
+// A signed-out device's token is refused: back to sign-in, with a note.
+await alice.eval(`(localStorage.setItem("wrinkle.credentials", ${JSON.stringify(revoked)}), true)`);
+await alice.send("Page.reload");
+await alice.waitFor(`!!${q("url")} && document.querySelector(".notice")?.textContent.includes("signed out")`);
+check(true, "a revoked token returns to sign-in with a note");
 
 if (process.env.SCREENSHOT) {
   const { writeFileSync } = await import("node:fs");

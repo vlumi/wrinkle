@@ -1,33 +1,56 @@
-// What the browser remembers between page loads: per user, the device id the
-// backend assigned and the cursor into the user's log; and the last session,
-// resumed on load until signed out.
+// What the browser remembers between page loads: the signed-in device's
+// credentials, resumed on load until signed out, and its cursor into the
+// user's log.
 
 import { storage } from "../storage";
 
-export interface LastSession {
-  name: string;
+export interface Credentials {
+  /** Hex. */
+  userId: string;
+  /** Decimal; a uint64 does not fit a JSON number. */
+  deviceId: string;
+  deviceToken: string;
+  /** The gateway signed in through. */
   url: string;
 }
 
-const LAST = "last";
+// Settings written for an earlier contract, with numeric ids and no tokens,
+// are dropped; the gateways used before stay.
+const VERSION = "2";
+const KEEP = ["version", "gateways"];
 
-function loadBigInt(key: string): bigint {
-  return BigInt(storage.get(key) ?? "0");
+const CREDENTIALS = "credentials";
+const CURSOR = "cursor";
+
+if (storage.get("version") !== VERSION) {
+  storage.clear(KEEP);
+  storage.set("version", VERSION);
+}
+
+function isCredentials(c: unknown): c is Credentials {
+  if (typeof c !== "object" || c === null) return false;
+  const r = c as Record<string, unknown>;
+  return ["userId", "deviceId", "deviceToken", "url"].every((k) => typeof r[k] === "string");
 }
 
 export const saved = {
-  deviceId: (user: string): bigint => loadBigInt(`${user}.device`),
-  setDeviceId: (user: string, id: bigint): void => storage.set(`${user}.device`, id.toString()),
-  cursor: (user: string): bigint => loadBigInt(`${user}.cursor`),
-  setCursor: (user: string, cursor: bigint): void => storage.set(`${user}.cursor`, cursor.toString()),
+  cursor: (): bigint => BigInt(storage.get(CURSOR) ?? "0"),
+  setCursor: (cursor: bigint): void => storage.set(CURSOR, cursor.toString()),
 
-  lastSession(): LastSession | null {
+  credentials(): Credentials | null {
     try {
-      return JSON.parse(storage.get(LAST) ?? "null");
+      const c: unknown = JSON.parse(storage.get(CREDENTIALS) ?? "null");
+      return isCredentials(c) ? c : null;
     } catch {
       return null;
     }
   },
-  setLastSession: (last: LastSession): void => storage.set(LAST, JSON.stringify(last)),
-  forgetLastSession: (): void => storage.remove(LAST),
+  setCredentials(c: Credentials): void {
+    storage.set(CREDENTIALS, JSON.stringify(c));
+    storage.remove(CURSOR);
+  },
+  forget(): void {
+    storage.remove(CREDENTIALS);
+    storage.remove(CURSOR);
+  },
 };

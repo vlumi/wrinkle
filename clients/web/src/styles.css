@@ -113,6 +113,43 @@ button:disabled {
   color: var(--muted);
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 20px;
+  padding: 4px;
+  border-radius: 14px;
+  background: var(--theirs);
+}
+
+.tabs button {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 15px;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 10px;
+}
+
+.tabs button[aria-selected="true"] {
+  color: var(--ink);
+  background: var(--panel);
+}
+
+.signin .hint,
+.signin .error,
+.signin .notice,
+.settings .hint,
+.settings .error {
+  padding: 0;
+}
+
+.notice {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--danger);
+}
+
 /* Gateways used before: tap one to fill the field, × to forget it. */
 .gateways {
   display: flex;
@@ -190,18 +227,60 @@ button:disabled {
 
 .me {
   flex: 1;
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px;
   font-size: 14px;
   color: var(--muted);
-  text-align: right;
+  background: transparent;
+}
+
+.me .name {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.me[aria-pressed="true"] .name {
+  color: var(--accent);
+}
+
+/* A user's icon, or their initial, in a circle. */
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--accent);
+  background: var(--theirs);
+}
+
+.avatar.icon {
+  font-size: 19px;
+}
+
+.avatar.large {
+  width: 56px;
+  height: 56px;
+  font-size: 24px;
+}
+
+.avatar.large.icon {
+  font-size: 32px;
+}
+
 .signout {
-  padding: 6px 10px;
+  padding: 8px 14px;
   font-size: 14px;
-  color: var(--ink);
+  color: var(--danger);
   background: var(--theirs);
 }
 
@@ -284,14 +363,23 @@ button:disabled {
 
 .row {
   display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: center;
   width: 100%;
-  gap: 2px;
   padding: 12px calc(env(safe-area-inset-right) + 16px) 12px calc(env(safe-area-inset-left) + 16px);
   border-bottom: 1px solid var(--line);
   border-radius: 0;
   color: var(--ink);
   background: transparent;
   text-align: left;
+}
+
+.row .avatar {
+  grid-row: span 2;
+  width: 40px;
+  height: 40px;
 }
 
 .row.current {
@@ -302,7 +390,14 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   gap: 8px;
+  min-width: 0;
   font-weight: 600;
+}
+
+.peer .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .unread {
@@ -348,16 +443,18 @@ button:disabled {
   background: var(--bg);
 }
 
-.conversation header {
+.conversation header,
+.settings header {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   padding: 6px calc(env(safe-area-inset-right) + 12px) 6px calc(env(safe-area-inset-left) + 4px);
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
 
-.conversation h2 {
+.conversation h2,
+.settings h2 {
   margin: 0;
   overflow: hidden;
   font-size: 17px;
@@ -449,6 +546,82 @@ button:disabled {
   display: none;
 }
 
+/* Settings */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.settings-body {
+  display: grid;
+  align-content: start;
+  grid-template-columns: minmax(0, 480px);
+  gap: 28px;
+  padding: 20px calc(env(safe-area-inset-right) + 20px) calc(env(safe-area-inset-bottom) + 20px)
+    calc(env(safe-area-inset-left) + 20px);
+  overflow-y: auto;
+}
+
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 20px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.settings form,
+.settings .field {
+  display: grid;
+  gap: 12px;
+}
+
+.settings label,
+.settings .label {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.row-input {
+  display: flex;
+  gap: 8px;
+}
+
+.row-input input {
+  flex: 1;
+}
+
+.icons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 8px;
+}
+
+.icons button {
+  padding: 6px 0;
+  font-size: 22px;
+  line-height: 1.3;
+  color: var(--muted);
+  background: var(--panel);
+  border: 2px solid transparent;
+}
+
+.icons button[aria-checked="true"] {
+  border-color: var(--accent);
+}
+
+.settings .signout {
+  justify-self: start;
+}
+
 /* Narrow: one pane at a time. */
 @media (max-width: 719px) {
   .app[data-view="conversation"] .list {
@@ -468,7 +641,8 @@ button:disabled {
     display: none;
   }
 
-  .conversation header {
+  .conversation header,
+  .settings header {
     padding-left: 16px;
   }
 

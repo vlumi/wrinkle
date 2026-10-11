@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Avatar } from "../account/Avatar";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
+import { sameId } from "../ids";
 import { useSession } from "../session/session";
 import { inOrder } from "./model";
 import type { Pending } from "./pending";
@@ -39,6 +41,7 @@ export function ConversationView({ id }: { id: string }) {
         <button className="back" onClick={() => show(null)} aria-label="Back to conversations">
           ‹
         </button>
+        <Avatar user={conversation.peer} />
         <h2 data-testid="peer-name">{conversation.peer?.name}</h2>
       </header>
       <ol
@@ -63,7 +66,7 @@ export function ConversationView({ id }: { id: string }) {
           </li>
         )}
         {messages.map((m) => {
-          const mine = m.senderUserId === me?.userId;
+          const mine = sameId(m.senderUserId, me?.userId);
           return (
             <MessageItem
               key={m.seq.toString()}

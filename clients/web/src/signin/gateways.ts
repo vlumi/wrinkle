@@ -6,10 +6,13 @@ import { storage } from "../storage";
 const KEY = "gateways";
 const MAX = 12;
 
-/** The gateway, or the load balancer in front of several, on the host that served this page. */
+/**
+ * The gateway, or the load balancer in front of several, on the host that
+ * served this page: through the TLS edge when the page came over HTTPS.
+ */
 export function defaultGatewayURL(loc: Pick<Location, "protocol" | "hostname"> = location): string {
-  const scheme = loc.protocol === "https:" ? "wss" : "ws";
-  return `${scheme}://${loc.hostname || "localhost"}:8080/v1/ws`;
+  const host = loc.hostname || "localhost";
+  return loc.protocol === "https:" ? `wss://${host}:8443/v1/ws` : `ws://${host}:8080/v1/ws`;
 }
 
 /** The list with url moved to the front. */

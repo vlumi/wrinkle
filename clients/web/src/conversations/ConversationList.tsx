@@ -1,5 +1,9 @@
 import { useState } from "react";
+import { Avatar } from "../account/Avatar";
+import { errorText } from "../connection/connection";
+import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { Conversation } from "../gen/wrinkle/v1/model_pb";
+import { sameId } from "../ids";
 import { useSession } from "../session/session";
 import { byActivity, key, unread } from "./model";
 
@@ -47,7 +51,14 @@ function OpenConversation() {
               setPeer("");
               setError(null);
             })
-            .catch((err: Error) => setError(err.message));
+            .catch((err) =>
+              setError(
+                errorText(err, {
+                  [ErrorCode.NOT_FOUND]: `No one is called ${name}.`,
+                  [ErrorCode.INVALID_ARGUMENT]: "Enter another user's name.",
+                }),
+              ),
+            );
         }}
       >
         <input
@@ -74,15 +85,16 @@ function ConversationRow({
   onClick,
 }: {
   conversation: Conversation;
-  me: bigint | undefined;
+  me: Uint8Array | undefined;
   current: boolean;
   onClick(): void;
 }) {
   const n = unread(c);
   return (
     <button className={current ? "row current" : "row"} onClick={onClick}>
+      <Avatar user={c.peer} />
       <span className="peer">
-        {c.peer?.name}
+        <span className="name">{c.peer?.name}</span>
         {n > 0n && (
           <span className="unread" data-testid="unread">
             {n.toString()}
@@ -94,8 +106,8 @@ function ConversationRow({
   );
 }
 
-function preview(c: Conversation, me: bigint | undefined): string {
+function preview(c: Conversation, me: Uint8Array | undefined): string {
   const m = c.lastMessage;
   if (!m) return "No messages yet";
-  return `${m.senderUserId === me ? "You: " : ""}${m.text}`;
+  return `${sameId(m.senderUserId, me) ? "You: " : ""}${m.text}`;
 }
