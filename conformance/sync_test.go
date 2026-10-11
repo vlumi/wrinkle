@@ -87,7 +87,7 @@ func TestSyncFillsGapAfterReconnect(t *testing.T) {
 	b.Close()
 	sendMessages(t, a, conv, 3, "while away")
 	messageEvent(t, a, conv, 3)
-	back := connectDevice(t, b.user.GetName(), b.deviceID)
+	back := reconnect(t, b)
 	resp, err := back.Sync(ctx(t), cursor, 0)
 	if err != nil {
 		t.Fatal(err)

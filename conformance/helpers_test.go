@@ -4,6 +4,7 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -56,10 +57,14 @@ func dial(t *testing.T) *wrinkleclient.Client {
 	return c
 }
 
+// password is every test account's, unless a test says otherwise.
+const password = "conformance password"
+
 type device struct {
 	*wrinkleclient.Client
 	user     *pb.User
 	deviceID uint64
+	token    string
 	// cursor is the last event position this device has seen; it starts at
 	// the log head at connect time, so only new events are expected.
 	cursor uint64
@@ -67,38 +72,89 @@ type device struct {
 	deviceCursor uint64
 }
 
-// connect dials and signs in as a new device of the named user.
-func connect(t *testing.T, userName string) *device {
+// register creates an account on a connection of its own, and returns the
+// device's credentials.
+func register(t *testing.T, name string) *pb.DeviceCredentials {
 	t.Helper()
-	return connectDevice(t, userName, 0)
+	creds, err := dial(t).Register(ctx(t), name, password, "conformance")
+	if err != nil {
+		t.Fatalf("register %s: %v", name, err)
+	}
+	return creds
 }
 
-func connectDevice(t *testing.T, userName string, deviceID uint64) *device {
+// signIn signs a new device in to the account, on a connection of its own.
+func signIn(t *testing.T, name, pw string) *pb.DeviceCredentials {
+	t.Helper()
+	creds, err := dial(t).SignIn(ctx(t), name, pw, "conformance")
+	if err != nil {
+		t.Fatalf("sign in as %s: %v", name, err)
+	}
+	return creds
+}
+
+// connectToken dials and connects with a device token.
+func connectToken(t *testing.T, token string) *device {
 	t.Helper()
 	c := dial(t)
-	resp, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: userName, DeviceId: deviceID, DeviceName: "conformance"})
+	resp, err := c.Connect(ctx(t), token)
 	if err != nil {
-		t.Fatalf("connect as %s: %v", userName, err)
+		t.Fatalf("connect: %v", err)
 	}
 	return &device{
 		Client:       c,
 		user:         resp.GetUser(),
 		deviceID:     resp.GetDeviceId(),
+		token:        token,
 		cursor:       resp.GetLogHead(),
 		deviceCursor: resp.GetDeviceCursor(),
 	}
 }
 
-// pair connects two new users and opens their conversation.
-func pair(t *testing.T) (a, b *device, conversationID uint64) {
+// signUp registers a new user and connects its first device.
+func signUp(t *testing.T, name string) *device {
 	t.Helper()
-	a = connect(t, uniqueName(t, "alice"))
-	b = connect(t, uniqueName(t, "bob"))
+	return connectToken(t, register(t, name).GetDeviceToken())
+}
+
+// newUser signs up a user with a unique name.
+func newUser(t *testing.T, prefix string) *device {
+	t.Helper()
+	return signUp(t, uniqueName(t, prefix))
+}
+
+// otherDevice signs in and connects another device of d's user.
+func otherDevice(t *testing.T, d *device) *device {
+	t.Helper()
+	return connectToken(t, signIn(t, d.user.GetName(), password).GetDeviceToken())
+}
+
+// reconnect connects d's device again on a new connection.
+func reconnect(t *testing.T, d *device) *device {
+	t.Helper()
+	return connectToken(t, d.token)
+}
+
+// pair signs up two users and opens their conversation.
+func pair(t *testing.T) (a, b *device, conversationID []byte) {
+	t.Helper()
+	a = newUser(t, "alice")
+	b = newUser(t, "bob")
 	conv, err := a.OpenConversation(ctx(t), b.user.GetName())
 	if err != nil {
 		t.Fatalf("open conversation: %v", err)
 	}
 	return a, b, conv.GetConversationId()
+}
+
+// randomID is a 16-byte id nothing has.
+func randomID(t *testing.T) []byte {
+	t.Helper()
+	id := make([]byte, 16)
+	if _, err := rand.Read(id); err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 // nextEvent waits for the next pushed event that matches.
@@ -124,27 +180,27 @@ func nextEvent(t *testing.T, d *device, match func(*pb.Event) bool) *pb.Event {
 	}
 }
 
-func messageEvent(t *testing.T, d *device, conversationID, seq uint64) *pb.Message {
+func messageEvent(t *testing.T, d *device, conversationID []byte, seq uint64) *pb.Message {
 	t.Helper()
 	ev := nextEvent(t, d, func(ev *pb.Event) bool {
 		m := ev.GetMessage().GetMessage()
-		return m != nil && m.GetConversationId() == conversationID && m.GetSeq() == seq
+		return m != nil && bytes.Equal(m.GetConversationId(), conversationID) && m.GetSeq() == seq
 	})
 	return ev.GetMessage().GetMessage()
 }
 
-func readEvent(t *testing.T, d *device, conversationID, userID, seq uint64) {
+func readEvent(t *testing.T, d *device, conversationID, userID []byte, seq uint64) {
 	t.Helper()
 	nextEvent(t, d, func(ev *pb.Event) bool {
 		r := ev.GetRead()
-		return r != nil && r.GetConversationId() == conversationID && r.GetUserId() == userID && r.GetSeq() == seq
+		return r != nil && bytes.Equal(r.GetConversationId(), conversationID) && bytes.Equal(r.GetUserId(), userID) && r.GetSeq() == seq
 	})
 }
 
 func isMessage(ev *pb.Event) bool { return ev.GetMessage() != nil }
 
 // sendMessages sends n messages with client ids m1 to mn.
-func sendMessages(t *testing.T, d *device, conversationID uint64, n int, text string) {
+func sendMessages(t *testing.T, d *device, conversationID []byte, n int, text string) {
 	t.Helper()
 	for i := 1; i <= n; i++ {
 		if _, err := d.SendMessage(ctx(t), conversationID, fmt.Sprintf("m%d", i), text); err != nil {

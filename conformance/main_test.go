@@ -9,7 +9,6 @@ import (
 	"time"
 
 	wrinkleclient "github.com/vlumi/wrinkle/clients/go"
-	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 // TestMain waits until the backend delivers events end to end, so a backend
@@ -76,7 +75,11 @@ func probeUser(ctx context.Context, name string) (*wrinkleclient.Client, error) 
 	if err != nil {
 		return nil, err
 	}
-	if _, err := c.Connect(ctx, &pb.ConnectRequest{UserName: name}); err != nil {
+	creds, err := c.Register(ctx, name, password, "probe")
+	if err == nil {
+		_, err = c.Connect(ctx, creds.GetDeviceToken())
+	}
+	if err != nil {
 		c.Close()
 		return nil, err
 	}

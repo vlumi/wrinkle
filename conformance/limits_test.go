@@ -77,7 +77,7 @@ func TestConnectDeadline(t *testing.T) {
 }
 
 func TestRequestFlood(t *testing.T) {
-	d := connect(t, uniqueName(t, "flood"))
+	d := newUser(t, "flood")
 	const n = 200
 	var wg sync.WaitGroup
 	var mu sync.Mutex

@@ -1,23 +1,24 @@
 package conformance
 
 import (
+	"bytes"
 	"testing"
 
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-func findConversation(t *testing.T, d *device, conversationID uint64) *pb.Conversation {
+func findConversation(t *testing.T, d *device, conversationID []byte) *pb.Conversation {
 	t.Helper()
 	list, err := d.ListConversations(ctx(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range list {
-		if c.GetConversationId() == conversationID {
+		if bytes.Equal(c.GetConversationId(), conversationID) {
 			return c
 		}
 	}
-	t.Fatalf("conversation %d not in %s's list", conversationID, d.user.GetName())
+	t.Fatalf("conversation %x not in %s's list", conversationID, d.user.GetName())
 	return nil
 }
 
@@ -42,7 +43,7 @@ func TestListConversations(t *testing.T) {
 
 	// The peer sees it after the first message, with the last message.
 	c = findConversation(t, b, conv)
-	if c.GetPeer().GetUserId() != a.user.GetUserId() || c.GetPeer().GetName() != a.user.GetName() {
+	if !bytes.Equal(c.GetPeer().GetUserId(), a.user.GetUserId()) || c.GetPeer().GetName() != a.user.GetName() {
 		t.Fatalf("wrong peer: %v", c.GetPeer())
 	}
 	if c.GetLastSeq() != 2 || c.GetLastMessage().GetSeq() != 2 || c.GetLastMessage().GetText() != sent2.GetText() {
@@ -67,9 +68,9 @@ func TestListConversations(t *testing.T) {
 }
 
 func TestListOrdersByActivity(t *testing.T) {
-	a := connect(t, uniqueName(t, "alice"))
-	b := connect(t, uniqueName(t, "bob"))
-	c := connect(t, uniqueName(t, "carol"))
+	a := newUser(t, "alice")
+	b := newUser(t, "bob")
+	c := newUser(t, "carol")
 	withB, err := a.OpenConversation(ctx(t), b.user.GetName())
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +87,7 @@ func TestListOrdersByActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 || list[0].GetConversationId() != withB.GetConversationId() || list[1].GetConversationId() != withC.GetConversationId() {
+	if len(list) != 2 || !bytes.Equal(list[0].GetConversationId(), withB.GetConversationId()) || !bytes.Equal(list[1].GetConversationId(), withC.GetConversationId()) {
 		t.Fatalf("expected the active conversation first: %v", list)
 	}
 	if _, err := c.SendMessage(ctx(t), withC.GetConversationId(), "m", "from c"); err != nil {
@@ -97,7 +98,7 @@ func TestListOrdersByActivity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list[0].GetConversationId() != withC.GetConversationId() {
+	if !bytes.Equal(list[0].GetConversationId(), withC.GetConversationId()) {
 		t.Fatalf("expected the newly active conversation first: %v", list)
 	}
 }

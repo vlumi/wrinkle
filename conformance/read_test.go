@@ -9,7 +9,7 @@ import (
 
 func TestMarkRead(t *testing.T) {
 	a, b, conv := pair(t)
-	a2 := connect(t, a.user.GetName())
+	a2 := otherDevice(t, a)
 	sendMessages(t, b, conv, 2, "hi")
 	for _, d := range []*device{a, a2, b} {
 		messageEvent(t, d, conv, 2)

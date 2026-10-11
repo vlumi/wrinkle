@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
@@ -10,8 +11,8 @@ import (
 )
 
 func TestOpenConversation(t *testing.T) {
-	a := connect(t, uniqueName(t, "alice"))
-	b := connect(t, uniqueName(t, "bob"))
+	a := newUser(t, "alice")
+	b := newUser(t, "bob")
 
 	_, err := a.OpenConversation(ctx(t), uniqueName(t, "nobody"))
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_NOT_FOUND)
@@ -22,7 +23,10 @@ func TestOpenConversation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fromA.GetPeer().GetUserId() != b.user.GetUserId() || fromA.GetPeer().GetName() != b.user.GetName() {
+	if len(fromA.GetConversationId()) != 16 {
+		t.Fatalf("conversation id of %d bytes", len(fromA.GetConversationId()))
+	}
+	if !bytes.Equal(fromA.GetPeer().GetUserId(), b.user.GetUserId()) || fromA.GetPeer().GetName() != b.user.GetName() {
 		t.Fatalf("wrong peer: %v", fromA.GetPeer())
 	}
 	if fromA.GetLastSeq() != 0 || fromA.GetLastMessage() != nil {
@@ -32,11 +36,11 @@ func TestOpenConversation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fromB.GetConversationId() != fromA.GetConversationId() {
-		t.Fatalf("both sides should open the same conversation: %d and %d", fromA.GetConversationId(), fromB.GetConversationId())
+	if !bytes.Equal(fromB.GetConversationId(), fromA.GetConversationId()) {
+		t.Fatalf("both sides should open the same conversation: %x and %x", fromA.GetConversationId(), fromB.GetConversationId())
 	}
 	again, err := a.OpenConversation(ctx(t), b.user.GetName())
-	if err != nil || again.GetConversationId() != fromA.GetConversationId() {
+	if err != nil || !bytes.Equal(again.GetConversationId(), fromA.GetConversationId()) {
 		t.Fatalf("reopening changed the conversation: %v %v", again, err)
 	}
 }
@@ -51,7 +55,7 @@ func TestSendAssignsDenseSequence(t *testing.T) {
 		if msg.GetSeq() != i {
 			t.Fatalf("message %d got seq %d", i, msg.GetSeq())
 		}
-		if msg.GetConversationId() != conv || msg.GetSenderUserId() != a.user.GetUserId() ||
+		if !bytes.Equal(msg.GetConversationId(), conv) || !bytes.Equal(msg.GetSenderUserId(), a.user.GetUserId()) ||
 			msg.GetClientMessageId() != fmt.Sprintf("m%d", i) || msg.GetText() != fmt.Sprintf("message %d", i) {
 			t.Fatalf("response does not echo the message: %v", msg)
 		}
@@ -97,10 +101,19 @@ func TestSendValidation(t *testing.T) {
 	}
 	_, err = a.SendMessage(ctx(t), conv, "too long", strings.Repeat("é", 4001))
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = a.SendMessage(ctx(t), conv+1, "x", "no such conversation")
+	_, err = a.SendMessage(ctx(t), randomID(t), "x", "no such conversation")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_NOT_FOUND)
+	// Ids are 16 bytes.
+	_, err = a.SendMessage(ctx(t), conv[:15], "x", "short id")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	_, err = a.SendMessage(ctx(t), nil, "x", "no id")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	err = a.MarkRead(ctx(t), append(bytes.Clone(conv), 0), 1)
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	_, err = a.GetMessages(ctx(t), conv[:8], 0, 0)
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 
-	outsider := connect(t, uniqueName(t, "eve"))
+	outsider := newUser(t, "eve")
 	_, err = outsider.SendMessage(ctx(t), conv, "x", "not mine")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_PERMISSION_DENIED)
 	_, err = outsider.GetMessages(ctx(t), conv, 0, 0)
@@ -111,8 +124,8 @@ func TestSendValidation(t *testing.T) {
 
 func TestMessageIsPushedToEveryDevice(t *testing.T) {
 	a, b, conv := pair(t)
-	a2 := connect(t, a.user.GetName())
-	b2 := connect(t, b.user.GetName())
+	a2 := otherDevice(t, a)
+	b2 := otherDevice(t, b)
 
 	sent, err := a.SendMessage(ctx(t), conv, "m1", "hello everyone")
 	if err != nil {
@@ -120,7 +133,7 @@ func TestMessageIsPushedToEveryDevice(t *testing.T) {
 	}
 	for _, d := range []*device{a, a2, b, b2} {
 		got := messageEvent(t, d, conv, 1)
-		if got.GetText() != sent.GetText() || got.GetSenderUserId() != a.user.GetUserId() ||
+		if got.GetText() != sent.GetText() || !bytes.Equal(got.GetSenderUserId(), a.user.GetUserId()) ||
 			got.GetClientMessageId() != "m1" || !got.GetSentAt().AsTime().Equal(sent.GetSentAt().AsTime()) {
 			t.Fatalf("pushed message differs from the sent one: %v vs %v", got, sent)
 		}
@@ -161,6 +174,6 @@ func TestGetMessages(t *testing.T) {
 	if len(page) != 2 || page[0].GetSeq() != 3 || page[1].GetSeq() != 2 {
 		t.Fatalf("page before 4 limit 2: %v", page)
 	}
-	_, err = b.GetMessages(ctx(t), conv+1, 0, 0)
+	_, err = b.GetMessages(ctx(t), randomID(t), 0, 0)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_NOT_FOUND)
 }

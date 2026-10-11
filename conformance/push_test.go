@@ -8,7 +8,7 @@ import (
 )
 
 func TestRegisterPushToken(t *testing.T) {
-	d := connect(t, uniqueName(t, "push"))
+	d := newUser(t, "push")
 	token := strings.Repeat("ab", 32)
 	if err := d.RegisterPushToken(ctx(t), pb.PushService_PUSH_SERVICE_APNS_SANDBOX, token); err != nil {
 		t.Fatal(err)

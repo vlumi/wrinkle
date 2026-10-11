@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -8,39 +9,35 @@ import (
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-func TestConnectCreatesUserAndDevice(t *testing.T) {
+func TestConnectWithToken(t *testing.T) {
 	name := uniqueName(t, "connect")
-	d := connect(t, name)
-	if d.user.GetName() != name || d.user.GetUserId() == 0 {
+	creds := register(t, name)
+	if len(creds.GetUserId()) != 16 || creds.GetDeviceId() == 0 || creds.GetDeviceToken() == "" {
+		t.Fatalf("bad credentials: %v", creds)
+	}
+	d := connectToken(t, creds.GetDeviceToken())
+	if d.user.GetName() != name || !bytes.Equal(d.user.GetUserId(), creds.GetUserId()) || d.user.GetIcon() != "" {
 		t.Fatalf("bad user in response: %v", d.user)
 	}
-	if d.deviceID == 0 {
-		t.Fatal("expected a device id")
+	if d.deviceID != creds.GetDeviceId() {
+		t.Fatalf("connected as device %d, registered %d", d.deviceID, creds.GetDeviceId())
 	}
-	again := connect(t, name)
-	if again.user.GetUserId() != d.user.GetUserId() {
-		t.Fatalf("same name gave different users: %d and %d", d.user.GetUserId(), again.user.GetUserId())
-	}
-	if again.deviceID == d.deviceID {
-		t.Fatal("a new device got the old device id")
-	}
-	same := connectDevice(t, name, d.deviceID)
-	if same.deviceID != d.deviceID {
+	same := reconnect(t, d)
+	if same.deviceID != d.deviceID || !bytes.Equal(same.user.GetUserId(), d.user.GetUserId()) {
 		t.Fatalf("reconnecting device %d got %d", d.deviceID, same.deviceID)
+	}
+	other := otherDevice(t, d)
+	if !bytes.Equal(other.user.GetUserId(), d.user.GetUserId()) || other.deviceID == d.deviceID {
+		t.Fatalf("sign-in gave user %x device %d", other.user.GetUserId(), other.deviceID)
 	}
 }
 
-func TestConnectValidation(t *testing.T) {
+func TestDeviceNameValidation(t *testing.T) {
 	c := dial(t)
-	_, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: ""})
+	_, err := c.Register(ctx(t), uniqueName(t, "dev"), password, strings.Repeat("d", 65))
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = c.Connect(ctx(t), &pb.ConnectRequest{UserName: strings.Repeat("n", 65)})
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	_, err = c.Connect(ctx(t), &pb.ConnectRequest{UserName: uniqueName(t, "dev"), DeviceName: strings.Repeat("d", 65)})
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	// Names are limited in characters: 64 of them fit even when each takes four bytes.
-	if _, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: strings.Repeat("😀", 51) + uniqueName(t, "")}); err != nil {
-		t.Fatalf("64 characters: %v", err)
+	if _, err := c.Register(ctx(t), uniqueName(t, "dev"), password, ""); err != nil {
+		t.Fatalf("empty device name: %v", err)
 	}
 }
 
@@ -50,21 +47,40 @@ func TestRequestsBeforeConnect(t *testing.T) {
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
 	_, err = c.Sync(ctx(t), 0, 0)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	_, err = c.OpenConversation(ctx(t), uniqueName(t, "nobody"))
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	_, err = c.SendMessage(ctx(t), randomID(t), "m1", "hi")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	err = c.ChangePassword(ctx(t), password, password+"!")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	name := "someone"
+	_, err = c.UpdateProfile(ctx(t), &name, nil)
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	err = c.SignOut(ctx(t))
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	// Still usable: an account can be made and connected.
+	creds, err := c.Register(ctx(t), uniqueName(t, "late"), password, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Connect(ctx(t), creds.GetDeviceToken()); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestConnectTwice(t *testing.T) {
-	d := connect(t, uniqueName(t, "twice"))
-	_, err := d.Connect(ctx(t), &pb.ConnectRequest{UserName: uniqueName(t, "other")})
+	d := newUser(t, "twice")
+	_, err := d.Connect(ctx(t), d.token)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
 }
 
 func TestConnectTwiceConcurrently(t *testing.T) {
+	token := register(t, uniqueName(t, "racer")).GetDeviceToken()
 	c := dial(t)
-	name := uniqueName(t, "racer")
 	errs := make(chan error, 2)
 	for range 2 {
 		go func() {
-			_, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: name})
+			_, err := c.Connect(ctx(t), token)
 			errs <- err
 		}()
 	}
@@ -104,7 +120,7 @@ func TestAckIsRememberedPerDevice(t *testing.T) {
 	// An ack has no response, so poll reconnects until it shows.
 	deadline := time.Now().Add(eventTimeout)
 	for {
-		again := connectDevice(t, a.user.GetName(), a.deviceID)
+		again := reconnect(t, a)
 		got := again.deviceCursor
 		again.Close()
 		if got == a.cursor {
@@ -115,7 +131,7 @@ func TestAckIsRememberedPerDevice(t *testing.T) {
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	fresh := connect(t, a.user.GetName())
+	fresh := otherDevice(t, a)
 	if fresh.deviceCursor != 0 {
 		t.Fatalf("new device has cursor %d", fresh.deviceCursor)
 	}
