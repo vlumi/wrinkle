@@ -12,27 +12,27 @@ use futures_util::{SinkExt, StreamExt};
 use prost::Message as _;
 use tokio::sync::mpsc;
 
-use crate::App;
 use crate::pb::backend::v1::{AckRequest, CallRequest};
 use crate::pb::v1::{
     self as pb, ErrorCode, Frame, Request, Response as WireResponse, frame, request, response,
 };
+use crate::{App, BackendClient};
 
 const MAX_FRAME_BYTES: usize = 64 * 1024;
 const OUTBOUND_QUEUE: usize = 32;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
+/// The device a connection belongs to, known once Connect succeeds.
 #[derive(Clone, Copy, Default)]
-struct Identity {
+struct Device {
     user_id: u64,
     device_id: u64,
-    connected: bool,
 }
 
 pub struct Conn {
     app: Arc<App>,
     out: mpsc::Sender<Bytes>,
-    identity: Mutex<Identity>,
+    device: Mutex<Option<Device>>,
 }
 
 pub async fn upgrade(ws: WebSocketUpgrade, State(app): State<Arc<App>>) -> Response {
@@ -49,7 +49,7 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
     let conn = Arc::new(Conn {
         app: app.clone(),
         out: tx,
-        identity: Mutex::new(Identity::default()),
+        device: Mutex::new(None),
     });
 
     let writer = tokio::spawn(async move {
@@ -76,15 +76,15 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
             _ => {}
         }
     }
-    conn.closed().await;
+    conn.detach().await;
     drop(conn);
     let _ = writer.await;
     app.metrics.connection(-1);
 }
 
 impl Conn {
-    fn identity(&self) -> Identity {
-        *self.identity.lock().unwrap()
+    fn device(&self) -> Option<Device> {
+        *self.device.lock().unwrap()
     }
 
     /// Handles one frame; false ends the connection.
@@ -99,26 +99,12 @@ impl Conn {
                 tokio::spawn(async move { conn.handle_request(request).await });
             }
             Some(frame::Kind::Ack(ack)) => {
-                let id = self.identity();
-                if id.connected {
-                    let mut backend = self.app.backend.clone();
-                    tokio::spawn(async move {
-                        let req = AckRequest {
-                            user_id: id.user_id,
-                            device_id: id.device_id,
-                            cursor: ack.cursor,
-                        };
-                        if let Err(e) = backend.ack(req).await {
-                            tracing::warn!(error = %e, "ack failed");
-                        }
-                    });
+                if let Some(device) = self.device() {
+                    tokio::spawn(ack_cursor(self.app.backend.clone(), device, ack.cursor));
                 }
             }
             Some(frame::Kind::Ping(_)) => {
-                self.send_frame(Frame {
-                    kind: Some(frame::Kind::Pong(pb::Pong {})),
-                })
-                .await;
+                self.send_frame(frame::Kind::Pong(pb::Pong {})).await;
             }
             Some(frame::Kind::Pong(_)) => {}
             _ => {
@@ -131,85 +117,84 @@ impl Conn {
 
     async fn handle_request(self: Arc<Self>, request: Request) {
         let started = Instant::now();
-        let kind = request_type(&request);
+        let kind = request.body.as_ref().map_or("unknown", request::Body::name);
         let response = tokio::time::timeout(REQUEST_TIMEOUT, self.dispatch(request))
             .await
-            .unwrap_or_else(|_| error(0, ErrorCode::Unavailable, "services unavailable"));
+            .unwrap_or_else(|_| services_unavailable(0));
         let code = match &response.body {
-            Some(response::Body::Error(e)) => e.code().as_str_name().to_string(),
-            _ => "ok".to_string(),
+            Some(response::Body::Error(e)) => e.code().as_str_name(),
+            _ => "ok",
         };
-        self.send_frame(Frame {
-            kind: Some(frame::Kind::Response(response)),
-        })
-        .await;
-        self.app.metrics.request(kind, &code, started.elapsed());
+        self.send_frame(frame::Kind::Response(response)).await;
+        self.app.metrics.request(kind, code, started.elapsed());
     }
 
     /// Applies the connection's state rules, then forwards to the services.
     async fn dispatch(&self, request: Request) -> WireResponse {
-        let id = self.identity();
+        let request_id = request.id;
+        let device = self.device();
         let is_connect = matches!(request.body, Some(request::Body::Connect(_)));
-        if is_connect && id.connected {
-            return error(
-                request.id,
-                ErrorCode::FailedPrecondition,
-                "already connected",
-            );
+        match (is_connect, device) {
+            (true, Some(_)) => return already_connected(request_id),
+            (false, None) => return error(request_id, ErrorCode::Unauthenticated, "connect first"),
+            _ => {}
         }
-        if !is_connect && !id.connected {
-            return error(request.id, ErrorCode::Unauthenticated, "connect first");
-        }
-        let req = CallRequest {
-            user_id: id.user_id,
-            device_id: id.device_id,
-            request: Some(request.clone()),
+        let device = device.unwrap_or_default();
+        let call = CallRequest {
+            user_id: device.user_id,
+            device_id: device.device_id,
+            request: Some(request),
         };
         let mut backend = self.app.backend.clone();
-        let response = match backend.call(req).await {
+        let response = match backend.call(call).await {
             Ok(r) => r.into_inner().response.unwrap_or_default(),
             Err(e) => {
                 tracing::error!(error = %e, "backend call failed");
-                return error(request.id, ErrorCode::Unavailable, "services unavailable");
+                return services_unavailable(request_id);
             }
         };
         if let Some(response::Body::Connect(c)) = &response.body {
-            let user_id = c.user.as_ref().map(|u| u.user_id).unwrap_or_default();
-            let device_id = c.device_id;
-            {
-                let mut guard = self.identity.lock().unwrap();
-                if guard.connected {
-                    return error(
-                        request.id,
-                        ErrorCode::FailedPrecondition,
-                        "already connected",
-                    );
-                }
-                *guard = Identity {
-                    user_id,
-                    device_id,
-                    connected: true,
-                };
+            let device = Device {
+                user_id: c.user.as_ref().map(|u| u.user_id).unwrap_or_default(),
+                device_id: c.device_id,
+            };
+            if !self.attach(device).await {
+                return already_connected(request_id);
             }
-            self.app
-                .push
-                .attach(user_id, device_id, self.out.clone())
-                .await;
         }
         response
     }
 
-    async fn closed(&self) {
-        let id = self.identity();
-        if id.connected {
+    /// Binds the connection to its device; false if a concurrent Connect
+    /// already did.
+    async fn attach(&self, device: Device) -> bool {
+        {
+            let mut current = self.device.lock().unwrap();
+            if current.is_some() {
+                return false;
+            }
+            *current = Some(device);
+        }
+        self.app.push.attach(device.user_id, self.out.clone()).await;
+        self.app
+            .presence
+            .set(device.user_id, device.device_id)
+            .await;
+        true
+    }
+
+    async fn detach(&self) {
+        if let Some(device) = self.device() {
+            self.app.push.detach(device.user_id, &self.out).await;
             self.app
-                .push
-                .detach(id.user_id, id.device_id, &self.out)
+                .presence
+                .remove(device.user_id, device.device_id)
                 .await;
         }
     }
 
-    async fn send_frame(&self, frame: Frame) {
+    async fn send_frame(&self, kind: frame::Kind) {
+        let frame = Frame { kind: Some(kind) };
         self.send(Bytes::from(frame.encode_to_vec())).await;
     }
 
@@ -232,9 +217,20 @@ impl Conn {
     }
 }
 
-fn error(id: u64, code: ErrorCode, message: &str) -> WireResponse {
+async fn ack_cursor(mut backend: BackendClient, device: Device, cursor: u64) {
+    let ack = AckRequest {
+        user_id: device.user_id,
+        device_id: device.device_id,
+        cursor,
+    };
+    if let Err(e) = backend.ack(ack).await {
+        tracing::warn!(error = %e, "ack failed");
+    }
+}
+
+fn error(request_id: u64, code: ErrorCode, message: &str) -> WireResponse {
     WireResponse {
-        request_id: id,
+        request_id,
         body: Some(response::Body::Error(pb::Error {
             code: code as i32,
             message: message.to_string(),
@@ -242,64 +238,30 @@ fn error(id: u64, code: ErrorCode, message: &str) -> WireResponse {
     }
 }
 
-fn request_type(request: &Request) -> &'static str {
-    match request.body {
-        Some(request::Body::Connect(_)) => "connect",
-        Some(request::Body::OpenConversation(_)) => "open_conversation",
-        Some(request::Body::SendMessage(_)) => "send_message",
-        Some(request::Body::MarkRead(_)) => "mark_read",
-        Some(request::Body::Sync(_)) => "sync",
-        Some(request::Body::ListConversations(_)) => "list_conversations",
-        Some(request::Body::GetMessages(_)) => "get_messages",
-        Some(request::Body::RegisterPushToken(_)) => "register_push_token",
-        None => "unknown",
-    }
+fn already_connected(request_id: u64) -> WireResponse {
+    error(
+        request_id,
+        ErrorCode::FailedPrecondition,
+        "already connected",
+    )
 }
 
-/// Wraps an already serialized Event in a Frame without decoding it:
-/// Frame.event is field 3.
-pub fn event_frame(payload: &[u8]) -> Bytes {
-    let mut out = Vec::with_capacity(payload.len() + 8);
-    out.push(0x1a);
-    prost::encoding::encode_varint(payload.len() as u64, &mut out);
-    out.extend_from_slice(payload);
-    Bytes::from(out)
+fn services_unavailable(request_id: u64) -> WireResponse {
+    error(request_id, ErrorCode::Unavailable, "services unavailable")
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::pb::v1::{Event, ReadEvent, event};
-
-    #[test]
-    fn event_frame_wraps_without_decoding() {
-        for len in [1usize, 200, 70_000] {
-            let event = Event {
-                cursor: len as u64,
-                occurred_at: None,
-                body: Some(event::Body::MessageFailed(pb::MessageFailedEvent {
-                    conversation_id: 7,
-                    client_message_id: "x".repeat(len),
-                    reason: String::new(),
-                })),
-            };
-            let frame = Frame::decode(event_frame(&event.encode_to_vec())).unwrap();
-            assert_eq!(frame.kind, Some(frame::Kind::Event(event)));
+impl request::Body {
+    /// The request's name in metrics, as the other backends label it.
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Connect(_) => "connect",
+            Self::OpenConversation(_) => "open_conversation",
+            Self::SendMessage(_) => "send_message",
+            Self::MarkRead(_) => "mark_read",
+            Self::Sync(_) => "sync",
+            Self::ListConversations(_) => "list_conversations",
+            Self::GetMessages(_) => "get_messages",
+            Self::RegisterPushToken(_) => "register_push_token",
         }
-        let read = Event {
-            cursor: 1,
-            occurred_at: None,
-            body: Some(event::Body::Read(ReadEvent {
-                conversation_id: 1,
-                user_id: 2,
-                seq: 3,
-            })),
-        };
-        assert_eq!(
-            Frame::decode(event_frame(&read.encode_to_vec()))
-                .unwrap()
-                .kind,
-            Some(frame::Kind::Event(read))
-        );
     }
 }

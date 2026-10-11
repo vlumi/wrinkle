@@ -4,6 +4,7 @@
 
 mod conn;
 mod metrics;
+mod presence;
 mod push;
 
 use std::net::SocketAddr;
@@ -31,14 +32,8 @@ pub type BackendClient = pb::backend::v1::backend_service_client::BackendService
 pub struct App {
     pub backend: BackendClient,
     pub push: push::Push,
+    pub presence: presence::Presence,
     pub metrics: metrics::Metrics,
-}
-
-fn env(key: &str, fallback: &str) -> String {
-    std::env::var(key)
-        .ok()
-        .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| fallback.to_string())
 }
 
 #[tokio::main]
@@ -56,32 +51,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let node = env("WRINKLE_NODE", &hostname());
 
     let backend = BackendClient::connect(format!("http://{services}")).await?;
-    let push = push::Push::connect(&valkey, node).await?;
+    let valkey = redis::Client::open(format!("redis://{valkey}/"))?;
+    let presence = presence::Presence::connect(&valkey, node).await?;
+    let push = push::Push::connect(&valkey).await?;
     let app = Arc::new(App {
         backend,
         push,
+        presence,
         metrics: metrics::Metrics::default(),
     });
 
-    let router = Router::new()
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    tracing::info!(%addr, services, "gateway listening");
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, router(app))
+        .with_graceful_shutdown(async {
+            let _ = tokio::signal::ctrl_c().await;
+        })
+        .await?;
+    Ok(())
+}
+
+fn router(app: Arc<App>) -> Router {
+    Router::new()
         .route("/v1/ws", get(conn::upgrade))
         .route("/healthz", get(|| async { "ok\n" }))
         .route(
             "/metrics",
             get(|State(app): State<Arc<App>>| async move { app.metrics.render() }),
         )
+        // The load generator collects garbage before reading live memory;
+        // there is no collector here, so it only answers.
         .route("/debug/gc", post(|| async { "ok\n" }))
-        .with_state(app);
+        .with_state(app)
+}
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!(%addr, services, "gateway listening");
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, router)
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
-        .await?;
-    Ok(())
+fn env(key: &str, fallback: &str) -> String {
+    std::env::var(key)
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn hostname() -> String {
