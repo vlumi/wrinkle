@@ -13,4 +13,13 @@ Every backend exposes Prometheus metrics at `/metrics` on its HTTP port, with th
 | `wrinkle_push_sent_total` | counter | `result` | Push notifications to devices that are not connected: `ok`, `unregistered` (token cleared), `error`, `dropped` (too many in flight). Only on backends that push. |
 | `wrinkle_fanout_lag_seconds` | histogram | | From an event being stored to its append to a user's log: the change-data path plus the worker. |
 
-Process metrics come from each runtime's client library: `process_cpu_seconds_total` on both, `process_resident_memory_bytes` on Go. The JVM exporter reports resident memory only on Linux, so on macOS the load generator measures the process listening on the metrics port with `ps` instead.
+Process metrics:
+
+| Runtime | CPU | Resident memory | Live memory (after `POST /debug/gc`) |
+|---|---|---|---|
+| Go | `process_cpu_seconds_total` | `process_resident_memory_bytes` | `go_memstats_heap_alloc_bytes` + `go_memstats_stack_inuse_bytes` |
+| Java | `process_cpu_seconds_total` | `ps` on macOS (the JVM exporter reports it only on Linux) | `jvm_memory_used_bytes`, all pools |
+| Elixir | `process_cpu_seconds_total` | `ps` | `erlang_vm_memory_bytes_total`, processes and system (counts allocator carriers, so it can exceed RSS) |
+| Rust | `process_cpu_seconds_total` | `process_resident_memory_bytes` | none: no collector |
+
+Where a backend lacks resident memory, the load generator measures the process listening on the metrics port with `ps`.
