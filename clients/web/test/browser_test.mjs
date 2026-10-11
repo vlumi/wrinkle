@@ -130,9 +130,14 @@ const visible = (sel) => `(() => { const el = document.querySelector(${JSON.stri
 
 check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
 await alice.waitFor(`!!${q("url")}`);
-check((await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8080/v1/ws", "the gateway defaults to the page's host");
+check((await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8180/v1/ws", "the gateway defaults to the page's host");
+check((await alice.eval(`${qa("gateway")}.length`)) === 0, "no gateways are remembered before the first sign-in");
 
+const GATEWAY = "ws://wrinkle.test:8080/v1/ws";
 for (const [p, name] of [[alice, "web-alice-" + suffix], [bob, "web-bob-" + suffix]]) {
+  await p.waitFor(`!!${q("url")}`);
+  await p.eval(type("url", GATEWAY));
+  await p.waitFor(`${q("url")}.value === ${JSON.stringify(GATEWAY)}`);
   await fill(p, "name", name);
   await p.waitFor(`${q("status")}?.textContent === "online" && ${q("me")}?.textContent === ${JSON.stringify(name)}`);
   check(true, `${p.name} signed in as ${name}`);
@@ -176,6 +181,21 @@ await alice.waitFor(`${q("status")}?.textContent === "online"`);
 await alice.eval(`(document.querySelector(".row").click(), true)`);
 await alice.waitFor(`${qa("message")}.length === 2`);
 check((await alice.eval(`${q("me")}.textContent`)) === "web-alice-" + suffix, "alice reloaded as herself and sees both messages from history");
+
+// Signed out, Alice can pick the gateway she used with one click, and forget it.
+await alice.eval(`(document.querySelector(".signout").click(), true)`);
+await alice.waitFor(`${qa("gateway")}.length === 1`);
+check((await alice.eval(`${q("gateway")}.textContent`)) === "wrinkle.test:8080", "the gateway she signed in through is remembered");
+await alice.eval(type("url", "ws://elsewhere.test:1/v1/ws"));
+await alice.waitFor(`${q("url")}.value === "ws://elsewhere.test:1/v1/ws"`);
+await alice.eval(`(${q("gateway")}.click(), true)`);
+await alice.waitFor(`${q("url")}.value === ${JSON.stringify(GATEWAY)}`);
+check(true, "one click on a remembered gateway fills the field");
+await alice.eval(`(${q("forget-gateway")}.click(), true)`);
+await alice.waitFor(`${qa("gateway")}.length === 0`);
+await alice.send("Page.reload");
+await alice.waitFor(`!!${q("url")}`);
+check((await alice.eval(`${qa("gateway")}.length`)) === 0, "a forgotten gateway stays forgotten");
 
 if (process.env.SCREENSHOT) {
   const { writeFileSync } = await import("node:fs");

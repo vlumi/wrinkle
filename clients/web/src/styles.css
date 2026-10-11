@@ -110,6 +110,58 @@ button:disabled {
   color: var(--muted);
 }
 
+/* Gateways used before: tap one to fill the field, × to forget it. */
+.gateways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gateways li {
+  display: flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.gateways li.chosen {
+  border-color: var(--accent);
+}
+
+.gateways button {
+  color: var(--ink);
+  background: none;
+  border-radius: 999px;
+}
+
+.gateways .pick {
+  overflow: hidden;
+  padding: 8px 4px 8px 14px;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gateways .chosen .pick {
+  color: var(--accent);
+}
+
+.gateways .forget {
+  padding: 8px 12px 8px 6px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.gateways .forget:hover {
+  color: var(--danger);
+}
+
 /* Shell */
 
 .app {

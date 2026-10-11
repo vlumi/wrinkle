@@ -7,6 +7,7 @@ import type { Event } from "../gen/wrinkle/v1/event_pb";
 import type { User } from "../gen/wrinkle/v1/model_pb";
 import { Connection } from "./connection";
 import type { ConnectionState } from "./connection";
+import { rememberGateway } from "./gateways";
 import { addMessages, applyEvent, key, noteLatest, unread, upsertConversation } from "./model";
 import type { Data } from "./model";
 import { newMessageId, storage } from "./util";
@@ -41,6 +42,7 @@ export interface Session extends Data {
 let conn: Connection | null = null;
 let cursor = 0n;
 let deviceId = 0n;
+let gatewayURL = "";
 
 const empty: Data = { conversations: {}, messages: {} };
 
@@ -59,6 +61,7 @@ export const useSession = create<Session>((set, get) => {
     if (!c || !name) return;
     const resp = await c.call("connect", { case: "connect", value: { userName: name, deviceId, deviceName: navigator.userAgent.slice(0, 64) } });
     deviceId = resp.deviceId;
+    rememberGateway(gatewayURL);
     storage.set(userKey("device"), deviceId.toString());
     if (cursor === 0n) {
       // A device without history starts at the head; the past comes from the
@@ -159,6 +162,7 @@ export const useSession = create<Session>((set, get) => {
       deviceId = BigInt(storage.get(`${name}.device`) ?? "0");
       cursor = BigInt(storage.get(`${name}.cursor`) ?? "0");
       storage.set("last", JSON.stringify({ name, url }));
+      gatewayURL = url;
       conn = new Connection(url, {
         state: (status) => set({ status }),
         open: () => onOpen().catch(fail),

@@ -1,7 +1,7 @@
-/** The gateway on the host that served this page, port 8080. */
+/** The gateway on the host that served this page, on the first side-by-side port. */
 export function defaultGatewayURL(loc: Pick<Location, "protocol" | "hostname"> = location): string {
   const scheme = loc.protocol === "https:" ? "wss" : "ws";
-  return `${scheme}://${loc.hostname || "localhost"}:8080/v1/ws`;
+  return `${scheme}://${loc.hostname || "localhost"}:8180/v1/ws`;
 }
 
 /**
