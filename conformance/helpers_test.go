@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/coder/websocket"
+
 	wrinkleclient "github.com/vlumi/wrinkle/clients/go"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -111,10 +113,29 @@ func connectToken(t *testing.T, token string) *device {
 	}
 }
 
-// signUp registers a new user and connects its first device.
+// signUp registers a new user and connects its first device, once the
+// registration's DeviceEvent is in the log, so that the tests see only the
+// events they cause.
 func signUp(t *testing.T, name string) *device {
 	t.Helper()
-	return connectToken(t, register(t, name).GetDeviceToken())
+	token := register(t, name).GetDeviceToken()
+	deadline := time.Now().Add(eventTimeout)
+	for {
+		c := dial(t)
+		resp, err := c.Connect(ctx(t), token)
+		c.Close()
+		if err != nil {
+			t.Fatalf("connect: %v", err)
+		}
+		if resp.GetLogHead() > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the registration's event is not in the log after %s", eventTimeout)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return connectToken(t, token)
 }
 
 // newUser signs up a user with a unique name.
@@ -216,6 +237,33 @@ func noEvent(t *testing.T, d *device, wait time.Duration) {
 	case ev := <-d.Events:
 		t.Fatalf("unexpected event: %v", ev)
 	case <-time.After(wait):
+	}
+}
+
+const (
+	// signedOutCode closes the connections of a device signed out.
+	signedOutCode websocket.StatusCode = 4001
+	// signOutWithin is how soon they must close.
+	signOutWithin = 5 * time.Second
+)
+
+// waitSignedOut waits for the server to close the connection as signed
+// out.
+func waitSignedOut(t *testing.T, d *device) {
+	t.Helper()
+	deadline := time.After(signOutWithin)
+	for {
+		select {
+		case _, ok := <-d.Events:
+			if !ok {
+				if got := websocket.CloseStatus(d.Err()); got != signedOutCode {
+					t.Fatalf("connection closed with %v (%v), want %v", got, d.Err(), signedOutCode)
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatalf("connection still open after %s", signOutWithin)
+		}
 	}
 }
 

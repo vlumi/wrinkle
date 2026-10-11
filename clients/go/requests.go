@@ -124,3 +124,56 @@ func (c *Client) RegisterPushToken(ctx context.Context, service pb.PushService, 
 		RegisterPushToken: &pb.RegisterPushTokenRequest{Service: service, Token: token}}})
 	return err
 }
+
+// UpdateAvatar sets the profile picture to an uploaded blob; empty removes
+// it.
+func (c *Client) UpdateAvatar(ctx context.Context, blobID []byte) (*pb.User, error) {
+	if blobID == nil {
+		blobID = []byte{}
+	}
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_UpdateProfile{
+		UpdateProfile: &pb.UpdateProfileRequest{Avatar: blobID}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetUpdateProfile().GetUser(), nil
+}
+
+func (c *Client) ListDevices(ctx context.Context) ([]*pb.Device, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_ListDevices{ListDevices: &pb.ListDevicesRequest{}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetListDevices().GetDevices(), nil
+}
+
+func (c *Client) RenameDevice(ctx context.Context, deviceID uint64, name string) (*pb.Device, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_RenameDevice{
+		RenameDevice: &pb.RenameDeviceRequest{DeviceId: deviceID, Name: name}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetRenameDevice().GetDevice(), nil
+}
+
+// SignOutDevice signs out another device of the account.
+func (c *Client) SignOutDevice(ctx context.Context, deviceID uint64) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SignOutDevice{
+		SignOutDevice: &pb.SignOutDeviceRequest{DeviceId: deviceID}}})
+	return err
+}
+
+func (c *Client) DeleteAccount(ctx context.Context, password string) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_DeleteAccount{
+		DeleteAccount: &pb.DeleteAccountRequest{Password: password}}})
+	return err
+}
+
+func (c *Client) CreateUpload(ctx context.Context, purpose pb.BlobPurpose, mediaType string, size uint64) (*pb.CreateUploadResponse, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_CreateUpload{
+		CreateUpload: &pb.CreateUploadRequest{Purpose: purpose, MediaType: mediaType, Size: size}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetCreateUpload(), nil
+}
