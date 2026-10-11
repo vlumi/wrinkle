@@ -19,9 +19,13 @@ shift
 "$services" --roles services,fanout --listen 127.0.0.1:8090 --services-listen 127.0.0.1:9000 &
 services_pid=$!
 gateway_pid=""
+# The gateway first, so it drains its connections while the services still
+# answer.
 stop() {
-  kill $gateway_pid $services_pid 2>/dev/null || true
-  wait $gateway_pid $services_pid 2>/dev/null || true
+  kill $gateway_pid 2>/dev/null || true
+  wait $gateway_pid 2>/dev/null || true
+  kill $services_pid 2>/dev/null || true
+  wait $services_pid 2>/dev/null || true
 }
 trap stop EXIT INT TERM
 for _ in $(seq 1 60); do
