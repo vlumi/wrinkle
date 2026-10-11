@@ -82,6 +82,11 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 		body, conversationID, seq); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM reaction WHERE conversation_id = ? AND seq = ?`,
+		conversationID, seq); err != nil {
+		return err
+	}
 	recipients := st.members
 	if !st.has(userID) {
 		recipients = append(slices.Clone(recipients), userID)

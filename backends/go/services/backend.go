@@ -197,6 +197,16 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_DeleteMessage{DeleteMessage: &pb.DeleteMessageResponse{}}
+	case *pb.Request_SetReaction:
+		conversationID, err := parseConversationID(r.SetReaction.GetConversationId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.SetReaction(ctx, userID, conversationID,
+			r.SetReaction.GetSeq(), r.SetReaction.GetSealed()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SetReaction{SetReaction: &pb.SetReactionResponse{}}
 	case *pb.Request_MarkRead:
 		conversationID, err := parseConversationID(r.MarkRead.GetConversationId())
 		if err != nil {

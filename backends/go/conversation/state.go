@@ -89,10 +89,10 @@ func load(ctx context.Context, q rowQuerier, query string, conversationID ids.UU
 	return st, err
 }
 
-// member loads the conversation and checks that the user is a current
-// member.
-func member(ctx context.Context, q rowQuerier, query string, conversationID, userID ids.UUID) (state, error) {
-	st, err := load(ctx, q, query, conversationID)
+// member locks the conversation's row and checks that the user is a
+// current member.
+func member(ctx context.Context, q rowQuerier, conversationID, userID ids.UUID) (state, error) {
+	st, err := load(ctx, q, selectStateForUpdate, conversationID)
 	if err != nil {
 		return st, err
 	}

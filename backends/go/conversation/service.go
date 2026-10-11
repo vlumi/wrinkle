@@ -126,7 +126,7 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	}
 	defer tx.Rollback()
 
-	st, err := member(ctx, tx, selectStateForUpdate, conversationID, userID)
+	st, err := member(ctx, tx, conversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 	}
 	defer tx.Rollback()
 
-	st, err := member(ctx, tx, selectStateForUpdate, conversationID, userID)
+	st, err := member(ctx, tx, conversationID, userID)
 	if err != nil {
 		return err
 	}
@@ -298,5 +298,12 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 		}
 		messages = append(messages, msg)
 	}
-	return messages, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if err := addReactions(ctx, s.db, conversationID, messages); err != nil {
+		return nil, err
+	}
+	return messages, nil
 }

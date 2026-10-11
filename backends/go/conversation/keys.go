@@ -65,7 +65,7 @@ func (s *Service) PublishKeys(ctx context.Context, userID ids.UUID, deviceID uin
 		return err
 	}
 	defer tx.Rollback()
-	st, err := member(ctx, tx, selectStateForUpdate, conversationID, userID)
+	st, err := member(ctx, tx, conversationID, userID)
 	if err != nil {
 		return err
 	}
