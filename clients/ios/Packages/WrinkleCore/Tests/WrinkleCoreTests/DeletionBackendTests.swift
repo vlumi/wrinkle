@@ -10,8 +10,8 @@ extension BackendTests {
         let (bob, b) = try await registered(unique("ios-bob"))
         let conv = try await alice.openConversation(peerName: b.user.name)
         let id = conv.conversationID
-        let sent = try await alice.sendMessage(
-            conversationID: id, clientMessageID: "m1", text: "oops")
+        let sent = try await send(
+            alice, "oops", to: id, members: .direct(peer: b.user.userID), id: "m1")
         _ = try await next(bob.events) { $0.message.message.seq == sent.seq }
 
         let denied = await code { try await bob.deleteMessage(conversationID: id, seq: sent.seq) }
@@ -29,7 +29,6 @@ extension BackendTests {
         let history = try await bob.getMessages(conversationID: id, beforeSeq: 0, limit: 10)
         XCTAssertEqual(history.map(\.seq), [sent.seq])
         XCTAssertTrue(history.first?.hasDeletedAt == true)
-        XCTAssertEqual(history.first?.text, "")
         XCTAssertNil(history.first?.content)
         await alice.close()
         await bob.close()

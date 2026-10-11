@@ -88,12 +88,14 @@ extension BackendTests {
         let seen = try await t.carol.getMessages(conversationID: id, beforeSeq: 0, limit: 10)
         XCTAssertEqual(seen.map(\.seq), [2])
 
-        let hello = try await t.bob.sendMessage(
-            conversationID: id, clientMessageID: "m1", text: "hello all")
+        // Adding carol requires a new epoch, which bob's device publishes before sending.
+        let hello = try await send(t.bob, "hello all", to: id, members: .group, id: "m1")
         XCTAssertEqual(hello.seq, 3)
+        XCTAssertEqual(hello.sealed.epoch, 1)
         for conn in [t.alice, t.carol] {
             let got = try await next(conn.events) { $0.message.message.seq == 3 }
-            XCTAssertEqual(got.message.message.text, "hello all")
+            let text = try await read(conn, got.message.message)
+            XCTAssertEqual(text, "hello all")
         }
 
         try await t.carol.setTopic(conversationID: id, topic: "Holiday")
@@ -141,9 +143,17 @@ extension BackendTests {
         let removed = try await next(t.carol.events) { $0.message.message.seq == 5 }
         XCTAssertEqual(removed.message.message.notice.memberRemoved.user.userID, t.c.userID)
         let refused = await code {
-            try await t.carol.sendMessage(conversationID: id, clientMessageID: "m2", text: "hi")
+            try await self.send(t.carol, "hi", to: id, members: .group, id: "m2")
         }
         XCTAssertEqual(refused, .permissionDenied)
+        // The others' next epoch leaves carol out.
+        let after = try await send(t.alice, "without carol", to: id, members: .group, id: "m3")
+        XCTAssertEqual(after.sealed.epoch, 2)
+        let got = try await next(t.bob.events) { $0.message.message.seq == after.seq }
+        let text = try await read(t.bob, got.message.message)
+        XCTAssertEqual(text, "without carol")
+        let unreadable = try await read(t.carol, after)
+        XCTAssertNil(unreadable)
         let history = try await t.carol.getMessages(conversationID: id, beforeSeq: 0, limit: 10)
         XCTAssertEqual(history.map(\.seq), [5, 4, 3, 2])
         let former = try await eventually({ try await self.listed(t.carol, id) }) {

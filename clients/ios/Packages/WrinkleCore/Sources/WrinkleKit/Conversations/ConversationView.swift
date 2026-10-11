@@ -8,9 +8,11 @@ struct ConversationView: View {
     @Query private var conversations: [StoredConversation]
     @Query private var messages: [StoredMessage]
     @Query private var members: [StoredMember]
+    @Query private var verifications: [StoredVerification]
     @State private var text = ""
     @State private var error: String?
     @State private var showInfo = false
+    @State private var contact: Wrinkle_V1_User?
     /// The seq of the user's own message awaiting confirmation of its deletion.
     @State private var deleting: Int64?
 
@@ -55,6 +57,22 @@ struct ConversationView: View {
                     app.markRead(conversationID: conversationID)
                 }
             }
+            if let changed = changedContacts.first {
+                Button {
+                    contact = changed
+                } label: {
+                    Label(
+                        "The safety number with \(displayName(changed)) changed. Verify it again.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .font(.footnote)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.orange)
+                .padding(.horizontal)
+                .padding(.vertical, 8)
+            }
             Divider()
             if conversation?.isFormer == true {
                 Text("You are no longer in this group")
@@ -77,14 +95,18 @@ struct ConversationView: View {
             ToolbarItem(placement: .principal) {
                 if let conversation { header(conversation) }
             }
-            if isGroup {
+            if let conversation {
                 ToolbarItem(placement: Toolbar.trailing) {
                     Button {
-                        showInfo = true
+                        if conversation.isGroup {
+                            showInfo = true
+                        } else {
+                            contact = conversation.peer
+                        }
                     } label: {
                         Image(systemName: "info.circle")
                     }
-                    .accessibilityLabel("Group info")
+                    .accessibilityLabel(conversation.isGroup ? "Group info" : "Contact")
                 }
             }
         }
@@ -102,6 +124,18 @@ struct ConversationView: View {
                 GroupInfoView(conversationID: conversationID) { showInfo = false }
             }
         }
+        .sheet(isPresented: Binding(get: { contact != nil }, set: { if !$0 { contact = nil } })) {
+            if let contact {
+                NavigationStack {
+                    ContactView(user: contact)
+                        .toolbar {
+                            ToolbarItem(placement: .confirmationAction) {
+                                Button("Done") { self.contact = nil }
+                            }
+                        }
+                }
+            }
+        }
         // Again once connected: opened from a notification, the app is still connecting.
         .task(id: app.me?.userID) {
             if messages.isEmpty {
@@ -111,6 +145,12 @@ struct ConversationView: View {
             if conversation?.isGroup == true && conversation?.member == true {
                 try? await app.loadMembers(conversationID: conversationID)
             }
+            if messages.contains(where: \.isLocked) || conversation?.lastSealed != nil {
+                await app.unlock(conversationID: conversationID)
+            }
+            await app.loadFingerprints(
+                contacts.map(\.userID.hex).filter { id in verifications.contains { $0.userID == id }
+                })
         }
     }
 
@@ -149,6 +189,26 @@ struct ConversationView: View {
                 }
             }
         }
+    }
+
+    /// The other people in the conversation.
+    private var contacts: [Wrinkle_V1_User] {
+        guard let c = conversation else { return [] }
+        guard c.isGroup else { return [c.peer] }
+        return members.filter { $0.current && $0.userID != app.myUserID }.map(\.user)
+    }
+
+    /// Verified contacts whose safety number has changed since.
+    private var changedContacts: [Wrinkle_V1_User] {
+        contacts.filter { u in
+            let id = u.userID.hex
+            let verified = verifications.first { $0.userID == id }?.fingerprint
+            return verified != nil && app.verificationState(id, verified: verified) == .changed
+        }
+    }
+
+    private func displayName(_ u: Wrinkle_V1_User) -> String {
+        u.name.isEmpty && !u.deleted ? "someone" : UserDisplay.name(u.name, deleted: u.deleted)
     }
 
     /// The sender as the members cache knows them; only the id if it does not.

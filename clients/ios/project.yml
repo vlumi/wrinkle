@@ -12,7 +12,11 @@ options:
 
 settings:
   base:
-    PRODUCT_BUNDLE_IDENTIFIER: fi.misaki.wrinkle
+    WRINKLE_BUNDLE_ID: fi.misaki.wrinkle
+    # Shared by the app and the notification service extension: the epoch keys the
+    # extension decrypts pushes with live in this group's Keychain.
+    WRINKLE_APP_GROUP: group.$(WRINKLE_BUNDLE_ID)
+    PRODUCT_BUNDLE_IDENTIFIER: $(WRINKLE_BUNDLE_ID)
     PRODUCT_NAME: Wrinkle
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "0"
@@ -42,6 +46,8 @@ targets:
         # Development builds get sandbox pushes; TestFlight and the App Store
         # are re-signed for production.
         aps-environment: development
+        com.apple.security.application-groups:
+          - $(WRINKLE_APP_GROUP)
     info:
       path: Sources/iOS/Info.plist
       properties:
@@ -65,10 +71,43 @@ targets:
           NSAllowsLocalNetworking: true
         # Asked the first time the app reaches a backend on the local network.
         NSLocalNetworkUsageDescription: Wrinkle connects to a messaging backend on your local network.
+        # Read by WrinkleCore's Vaults, in the app and the extension.
+        WrinkleAppGroup: $(WRINKLE_APP_GROUP)
     dependencies:
       - package: WrinkleCore
         product: WrinkleKit
+      - target: Wrinkle-NotificationService
     # Explicit scheme so xcodegen writes a shared one; `xcodebuild -scheme
     # Wrinkle-iOS` then works on a fresh checkout.
     scheme:
       configVariants: []
+
+  # Decrypts message pushes ("mutable-content") with the epoch keys the app shares
+  # through the app group.
+  Wrinkle-NotificationService:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/NotificationService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(WRINKLE_BUNDLE_ID).NotificationService
+        PRODUCT_NAME: WrinkleNotificationService
+    entitlements:
+      path: Sources/NotificationService/NotificationService.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - $(WRINKLE_APP_GROUP)
+    info:
+      path: Sources/NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Wrinkle
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WrinkleAppGroup: $(WRINKLE_APP_GROUP)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    dependencies:
+      - package: WrinkleCore
+        product: WrinkleCore

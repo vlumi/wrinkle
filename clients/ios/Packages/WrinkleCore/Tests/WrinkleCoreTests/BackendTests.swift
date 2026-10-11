@@ -5,13 +5,14 @@ import XCTest
 /// Against a live backend at ws://localhost:8080/v1/ws: accounts, a message each way, a read
 /// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
 /// deletion, a group of three (GroupBackendTests.swift), deleting a message
-/// (DeletionBackendTests.swift). Skipped when nothing listens, unless
+/// (DeletionBackendTests.swift), end-to-end encryption (E2EEBackendTests.swift). Every message
+/// is sealed on the sending device and opened on the receiving ones. Skipped when nothing listens, unless
 /// WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {
     private let url = URL(
         string: ProcessInfo.processInfo.environment["WRINKLE_URL"] ?? "ws://localhost:8080/v1/ws")!
 
-    private func dial() async throws -> Connection {
+    func dial() async throws -> Connection {
         let c = Connection(url: url)
         do {
             try await c.open()
@@ -45,6 +46,9 @@ final class BackendTests: XCTestCase {
 
     static let password = "correct horse"
 
+    /// Each connected device's keys, by connection.
+    var keyManagers: [ObjectIdentifier: KeyManager] = [:]
+
     /// A name no earlier run used.
     func unique(_ prefix: String) -> String {
         "\(prefix)-\(UUID().uuidString.prefix(8).lowercased())"
@@ -58,6 +62,7 @@ final class BackendTests: XCTestCase {
         let resp = try await c.connect(deviceToken: creds.deviceToken)
         XCTAssertEqual(resp.user.userID, creds.userID)
         XCTAssertEqual(resp.deviceID, creds.deviceID)
+        try await keyed(c, resp)
         return (c, resp)
     }
 
@@ -81,20 +86,23 @@ final class BackendTests: XCTestCase {
         let conv = try await alice.openConversation(peerName: b.user.name.uppercased())
         XCTAssertEqual(conv.conversationID.count, 16)
         XCTAssertEqual(conv.peer.name, b.user.name)
-        let sent = try await alice.sendMessage(
-            conversationID: conv.conversationID, clientMessageID: "m1", text: "hello bob")
+        let sent = try await send(
+            alice, "hello bob", to: conv.conversationID, members: .direct(peer: b.user.userID),
+            id: "m1")
         XCTAssertEqual(sent.seq, 1)
 
         let got = try await next(bob.events) { $0.message.message.seq == 1 }
-        XCTAssertEqual(got.message.message.text, "hello bob")
+        let text = try await read(bob, got.message.message)
+        XCTAssertEqual(text, "hello bob")
         XCTAssertEqual(got.message.message.senderUserID, a.user.userID)
 
         try await bob.markRead(conversationID: conv.conversationID, seq: 1)
         let read = try await next(alice.events) { $0.read.seq == 1 }
         XCTAssertEqual(read.read.userID, b.user.userID)
 
-        let reply = try await bob.sendMessage(
-            conversationID: conv.conversationID, clientMessageID: "m2", text: "hi alice")
+        let reply = try await send(
+            bob, "hi alice", to: conv.conversationID, members: .direct(peer: a.user.userID),
+            id: "m2")
         XCTAssertEqual(reply.seq, 2)
         _ = try await next(alice.events) { $0.message.message.seq == 2 }
         _ = try await next(bob.events) { $0.message.message.seq == 2 }
@@ -171,13 +179,6 @@ final class BackendTests: XCTestCase {
             group.cancelAll()
         }
         return await c.closeCode
-    }
-
-    /// Opens a conversation and sends a message, so that both are in each other's lists.
-    private func converse(_ c: Connection, with peer: String) async throws {
-        let conv = try await c.openConversation(peerName: peer)
-        _ = try await c.sendMessage(
-            conversationID: conv.conversationID, clientMessageID: "hello", text: "hello")
     }
 
     private func scratchBlobs() -> Blobs {
@@ -302,5 +303,15 @@ final class BackendTests: XCTestCase {
         _ = try await c.register(name: name, password: Self.password, deviceName: "")
         await c.close()
         await grace.close()
+    }
+}
+
+extension BackendTests {
+    /// Opens a conversation and sends a message, so that both are in each other's lists.
+    fileprivate func converse(_ c: Connection, with peer: String) async throws {
+        let conv = try await c.openConversation(peerName: peer)
+        try await send(
+            c, "hello", to: conv.conversationID, members: .direct(peer: conv.peer.userID),
+            id: "hello")
     }
 }

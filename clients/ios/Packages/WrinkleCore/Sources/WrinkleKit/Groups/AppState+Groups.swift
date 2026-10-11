@@ -24,6 +24,7 @@ extension AppState {
         let members = try await connection.getMembers(conversationID: try wireID(conversationID))
         store.replaceMembers(members, in: conversationID, me: myUserID)
         store.save()
+        publishNames()
     }
 
     public func addMembers(_ names: [String], to conversationID: IDHex) async throws {
@@ -76,6 +77,9 @@ extension AppState {
                 NoticeText.changesMembers(n)
             else { continue }
             ids.insert(m.message.conversationID.hex)
+        }
+        for id in ids {
+            if let wire = Data.id(hex: id) { Task { await keys?.invalidate(wire) } }
         }
         for id in ids where store.conversation(id)?.member == true {
             Task { try? await loadMembers(conversationID: id) }

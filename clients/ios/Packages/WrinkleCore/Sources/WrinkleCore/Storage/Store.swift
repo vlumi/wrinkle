@@ -23,6 +23,8 @@ public final class StoredConversation {
     public var lastSeq: Int64
     public var lastSenderID: IDHex?
     public var lastText: String?
+    /// The serialized latest message while its sealed content is not opened.
+    public var lastSealed: Data?
     /// The serialized Notice when the latest message is one.
     public var lastNotice: Data?
     /// The latest message was deleted by its sender.
@@ -147,18 +149,21 @@ public final class StoredConversation {
     /// The latest message was deleted: its text goes.
     func lastWasDeleted() {
         lastText = ""
+        lastSealed = nil
         lastNotice = nil
         lastDeleted = true
     }
 
     private func showLast(_ m: Wrinkle_V1_Message) {
         lastSenderID = m.senderUserID.hex
-        lastText = m.text
+        lastText = ""
         lastDeleted = m.hasDeletedAt
-        if case .notice(let n) = m.content {
-            lastNotice = try? n.serializedData()
-        } else {
-            lastNotice = nil
+        lastNotice = nil
+        lastSealed = nil
+        switch m.content {
+        case .notice(let n): lastNotice = try? n.serializedData()
+        case .sealed: lastSealed = try? m.serializedData()
+        case nil: break
         }
         lastSentAt = m.sentAt.date
         updatedAt = m.sentAt.date
@@ -172,8 +177,10 @@ public final class StoredMessage {
     public var seq: Int64
     public var senderID: IDHex
     public var clientMessageID: String
-    /// Empty for a notice.
+    /// The opened text; empty for a notice and while the content is not opened.
     public var text: String
+    /// The serialized message while its sealed content is not opened.
+    public var sealedMessage: Data?
     /// The serialized Notice, for a group notice.
     public var notice: Data?
     public var sentAt: Date
@@ -185,13 +192,20 @@ public final class StoredMessage {
         seq = Int64(m.seq)
         senderID = m.senderUserID.hex
         clientMessageID = m.clientMessageID
-        text = m.text
-        if case .notice(let n) = m.content { notice = try? n.serializedData() }
+        text = ""
+        switch m.content {
+        case .notice(let n): notice = try? n.serializedData()
+        case .sealed: sealedMessage = try? m.serializedData()
+        case nil: break
+        }
         sentAt = m.sentAt.date
         if m.hasDeletedAt { deletedAt = m.deletedAt.date }
     }
 
     public var isDeleted: Bool { deletedAt != nil }
+
+    /// Sealed content this device cannot open (yet).
+    public var isLocked: Bool { sealedMessage != nil }
 
     /// Whether the user may delete it: their own text, not yet deleted.
     public func deletable(by userID: IDHex) -> Bool {
@@ -203,6 +217,7 @@ public final class StoredMessage {
         guard deletedAt == nil else { return }
         text = ""
         notice = nil
+        sealedMessage = nil
         deletedAt = date
     }
 
@@ -216,17 +231,22 @@ public final class StoredMessage {
 @MainActor
 public struct Store {
     public let context: ModelContext
+    /// The epoch keys that open sealed content; without them content stays locked.
+    public var keys: EpochKeys?
 
-    public init(context: ModelContext) { self.context = context }
+    public init(context: ModelContext, keys: EpochKeys? = nil) {
+        self.context = context
+        self.keys = keys
+    }
 
     public static let models: [any PersistentModel.Type] = [
-        StoredConversation.self, StoredMessage.self, StoredMember.self,
+        StoredConversation.self, StoredMessage.self, StoredMember.self, StoredVerification.self,
     ]
     public static let schema = Schema(models)
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 5
+    static let version = 6
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {
@@ -253,6 +273,7 @@ public struct Store {
         try? context.delete(model: StoredMessage.self)
         try? context.delete(model: StoredMember.self)
         try? context.delete(model: StoredConversation.self)
+        try? context.delete(model: StoredVerification.self)
         save()
     }
 
@@ -272,6 +293,7 @@ public struct Store {
                 return s
             }()
         stored.apply(c)
+        open(stored)
         return stored
     }
 
@@ -290,7 +312,9 @@ public struct Store {
             if m.hasDeletedAt { stored.delete(at: m.deletedAt.date) }
             return false
         }
-        context.insert(StoredMessage(m))
+        let stored = StoredMessage(m)
+        open(stored)
+        context.insert(stored)
         return true
     }
 
@@ -345,8 +369,9 @@ public struct Store {
         let new = insert(m)
         if new, case .notice(let n) = m.content { followMembers(n, in: m) }
         guard let c = conversation(m.conversationID.hex) else { return nil }
-        if c.noteLatest(m), case .notice(let n) = m.content {
-            c.follow(n, sender: m.senderUserID.hex, me: me)
+        if c.noteLatest(m) {
+            if case .notice(let n) = m.content { c.follow(n, sender: m.senderUserID.hex, me: me) }
+            open(c)
         }
         if m.senderUserID.hex == me {
             c.readSeq = max(c.readSeq, Int64(m.seq))

@@ -14,7 +14,7 @@ final class DeletionTests: XCTestCase {
     private func makeStore() throws -> (Store, StoredConversation) {
         let container = try ModelContainer(
             for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let store = Store(context: ModelContext(container))
+        let store = Store(context: ModelContext(container), keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         conv.peer.userID = bob
@@ -27,8 +27,8 @@ final class DeletionTests: XCTestCase {
             $0.conversationID = conv7
             $0.seq = seq
             $0.senderUserID = sender
-            $0.text = text
             $0.sentAt = .init(date: Date())
+            $0.seal(text)
         }
         return event
     }

@@ -16,6 +16,22 @@ struct ConversationListView: View {
     var body: some View {
         NavigationStack(path: $path) {
             List {
+                if !app.securityNotices.isEmpty {
+                    Section("Security") {
+                        ForEach(app.securityNotices, id: \.self) { notice in
+                            HStack(alignment: .top) {
+                                Label(notice, systemImage: "lock.shield")
+                                    .font(.footnote)
+                                Spacer()
+                                Button("Dismiss", systemImage: "xmark") {
+                                    app.dismissSecurityNotice(notice)
+                                }
+                                .labelStyle(.iconOnly)
+                                .buttonStyle(.borderless)
+                            }
+                        }
+                    }
+                }
                 Section {
                     HStack {
                         TextField("Start a conversation with…", text: $peerName)
@@ -75,6 +91,19 @@ struct ConversationListView: View {
                         path = [id]
                     }
                 }
+            }
+            .alert(
+                "New device",
+                // The buttons answer; dismissing alone changes nothing.
+                isPresented: Binding(get: { app.newDevice != nil }, set: { _ in }),
+                presenting: app.newDevice
+            ) { _ in
+                Button("Share History") { app.decideSharing(true) }
+                Button("Don't Share", role: .cancel) { app.decideSharing(false) }
+            } message: { device in
+                Text(
+                    "\(device.name.isEmpty ? "A new device" : device.name) signed in. "
+                        + "Share your message history with it?")
             }
             .sheet(isPresented: $showProfile) {
                 NavigationStack {

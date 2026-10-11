@@ -14,6 +14,7 @@ struct GroupInfoView: View {
     @State private var newNames: [String] = []
     @State private var confirmingLeave = false
     @State private var error: String?
+    @State private var contact: Wrinkle_V1_User?
 
     init(conversationID: IDHex, done: @escaping () -> Void) {
         self.conversationID = conversationID
@@ -77,6 +78,7 @@ struct GroupInfoView: View {
             }
         }
         .onChange(of: conversation?.topic) { _, new in topic = new ?? "" }
+        .navigationDestination(item: $contact) { ContactView(user: $0) }
     }
 
     private func row(_ m: StoredMember) -> some View {
@@ -88,15 +90,19 @@ struct GroupInfoView: View {
             if m.admin {
                 Text("Admin").font(.caption).foregroundStyle(.secondary)
             }
-            if isAdmin && !me {
+            if !me {
                 Menu {
-                    Button(m.admin ? "Remove as admin" : "Make admin") {
-                        run {
-                            try await app.setAdmin(m.userID, admin: !m.admin, in: conversationID)
+                    Button("Safety number", systemImage: "checkmark.shield") { contact = m.user }
+                    if isAdmin {
+                        Button(m.admin ? "Remove as admin" : "Make admin") {
+                            run {
+                                try await app.setAdmin(
+                                    m.userID, admin: !m.admin, in: conversationID)
+                            }
                         }
-                    }
-                    Button("Remove from group", role: .destructive) {
-                        run { try await app.removeMember(m.userID, from: conversationID) }
+                        Button("Remove from group", role: .destructive) {
+                            run { try await app.removeMember(m.userID, from: conversationID) }
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

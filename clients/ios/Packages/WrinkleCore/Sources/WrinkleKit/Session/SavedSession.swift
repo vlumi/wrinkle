@@ -34,4 +34,21 @@ enum SavedSession {
     static var lastURL: String? { defaults.string(forKey: urlKey) }
 
     static func setLastURL(_ url: String) { defaults.set(url, forKey: urlKey) }
+
+    private static func decidedKey(_ deviceID: UInt64) -> String { "wrinkle.decided.\(deviceID)" }
+
+    /// The user's other devices whose history sharing this device has settled.
+    static func decidedDevices(for deviceID: UInt64) -> Set<UInt64> {
+        let ids = defaults.stringArray(forKey: decidedKey(deviceID)) ?? []
+        return Set(ids.compactMap { UInt64($0) })
+    }
+
+    static func decide(_ device: UInt64, for deviceID: UInt64) {
+        let ids = decidedDevices(for: deviceID).union([device])
+        defaults.set(ids.map(String.init), forKey: decidedKey(deviceID))
+    }
+
+    static func forgetDecidedDevices(for deviceID: UInt64) {
+        defaults.removeObject(forKey: decidedKey(deviceID))
+    }
 }

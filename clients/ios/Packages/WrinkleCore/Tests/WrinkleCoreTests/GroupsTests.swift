@@ -13,7 +13,7 @@ final class GroupsTests: XCTestCase {
     private func makeStore() throws -> Store {
         let container = try ModelContainer(
             for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        return Store(context: ModelContext(container))
+        return Store(context: ModelContext(container), keys: TestSealing.keys(group))
     }
 
     private func user(_ id: Data, _ name: String) -> Wrinkle_V1_User {
@@ -44,7 +44,7 @@ final class GroupsTests: XCTestCase {
             $0.seq = seq
             $0.senderUserID = sender
             $0.clientMessageID = "m\(seq)"
-            $0.text = text
+            $0.seal(text)
         }
         return e
     }

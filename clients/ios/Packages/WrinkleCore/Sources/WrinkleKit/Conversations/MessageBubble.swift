@@ -20,6 +20,9 @@ struct MessageBubble: View {
                 }
                 if message.isDeleted {
                     Text("Message removed").italic().foregroundStyle(.secondary)
+                } else if message.isLocked {
+                    Label("Can't decrypt this message", systemImage: "lock")
+                        .italic().foregroundStyle(.secondary)
                 } else {
                     Text(message.text)
                 }

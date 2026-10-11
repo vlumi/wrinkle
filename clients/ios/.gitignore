@@ -2,6 +2,8 @@
 Wrinkle.xcodeproj
 Sources/iOS/Info.plist
 Sources/iOS/Wrinkle.entitlements
+Sources/NotificationService/Info.plist
+Sources/NotificationService/NotificationService.entitlements
 
 # Xcode / SwiftPM
 .build/

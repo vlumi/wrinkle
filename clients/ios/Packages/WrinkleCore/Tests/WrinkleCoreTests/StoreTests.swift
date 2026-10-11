@@ -12,7 +12,7 @@ final class StoreTests: XCTestCase {
     private func makeStore() throws -> Store {
         let container = try ModelContainer(
             for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        return Store(context: ModelContext(container))
+        return Store(context: ModelContext(container), keys: TestSealing.keys(conv7))
     }
 
     func testMessageEventUpdatesConversation() throws {
@@ -30,8 +30,8 @@ final class StoreTests: XCTestCase {
             $0.seq = 1
             $0.senderUserID = bob
             $0.clientMessageID = "m1"
-            $0.text = "hello"
             $0.sentAt = .init(date: Date())
+            $0.seal("hello")
         }
         let touched = store.apply(event, me: me.hex)
         XCTAssertEqual(touched?.lastSeq, 1)
@@ -55,7 +55,7 @@ final class StoreTests: XCTestCase {
             $0.seq = 1
             $0.senderUserID = me
             $0.clientMessageID = "m1"
-            $0.text = "sent from another device"
+            $0.seal("sent from another device")
         }
         _ = store.apply(event, me: me.hex)
         XCTAssertEqual(stored.readSeq, 1)
@@ -103,12 +103,16 @@ final class StoreTests: XCTestCase {
             Wrinkle_V1_Message.with {
                 $0.conversationID = conv7
                 $0.seq = seq
-                $0.text = text
+                $0.seal(text)
             }
         }
         XCTAssertTrue(stored.noteLatest(message(2, "second")))
         XCTAssertFalse(stored.noteLatest(message(1, "first")))
         XCTAssertEqual(stored.lastSeq, 2)
+        // Sealed until the store opens it.
+        XCTAssertNotNil(stored.lastSealed)
+        store.open(stored)
+        XCTAssertNil(stored.lastSealed)
         XCTAssertEqual(stored.lastText, "second")
     }
 
@@ -186,5 +190,64 @@ extension StoreTests {
         XCTAssertEqual(stored.peerAvatar, "")
         XCTAssertEqual(stored.peerName, "")
         XCTAssertEqual(stored.peerDisplayName, "Deleted account")
+    }
+}
+
+/// Sealed content in the store: locked until a key opens it, in the list and the history.
+@MainActor
+final class SealedStoreTests: XCTestCase {
+    private let conv7 = Data(repeating: 7, count: 16)
+    private let me = Data(repeating: 1, count: 16)
+    private let bob = Data(repeating: 2, count: 16)
+
+    func testLockedUntilTheKeyArrives() throws {
+        let container = try ModelContainer(
+            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let keys = EpochKeys(vault: MemoryVault())
+        let store = Store(context: ModelContext(container), keys: keys)
+        _ = store.upsert(
+            .with {
+                $0.conversationID = conv7
+                $0.peer.userID = bob
+            })
+        var event = Wrinkle_V1_Event()
+        event.message.message = .with {
+            $0.conversationID = conv7
+            $0.seq = 1
+            $0.senderUserID = bob
+            $0.clientMessageID = "m1"
+            $0.seal("later", epoch: 3)
+        }
+        let c = try XCTUnwrap(store.apply(event, me: me.hex))
+        let m = try XCTUnwrap(store.message(1, in: conv7.hex))
+        XCTAssertTrue(m.isLocked)
+        XCTAssertEqual(m.text, "")
+        XCTAssertNotNil(c.lastSealed)
+        XCTAssertEqual(store.locked(), [conv7.hex: [3]])
+
+        keys.put(conv7, epoch: 3, key: TestSealing.key)
+        store.reopen(conv7.hex)
+        XCTAssertFalse(m.isLocked)
+        XCTAssertEqual(m.text, "later")
+        XCTAssertEqual(c.lastText, "later")
+        XCTAssertNil(c.lastSealed)
+        XCTAssertTrue(store.locked().isEmpty)
+    }
+
+    func testWrongKeyStaysLocked() throws {
+        let container = try ModelContainer(
+            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
+        let keys = EpochKeys(vault: MemoryVault())
+        keys.put(conv7, epoch: 1, key: Data(repeating: 9, count: 32))
+        let store = Store(context: ModelContext(container), keys: keys)
+        var m = Wrinkle_V1_Message.with {
+            $0.conversationID = conv7
+            $0.seq = 1
+            $0.senderUserID = bob
+            $0.clientMessageID = "m1"
+        }
+        m.seal("secret")
+        store.insert(m)
+        XCTAssertEqual(store.message(1, in: conv7.hex)?.isLocked, true)
     }
 }

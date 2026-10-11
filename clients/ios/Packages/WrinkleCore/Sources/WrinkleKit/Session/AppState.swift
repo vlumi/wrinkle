@@ -33,6 +33,19 @@ public final class AppState {
     public internal(set) var devices: [Wrinkle_V1_Device] = []
     /// Avatars decoded so far, by blob id as hex.
     var avatarImages: [String: CGImage] = [:]
+    /// Another device of the user that set its key and awaits the user's decision on sharing
+    /// the message history with it.
+    public internal(set) var newDevice: Wrinkle_V1_Device?
+    /// Notices about the account's security, such as a device signing in, until dismissed.
+    public internal(set) var securityNotices: [String] = []
+    /// Users' fingerprints as last known, by user id, for the safety number warnings.
+    public internal(set) var fingerprints: [IDHex: Data] = [:]
+    /// The device's encryption state, once connected.
+    var keys: KeyManager?
+    /// Epochs whose keys were asked for this connection without success, by conversation.
+    var triedEpochs: [IDHex: Set<UInt32>] = [:]
+    let deviceVault = Vaults.device()
+    let sharedVault = Vaults.shared()
 
     private var credentials: Credentials?
     private var connection: Connection?
@@ -51,6 +64,8 @@ public final class AppState {
     private static let rejectedNotice =
         "This device was signed out, perhaps by a password change elsewhere. Sign in again."
     private static let signedOutNotice = "Signed out."
+    private static let keyLostNotice =
+        "This device lost its encryption key and was signed out. Sign in again."
     static let deletedNotice = "Account deleted."
 
     /// The device's name, without UIKit so the package compiles for the Mac too.
@@ -80,7 +95,7 @@ public final class AppState {
 
     /// Resumes the saved session, if there is one.
     public func resume(context: ModelContext) {
-        if store == nil { store = Store(context: context) }
+        if store == nil { store = Store(context: context, keys: EpochKeys(vault: sharedVault)) }
         SavedSession.migrate()
         guard credentials == nil, let saved = Credentials.load() else { return }
         credentials = saved
@@ -118,6 +133,7 @@ public final class AppState {
         }
         // A new device: whatever an earlier account left here goes.
         store?.reset()
+        forgetEncryption(deviceID: credentials?.deviceID)
         let saved = Credentials(
             userID: creds.userID, deviceID: creds.deviceID, deviceToken: creds.deviceToken,
             serverURL: url)
@@ -145,30 +161,6 @@ public final class AppState {
         endSession(notice: nil)
     }
 
-    /// The app went to the background: close the connection, so the backend
-    /// sees the device as gone and pushes to it instead. iOS would suspend the
-    /// socket within seconds anyway, leaving it half-open.
-    public func enterBackground() {
-        guard sessionTask != nil else { return }
-        stopSession()
-    }
-
-    /// The app is active again: reconnect and sync what was missed.
-    public func enterForeground() {
-        guard credentials != nil, sessionTask == nil else { return }
-        startSession(first: nil)
-    }
-
-    /// The token APNs issued this device; registered now if connected, and
-    /// after every connect.
-    public func setPushToken(_ token: String, sandbox: Bool) {
-        let service: Wrinkle_V1_PushService = sandbox ? .apnsSandbox : .apns
-        pushToken = (service, token)
-        if let connection, me != nil {
-            Task { try? await connection.registerPushToken(service: service, token: token) }
-        }
-    }
-
     private func startSession(first: Connection?) {
         sessionTask = Task { await self.runSession(first: first) }
     }
@@ -185,6 +177,7 @@ public final class AppState {
     func endSession(notice: String?) {
         stopSession()
         if let credentials { SavedSession.forgetCursor(for: credentials.deviceID) }
+        forgetEncryption(deviceID: credentials?.deviceID)
         Credentials.delete()
         credentials = nil
         me = nil
@@ -218,6 +211,12 @@ public final class AppState {
                 await conn.close()
                 endSession(notice: Self.rejectedNotice)
                 return
+            } catch is KeyLost {
+                stateTask.cancel()
+                try? await conn.signOut()
+                await conn.close()
+                endSession(notice: Self.keyLostNotice)
+                return
             } catch {
                 lastError = "\(error)"
             }
@@ -246,6 +245,7 @@ public final class AppState {
             throw TokenRejected()
         }
         me = resp.user
+        try await startEncryption(conn, creds)
         if cursor == 0 {
             // A device without history starts at the head; the past comes from the
             // conversation list and history requests.
@@ -257,6 +257,45 @@ public final class AppState {
         try await refreshConversations(conn)
         if !devices.isEmpty { devices = try await conn.listDevices() }
         try await syncFromCursor(conn)
+        publishNames()
+    }
+}
+
+// MARK: Lifecycle
+
+extension AppState {
+    /// The app went to the background: close the connection, so the backend
+    /// sees the device as gone and pushes to it instead. iOS would suspend the
+    /// socket within seconds anyway, leaving it half-open.
+    public func enterBackground() {
+        guard sessionTask != nil else { return }
+        stopSession()
+    }
+
+    /// The app is active again: reconnect and sync what was missed.
+    public func enterForeground() {
+        guard credentials != nil, sessionTask == nil else { return }
+        startSession(first: nil)
+    }
+
+    /// The token APNs issued this device; registered now if connected, and
+    /// after every connect.
+    public func setPushToken(_ token: String, sandbox: Bool) {
+        let service: Wrinkle_V1_PushService = sandbox ? .apnsSandbox : .apns
+        pushToken = (service, token)
+        if let connection, me != nil {
+            Task { try? await connection.registerPushToken(service: service, token: token) }
+        }
+    }
+}
+
+// MARK: Sync
+
+extension AppState {
+    /// The open connection and the store, or an error when not connected.
+    func connected() throws -> (Connection, Store) {
+        guard let connection, let store, me != nil else { throw AccountError("Not connected.") }
+        return (connection, store)
     }
 
     private func advanceCursor(to next: UInt64) {
@@ -269,6 +308,7 @@ public final class AppState {
         guard let store else { return }
         for c in list { _ = store.upsert(c) }
         store.save()
+        await openLocked(conn)
     }
 
     private func syncFromCursor(_ conn: Connection) async throws {
@@ -282,6 +322,7 @@ public final class AppState {
             if !resp.hasMore_p { break }
         }
         try await conn.ack(cursor: cursor)
+        await openLocked(conn)
     }
 
     @discardableResult
@@ -290,7 +331,7 @@ public final class AppState {
         case .profile(let p) where p.user.userID.hex == myUserID:
             me = p.user
         case .device(let d):
-            applyDevice(d)
+            followDevice(d)
         case .messageDeleted(let d):
             onMessageDeleted?(d.conversationID.hex, d.seq)
         // Synced from before the deletion: the message arrives already deleted.
@@ -319,75 +360,9 @@ public final class AppState {
         refreshMembers(after: [event], store)
         advanceCursor(to: event.cursor)
         try? await conn.ack(cursor: cursor)
-    }
-}
-
-// MARK: Actions
-
-extension AppState {
-    func connected() throws -> (Connection, Store) {
-        guard let connection, let store, me != nil else { throw AccountError("Not connected.") }
-        return (connection, store)
-    }
-
-    func wireID(_ hex: IDHex) throws -> Data {
-        guard let id = Data.id(hex: hex) else { throw AccountError("Unknown conversation.") }
-        return id
-    }
-
-    public func openConversation(peerName: String) async throws -> IDHex {
-        let (connection, store) = try connected()
-        let c = try await connection.openConversation(peerName: peerName)
-        let stored = store.upsert(c)
-        store.save()
-        return stored.id
-    }
-
-    public func loadHistory(conversationID: IDHex, before: Int64?) async throws {
-        let (connection, store) = try connected()
-        let messages = try await connection.getMessages(
-            conversationID: try wireID(conversationID), beforeSeq: UInt64(before ?? 0),
-            limit: Self.historyPage)
-        for m in messages { store.insert(m) }
-        if messages.count < Self.historyPage, let c = store.conversation(conversationID) {
-            c.historyComplete = true
+        if case .message(let m) = event.body, case .sealed = m.message.content {
+            await openLocked(conn)
         }
-        store.save()
-    }
-
-    public func send(text: String, in conversationID: IDHex) async throws {
-        let (connection, store) = try connected()
-        let m = try await connection.sendMessage(
-            conversationID: try wireID(conversationID), clientMessageID: UUID().uuidString,
-            text: text)
-        store.insert(m)
-        if let c = store.conversation(conversationID), c.noteLatest(m) {
-            c.readSeq = Int64(m.seq)
-        }
-        store.save()
-    }
-
-    /// Deletes one of the user's own messages for everyone; the event that follows changes
-    /// nothing more.
-    public func deleteMessage(_ seq: Int64, in conversationID: IDHex) async throws {
-        let (connection, store) = try connected()
-        try await connection.deleteMessage(
-            conversationID: try wireID(conversationID), seq: UInt64(seq))
-        store.markDeleted(seq, in: conversationID, at: Date())
-        store.save()
-    }
-
-    /// Marks the conversation read up to its last message, if anything is unread.
-    public func markRead(conversationID: IDHex) {
-        guard let session = try? connected() else { return }
-        let (connection, store) = session
-        guard let id = Data.id(hex: conversationID), let c = store.conversation(conversationID),
-            c.unread > 0
-        else { return }
-        let seq = c.lastSeq
-        c.readSeq = seq
-        store.save()
-        Task { try? await connection.markRead(conversationID: id, seq: UInt64(seq)) }
     }
 }
 

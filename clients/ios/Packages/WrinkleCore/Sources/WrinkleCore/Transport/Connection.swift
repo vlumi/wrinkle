@@ -256,19 +256,6 @@ public actor Connection {
             .openConversation.conversation
     }
 
-    public func sendMessage(conversationID: Data, clientMessageID: String, text: String)
-        async throws -> Wrinkle_V1_Message
-    {
-        try await call(
-            .sendMessage(
-                .with {
-                    $0.conversationID = conversationID
-                    $0.clientMessageID = clientMessageID
-                    $0.text = text
-                })
-        ).sendMessage.message
-    }
-
     public func markRead(conversationID: Data, seq: UInt64) async throws {
         _ = try await call(
             .markRead(

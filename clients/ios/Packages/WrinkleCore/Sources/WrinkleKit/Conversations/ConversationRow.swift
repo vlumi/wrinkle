@@ -13,6 +13,9 @@ struct ConversationRow: View {
                 if conversation.lastDeleted {
                     Text("Message removed")
                         .font(.subheadline).italic().foregroundStyle(.secondary).lineLimit(1)
+                } else if conversation.lastSealed != nil {
+                    Text("Can't decrypt this message")
+                        .font(.subheadline).italic().foregroundStyle(.secondary).lineLimit(1)
                 } else if let preview {
                     Text(preview)
                         .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
