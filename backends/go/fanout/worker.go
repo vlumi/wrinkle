@@ -81,9 +81,13 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.log.Warn("fetch error", "topic", topic, "partition", partition, "err", err)
 		})
 		ok := w.handleFetches(ctx, fetches)
+		if !ok {
+			// Fetch the batch again; records already delivered are skipped
+			// by the logs' source key.
+			w.kafka.SetOffsets(batchStarts(fetches))
+		}
 		w.kafka.AllowRebalance()
 		if !ok {
-			// Leave the offsets where they are and poll again.
 			time.Sleep(time.Second)
 			continue
 		}
@@ -123,6 +127,23 @@ func (w *Worker) handleFetches(ctx context.Context, fetches kgo.Fetches) bool {
 	})
 	wg.Wait()
 	return !failed.Load()
+}
+
+// batchStarts returns the offset of each partition's first record in the
+// fetches.
+func batchStarts(fetches kgo.Fetches) map[string]map[int32]kgo.EpochOffset {
+	starts := map[string]map[int32]kgo.EpochOffset{}
+	fetches.EachPartition(func(p kgo.FetchTopicPartition) {
+		if len(p.Records) == 0 {
+			return
+		}
+		if starts[p.Topic] == nil {
+			starts[p.Topic] = map[int32]kgo.EpochOffset{}
+		}
+		first := p.Records[0]
+		starts[p.Topic][p.Partition] = kgo.EpochOffset{Epoch: first.LeaderEpoch, Offset: first.Offset}
+	})
+	return starts
 }
 
 // byConversation groups records by key, the conversation id, keeping each
