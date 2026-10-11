@@ -2,7 +2,10 @@ import { gatewayLabel, withGateway } from "./gateways";
 
 test("a gateway moves to the front without duplicates", () => {
   expect(withGateway([], "ws://a:8180/v1/ws")).toEqual(["ws://a:8180/v1/ws"]);
-  expect(withGateway(["ws://a:8180/v1/ws", "ws://b:8181/v1/ws"], "ws://b:8181/v1/ws")).toEqual(["ws://b:8181/v1/ws", "ws://a:8180/v1/ws"]);
+  expect(withGateway(["ws://a:8180/v1/ws", "ws://b:8181/v1/ws"], "ws://b:8181/v1/ws")).toEqual([
+    "ws://b:8181/v1/ws",
+    "ws://a:8180/v1/ws",
+  ]);
 });
 
 test("the list keeps the most recent dozen", () => {

@@ -76,7 +76,10 @@ export function applyEvent(data: Data, event: Event, me: bigint): Applied {
         r.userId === me
           ? { ...c, readSeq: r.seq > c.readSeq ? r.seq : c.readSeq }
           : { ...c, peerReadSeq: r.seq > c.peerReadSeq ? r.seq : c.peerReadSeq };
-      return { data: { ...data, conversations: { ...data.conversations, [key(c.conversationId)]: next } }, unknownConversation: false };
+      return {
+        data: { ...data, conversations: { ...data.conversations, [key(c.conversationId)]: next } },
+        unknownConversation: false,
+      };
     }
     default:
       return { data, unknownConversation: false };

@@ -6,27 +6,85 @@ const services = [
   {
     group: "Infrastructure",
     items: [
-      { name: "Grafana", probe: "http://127.0.0.1:3000/api/health", links: [["dashboard", "http://localhost:3000/d/wrinkle"], ["home", "http://localhost:3000/"]] },
-      { name: "Prometheus", probe: "http://127.0.0.1:9090/-/healthy", links: [["targets", "http://localhost:9090/targets"], ["query", "http://localhost:9090/query"]] },
-      { name: "Balancers (HAProxy)", probe: "http://127.0.0.1:8404/", links: [["statistics", "http://localhost:8404/"]], note: "make lb-up" },
-      { name: "Kafka Connect (Debezium)", probe: "http://127.0.0.1:8083/connectors", links: [["outbox connector", "http://localhost:8083/connectors/wrinkle-outbox/status"], ["connectors", "http://localhost:8083/connectors"]] },
-      { name: "Vitess (vtcombo)", probe: "http://127.0.0.1:15000/debug/status", links: [["status", "http://localhost:15000/debug/status"], ["variables", "http://localhost:15000/debug/vars"]] },
+      {
+        name: "Grafana",
+        probe: "http://127.0.0.1:3000/api/health",
+        links: [
+          ["dashboard", "http://localhost:3000/d/wrinkle"],
+          ["home", "http://localhost:3000/"],
+        ],
+      },
+      {
+        name: "Prometheus",
+        probe: "http://127.0.0.1:9090/-/healthy",
+        links: [
+          ["targets", "http://localhost:9090/targets"],
+          ["query", "http://localhost:9090/query"],
+        ],
+      },
+      {
+        name: "Balancers (HAProxy)",
+        probe: "http://127.0.0.1:8404/",
+        links: [["statistics", "http://localhost:8404/"]],
+        note: "make lb-up",
+      },
+      {
+        name: "Kafka Connect (Debezium)",
+        probe: "http://127.0.0.1:8083/connectors",
+        links: [
+          ["outbox connector", "http://localhost:8083/connectors/wrinkle-outbox/status"],
+          ["connectors", "http://localhost:8083/connectors"],
+        ],
+      },
+      {
+        name: "Vitess (vtcombo)",
+        probe: "http://127.0.0.1:15000/debug/status",
+        links: [
+          ["status", "http://localhost:15000/debug/status"],
+          ["variables", "http://localhost:15000/debug/vars"],
+        ],
+      },
     ],
   },
   {
     group: "Backends",
     items: [
-      { name: "Backend or load balancer :8080", probe: "http://127.0.0.1:8080/healthz", links: backendLinks(8080), note: "make run-go-mono, run-java-mono or lb-up" },
+      {
+        name: "Backend or load balancer :8080",
+        probe: "http://127.0.0.1:8080/healthz",
+        links: backendLinks(8080),
+        note: "make run-go-mono, run-java-mono or lb-up",
+      },
       ...[1, 2, 3, 4].map((n) => ({
         name: `Services instance ${n} :${9100 + n}`,
         probe: `http://127.0.0.1:${8190 + n}/healthz`,
         links: backendLinks(8190 + n),
         note: n === 1 ? "make run-go-services or run-java-services" : `INSTANCE=${n}`,
       })),
-      { name: "Go gateway :8180", probe: "http://127.0.0.1:8180/healthz", links: backendLinks(8180), note: "make run-go-gw" },
-      { name: "Elixir gateway :8181", probe: "http://127.0.0.1:8181/healthz", links: backendLinks(8181, false), note: "make run-elixir-gw" },
-      { name: "Rust gateway :8182", probe: "http://127.0.0.1:8182/healthz", links: backendLinks(8182, false), note: "make run-rust-gw" },
-      { name: "Java gateway :8183", probe: "http://127.0.0.1:8183/healthz", links: backendLinks(8183, false), note: "make run-java-gw" },
+      {
+        name: "Go gateway :8180",
+        probe: "http://127.0.0.1:8180/healthz",
+        links: backendLinks(8180),
+        note: "make run-go-gw",
+      },
+      {
+        name: "Elixir gateway :8181",
+        probe: "http://127.0.0.1:8181/healthz",
+        links: backendLinks(8181, false),
+        note: "make run-elixir-gw",
+      },
+      {
+        name: "Rust gateway :8182",
+        probe: "http://127.0.0.1:8182/healthz",
+        links: backendLinks(8182, false),
+        note: "make run-rust-gw",
+      },
+      {
+        name: "Java gateway :8183",
+        probe: "http://127.0.0.1:8183/healthz",
+        links: backendLinks(8183, false),
+        note: "make run-java-gw",
+      },
     ],
   },
 ];
@@ -77,13 +135,15 @@ function page() {
   let i = 0;
   const groups = services
     .map(
-      (g) => `<h2>${esc(g.group)}</h2><ul>${g.items
-        .map(
-          (s) => `<li><span class="dot" data-i="${i++}"></span><div><strong>${esc(s.name)}</strong>${s.note ? ` <small>${esc(s.note)}</small>` : ""}<br>${s.links
-            .map(([label, href]) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`)
-            .join(" · ")}</div></li>`,
-        )
-        .join("")}</ul>`,
+      (g) =>
+        `<h2>${esc(g.group)}</h2><ul>${g.items
+          .map(
+            (s) =>
+              `<li><span class="dot" data-i="${i++}"></span><div><strong>${esc(s.name)}</strong>${s.note ? ` <small>${esc(s.note)}</small>` : ""}<br>${s.links
+                .map(([label, href]) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`)
+                .join(" · ")}</div></li>`,
+          )
+          .join("")}</ul>`,
     )
     .join("");
   return `<!doctype html>

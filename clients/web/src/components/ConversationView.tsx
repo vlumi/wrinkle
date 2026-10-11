@@ -94,7 +94,15 @@ export function ConversationView({ id }: { id: string }) {
           send(t).catch(() => {});
         }}
       >
-        <input data-testid="text" value={text} onChange={(e) => setText(e.target.value)} placeholder="Message" maxLength={4000} autoComplete="off" enterKeyHint="send" />
+        <input
+          data-testid="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Message"
+          maxLength={4000}
+          autoComplete="off"
+          enterKeyHint="send"
+        />
         <button type="submit" disabled={!text.trim()}>
           Send
         </button>

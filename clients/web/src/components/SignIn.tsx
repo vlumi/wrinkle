@@ -20,20 +20,48 @@ export function SignIn({ initialName, initialURL }: { initialName?: string; init
       >
         <label>
           Name
-          <input data-testid="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={64} autoComplete="username" autoCapitalize="none" required />
+          <input
+            data-testid="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={64}
+            autoComplete="username"
+            autoCapitalize="none"
+            required
+          />
         </label>
         <label>
           Gateway
-          <input data-testid="url" value={url} onChange={(e) => setURL(e.target.value)} autoCapitalize="none" spellCheck={false} required />
+          <input
+            data-testid="url"
+            value={url}
+            onChange={(e) => setURL(e.target.value)}
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+          />
         </label>
         {gateways.length > 0 && (
           <ul className="gateways" aria-label="Gateways used before">
             {gateways.map((g) => (
               <li key={g} className={g === url.trim() ? "chosen" : undefined}>
-                <button type="button" className="pick" data-testid="gateway" title={g} aria-pressed={g === url.trim()} onClick={() => setURL(g)}>
+                <button
+                  type="button"
+                  className="pick"
+                  data-testid="gateway"
+                  title={g}
+                  aria-pressed={g === url.trim()}
+                  onClick={() => setURL(g)}
+                >
                   {gatewayLabel(g)}
                 </button>
-                <button type="button" className="forget" data-testid="forget-gateway" aria-label={`Forget ${g}`} onClick={() => setGateways(forgetGateway(g))}>
+                <button
+                  type="button"
+                  className="forget"
+                  data-testid="forget-gateway"
+                  aria-label={`Forget ${g}`}
+                  onClick={() => setGateways(forgetGateway(g))}
+                >
                   ×
                 </button>
               </li>

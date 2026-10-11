@@ -59,7 +59,10 @@ export const useSession = create<Session>((set, get) => {
     const c = conn;
     const name = get().name;
     if (!c || !name) return;
-    const resp = await c.call("connect", { case: "connect", value: { userName: name, deviceId, deviceName: navigator.userAgent.slice(0, 64) } });
+    const resp = await c.call("connect", {
+      case: "connect",
+      value: { userName: name, deviceId, deviceName: navigator.userAgent.slice(0, 64) },
+    });
     deviceId = resp.deviceId;
     rememberGateway(gatewayURL);
     storage.set(userKey("device"), deviceId.toString());
@@ -218,7 +221,9 @@ export const useSession = create<Session>((set, get) => {
         data = noteLatest(data, m, true);
         set({ ...data, pending: dropPending(get().pending, m.conversationId, m.clientMessageId) });
       } catch (err) {
-        const list = (get().pending[id] ?? []).map((q) => (q.clientMessageId === p.clientMessageId ? { ...q, failed: true } : q));
+        const list = (get().pending[id] ?? []).map((q) =>
+          q.clientMessageId === p.clientMessageId ? { ...q, failed: true } : q,
+        );
         set({ pending: { ...get().pending, [id]: list } });
         throw err;
       }

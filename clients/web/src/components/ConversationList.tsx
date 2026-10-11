@@ -27,7 +27,14 @@ export function ConversationList() {
             .catch((err: Error) => setError(err.message));
         }}
       >
-        <input data-testid="peer" value={peer} onChange={(e) => setPeer(e.target.value)} placeholder="Start a conversation with…" maxLength={64} autoCapitalize="none" />
+        <input
+          data-testid="peer"
+          value={peer}
+          onChange={(e) => setPeer(e.target.value)}
+          placeholder="Start a conversation with…"
+          maxLength={64}
+          autoCapitalize="none"
+        />
         <button type="submit" disabled={!peer.trim()}>
           Open
         </button>
@@ -37,7 +44,9 @@ export function ConversationList() {
         {byActivity(conversations).map((c) => {
           const id = key(c.conversationId);
           const n = unread(c);
-          const last = c.lastMessage ? `${c.lastMessage.senderUserId === me?.userId ? "You: " : ""}${c.lastMessage.text}` : "No messages yet";
+          const last = c.lastMessage
+            ? `${c.lastMessage.senderUserId === me?.userId ? "You: " : ""}${c.lastMessage.text}`
+            : "No messages yet";
           return (
             <li key={id}>
               <button className={id === current ? "row current" : "row"} onClick={() => show(id)}>
@@ -55,7 +64,9 @@ export function ConversationList() {
           );
         })}
       </ul>
-      {Object.keys(conversations).length === 0 && <p className="hint">No conversations yet. Start one above with another user's name.</p>}
+      {Object.keys(conversations).length === 0 && (
+        <p className="hint">No conversations yet. Start one above with another user's name.</p>
+      )}
     </section>
   );
 }
