@@ -53,12 +53,20 @@ func (h header) has(userID uint64) bool {
 	return userID == h.userA || userID == h.userB
 }
 
-// lock reads the conversation row for update and checks membership.
-func lock(ctx context.Context, tx *sql.Tx, conversationID, userID uint64) (header, error) {
+const (
+	selectHeader          = `SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ?`
+	selectHeaderForUpdate = selectHeader + ` FOR UPDATE`
+)
+
+type rowQuerier interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+// member reads the conversation's header with the given query and checks
+// that the user is a participant.
+func member(ctx context.Context, q rowQuerier, query string, conversationID, userID uint64) (header, error) {
 	var h header
-	err := tx.QueryRowContext(ctx, `
-		SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ? FOR UPDATE`,
-		conversationID).Scan(&h.userA, &h.userB, &h.lastSeq)
+	err := q.QueryRowContext(ctx, query, conversationID).Scan(&h.userA, &h.userB, &h.lastSeq)
 	if errors.Is(err, sql.ErrNoRows) {
 		return h, apierror.NotFound("conversation %d does not exist", conversationID)
 	}
@@ -86,7 +94,7 @@ func (s *Service) Send(ctx context.Context, userID, conversationID uint64, clien
 	}
 	defer tx.Rollback()
 
-	h, err := lock(ctx, tx, conversationID, userID)
+	h, err := member(ctx, tx, selectHeaderForUpdate, conversationID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +156,7 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID, seq uint
 	}
 	defer tx.Rollback()
 
-	h, err := lock(ctx, tx, conversationID, userID)
+	h, err := member(ctx, tx, selectHeaderForUpdate, conversationID, userID)
 	if err != nil {
 		return err
 	}
@@ -186,18 +194,8 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID, seq uint
 
 // Messages returns messages with seq below beforeSeq, newest first.
 func (s *Service) Messages(ctx context.Context, userID, conversationID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
-	var h header
-	err := s.db.QueryRowContext(ctx, `
-		SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ?`,
-		conversationID).Scan(&h.userA, &h.userB, &h.lastSeq)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, apierror.NotFound("conversation %d does not exist", conversationID)
-	}
-	if err != nil {
+	if _, err := member(ctx, s.db, selectHeader, conversationID, userID); err != nil {
 		return nil, err
-	}
-	if !h.has(userID) {
-		return nil, apierror.PermissionDenied("user %d is not in conversation %d", userID, conversationID)
 	}
 	if beforeSeq == 0 {
 		beforeSeq = math.MaxUint64
