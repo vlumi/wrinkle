@@ -45,12 +45,13 @@ help:
 		/^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
 
-##@ Infrastructure (Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana)
+##@ Infrastructure (Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana)
 
 .PHONY: infra-up infra-down infra-reset infra-status infra-logs reset-fanout
 infra-up:  ## Start the stack and register the outbox connectors
 	$(COMPOSE) up -d --build --wait
 	infra/kafka-topics.sh
+	infra/garage-init.sh
 	infra/debezium/register.sh
 
 infra-down:  ## Stop the stack and discard all data

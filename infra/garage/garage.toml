@@ -1,0 +1,20 @@
+# One Garage node holding the blobs: avatars, stickers and attachments. The
+# S3 API takes signed uploads and deletes; the web endpoint serves the
+# bucket's objects to anyone, by blob id. Both are reached through the blobs
+# proxy, never directly.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+rpc_bind_addr = "[::]:3901"
+# Local only: the single node talks to nothing else.
+rpc_secret = "0000000000000000000000000000000000000000000000000000000000000000"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.garage"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.garage"

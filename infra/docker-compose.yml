@@ -3,7 +3,8 @@
 # on loopback only: the backends run on the host and reach it there.
 # GRAFANA_BIND=0.0.0.0 opens Grafana to the network. The load balancer, in
 # the lb profile, serves devices on loopback port 8080 like a gateway; the
-# TLS edge, in the tls profile, faces the network on 8443.
+# TLS edge, in the tls profile, faces the network on 8443. Blobs are in
+# Garage, behind a proxy on loopback port 9200.
 
 name: wrinkle
 
@@ -174,6 +175,36 @@ services:
       resources:
         limits:
           memory: 256M
+
+  garage:
+    image: dxflrs/garage:v2.4.1
+    volumes:
+      - ./garage/garage.toml:/etc/garage.toml:ro
+    healthcheck:
+      test: ["CMD", "/garage", "status"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # The blob address on loopback; devices on the network come through the
+  # TLS edge, which forwards /blobs/ here.
+  blobs:
+    image: haproxy:3.4.6
+    volumes:
+      - ./blobs/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "127.0.0.1:9200:9200"
+    depends_on:
+      garage:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
 volumes:
   prometheus-data:
