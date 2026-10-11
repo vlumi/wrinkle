@@ -206,6 +206,8 @@ and restart the backend; it logs "push notifications on". Without a key everythi
 
 Pushes are sent by the Go fan-out, so they need the Go monolith or Go services instances; which gateway a device uses does not matter. The Java fan-out stores tokens but does not push yet. In a pool with both, the Go and Java instances split Kafka's partitions between them, so a message whose conversation falls to a Java instance gets no push; for testing push, run only Go services.
 
+Message text is encrypted, so the backend sends notifications with the generic body "New message" and the sealed content; the app's notification service extension decrypts it on the phone. It reads the keys from an app group, `group.fi.misaki.wrinkle`, which the team must have and both app ids (`fi.misaki.wrinkle` and `fi.misaki.wrinkle.NotificationService`) must be allowed; automatic signing in `make ios-device` usually registers it, otherwise add App Groups under Signing & Capabilities in Xcode for both targets. Without it the app works, but notifications keep the generic body.
+
 To try the app's handling of a notification without APNs, the simulator takes a payload directly:
 
 ```sh

@@ -8,7 +8,7 @@ In rough order; each step assumes the ones before it.
 
 ### 1. Hardening
 
-Done, without authentication or encryption (ROADMAP.md, "Hardening"): limits on frames, requests and rates per connection, a deadline for Connect, keepalive and idle timeouts, close codes, presence that expires with its gateway, outbox rows deleted once streamed, and gateways that drain on shutdown. Still open for a public service: limits per user across devices and per address.
+Done (ROADMAP.md, "Hardening"): limits on frames, requests and rates per connection, a deadline for Connect, keepalive and idle timeouts, close codes, presence that expires with its gateway, outbox rows deleted once streamed, and gateways that drain on shutdown. Still open for a public service: limits per user across devices and per address.
 
 ### 2. Encryption in transit
 
@@ -106,7 +106,7 @@ A small computer at home or in an office, reached through Cloudflare Tunnel (fre
 | Off-site backup storage | about €4 |
 | **Monthly** | **about €10**, plus the hardware |
 
-Pays back against option A in two to three years, but the home connection and power are the availability, and Cloudflare terminates TLS, so it sees the traffic, unlike option A. Until end-to-end encryption exists ([#6](https://github.com/vlumi/wrinkle/issues/6)) that includes message text.
+Pays back against option A in two to three years, but the home connection and power are the availability, and Cloudflare terminates TLS, so it sees the traffic, unlike option A. With end-to-end encryption that no longer includes message text, but still who talks to whom, profiles and group topics.
 
 ### D. AWS
 

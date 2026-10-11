@@ -53,7 +53,7 @@ Components:
 
 - **Load balancers:** one terminates TLS for devices and spreads their connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy.
 - **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`). It enforces the limits the contract sets per connection and drains on shutdown, closing connections so devices reconnect elsewhere.
-- **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
+- **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction. Message content is encrypted end to end: the services store and relay ciphertext and the keys devices wrap for each other.
 - **Sync service:** accounts (registration and sign-in with passwords, a token per device, profiles), incremental sync, conversation lists, push token registration.
 - **Fan-out workers:** run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
 - **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.

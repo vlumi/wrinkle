@@ -134,6 +134,14 @@ Notes:
 - [x] Senders delete their own messages for everyone: a tombstone that keeps the seq, the copies in members' logs and the list preview scrubbed by the fan-out, and a background push so iOS withdraws a notification already shown. Go and Java implement it; both clients delete from a message's menu and show "Message removed".
 - [ ] Editing a message (a replacement body by the same path) and deleting only on one's own devices.
 
+## End-to-end encryption
+
+- [x] A key per conversation and epoch, wrapped for every member device's X25519 key; content sealed with AES-256-GCM; the services store and relay ciphertext and wrapped keys. Membership changes force a new epoch; device changes make senders rotate; a new device gets history from the user's other devices after the user approves. Safety numbers with a warning when a verified contact's devices change. Go and Java serve it, both clients and the load generator encrypt, the iOS notification service extension decrypts pushes. Test vectors shared by Go, TypeScript and Swift.
+- [ ] No forward secrecy between rotations, and a stolen device key reads every epoch it was given; MLS (RFC 9420) would add both, with a library on each client.
+- [ ] A new device learns that history was shared only when it opens a conversation or reconnects; a notice event would let it fetch at once.
+- [ ] A key wrapped by a device that has since signed out, and whose key a device never saw, is refused as unverifiable.
+- [ ] The web client needs a secure context (HTTPS) for WebCrypto, so a page served over plain HTTP on the network cannot send.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -158,7 +166,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3), deleting one's own messages (#4, done), stickers (#5), end-to-end encryption (#6), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3), deleting one's own messages (#4, done), stickers (#5), end-to-end encryption (#6, done), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 
