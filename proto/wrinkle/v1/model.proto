@@ -63,6 +63,16 @@ message Message {
   }
   // Set once the sender deleted the message; its content is then unset.
   google.protobuf.Timestamp deleted_at = 8;
+  // Members' reactions, oldest first. Only GetMessages fills them; events
+  // carry changes as ReactionEvents.
+  repeated Reaction reactions = 10;
+}
+
+// One user's reactions to a message: a sealed wrinkle.v1.Reactions.
+message Reaction {
+  bytes user_id = 1;
+  Sealed sealed = 2;
+  google.protobuf.Timestamp updated_at = 3;
 }
 
 // Content encrypted end to end: a serialized wrinkle.v1.Content sealed with

@@ -859,6 +859,47 @@ public nonisolated struct Wrinkle_V1_DeleteMessageResponse: Sendable {
   public init() {}
 }
 
+/// Sets the requesting user's reactions to a message, replacing any earlier
+/// ones; without sealed, removes them. Only current members may react, not
+/// to notices (ERROR_CODE_INVALID_ARGUMENT) nor deleted messages
+/// (ERROR_CODE_FAILED_PRECONDITION). The sealed Reactions follow the key
+/// epoch rules of SendMessage; the ciphertext is at most 1 KiB. Reactions
+/// are not messages: they take no seq and are never unread.
+public nonisolated struct Wrinkle_V1_SetReactionRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversationID: Data = Data()
+
+  public var seq: UInt64 = 0
+
+  public var sealed: Wrinkle_V1_Sealed {
+    get {_sealed ?? Wrinkle_V1_Sealed()}
+    set {_sealed = newValue}
+  }
+  /// Returns true if `sealed` has been explicitly set.
+  public var hasSealed: Bool {self._sealed != nil}
+  /// Clears the value of `sealed`. Subsequent reads from it will return its default value.
+  public mutating func clearSealed() {self._sealed = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _sealed: Wrinkle_V1_Sealed? = nil
+}
+
+public nonisolated struct Wrinkle_V1_SetReactionResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 /// Publishes this device's public key, once. The same key again does
 /// nothing; a different one fails with ERROR_CODE_FAILED_PRECONDITION (a
 /// device with a new key signs in as a new device).
@@ -2546,6 +2587,69 @@ nonisolated extension Wrinkle_V1_DeleteMessageResponse: SwiftProtobuf.Message, S
   }
 
   public static func ==(lhs: Wrinkle_V1_DeleteMessageResponse, rhs: Wrinkle_V1_DeleteMessageResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_SetReactionRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetReactionRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{1}sealed\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._sealed) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
+    }
+    if self.seq != 0 {
+      try visitor.visitSingularUInt64Field(value: self.seq, fieldNumber: 2)
+    }
+    try { if let v = self._sealed {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_SetReactionRequest, rhs: Wrinkle_V1_SetReactionRequest) -> Bool {
+    if lhs.conversationID != rhs.conversationID {return false}
+    if lhs.seq != rhs.seq {return false}
+    if lhs._sealed != rhs._sealed {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_SetReactionResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SetReactionResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_SetReactionResponse, rhs: Wrinkle_V1_SetReactionResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

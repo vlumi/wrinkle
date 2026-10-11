@@ -141,6 +141,8 @@ defmodule Wrinkle.V1.Request do
     type: Wrinkle.V1.GetConversationKeysRequest,
     json_name: "getConversationKeys",
     oneof: 0
+
+  field :set_reaction, 40, type: Wrinkle.V1.SetReactionRequest, json_name: "setReaction", oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -265,6 +267,11 @@ defmodule Wrinkle.V1.Response do
   field :get_conversation_keys, 39,
     type: Wrinkle.V1.GetConversationKeysResponse,
     json_name: "getConversationKeys",
+    oneof: 0
+
+  field :set_reaction, 40,
+    type: Wrinkle.V1.SetReactionResponse,
+    json_name: "setReaction",
     oneof: 0
 end
 

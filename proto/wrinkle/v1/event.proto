@@ -24,6 +24,7 @@ message Event {
     ProfileEvent profile = 13;
     DeviceEvent device = 14;
     MessageDeletedEvent message_deleted = 15;
+    ReactionEvent reaction = 16;
   }
 }
 
@@ -75,4 +76,15 @@ message MessageDeletedEvent {
   bytes conversation_id = 1;
   uint64 seq = 2;
   google.protobuf.Timestamp deleted_at = 3;
+}
+
+// A member set or removed their reactions to a message. Received by the
+// conversation's current members.
+message ReactionEvent {
+  bytes conversation_id = 1;
+  uint64 seq = 2;
+  bytes user_id = 3;
+  // Unset when the user removed their reactions.
+  Sealed sealed = 4;
+  google.protobuf.Timestamp updated_at = 5;
 }

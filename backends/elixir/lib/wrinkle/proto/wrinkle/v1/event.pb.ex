@@ -25,6 +25,8 @@ defmodule Wrinkle.V1.Event do
     type: Wrinkle.V1.MessageDeletedEvent,
     json_name: "messageDeleted",
     oneof: 0
+
+  field :reaction, 16, type: Wrinkle.V1.ReactionEvent, oneof: 0
 end
 
 defmodule Wrinkle.V1.MessageEvent do
@@ -99,4 +101,19 @@ defmodule Wrinkle.V1.MessageDeletedEvent do
   field :conversation_id, 1, type: :bytes, json_name: "conversationId"
   field :seq, 2, type: :uint64
   field :deleted_at, 3, type: Google.Protobuf.Timestamp, json_name: "deletedAt"
+end
+
+defmodule Wrinkle.V1.ReactionEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ReactionEvent",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :seq, 2, type: :uint64
+  field :user_id, 3, type: :bytes, json_name: "userId"
+  field :sealed, 4, type: Wrinkle.V1.Sealed
+  field :updated_at, 5, type: Google.Protobuf.Timestamp, json_name: "updatedAt"
 end

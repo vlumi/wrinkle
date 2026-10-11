@@ -58,6 +58,20 @@ defmodule Wrinkle.V1.Message do
   field :sealed, 9, type: Wrinkle.V1.Sealed, oneof: 0
   field :notice, 7, type: Wrinkle.V1.Notice, oneof: 0
   field :deleted_at, 8, type: Google.Protobuf.Timestamp, json_name: "deletedAt"
+  field :reactions, 10, repeated: true, type: Wrinkle.V1.Reaction
+end
+
+defmodule Wrinkle.V1.Reaction do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.Reaction",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_id, 1, type: :bytes, json_name: "userId"
+  field :sealed, 2, type: Wrinkle.V1.Sealed
+  field :updated_at, 3, type: Google.Protobuf.Timestamp, json_name: "updatedAt"
 end
 
 defmodule Wrinkle.V1.Sealed do

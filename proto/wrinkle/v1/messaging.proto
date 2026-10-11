@@ -287,6 +287,20 @@ message DeleteMessageRequest {
 
 message DeleteMessageResponse {}
 
+// Sets the requesting user's reactions to a message, replacing any earlier
+// ones; without sealed, removes them. Only current members may react, not
+// to notices (ERROR_CODE_INVALID_ARGUMENT) nor deleted messages
+// (ERROR_CODE_FAILED_PRECONDITION). The sealed Reactions follow the key
+// epoch rules of SendMessage; the ciphertext is at most 1 KiB. Reactions
+// are not messages: they take no seq and are never unread.
+message SetReactionRequest {
+  bytes conversation_id = 1;
+  uint64 seq = 2;
+  Sealed sealed = 3;
+}
+
+message SetReactionResponse {}
+
 // End-to-end encryption. Each device has an X25519 key pair and publishes
 // the public key; each conversation has key epochs, an epoch key made by a
 // member device and wrapped for every member device. A conversation needs a

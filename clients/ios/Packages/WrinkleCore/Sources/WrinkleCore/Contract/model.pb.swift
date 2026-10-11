@@ -197,6 +197,10 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
   /// Clears the value of `deletedAt`. Subsequent reads from it will return its default value.
   public mutating func clearDeletedAt() {self._deletedAt = nil}
 
+  /// Members' reactions, oldest first. Only GetMessages fills them; events
+  /// carry changes as ReactionEvents.
+  public var reactions: [Wrinkle_V1_Reaction] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Content: Equatable, Sendable {
@@ -211,6 +215,40 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
 
   fileprivate var _sentAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _deletedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// One user's reactions to a message: a sealed wrinkle.v1.Reactions.
+public nonisolated struct Wrinkle_V1_Reaction: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userID: Data = Data()
+
+  public var sealed: Wrinkle_V1_Sealed {
+    get {_sealed ?? Wrinkle_V1_Sealed()}
+    set {_sealed = newValue}
+  }
+  /// Returns true if `sealed` has been explicitly set.
+  public var hasSealed: Bool {self._sealed != nil}
+  /// Clears the value of `sealed`. Subsequent reads from it will return its default value.
+  public mutating func clearSealed() {self._sealed = nil}
+
+  public var updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_updatedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_updatedAt = newValue}
+  }
+  /// Returns true if `updatedAt` has been explicitly set.
+  public var hasUpdatedAt: Bool {self._updatedAt != nil}
+  /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearUpdatedAt() {self._updatedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _sealed: Wrinkle_V1_Sealed? = nil
+  fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 /// Content encrypted end to end: a serialized wrinkle.v1.Content sealed with
@@ -650,7 +688,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{4}\u{2}sent_at\0\u{1}notice\0\u{3}deleted_at\0\u{1}sealed\0\u{b}text\0\u{c}\u{5}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{4}\u{2}sent_at\0\u{1}notice\0\u{3}deleted_at\0\u{1}sealed\0\u{1}reactions\0\u{b}text\0\u{c}\u{5}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -690,6 +728,7 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
           self.content = .sealed(v)
         }
       }()
+      case 10: try { try decoder.decodeRepeatedMessageField(value: &self.reactions) }()
       default: break
       }
     }
@@ -724,6 +763,9 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     try { if case .sealed(let v)? = self.content {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
     } }()
+    if !self.reactions.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.reactions, fieldNumber: 10)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -735,6 +777,51 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs._sentAt != rhs._sentAt {return false}
     if lhs.content != rhs.content {return false}
     if lhs._deletedAt != rhs._deletedAt {return false}
+    if lhs.reactions != rhs.reactions {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Reaction: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Reaction"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{1}sealed\0\u{3}updated_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.userID) }()
+      case 2: try { try decoder.decodeSingularMessageField(value: &self._sealed) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.userID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.userID, fieldNumber: 1)
+    }
+    try { if let v = self._sealed {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    } }()
+    try { if let v = self._updatedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Reaction, rhs: Wrinkle_V1_Reaction) -> Bool {
+    if lhs.userID != rhs.userID {return false}
+    if lhs._sealed != rhs._sealed {return false}
+    if lhs._updatedAt != rhs._updatedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

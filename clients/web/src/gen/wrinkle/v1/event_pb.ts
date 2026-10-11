@@ -9,7 +9,7 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Device, Message as Message$1, User } from "./model_pb";
+import type { Device, Message as Message$1, Sealed, User } from "./model_pb";
 import { file_wrinkle_v1_model } from "./model_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIvICCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SABCBgoEYm9keSI0CgxNZXNzYWdlRXZlbnQSJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSJCCglSZWFkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg8KB3VzZXJfaWQYAiABKAwSCwoDc2VxGAMgASgEIlgKEk1lc3NhZ2VGYWlsZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIi4KDFByb2ZpbGVFdmVudBIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIlYKC0RldmljZUV2ZW50EiIKBmRldmljZRgBIAEoCzISLndyaW5rbGUudjEuRGV2aWNlEhIKCnNpZ25lZF9vdXQYAiABKAgSDwoHdXNlcl9pZBgDIAEoDCJrChNNZXNzYWdlRGVsZXRlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBILCgNzZXEYAiABKAQSLgoKZGVsZXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIqEDCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SAASLQoIcmVhY3Rpb24YECABKAsyGS53cmlua2xlLnYxLlJlYWN0aW9uRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -75,6 +75,12 @@ export type Event = Message<"wrinkle.v1.Event"> & {
      */
     value: MessageDeletedEvent;
     case: "messageDeleted";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.ReactionEvent reaction = 16;
+     */
+    value: ReactionEvent;
+    case: "reaction";
   } | { case: undefined; value?: undefined };
 };
 
@@ -250,4 +256,46 @@ export type MessageDeletedEvent = Message<"wrinkle.v1.MessageDeletedEvent"> & {
  */
 export const MessageDeletedEventSchema: GenMessage<MessageDeletedEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 6);
+
+/**
+ * A member set or removed their reactions to a message. Received by the
+ * conversation's current members.
+ *
+ * @generated from message wrinkle.v1.ReactionEvent
+ */
+export type ReactionEvent = Message<"wrinkle.v1.ReactionEvent"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: uint64 seq = 2;
+   */
+  seq: bigint;
+
+  /**
+   * @generated from field: bytes user_id = 3;
+   */
+  userId: Uint8Array;
+
+  /**
+   * Unset when the user removed their reactions.
+   *
+   * @generated from field: wrinkle.v1.Sealed sealed = 4;
+   */
+  sealed?: Sealed | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 5;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.ReactionEvent.
+ * Use `create(ReactionEventSchema)` to create a new message.
+ */
+export const ReactionEventSchema: GenMessage<ReactionEvent> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_event, 7);
 

@@ -39,6 +39,7 @@ type Event struct {
 	//	*Event_Profile
 	//	*Event_Device
 	//	*Event_MessageDeleted
+	//	*Event_Reaction
 	Body          isEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -149,6 +150,15 @@ func (x *Event) GetMessageDeleted() *MessageDeletedEvent {
 	return nil
 }
 
+func (x *Event) GetReaction() *ReactionEvent {
+	if x != nil {
+		if x, ok := x.Body.(*Event_Reaction); ok {
+			return x.Reaction
+		}
+	}
+	return nil
+}
+
 type isEvent_Body interface {
 	isEvent_Body()
 }
@@ -177,6 +187,10 @@ type Event_MessageDeleted struct {
 	MessageDeleted *MessageDeletedEvent `protobuf:"bytes,15,opt,name=message_deleted,json=messageDeleted,proto3,oneof"`
 }
 
+type Event_Reaction struct {
+	Reaction *ReactionEvent `protobuf:"bytes,16,opt,name=reaction,proto3,oneof"`
+}
+
 func (*Event_Message) isEvent_Body() {}
 
 func (*Event_Read) isEvent_Body() {}
@@ -188,6 +202,8 @@ func (*Event_Profile) isEvent_Body() {}
 func (*Event_Device) isEvent_Body() {}
 
 func (*Event_MessageDeleted) isEvent_Body() {}
+
+func (*Event_Reaction) isEvent_Body() {}
 
 // A message was stored in one of the user's conversations. The sender's own
 // devices receive it too.
@@ -535,12 +551,91 @@ func (x *MessageDeletedEvent) GetDeletedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// A member set or removed their reactions to a message. Received by the
+// conversation's current members.
+type ReactionEvent struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	Seq            uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
+	UserId         []byte                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Unset when the user removed their reactions.
+	Sealed        *Sealed                `protobuf:"bytes,4,opt,name=sealed,proto3" json:"sealed,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReactionEvent) Reset() {
+	*x = ReactionEvent{}
+	mi := &file_wrinkle_v1_event_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReactionEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReactionEvent) ProtoMessage() {}
+
+func (x *ReactionEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_event_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReactionEvent.ProtoReflect.Descriptor instead.
+func (*ReactionEvent) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_event_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ReactionEvent) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+func (x *ReactionEvent) GetSeq() uint64 {
+	if x != nil {
+		return x.Seq
+	}
+	return 0
+}
+
+func (x *ReactionEvent) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
+func (x *ReactionEvent) GetSealed() *Sealed {
+	if x != nil {
+		return x.Sealed
+	}
+	return nil
+}
+
+func (x *ReactionEvent) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 var File_wrinkle_v1_event_proto protoreflect.FileDescriptor
 
 const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\n" +
 	"\x16wrinkle/v1/event.proto\x12\n" +
-	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16wrinkle/v1/model.proto\"\xc5\x03\n" +
+	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16wrinkle/v1/model.proto\"\xfe\x03\n" +
 	"\x05Event\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x04R\x06cursor\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -551,7 +646,8 @@ const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\x0emessage_failed\x18\f \x01(\v2\x1e.wrinkle.v1.MessageFailedEventH\x00R\rmessageFailed\x124\n" +
 	"\aprofile\x18\r \x01(\v2\x18.wrinkle.v1.ProfileEventH\x00R\aprofile\x121\n" +
 	"\x06device\x18\x0e \x01(\v2\x17.wrinkle.v1.DeviceEventH\x00R\x06device\x12J\n" +
-	"\x0fmessage_deleted\x18\x0f \x01(\v2\x1f.wrinkle.v1.MessageDeletedEventH\x00R\x0emessageDeletedB\x06\n" +
+	"\x0fmessage_deleted\x18\x0f \x01(\v2\x1f.wrinkle.v1.MessageDeletedEventH\x00R\x0emessageDeleted\x127\n" +
+	"\breaction\x18\x10 \x01(\v2\x19.wrinkle.v1.ReactionEventH\x00R\breactionB\x06\n" +
 	"\x04body\"=\n" +
 	"\fMessageEvent\x12-\n" +
 	"\amessage\x18\x01 \x01(\v2\x13.wrinkle.v1.MessageR\amessage\"_\n" +
@@ -574,7 +670,14 @@ const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x129\n" +
 	"\n" +
-	"deleted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAtB\x9d\x01\n" +
+	"deleted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\"\xca\x01\n" +
+	"\rReactionEvent\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
+	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\fR\x06userId\x12*\n" +
+	"\x06sealed\x18\x04 \x01(\v2\x12.wrinkle.v1.SealedR\x06sealed\x129\n" +
+	"\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x9d\x01\n" +
 	"\x0ecom.wrinkle.v1B\n" +
 	"EventProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +
@@ -592,7 +695,7 @@ func file_wrinkle_v1_event_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_event_proto_rawDescData
 }
 
-var file_wrinkle_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_wrinkle_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_wrinkle_v1_event_proto_goTypes = []any{
 	(*Event)(nil),                 // 0: wrinkle.v1.Event
 	(*MessageEvent)(nil),          // 1: wrinkle.v1.MessageEvent
@@ -601,28 +704,33 @@ var file_wrinkle_v1_event_proto_goTypes = []any{
 	(*ProfileEvent)(nil),          // 4: wrinkle.v1.ProfileEvent
 	(*DeviceEvent)(nil),           // 5: wrinkle.v1.DeviceEvent
 	(*MessageDeletedEvent)(nil),   // 6: wrinkle.v1.MessageDeletedEvent
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
-	(*Message)(nil),               // 8: wrinkle.v1.Message
-	(*User)(nil),                  // 9: wrinkle.v1.User
-	(*Device)(nil),                // 10: wrinkle.v1.Device
+	(*ReactionEvent)(nil),         // 7: wrinkle.v1.ReactionEvent
+	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
+	(*Message)(nil),               // 9: wrinkle.v1.Message
+	(*User)(nil),                  // 10: wrinkle.v1.User
+	(*Device)(nil),                // 11: wrinkle.v1.Device
+	(*Sealed)(nil),                // 12: wrinkle.v1.Sealed
 }
 var file_wrinkle_v1_event_proto_depIdxs = []int32{
-	7,  // 0: wrinkle.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
+	8,  // 0: wrinkle.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
 	1,  // 1: wrinkle.v1.Event.message:type_name -> wrinkle.v1.MessageEvent
 	2,  // 2: wrinkle.v1.Event.read:type_name -> wrinkle.v1.ReadEvent
 	3,  // 3: wrinkle.v1.Event.message_failed:type_name -> wrinkle.v1.MessageFailedEvent
 	4,  // 4: wrinkle.v1.Event.profile:type_name -> wrinkle.v1.ProfileEvent
 	5,  // 5: wrinkle.v1.Event.device:type_name -> wrinkle.v1.DeviceEvent
 	6,  // 6: wrinkle.v1.Event.message_deleted:type_name -> wrinkle.v1.MessageDeletedEvent
-	8,  // 7: wrinkle.v1.MessageEvent.message:type_name -> wrinkle.v1.Message
-	9,  // 8: wrinkle.v1.ProfileEvent.user:type_name -> wrinkle.v1.User
-	10, // 9: wrinkle.v1.DeviceEvent.device:type_name -> wrinkle.v1.Device
-	7,  // 10: wrinkle.v1.MessageDeletedEvent.deleted_at:type_name -> google.protobuf.Timestamp
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	7,  // 7: wrinkle.v1.Event.reaction:type_name -> wrinkle.v1.ReactionEvent
+	9,  // 8: wrinkle.v1.MessageEvent.message:type_name -> wrinkle.v1.Message
+	10, // 9: wrinkle.v1.ProfileEvent.user:type_name -> wrinkle.v1.User
+	11, // 10: wrinkle.v1.DeviceEvent.device:type_name -> wrinkle.v1.Device
+	8,  // 11: wrinkle.v1.MessageDeletedEvent.deleted_at:type_name -> google.protobuf.Timestamp
+	12, // 12: wrinkle.v1.ReactionEvent.sealed:type_name -> wrinkle.v1.Sealed
+	8,  // 13: wrinkle.v1.ReactionEvent.updated_at:type_name -> google.protobuf.Timestamp
+	14, // [14:14] is the sub-list for method output_type
+	14, // [14:14] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_event_proto_init() }
@@ -638,6 +746,7 @@ func file_wrinkle_v1_event_proto_init() {
 		(*Event_Profile)(nil),
 		(*Event_Device)(nil),
 		(*Event_MessageDeleted)(nil),
+		(*Event_Reaction)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -645,7 +754,7 @@ func file_wrinkle_v1_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_event_proto_rawDesc), len(file_wrinkle_v1_event_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

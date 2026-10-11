@@ -22,6 +22,9 @@
 //   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
 //   5-byte big-endian numbers, each modulo 100000, written as five digits
 //   and separated by spaces. Both users see the same number.
+// - Reactions are sealed like content, with associated data "wrinkle
+//   reaction v1" || conversation_id || epoch (4 bytes) || the reacting
+//   user's id || the message's seq (8 bytes).
 
 syntax = "proto3";
 
@@ -36,4 +39,10 @@ message Content {
     // 1 to 4000 characters.
     string text = 1;
   }
+}
+
+// A user's reactions to one message.
+message Reactions {
+  // 0 to 3 distinct emoji, each one grapheme cluster of at most 32 bytes.
+  repeated string emoji = 1;
 }

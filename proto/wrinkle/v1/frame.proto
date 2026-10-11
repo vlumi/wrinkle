@@ -102,6 +102,7 @@ message Request {
     GetDeviceKeysRequest get_device_keys = 37;
     PublishKeysRequest publish_keys = 38;
     GetConversationKeysRequest get_conversation_keys = 39;
+    SetReactionRequest set_reaction = 40;
   }
 }
 
@@ -139,6 +140,7 @@ message Response {
     GetDeviceKeysResponse get_device_keys = 37;
     PublishKeysResponse publish_keys = 38;
     GetConversationKeysResponse get_conversation_keys = 39;
+    SetReactionResponse set_reaction = 40;
   }
 }
 

@@ -503,6 +503,28 @@ defmodule Wrinkle.V1.DeleteMessageResponse do
     syntax: :proto3
 end
 
+defmodule Wrinkle.V1.SetReactionRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetReactionRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :seq, 2, type: :uint64
+  field :sealed, 3, type: Wrinkle.V1.Sealed
+end
+
+defmodule Wrinkle.V1.SetReactionResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetReactionResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
 defmodule Wrinkle.V1.SetDeviceKeyRequest do
   @moduledoc false
 

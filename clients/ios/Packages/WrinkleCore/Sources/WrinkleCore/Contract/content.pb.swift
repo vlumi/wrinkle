@@ -32,6 +32,9 @@
 //   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
 //   5-byte big-endian numbers, each modulo 100000, written as five digits
 //   and separated by spaces. Both users see the same number.
+// - Reactions are sealed like content, with associated data "wrinkle
+//   reaction v1" || conversation_id || epoch (4 bytes) || the reacting
+//   user's id || the message's seq (8 bytes).
 
 import SwiftProtobuf
 
@@ -68,6 +71,20 @@ public nonisolated struct Wrinkle_V1_Content: Sendable {
     case text(String)
 
   }
+
+  public init() {}
+}
+
+/// A user's reactions to one message.
+public nonisolated struct Wrinkle_V1_Reactions: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 0 to 3 distinct emoji, each one grapheme cluster of at most 32 bytes.
+  public var emoji: [String] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -112,6 +129,36 @@ nonisolated extension Wrinkle_V1_Content: SwiftProtobuf.Message, SwiftProtobuf._
 
   public static func ==(lhs: Wrinkle_V1_Content, rhs: Wrinkle_V1_Content) -> Bool {
     if lhs.body != rhs.body {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Reactions: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Reactions"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}emoji\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedStringField(value: &self.emoji) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.emoji.isEmpty {
+      try visitor.visitRepeatedStringField(value: self.emoji, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Reactions, rhs: Wrinkle_V1_Reactions) -> Bool {
+    if lhs.emoji != rhs.emoji {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
