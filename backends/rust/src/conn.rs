@@ -692,6 +692,13 @@ impl request::Body {
             Self::SignOutDevice(_) => "sign_out_device",
             Self::DeleteAccount(_) => "delete_account",
             Self::CreateUpload(_) => "create_upload",
+            Self::CreateGroup(_) => "create_group",
+            Self::AddMembers(_) => "add_members",
+            Self::RemoveMember(_) => "remove_member",
+            Self::LeaveGroup(_) => "leave_group",
+            Self::SetTopic(_) => "set_topic",
+            Self::SetAdmin(_) => "set_admin",
+            Self::GetMembers(_) => "get_members",
         }
     }
 }
