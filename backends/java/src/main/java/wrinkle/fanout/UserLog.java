@@ -1,5 +1,6 @@
 package wrinkle.fanout;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.UnsafeByteOperations;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -24,6 +25,7 @@ import wrinkle.presence.Presence;
 import wrinkle.v1.Event;
 import wrinkle.v1.MemberLeft;
 import wrinkle.v1.Message;
+import wrinkle.v1.MessageDeletedEvent;
 import wrinkle.v1.Notice;
 import wrinkle.v1.ReadEvent;
 import wrinkle.v1.User;
@@ -72,6 +74,7 @@ final class UserLog {
               switch (e.getBodyCase()) {
                 case MESSAGE -> recordMessage(c, userId, peerId, peer, o, e);
                 case READ -> recordRead(c, userId, o, e.getRead());
+                case MESSAGE_DELETED -> recordDeleted(c, userId, o, e.getMessageDeleted());
                 default -> {}
               }
             });
@@ -317,6 +320,57 @@ final class UserLog {
         m.admin(),
         ownReadSeq,
         occurredAt);
+  }
+
+  /**
+   * Takes the content out of the user's copy of the deleted message, so a device syncing from
+   * before it never receives the content, and out of the list when the message is the last.
+   */
+  private static void recordDeleted(
+      Connection c, Uuid userId, OutboxRecord o, MessageDeletedEvent deleted) throws SQLException {
+    if (o.targetOutboxId() != null) {
+      long position = 0;
+      Event copy = null;
+      try (PreparedStatement ps =
+              Sql.prepare(
+                  c,
+                  "SELECT position, payload FROM user_event WHERE user_id = ? AND source_id = ? AND"
+                      + " outbox_id = ? FOR UPDATE",
+                  userId,
+                  o.conversationId(),
+                  o.targetOutboxId());
+          ResultSet rs = ps.executeQuery()) {
+        if (rs.next()) {
+          position = rs.getLong(1);
+          try {
+            copy = Event.parseFrom(rs.getBytes(2));
+          } catch (InvalidProtocolBufferException e) {
+            log.warn("corrupt event {} of user {}, not rewriting it", position, userId);
+          }
+        }
+      }
+      if (copy != null && copy.hasMessage()) {
+        Event.Builder b = copy.toBuilder();
+        b.getMessageBuilder()
+            .getMessageBuilder()
+            .clearContent()
+            .setDeletedAt(deleted.getDeletedAt());
+        Sql.update(
+            c,
+            "UPDATE user_event SET payload = ? WHERE user_id = ? AND position = ?",
+            b.build().toByteArray(),
+            userId,
+            position);
+      }
+    }
+    Sql.update(
+        c,
+        "UPDATE user_conversation SET last_body = ? WHERE user_id = ? AND conversation_id = ? AND"
+            + " last_seq = ?",
+        MessageBody.encode(Message.newBuilder().setDeletedAt(deleted.getDeletedAt()).build()),
+        userId,
+        o.conversationId(),
+        deleted.getSeq());
   }
 
   /**

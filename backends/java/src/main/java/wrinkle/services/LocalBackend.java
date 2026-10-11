@@ -15,6 +15,7 @@ import wrinkle.v1.AddMembersResponse;
 import wrinkle.v1.ChangePasswordResponse;
 import wrinkle.v1.CreateGroupResponse;
 import wrinkle.v1.DeleteAccountResponse;
+import wrinkle.v1.DeleteMessageResponse;
 import wrinkle.v1.GetMembersResponse;
 import wrinkle.v1.GetMessagesResponse;
 import wrinkle.v1.LeaveGroupResponse;
@@ -173,6 +174,11 @@ public final class LocalBackend implements Backend {
                         conversationId(r.getConversationId()),
                         r.getClientMessageId(),
                         r.getText())));
+      }
+      case DELETE_MESSAGE -> {
+        var r = req.getDeleteMessage();
+        conversations.deleteMessage(userId, conversationId(r.getConversationId()), r.getSeq());
+        yield resp.setDeleteMessage(DeleteMessageResponse.getDefaultInstance());
       }
       case MARK_READ -> {
         var r = req.getMarkRead();

@@ -66,6 +66,17 @@ class OutboxRecordTest {
     assertEquals("Hikes", o.topic());
     assertEquals(3, o.memberCount());
     assertNull(o.peerOf(ids[0]));
+    assertNull(o.targetOutboxId());
+  }
+
+  @Test
+  void parsesTheTargetOfADeletion() throws IOException {
+    OutboxRecord o =
+        OutboxRecord.parse(
+            json(
+                """
+                {"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"8",                "recipients":"C4X3FkaURgebCmaEBLUfTA==","conversation_kind":"direct",                "member_count":2,"kind":"message_deleted",                "target_outbox_id":"9223372036854775807","payload":""}"""));
+    assertEquals(Long.MAX_VALUE, o.targetOutboxId());
   }
 
   @Test

@@ -19,6 +19,7 @@ record OutboxRecord(
     String topic,
     int memberCount,
     String kind,
+    Long targetOutboxId,
     Event event) {
   private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -31,6 +32,7 @@ record OutboxRecord(
       throw new IOException("recipients", e);
     }
     JsonNode topic = n.get("topic");
+    JsonNode target = n.get("target_outbox_id");
     return new OutboxRecord(
         id(n, "conversation_id"),
         unsigned(n, "outbox_id"),
@@ -39,6 +41,7 @@ record OutboxRecord(
         topic == null || topic.isNull() ? "" : topic.asText(),
         (int) unsigned(n, "member_count"),
         field(n, "kind").asText(),
+        target == null || target.isNull() ? null : unsigned(n, "target_outbox_id"),
         Event.parseFrom(field(n, "payload").binaryValue()));
   }
 

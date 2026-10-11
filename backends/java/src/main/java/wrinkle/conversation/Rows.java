@@ -147,10 +147,39 @@ final class Rows {
       Event event,
       LocalDateTime at)
       throws SQLException {
+    insertOutbox(
+        c,
+        conversationId,
+        outboxId,
+        recipients,
+        conversationKind,
+        topic,
+        memberCount,
+        kind,
+        event,
+        at,
+        null);
+  }
+
+  /** As above, naming the outbox row of the message a message_deleted row is about. */
+  static void insertOutbox(
+      Connection c,
+      Uuid conversationId,
+      long outboxId,
+      Collection<Uuid> recipients,
+      String conversationKind,
+      String topic,
+      int memberCount,
+      String kind,
+      Event event,
+      LocalDateTime at,
+      Long targetOutboxId)
+      throws SQLException {
     Sql.update(
         c,
         "INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic,"
-            + " member_count, kind, payload, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            + " member_count, kind, target_outbox_id, payload, created_at) VALUES (?, ?, ?, ?, ?,"
+            + " ?, ?, ?, ?, ?)",
         conversationId,
         outboxId,
         Uuid.join(recipients),
@@ -158,6 +187,7 @@ final class Rows {
         topic,
         memberCount,
         kind,
+        targetOutboxId,
         event.toByteArray(),
         at);
     Sql.update(

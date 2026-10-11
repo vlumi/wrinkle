@@ -14,12 +14,14 @@ import java.util.Set;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Ids;
+import wrinkle.MessageBody;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.conversation.Rows.Header;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
+import wrinkle.v1.MessageDeletedEvent;
 import wrinkle.v1.ReadEvent;
 
 /**
@@ -147,6 +149,105 @@ public final class ConversationService {
         Rows.storeMessage(c, msg, h.members(), h.kind(), h.topic(), h.members().size());
         c.commit();
         return msg;
+      } catch (SQLException | RuntimeException e) {
+        c.rollback();
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Deletes one of the user's own messages for everyone: its content gives way to deleted_at, and
+   * the members, with the user even after leaving, learn of it. Deleting again does nothing.
+   */
+  public void deleteMessage(Uuid userId, Uuid conversationId, long seq) throws SQLException {
+    if (seq <= 0) {
+      throw ApiError.invalidArgument("seq must be positive");
+    }
+    try (Connection c = db.getConnection()) {
+      c.setAutoCommit(false);
+      try {
+        Header h = Rows.header(c, conversationId, true);
+        long from;
+        long to;
+        try (PreparedStatement ps =
+                Sql.prepare(
+                    c,
+                    "SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ?"
+                        + " AND user_id = ?",
+                    conversationId,
+                    userId);
+            ResultSet rs = ps.executeQuery()) {
+          if (!rs.next()) {
+            throw ApiError.permissionDenied(
+                "user " + userId + " is not in conversation " + conversationId);
+          }
+          from = rs.getLong(1);
+          long left = rs.getLong(2);
+          to = rs.wasNull() ? Long.MAX_VALUE : left;
+        }
+        Message msg;
+        long targetOutboxId;
+        try (PreparedStatement ps =
+                Sql.prepare(
+                    c,
+                    "SELECT "
+                        + Rows.MESSAGE_COLUMNS
+                        + ", outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR"
+                        + " UPDATE",
+                    conversationId,
+                    seq);
+            ResultSet rs = ps.executeQuery()) {
+          if (!rs.next() || seq < from || seq > to) {
+            throw ApiError.notFound("message " + seq + " does not exist");
+          }
+          msg = Rows.message(conversationId, rs);
+          targetOutboxId = rs.getLong(6);
+        }
+        if (msg.hasNotice()) {
+          throw ApiError.invalidArgument("a notice cannot be deleted");
+        }
+        if (!userId.matches(msg.getSenderUserId())) {
+          throw ApiError.permissionDenied("message " + seq + " was sent by someone else");
+        }
+        if (msg.hasDeletedAt()) {
+          c.commit();
+          return;
+        }
+        LocalDateTime at = Timestamps.now();
+        Message deleted = Message.newBuilder().setDeletedAt(Timestamps.toProto(at)).build();
+        Sql.update(
+            c,
+            "UPDATE message SET body = ? WHERE conversation_id = ? AND seq = ?",
+            MessageBody.encode(deleted),
+            conversationId,
+            seq);
+        Event event =
+            Event.newBuilder()
+                .setOccurredAt(deleted.getDeletedAt())
+                .setMessageDeleted(
+                    MessageDeletedEvent.newBuilder()
+                        .setConversationId(conversationId.toByteString())
+                        .setSeq(seq)
+                        .setDeletedAt(deleted.getDeletedAt()))
+                .build();
+        List<Uuid> recipients = new ArrayList<>(h.members());
+        if (!h.includes(userId)) {
+          recipients.add(userId);
+        }
+        Rows.insertOutbox(
+            c,
+            conversationId,
+            Ids.random(),
+            recipients,
+            h.kind(),
+            h.topic(),
+            h.members().size(),
+            "message_deleted",
+            event,
+            at,
+            targetOutboxId);
+        c.commit();
       } catch (SQLException | RuntimeException e) {
         c.rollback();
         throw e;

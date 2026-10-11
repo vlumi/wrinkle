@@ -5,13 +5,16 @@ import wrinkle.v1.Message;
 
 /**
  * A message's content as message.body and user_conversation.last_body store it: a serialized
- * Message with only its content set, text or notice.
+ * Message with only its content set, text or notice, or only deleted_at once deleted.
  */
 public final class MessageBody {
   private MessageBody() {}
 
   public static byte[] encode(Message m) {
     Message.Builder b = Message.newBuilder();
+    if (m.hasDeletedAt()) {
+      return b.setDeletedAt(m.getDeletedAt()).build().toByteArray();
+    }
     switch (m.getContentCase()) {
       case TEXT -> b.setText(m.getText());
       case NOTICE -> b.setNotice(m.getNotice());
