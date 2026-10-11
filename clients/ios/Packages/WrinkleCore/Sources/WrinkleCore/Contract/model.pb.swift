@@ -102,7 +102,8 @@ public nonisolated struct Wrinkle_V1_Conversation: Sendable {
   /// Clears the value of `lastMessage`. Subsequent reads from it will return its default value.
   public mutating func clearLastMessage() {self._lastMessage = nil}
 
-  /// The requesting user's read position; messages with seq above it are unread.
+  /// The requesting user's read position; messages with seq above it are
+  /// unread. Sending a message moves the sender's own position to it.
   public var readSeq: UInt64 = 0
 
   /// The peer's read position.

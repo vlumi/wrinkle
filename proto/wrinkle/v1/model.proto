@@ -37,7 +37,8 @@ message Conversation {
   uint64 last_seq = 3;
   // Unset when the conversation is empty.
   Message last_message = 4;
-  // The requesting user's read position; messages with seq above it are unread.
+  // The requesting user's read position; messages with seq above it are
+  // unread. Sending a message moves the sender's own position to it.
   uint64 read_seq = 5;
   // The peer's read position.
   uint64 peer_read_seq = 6;

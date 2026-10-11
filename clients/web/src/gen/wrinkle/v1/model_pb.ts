@@ -118,7 +118,8 @@ export type Conversation = Message$1<"wrinkle.v1.Conversation"> & {
   lastMessage?: Message | undefined;
 
   /**
-   * The requesting user's read position; messages with seq above it are unread.
+   * The requesting user's read position; messages with seq above it are
+   * unread. Sending a message moves the sender's own position to it.
    *
    * @generated from field: uint64 read_seq = 5;
    */

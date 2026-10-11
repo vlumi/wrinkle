@@ -174,7 +174,8 @@ type Conversation struct {
 	LastSeq uint64 `protobuf:"varint,3,opt,name=last_seq,json=lastSeq,proto3" json:"last_seq,omitempty"`
 	// Unset when the conversation is empty.
 	LastMessage *Message `protobuf:"bytes,4,opt,name=last_message,json=lastMessage,proto3" json:"last_message,omitempty"`
-	// The requesting user's read position; messages with seq above it are unread.
+	// The requesting user's read position; messages with seq above it are
+	// unread. Sending a message moves the sender's own position to it.
 	ReadSeq uint64 `protobuf:"varint,5,opt,name=read_seq,json=readSeq,proto3" json:"read_seq,omitempty"`
 	// The peer's read position.
 	PeerReadSeq   uint64 `protobuf:"varint,6,opt,name=peer_read_seq,json=peerReadSeq,proto3" json:"peer_read_seq,omitempty"`
