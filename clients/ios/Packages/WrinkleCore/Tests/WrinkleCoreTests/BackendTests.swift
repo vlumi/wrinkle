@@ -6,11 +6,11 @@ import XCTest
 /// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
 /// deletion, a group of three (GroupBackendTests.swift), deleting a message
 /// (DeletionBackendTests.swift), end-to-end encryption (E2EEBackendTests.swift), reactions
-/// (ReactionBackendTests.swift). Every message
+/// (ReactionBackendTests.swift), stickers (StickerBackendTests.swift). Every message
 /// is sealed on the sending device and opened on the receiving ones. Skipped when nothing listens, unless
 /// WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {
-    private let url = URL(
+    let url = URL(
         string: ProcessInfo.processInfo.environment["WRINKLE_URL"] ?? "ws://localhost:8080/v1/ws")!
 
     func dial() async throws -> Connection {

@@ -21,10 +21,18 @@ extension Wrinkle_V1_Message {
     mutating func seal(
         _ text: String, key: Data = TestSealing.key, epoch: UInt32 = TestSealing.epoch
     ) {
+        seal(content: .with { $0.text = text }, key: key, epoch: epoch)
+    }
+
+    /// Seals the content, as seal(_:) does a text.
+    mutating func seal(
+        content: Wrinkle_V1_Content, key: Data = TestSealing.key,
+        epoch: UInt32 = TestSealing.epoch
+    ) {
         // A fixed key and a fixed nonce are fine in tests.
         // swiftlint:disable:next force_try
         sealed = try! E2EE.seal(
-            .with { $0.text = text }, key: key,
+            content, key: key,
             context: E2EE.ContentContext(
                 conversationID: conversationID, epoch: epoch, senderUserID: senderUserID,
                 clientMessageID: clientMessageID),

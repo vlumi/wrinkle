@@ -33,6 +33,11 @@ public final class AppState {
     public internal(set) var devices: [Wrinkle_V1_Device] = []
     /// Avatars decoded so far, by blob id as hex.
     var avatarImages: [String: CGImage] = [:]
+    /// The user's saved sticker ids, in their order: from GetPalette on connecting, then kept
+    /// current by palette events.
+    public internal(set) var palette: [Data] = []
+    /// Stickers decoded so far, by sticker id as hex; nil for one that cannot be shown.
+    var stickerImages: [String: CGImage?] = [:]
     /// Another device of the user that set its key and awaits the user's decision on sharing
     /// the message history with it.
     public internal(set) var newDevice: Wrinkle_V1_Device?
@@ -184,6 +189,7 @@ public final class AppState {
         cursor = 0
         pendingConversation = nil
         devices = []
+        palette = []
         store?.reset()
         self.notice = notice
     }
@@ -257,6 +263,8 @@ public final class AppState {
         try await refreshConversations(conn)
         if !devices.isEmpty { devices = try await conn.listDevices() }
         try await syncFromCursor(conn)
+        // After the sync, whose palette events may be older.
+        palette = try await conn.getPalette().map(\.stickerID)
         publishNames()
     }
 }
@@ -332,6 +340,8 @@ extension AppState {
             me = p.user
         case .device(let d):
             followDevice(d)
+        case .palette(let p):
+            palette = p.stickerIds
         case .messageDeleted(let d):
             onMessageDeleted?(d.conversationID.hex, d.seq)
         // Synced from before the deletion: the message arrives already deleted.

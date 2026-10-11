@@ -32,20 +32,7 @@ public enum AvatarImage {
 
     /// The avatar JPEG for a picture in any format ImageIO reads, or nil if it cannot be read.
     public static func jpeg(from data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-            let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-            let w = props[kCGImagePropertyPixelWidth] as? Int,
-            let h = props[kCGImagePropertyPixelHeight] as? Int, w > 0, h > 0
-        else { return nil }
-        // Decoded upright (the thumbnail applies the orientation) and no larger than needed.
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: decodeSize(longer: max(w, h), shorter: min(w, h)),
-        ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-        else { return nil }
+        guard let image = upright(data) else { return nil }
         var limit = maxSide
         while limit >= 64 {
             guard let square = squared(image, limit: limit) else { return nil }
@@ -57,8 +44,26 @@ public enum AvatarImage {
         return nil
     }
 
-    /// The image's center square scaled to at most limit pixels a side.
-    static func squared(_ image: CGImage, limit: Int) -> CGImage? {
+    /// The picture decoded upright (the thumbnail applies the orientation) and no larger than
+    /// a square of maxSide needs.
+    static func upright(_ data: Data) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+            let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let w = props[kCGImagePropertyPixelWidth] as? Int,
+            let h = props[kCGImagePropertyPixelHeight] as? Int, w > 0, h > 0
+        else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: decodeSize(longer: max(w, h), shorter: min(w, h)),
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// The image's center square scaled to at most limit pixels a side, with its
+    /// transparency kept if asked.
+    static func squared(_ image: CGImage, limit: Int, alpha: Bool = false) -> CGImage? {
         let crop = cropRect(width: image.width, height: image.height)
         guard let cropped = image.cropping(to: crop) else { return nil }
         let side = outputSide(for: cropped.width, limit: limit)
@@ -66,7 +71,7 @@ public enum AvatarImage {
             let context = CGContext(
                 data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
                 space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+                bitmapInfo: (alpha ? CGImageAlphaInfo.premultipliedLast : .noneSkipLast).rawValue)
         else { return nil }
         context.interpolationQuality = .high
         context.draw(cropped, in: CGRect(x: 0, y: 0, width: side, height: side))

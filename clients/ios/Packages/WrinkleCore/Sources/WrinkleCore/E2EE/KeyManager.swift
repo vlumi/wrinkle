@@ -157,13 +157,12 @@ public actor KeyManager {
 
     // MARK: Sending
 
-    /// Seals the text and sends it, first publishing a new epoch if the conversation needs one;
-    /// a send refused for a stale epoch refreshes and is retried once.
+    /// Seals the content and sends it, first publishing a new epoch if the conversation needs
+    /// one; a send refused for a stale epoch refreshes and is retried once.
     public func send(
-        _ text: String, to conversationID: Data, members: Members, clientMessageID: String,
-        _ connection: Connection
+        content: Wrinkle_V1_Content, to conversationID: Data, members: Members,
+        clientMessageID: String, _ connection: Connection
     ) async throws -> Wrinkle_V1_Message {
-        let content = Wrinkle_V1_Content.with { $0.text = text }
         var (epoch, key) = try await currentEpoch(conversationID, members, connection)
         var retried = false
         while true {
@@ -308,5 +307,17 @@ public actor KeyManager {
             }
         }
         return shared
+    }
+}
+
+extension KeyManager {
+    /// Seals the text and sends it; see send(content:).
+    public func send(
+        _ text: String, to conversationID: Data, members: Members, clientMessageID: String,
+        _ connection: Connection
+    ) async throws -> Wrinkle_V1_Message {
+        try await send(
+            content: .with { $0.text = text }, to: conversationID, members: members,
+            clientMessageID: clientMessageID, connection)
     }
 }

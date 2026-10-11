@@ -223,10 +223,12 @@ final class E2EETests: XCTestCase {
         XCTAssertNil(DeviceKey.load(deviceID: 7, from: vault))
     }
 
-    /// A push as the backend sends it for the sealed vector message.
-    private func push(epoch: UInt32 = 1) throws -> [AnyHashable: Any] {
+    /// A push as the backend sends it for the sealed vector message, or other content.
+    private func push(
+        epoch: UInt32 = 1, content: Wrinkle_V1_Content = .with { $0.text = "hello" }
+    ) throws -> [AnyHashable: Any] {
         let sealed = try E2EE.seal(
-            .with { $0.text = "hello" }, key: hex(epochKey), context: contentContext,
+            content, key: hex(epochKey), context: contentContext,
             nonce: hex("303132333435363738393a3b"))
         return [
             "conversation_id": conversation, "seq": NSNumber(value: 3),
@@ -248,6 +250,10 @@ final class E2EETests: XCTestCase {
         XCTAssertNil(
             PushContent.body(["conversation_id": conversation], keys: keys, names: names))
         XCTAssertNil(PushContent.body(try push(epoch: 2), keys: keys, names: names))
+        let sticker = try push(
+            content: .with { $0.sticker = .with { $0.stickerID = Data(count: 16) } })
+        XCTAssertEqual(PushContent.body(sticker, keys: keys, names: SharedNames()), "Sticker")
+        XCTAssertEqual(PushContent.body(sticker, keys: keys, names: names), "alice: Sticker")
     }
 
     func testSharedNamesRoundTrip() {

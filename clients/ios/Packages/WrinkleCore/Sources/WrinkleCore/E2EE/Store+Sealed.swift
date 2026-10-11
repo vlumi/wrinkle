@@ -6,23 +6,23 @@ import SwiftData
 extension Store {
     /// Opens the message's sealed content if a held key does.
     public func open(_ stored: StoredMessage) {
-        guard let data = stored.sealedMessage, let text = opened(data) else { return }
-        stored.text = text
+        guard let data = stored.sealedMessage, let content = opened(data) else { return }
+        stored.text = content.stickerID == nil ? content.text : ""
+        stored.stickerID = content.stickerID?.hex ?? ""
         stored.sealedMessage = nil
     }
 
-    /// Opens the latest message of the conversation, for the list.
+    /// Opens the latest message of the conversation, for the list: a sticker reads as
+    /// "Sticker".
     public func open(_ c: StoredConversation) {
-        guard let data = c.lastSealed, let text = opened(data) else { return }
-        c.lastText = text
+        guard let data = c.lastSealed, let content = opened(data) else { return }
+        c.lastText = content.preview
         c.lastSealed = nil
     }
 
-    private func opened(_ data: Data) -> String? {
-        guard let keys, let m = try? Wrinkle_V1_Message(serializedBytes: data),
-            let content = keys.open(m)
-        else { return nil }
-        return content.text
+    private func opened(_ data: Data) -> Wrinkle_V1_Content? {
+        guard let keys, let m = try? Wrinkle_V1_Message(serializedBytes: data) else { return nil }
+        return keys.open(m)
     }
 
     /// The epochs that locked messages, list previews and reactions need, by conversation.

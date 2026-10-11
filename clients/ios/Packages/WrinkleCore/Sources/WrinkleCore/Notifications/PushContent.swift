@@ -33,16 +33,16 @@ public struct SharedNames: Codable, Equatable, Sendable {
 /// The text of a message push, decrypted: the backend sends only "New message" and the sealed
 /// content, which a held epoch key opens.
 public enum PushContent {
-    /// The notification body: the text in a direct conversation, "<sender>: <text>" in a group;
-    /// nil when the push has no sealed content or no held key opens it.
+    /// The notification body: the text, or "Sticker" for a sticker, in a direct conversation;
+    /// "<sender>: <text>" in a group; nil when the push has no sealed content or no held key opens it.
     public static func body(
         _ info: [AnyHashable: Any], keys: EpochKeys, names: SharedNames
     ) -> String? {
         guard let message = message(info), let content = keys.open(message) else { return nil }
         let conversation = message.conversationID.hex
-        guard names.groups.contains(conversation) else { return content.text }
+        guard names.groups.contains(conversation) else { return content.preview }
         let sender = names.names[message.senderUserID.hex] ?? "Someone"
-        return "\(sender): \(content.text)"
+        return "\(sender): \(content.preview)"
     }
 
     /// The message the push describes, with its sealed content.

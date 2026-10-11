@@ -39,6 +39,9 @@ struct ProfileView: View {
                 StatusText(status: nameStatus)
             }
             PictureSection()
+            Section {
+                NavigationLink("My stickers") { PaletteView() }
+            }
             Section("Icon") {
                 LazyVGrid(columns: columns, spacing: 8) {
                     iconButton("")

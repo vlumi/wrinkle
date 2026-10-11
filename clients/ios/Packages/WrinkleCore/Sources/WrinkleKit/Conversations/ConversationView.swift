@@ -19,6 +19,7 @@ struct ConversationView: View {
     /// The seq of the message being reacted to with an emoji typed in.
     @State private var reactingWithOther: Int64?
     @State private var otherEmoji = ""
+    @State private var showStickers = false
 
     init(conversationID: IDHex) {
         self.conversationID = conversationID
@@ -84,6 +85,12 @@ struct ConversationView: View {
                     .font(.footnote).foregroundStyle(.secondary).padding()
             } else {
                 HStack {
+                    Button {
+                        showStickers = true
+                    } label: {
+                        Image(systemName: "face.smiling")
+                    }
+                    .accessibilityLabel("Stickers")
                     TextField("Message", text: $text).textFieldStyle(.roundedBorder)
                         .onSubmit(send)
                     Button("Send", action: send).disabled(trimmedText.isEmpty)
@@ -137,6 +144,11 @@ struct ConversationView: View {
                 otherEmoji = ""
             }
             Button("Cancel", role: .cancel) { otherEmoji = "" }
+        }
+        .sheet(isPresented: $showStickers) {
+            NavigationStack {
+                StickerPicker(pick: send(sticker:)) { showStickers = false }
+            }
         }
         .sheet(isPresented: $showInfo) {
             NavigationStack {
@@ -214,6 +226,15 @@ struct ConversationView: View {
                         reactingWithOther = m.seq
                     }
                 }
+                if let sticker = Data.id(hex: m.stickerID), !m.isDeleted {
+                    if app.isSaved(sticker) {
+                        Button("Saved", systemImage: "checkmark") {}.disabled(true)
+                    } else {
+                        Button("Save to Palette", systemImage: "square.and.arrow.down") {
+                            save(sticker)
+                        }
+                    }
+                }
                 if m.deletable(by: app.myUserID) {
                     Button("Delete for Everyone", systemImage: "trash", role: .destructive) {
                         deleting = m.seq
@@ -222,7 +243,11 @@ struct ConversationView: View {
             }
         }
     }
+}
 
+// MARK: People
+
+extension ConversationView {
     /// The other people in the conversation.
     private var contacts: [Wrinkle_V1_User] {
         guard let c = conversation else { return [] }
@@ -285,6 +310,35 @@ extension ConversationView {
             } catch {
                 self.error = errorText(
                     error, [.permissionDenied: "You are no longer in this group."])
+            }
+        }
+    }
+
+    private func send(sticker: Data) {
+        showStickers = false
+        Task {
+            do {
+                try await app.send(sticker: sticker, in: conversationID)
+                error = nil
+            } catch {
+                self.error = errorText(
+                    error, [.permissionDenied: "You are no longer in this group."])
+            }
+        }
+    }
+
+    private func save(_ sticker: Data) {
+        Task {
+            do {
+                try await app.saveSticker(sticker)
+                error = nil
+            } catch {
+                self.error = errorText(
+                    error,
+                    [
+                        .failedPrecondition: "Your palette is full; remove a sticker first.",
+                        .notFound: "That sticker is not known.",
+                    ])
             }
         }
     }

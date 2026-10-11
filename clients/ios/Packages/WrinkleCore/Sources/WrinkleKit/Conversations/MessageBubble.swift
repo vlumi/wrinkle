@@ -27,7 +27,36 @@ struct MessageBubble: View {
         }
     }
 
+    @ViewBuilder
     private var bubble: some View {
+        if message.isSticker && !message.isDeleted {
+            sticker
+        } else {
+            textBubble
+        }
+    }
+
+    /// A sticker stands alone, without a bubble.
+    private var sticker: some View {
+        VStack(alignment: mine ? .trailing : .leading, spacing: 2) {
+            if let sender {
+                Text(senderName(sender))
+                    .font(.caption).bold().foregroundStyle(.tint)
+            }
+            StickerView(sticker: message.stickerID)
+            footer
+        }
+    }
+
+    private var footer: some View {
+        Text(
+            message.sentAt.formatted(date: .omitted, time: .shortened)
+                + (receipt.map { " · " + $0 } ?? "")
+        )
+        .font(.caption2).foregroundStyle(.secondary)
+    }
+
+    private var textBubble: some View {
         VStack(alignment: mine ? .trailing : .leading, spacing: 2) {
             if let sender {
                 Text(senderName(sender))
@@ -41,11 +70,7 @@ struct MessageBubble: View {
             } else {
                 Text(message.text)
             }
-            Text(
-                message.sentAt.formatted(date: .omitted, time: .shortened)
-                    + (receipt.map { " · " + $0 } ?? "")
-            )
-            .font(.caption2).foregroundStyle(.secondary)
+            footer
         }
         .padding(10)
         .background(

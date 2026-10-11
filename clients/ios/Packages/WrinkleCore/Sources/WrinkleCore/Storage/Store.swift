@@ -177,8 +177,10 @@ public final class StoredMessage {
     public var seq: Int64
     public var senderID: IDHex
     public var clientMessageID: String
-    /// The opened text; empty for a notice and while the content is not opened.
+    /// The opened text; empty for a notice, a sticker and while the content is not opened.
     public var text: String
+    /// The opened sticker's id as hex; empty for none.
+    public var stickerID: IDHex
     /// The serialized message while its sealed content is not opened.
     public var sealedMessage: Data?
     /// The serialized Notice, for a group notice.
@@ -193,6 +195,7 @@ public final class StoredMessage {
         senderID = m.senderUserID.hex
         clientMessageID = m.clientMessageID
         text = ""
+        stickerID = ""
         switch m.content {
         case .notice(let n): notice = try? n.serializedData()
         case .sealed: sealedMessage = try? m.serializedData()
@@ -207,7 +210,7 @@ public final class StoredMessage {
     /// Sealed content this device cannot open (yet).
     public var isLocked: Bool { sealedMessage != nil }
 
-    /// Whether the user may delete it: their own text, not yet deleted.
+    /// Whether the user may delete it: their own text or sticker, not yet deleted.
     public func deletable(by userID: IDHex) -> Bool {
         senderID == userID && notice == nil && deletedAt == nil
     }
@@ -216,6 +219,7 @@ public final class StoredMessage {
     func delete(at date: Date) {
         guard deletedAt == nil else { return }
         text = ""
+        stickerID = ""
         notice = nil
         sealedMessage = nil
         deletedAt = date
@@ -247,7 +251,7 @@ public struct Store {
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 7
+    static let version = 8
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {
