@@ -1,5 +1,6 @@
 package wrinkle.conversation;
 
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -19,7 +20,8 @@ import wrinkle.v1.ReadEvent;
 
 /**
  * The conversation service: sending, read marks and history, against the conversation keyspace.
- * Every change is stored with an outbox row in the same transaction.
+ * Every change is stored with an outbox row in the same transaction, which also deletes it: the
+ * change data capture picks up the insert, and the table stays empty.
  */
 public final class ConversationService {
   private static final int MAX_CLIENT_MESSAGE_ID = 64;
@@ -92,7 +94,8 @@ public final class ConversationService {
    */
   public Message send(long userId, long conversationId, String clientMessageId, String text)
       throws SQLException {
-    if (clientMessageId.isEmpty() || clientMessageId.length() > MAX_CLIENT_MESSAGE_ID) {
+    if (clientMessageId.isEmpty()
+        || clientMessageId.getBytes(StandardCharsets.UTF_8).length > MAX_CLIENT_MESSAGE_ID) {
       throw ApiError.invalidArgument(
           "client_message_id must be 1 to " + MAX_CLIENT_MESSAGE_ID + " bytes");
     }
@@ -271,16 +274,22 @@ public final class ConversationService {
   private static void insertOutbox(
       Connection c, Header h, long conversationId, String kind, Event event, LocalDateTime at)
       throws SQLException {
+    long outboxId = Ids.random();
     Sql.update(
         c,
         "INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload,"
             + " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         conversationId,
-        Ids.random(),
+        outboxId,
         h.userA(),
         h.userB(),
         kind,
         event.toByteArray(),
         at);
+    Sql.update(
+        c,
+        "DELETE FROM outbox WHERE conversation_id = ? AND outbox_id = ?",
+        conversationId,
+        outboxId);
   }
 }

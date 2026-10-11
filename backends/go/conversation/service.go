@@ -1,6 +1,7 @@
 // Package conversation is the conversation service: sending, read marks and
-// history, against the conversation keyspace. Every change is stored with
-// an outbox row in the same transaction.
+// history, against the conversation keyspace. Every change writes an
+// outbox row in the same transaction, which change data capture carries to
+// the fan-out.
 package conversation
 
 import (
@@ -230,9 +231,17 @@ func insertOutbox(ctx context.Context, tx *sql.Tx, h header, conversationID uint
 	if err != nil {
 		return fmt.Errorf("marshal outbox event: %w", err)
 	}
-	_, err = tx.ExecContext(ctx, `
+	outboxID := ids.Random()
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		conversationID, ids.Random(), h.userA, h.userB, kind, payload, at)
+		conversationID, outboxID, h.userA, h.userB, kind, payload, at); err != nil {
+		return err
+	}
+	// The insert reaches the binlog, which is all the fan-out reads; deleting
+	// the row in the same transaction keeps the table empty.
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM outbox WHERE conversation_id = ? AND outbox_id = ?`,
+		conversationID, outboxID)
 	return err
 }

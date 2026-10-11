@@ -10,6 +10,7 @@
   "poll.interval.ms": "20",
   "vitess.vgtid": "current",
   "table.include.list": "conversation.outbox",
+  "skipped.operations": "u,d,t",
   "message.key.columns": "conversation.outbox:conversation_id",
   "transforms": "unwrap",
   "transforms.unwrap.type": "io.debezium.transforms.ExtractNewRecordState",
