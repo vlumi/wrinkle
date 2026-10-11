@@ -9,7 +9,9 @@ import { hex, sameId } from "../ids";
 import { useSession } from "../session/session";
 import { FingerprintWarning } from "../e2ee/FingerprintWarning";
 import { Verify } from "../e2ee/Verify";
-import { inOrder, isDeleted, isUndecryptable, REMOVED, textOf } from "./model";
+import { chips, isEmoji, MAX_OWN, ownEmoji, QUICK, toggled } from "../reactions/model";
+import type { Entry } from "../reactions/model";
+import { inOrder, isDeleted, isUndecryptable, REMOVED, textKey, textOf } from "./model";
 import type { Texts } from "./model";
 import type { Pending } from "./pending";
 
@@ -23,11 +25,13 @@ export function ConversationView({ id }: { id: string }) {
   const members = useSession((s) => s.members[id]);
   const users = useSession((s) => s.users);
   const texts = useSession((s) => s.texts);
+  const reactions = useSession((s) => s.reactions);
   const complete = useSession((s) => s.complete[id]);
   const me = useSession((s) => s.me);
   const show = useSession((s) => s.show);
   const send = useSession((s) => s.send);
   const deleteMessage = useSession((s) => s.deleteMessage);
+  const react = useSession((s) => s.react);
   const loadEarlier = useSession((s) => s.loadEarlier);
   const scroller = useRef<HTMLOListElement>(null);
   // Whether to follow new messages: not while the user reads further up.
@@ -57,6 +61,9 @@ export function ConversationView({ id }: { id: string }) {
   const lastMine = [...messages]
     .reverse()
     .find((m) => !noticeOf(m) && !isDeleted(m) && sameId(m.senderUserId, me?.userId));
+
+  const former = isFormer(conversation);
+  const nameOf = (u: string): string => (me && u === hex(me.userId) ? "You" : displayName(users[u]) || "Someone");
 
   /** What the user's own message shows about who read it. */
   function receipt(m: Message): string {
@@ -152,6 +159,10 @@ export function ConversationView({ id }: { id: string }) {
               sender={group && !mine ? (users[hex(m.senderUserId)] ?? null) : undefined}
               receipt={mine ? receipt(m) : ""}
               onDelete={mine && !isDeleted(m) ? () => deleteMessage(m.seq) : undefined}
+              reactions={isDeleted(m) ? undefined : reactions[textKey(m)]}
+              me={me?.userId}
+              nameOf={nameOf}
+              onReact={former || isDeleted(m) ? undefined : (emoji) => react(m.seq, emoji)}
             />
           );
         })}
@@ -159,7 +170,7 @@ export function ConversationView({ id }: { id: string }) {
           <PendingItem key={p.clientMessageId} pending={p} />
         ))}
       </ol>
-      {isFormer(conversation) ? (
+      {former ? (
         <p className="hint closed" data-testid="former-member">
           You are no longer in this group
         </p>
@@ -184,6 +195,10 @@ function MessageItem({
   sender,
   receipt,
   onDelete,
+  reactions,
+  me,
+  nameOf,
+  onReact,
 }: {
   message: Message;
   texts: Texts;
@@ -193,11 +208,25 @@ function MessageItem({
   receipt: string;
   /** Present for the user's own messages that can still be deleted. */
   onDelete?: () => Promise<void>;
+  reactions?: Record<string, Entry>;
+  me?: Uint8Array;
+  nameOf(userId: string): string;
+  /** Present while the user may react to the message. */
+  onReact?: (emoji: string) => Promise<void>;
 }) {
   // Actions show on hover, or after a tap on touch screens.
   const [open, setOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [reactFailed, setReactFailed] = useState(false);
+  const shown = chips(reactions, me);
+  const own = ownEmoji(reactions, me);
+  const toggle = (emoji: string) => {
+    if (!onReact) return;
+    setReactFailed(false);
+    onReact(emoji).catch(() => setReactFailed(true));
+  };
   const removed = isDeleted(m);
   const undecryptable = isUndecryptable(m, texts);
   const classes = ["message", mine && "mine", removed && "removed", undecryptable && "undecryptable", open && "open"]
@@ -208,7 +237,7 @@ function MessageItem({
       className={classes}
       data-testid="message"
       data-epoch={m.content.case === "sealed" ? m.content.value.epoch : undefined}
-      onClick={onDelete ? () => setOpen(!open) : undefined}
+      onClick={onDelete || onReact || shown.length > 0 ? () => setOpen(!open) : undefined}
     >
       {sender !== undefined && (
         <span className="sender" data-testid="sender">
@@ -217,7 +246,61 @@ function MessageItem({
         </span>
       )}
       <span className="text">{removed ? REMOVED : textOf(m, texts)}</span>
+      {shown.length > 0 && (
+        <span className="reactions">
+          {shown.map((c) => (
+            <button
+              key={c.emoji}
+              className={c.mine ? "reaction mine" : "reaction"}
+              data-testid="reaction"
+              data-emoji={c.emoji}
+              aria-pressed={c.mine}
+              title={c.users.map(nameOf).join(", ")}
+              disabled={!onReact || (!c.mine && own.length >= MAX_OWN)}
+              onClick={(e) => {
+                e.stopPropagation();
+                toggle(c.emoji);
+              }}
+            >
+              {c.emoji} <span className="count">{c.users.length}</span>
+            </button>
+          ))}
+        </span>
+      )}
+      {open && shown.length > 0 && (
+        <span className="reacted-by" data-testid="reacted-by">
+          {shown.map((c) => (
+            <span key={c.emoji}>
+              {c.emoji} {c.users.map(nameOf).join(", ")}
+            </span>
+          ))}
+        </span>
+      )}
+      {onReact && picking && (
+        <ReactionPicker
+          own={own}
+          onPick={(emoji) => {
+            setPicking(false);
+            toggle(emoji);
+          }}
+        />
+      )}
+      {reactFailed && <span className="reaction-error">Could not react. Try again.</span>}
       <span className="meta">
+        {onReact && (
+          <button
+            className="message-react"
+            data-testid="react"
+            aria-label="React"
+            aria-expanded={picking}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPicking(!picking);
+            }}
+          >
+            React
+          </button>
+        )}
         {onDelete && !confirming && (
           <button
             className="message-delete"
@@ -260,6 +343,47 @@ function MessageItem({
         </span>
       )}
     </li>
+  );
+}
+
+function ReactionPicker({ own, onPick }: { own: string[]; onPick(emoji: string): void }) {
+  const [custom, setCustom] = useState("");
+  const value = custom.trim();
+  const allowed = (emoji: string) => toggled(own, emoji) !== null;
+  return (
+    <span className="reaction-picker" data-testid="reaction-picker" onClick={(e) => e.stopPropagation()}>
+      {QUICK.map((emoji) => (
+        <button
+          key={emoji}
+          className={own.includes(emoji) ? "mine" : undefined}
+          data-testid="react-emoji"
+          data-emoji={emoji}
+          disabled={!allowed(emoji)}
+          onClick={() => onPick(emoji)}
+        >
+          {emoji}
+        </button>
+      ))}
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (isEmoji(value) && allowed(value)) onPick(value);
+        }}
+      >
+        <input
+          data-testid="react-custom"
+          value={custom}
+          onChange={(e) => setCustom(e.target.value)}
+          placeholder="Any emoji"
+          aria-label="Any emoji"
+          autoComplete="off"
+          size={6}
+        />
+        <button type="submit" disabled={!isEmoji(value) || !allowed(value)}>
+          Add
+        </button>
+      </form>
+    </span>
   );
 }
 

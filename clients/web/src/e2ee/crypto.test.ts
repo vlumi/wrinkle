@@ -3,7 +3,7 @@
 // every client checks so their cryptography agrees bit for bit.
 
 import { create, toBinary } from "@bufbuild/protobuf";
-import { ContentSchema } from "../gen/wrinkle/v1/content_pb";
+import { ContentSchema, ReactionsSchema } from "../gen/wrinkle/v1/content_pb";
 import { fromHex, hex } from "../ids";
 import {
   contentAad,
@@ -13,8 +13,11 @@ import {
   hkdf,
   importPrivateKey,
   open,
+  openReactions,
+  reactionAad,
   safetyNumber,
   seal,
+  sealReactions,
   sharedSecret,
   unwrapKey,
   wrapInfo,
@@ -69,6 +72,18 @@ const V = {
     plaintext: "0a0568656c6c6f",
     aad: "7772696e6b6c6520636f6e74656e74207631c0c1c2c3c4c5c6c7c8c9cacbcccdcecf00000001a0a1a2a3a4a5a6a7a8a9aaabacadaeaf636c69656e742d6d6573736167652d31",
     ciphertext: "1fff712ff7e3e70fa783c1fc72407a404036b0a88eaf15",
+  },
+  reaction: {
+    key: "808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9f",
+    nonce: "505152535455565758595a5b",
+    conversationId: "c0c1c2c3c4c5c6c7c8c9cacbcccdcecf",
+    epoch: 2,
+    userId: "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf",
+    seq: 4294967298n,
+    emoji: ["\u{1f44d}", "\u2764\ufe0f", "\u{1f469}\u200d\u{1f469}\u200d\u{1f467}"],
+    plaintext: "0a04f09f918d0a06e29da4efb88f0a12f09f91a9e2808df09f91a9e2808df09f91a7",
+    aad: "7772696e6b6c65207265616374696f6e207631c0c1c2c3c4c5c6c7c8c9cacbcccdcecf00000002b0b1b2b3b4b5b6b7b8b9babbbcbdbebf0000000100000002",
+    ciphertext: "b88166dab6f40be08cc6afc43711da8db6eb856edea765d83d5ae6b3551376b6bed6b13a5bb740760a174caab460ee45e330",
   },
   fingerprints: {
     a: "83f8d669a171e66fe9f42fa06af663015c895d9e6b63b6a577514567ca391efc",
@@ -133,6 +148,28 @@ test("sealing content", async () => {
   // Moved to another message, it does not open.
   await expect(
     open(key, fromHex(V.seal.nonce), ciphertext, { ...sealParams, clientMessageId: "client-message-2" }),
+  ).rejects.toThrow();
+});
+
+test("sealing reactions", async () => {
+  const r = V.reaction;
+  const params = {
+    conversationId: fromHex(r.conversationId),
+    epoch: r.epoch,
+    reactorUserId: fromHex(r.userId),
+    seq: r.seq,
+  };
+  const plaintext = toBinary(ReactionsSchema, create(ReactionsSchema, { emoji: r.emoji }));
+  expect(hex(plaintext)).toBe(r.plaintext);
+  expect(hex(reactionAad(params))).toBe(r.aad);
+  const key = await epochKey(fromHex(r.key));
+  const ciphertext = await sealReactions(key, fromHex(r.nonce), plaintext, params);
+  expect(hex(ciphertext)).toBe(r.ciphertext);
+  expect(hex(await openReactions(key, fromHex(r.nonce), ciphertext, params))).toBe(r.plaintext);
+  // Moved to another message, or claimed by another user, it does not open.
+  await expect(openReactions(key, fromHex(r.nonce), ciphertext, { ...params, seq: r.seq + 1n })).rejects.toThrow();
+  await expect(
+    openReactions(key, fromHex(r.nonce), ciphertext, { ...params, reactorUserId: fromHex(V.seal.senderUserId) }),
   ).rejects.toThrow();
 });
 

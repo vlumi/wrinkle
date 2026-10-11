@@ -11,6 +11,7 @@ import {
 import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { hex } from "../ids";
 import {
+  addHistory,
   applyEvent,
   byActivity,
   emptyData,
@@ -307,4 +308,36 @@ test("a sealed message this device cannot open says so", () => {
   const next = withTexts(data, { [textKey(m)]: null });
   expect(textOf(m, next.texts)).toBe(UNDECRYPTABLE);
   expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe(UNDECRYPTABLE);
+});
+
+test("reaction events, history and a deletion", () => {
+  const reaction = (cursor: bigint, sealedSet?: { epoch: number }) =>
+    create(EventSchema, {
+      cursor,
+      body: { case: "reaction", value: { conversationId: c7, seq: 1n, userId: peer, sealed: sealedSet } },
+    });
+  let data = applyEvent(oneConversation(), messageEvent(1n, me), me).data;
+  data = applyEvent(data, reaction(2n, { epoch: 1 }), me).data;
+  const k = `${k7}/1`;
+  expect(Object.keys(data.reactions[k])).toEqual([hex(peer)]);
+  data = applyEvent(data, reaction(3n), me).data;
+  expect(data.reactions[k]).toBeUndefined();
+  // History brings the reactions with the messages.
+  const listed = create(MessageSchema, {
+    conversationId: c7,
+    seq: 1n,
+    senderUserId: me,
+    content: sealed,
+    reactions: [{ userId: peer, sealed: { epoch: 1 } }],
+  });
+  data = addHistory(data, c7, [listed]);
+  expect(Object.keys(data.reactions[k])).toEqual([hex(peer)]);
+  // A deleted message's reactions go with it.
+  data = applyEvent(
+    data,
+    create(EventSchema, { cursor: 4n, body: { case: "messageDeleted", value: { conversationId: c7, seq: 1n } } }),
+    me,
+  ).data;
+  expect(data.reactions[k]).toBeUndefined();
+  expect(addHistory(data, c7, [listed]).reactions[k]).toBeUndefined();
 });

@@ -2,17 +2,20 @@
 // flow of events into the model. Connection details live outside React
 // state; the screens read the store.
 
+import { create as createMessage } from "@bufbuild/protobuf";
 import { timestampNow } from "@bufbuild/protobuf/wkt";
 import { create } from "zustand";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { BlobPurpose } from "../gen/wrinkle/v1/messaging_pb";
 import type { DeviceCredentials } from "../gen/wrinkle/v1/messaging_pb";
+import { SealedSchema } from "../gen/wrinkle/v1/model_pb";
 import type { Conversation, Device, Message, User } from "../gen/wrinkle/v1/model_pb";
 import { blobAddress } from "../blobs/blobs";
 import { BackendError, Connection } from "../connection/connection";
 import type { ConnectionState } from "../connection/connection";
 import {
+  addHistory,
   addMessages,
   applyEvent,
   emptyData,
@@ -40,6 +43,7 @@ import { loadVerified, saveVerified } from "../e2ee/verified";
 import type { Verified } from "../e2ee/verified";
 import { isFormer, isGroup, noticeUsers } from "../groups/model";
 import { fromHex, hex, sameId } from "../ids";
+import { cleaned, ownEmoji, toggled, withOpened, withReaction } from "../reactions/model";
 import { rememberGateway } from "../signin/gateways";
 import { saved } from "./saved";
 import type { Credentials } from "./saved";
@@ -110,6 +114,8 @@ export interface Session extends Data {
   send(text: string): Promise<void>;
   /** Deletes one of the user's own messages in the current conversation, for everyone. */
   deleteMessage(seq: bigint): Promise<void>;
+  /** Adds the emoji to the user's reactions to a message in the current conversation, or removes it if there. */
+  react(seq: bigint, emoji: string): Promise<void>;
   markReadIfVisible(): void;
   clearError(): void;
   /** Shares the message history with the new device, or not; either way it is no longer new. */
@@ -146,6 +152,8 @@ let keysReady: Promise<boolean> = Promise.resolve(false);
 let newDevices: NewDevice[] = [];
 /** Messages being opened, by textKey. */
 const opening = new Set<string>();
+/** Reactions being opened, by textKey, user and nonce. */
+const openingReactions = new Set<string>();
 
 const NO_CRYPTO = "End-to-end encryption needs a secure page: open the client over HTTPS.";
 const KEY_LOST = "This device lost its encryption keys. Sign in again.";
@@ -256,6 +264,34 @@ export const useSession = create<Session>((set, get) => {
     }
   }
 
+  /** Opens the reactions of the conversation not opened yet; again, those that could not be opened before. */
+  function openReactions(conversationId: string, again = false) {
+    const k = keys;
+    if (!k?.ready) return;
+    const prefix = conversationId + "/";
+    for (const [messageKey, users] of Object.entries(get().reactions)) {
+      if (!messageKey.startsWith(prefix)) continue;
+      const seq = BigInt(messageKey.slice(prefix.length));
+      for (const [user, e] of Object.entries(users)) {
+        if (e.emoji !== undefined && !(again && e.emoji === null)) continue;
+        const sealed = e.sealed;
+        const o = `${messageKey}/${user}/${hex(sealed.nonce)}`;
+        if (openingReactions.has(o)) continue;
+        openingReactions.add(o);
+        k.openReactions(fromHex(conversationId), seq, fromHex(user), sealed)
+          .then((emoji) => {
+            if (keys !== k) return;
+            const opened = emoji && cleaned(emoji);
+            set({ reactions: withOpened(get().reactions, messageKey, user, sealed, opened) });
+          })
+          .catch(() => {
+            // Not reachable now: tried again on the next look.
+          })
+          .finally(() => openingReactions.delete(o));
+      }
+    }
+  }
+
   function openLatest() {
     openMessages(Object.values(get().conversations).map((c) => c.lastMessage));
   }
@@ -314,6 +350,7 @@ export const useSession = create<Session>((set, get) => {
     keysReady = Promise.resolve(false);
     newDevices = [];
     opening.clear();
+    openingReactions.clear();
     saved.forget();
     set({ ...blank, credentials: null, status: "offline", error: null, notice });
   }
@@ -469,8 +506,10 @@ export const useSession = create<Session>((set, get) => {
       messages: data.messages,
       members: data.members,
       users: data.users,
+      reactions: data.reactions,
       pending,
     });
+    if (event.body.case === "reaction") openReactions(key(event.body.value.conversationId));
     if (unknownConversation) refreshConversations().catch(fail);
     if (m) {
       const id = key(m.conversationId);
@@ -504,14 +543,15 @@ export const useSession = create<Session>((set, get) => {
       value: { conversationId: id, beforeSeq, limit: HISTORY_PAGE },
     });
     if (beforeSeq === 0n) loaded.add(conversationId);
-    const data = addMessages(get(), id, resp.messages);
+    const data = addHistory(get(), id, resp.messages);
     const notices = resp.messages.flatMap((m) => (m.content.case === "notice" ? [m.content.value] : []));
     const users = withUsers(data, notices.flatMap(noticeUsers)).users;
     // A short page reaches the start: of the conversation, or of what a group member may see.
     const complete =
       resp.messages.length < HISTORY_PAGE ? { ...get().complete, [conversationId]: true as const } : get().complete;
-    set({ messages: data.messages, users, complete });
+    set({ messages: data.messages, reactions: data.reactions, users, complete });
     openMessages(resp.messages);
+    openReactions(conversationId);
   }
 
   // Back on screen: reconnect now instead of waiting out the backoff.
@@ -679,6 +719,7 @@ export const useSession = create<Session>((set, get) => {
       keys?.retry(conversationId);
       const c = get().conversations[conversationId];
       openMessages([...Object.values(get().messages[conversationId] ?? {}), c?.lastMessage], true);
+      openReactions(conversationId, true);
       if (!loaded.has(conversationId)) await loadHistory(conversationId, 0n);
       get().markReadIfVisible();
       await refreshMembers(conversationId).catch(fail);
@@ -738,7 +779,35 @@ export const useSession = create<Session>((set, get) => {
       await conn!.call("deleteMessage", { case: "deleteMessage", value: { conversationId: c.conversationId, seq } });
       // The event follows; showing it now does not wait for it.
       const data = withDeleted(get(), c.conversationId, seq, timestampNow());
-      set({ conversations: data.conversations, messages: data.messages });
+      set({ conversations: data.conversations, messages: data.messages, reactions: data.reactions });
+    },
+
+    async react(seq, emoji) {
+      const c = current();
+      const conversationId = c.conversationId;
+      const id = key(conversationId);
+      const messageKey = textKey({ conversationId, seq });
+      const next = toggled(ownEmoji(get().reactions[messageKey], get().me?.userId), emoji);
+      if (!next) return;
+      for (let attempt = 1; ; attempt++) {
+        if (!keys?.ready) throw new Error(available() ? "Encryption is not ready yet." : NO_CRYPTO);
+        const sealed = next.length > 0 ? await keys.sealReactions(conversationId, seq, next) : undefined;
+        try {
+          await call("setReaction", { case: "setReaction", value: { conversationId, seq, sealed } });
+          // The event follows; showing it now does not wait for it.
+          const me = get().me;
+          if (me) {
+            const s = sealed && createMessage(SealedSchema, sealed);
+            set({ reactions: withReaction(get().reactions, messageKey, me.userId, s, timestampNow(), next) });
+          }
+          return;
+        } catch (err) {
+          // Another device made a newer epoch, or the members changed: look again, once.
+          const stale = err instanceof BackendError && err.code === ErrorCode.FAILED_PRECONDITION && sealed;
+          if (attempt > 1 || !stale) throw err;
+          keys.invalidate(id);
+        }
+      }
     },
 
     markReadIfVisible() {

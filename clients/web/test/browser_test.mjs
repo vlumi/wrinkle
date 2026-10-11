@@ -5,7 +5,7 @@
 // out from the first, delete an account, reload, sign out and in again;
 // then three users in a group: members added, messages, a topic change,
 // read counts and a removal, after which the group has a new key epoch.
-// Every message is end-to-end encrypted.
+// Reactions in both, toggled on and off. Every message and reaction is end-to-end encrypted.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -189,6 +189,28 @@ const visible = (sel) =>
 const click = (sel) => `(document.querySelector(${JSON.stringify(sel)}).click(), true)`;
 const text = (testid) => `${q(testid)}?.textContent`;
 
+/** The message with the given text. */
+const messageWith = (body) =>
+  `${qa("message")}.find(li => li.querySelector(".text").textContent === ${JSON.stringify(body)})`;
+/** The message's reaction chip for the emoji. */
+const chip = (body, emoji) =>
+  `${messageWith(body)}?.querySelector('[data-testid="reaction"][data-emoji=${JSON.stringify(emoji)}]')`;
+const chipShows = (body, emoji, count, mine) =>
+  `${chip(body, emoji)}?.textContent === ${JSON.stringify(`${emoji} ${count}`)} && ${chip(body, emoji)}.classList.contains("mine") === ${mine}`;
+const noChips = (body) => `!!${messageWith(body)} && !${messageWith(body)}.querySelector('[data-testid="reaction"]')`;
+/** Opens the message's reaction picker. */
+async function openPicker(p, body) {
+  await p.eval(`(${messageWith(body)}.querySelector('[data-testid="react"]').click(), true)`);
+  await p.waitFor(`!!${messageWith(body)}?.querySelector('[data-testid="reaction-picker"]')`);
+}
+/** Reacts to the message with one of the picker's emoji. */
+async function react(p, body, emoji) {
+  await openPicker(p, body);
+  await p.eval(
+    `(${messageWith(body)}.querySelector('[data-testid="react-emoji"][data-emoji=${JSON.stringify(emoji)}]').click(), true)`,
+  );
+}
+
 check(
   (await alice.eval("isSecureContext && !!crypto.subtle")) === true,
   "the page runs in a secure context, with WebCrypto",
@@ -287,6 +309,36 @@ await bob.eval(click('[data-testid="close-verify"]'));
 await alice.waitFor(`!!${q("peer-name")} && !${q("fingerprint-warning")}`);
 await bob.waitFor(`!!${q("peer-name")}`);
 
+// Alice reacts to Bob's reply; Bob sees the chip, its count, and who.
+await react(alice, "hi alice", "👍");
+await alice.waitFor(chipShows("hi alice", "👍", 1, true));
+await bob.waitFor(chipShows("hi alice", "👍", 1, false));
+check(
+  (await bob.eval(`${chip("hi alice", "👍")}.title`)) === aliceName,
+  "alice reacted with 👍; bob sees the chip and count, and who reacted",
+);
+// Any one emoji from the field adds to her set.
+await openPicker(alice, "hi alice");
+await fill(alice, "react-custom", "🎉");
+await bob.waitFor(chipShows("hi alice", "🎉", 1, false) + " && " + chipShows("hi alice", "👍", 1, false));
+check(true, "a second emoji from the picker's field adds to her reactions");
+// Bob adds his own 👍: the count goes up on both sides.
+await bob.eval(`(${chip("hi alice", "👍")}.click(), true)`);
+await alice.waitFor(chipShows("hi alice", "👍", 2, true));
+await bob.waitFor(chipShows("hi alice", "👍", 2, true));
+check(true, "bob taps the chip to react too; both see two");
+// Tapping her chips again removes her reactions.
+await alice.eval(`(${chip("hi alice", "👍")}.click(), true)`);
+await bob.waitFor(chipShows("hi alice", "👍", 1, true));
+await alice.waitFor(chipShows("hi alice", "👍", 1, false));
+await alice.eval(`(${chip("hi alice", "🎉")}.click(), true)`);
+await bob.waitFor(`!${chip("hi alice", "🎉")}`);
+check(true, "alice toggled her reactions off; bob sees them gone");
+await bob.eval(`(${chip("hi alice", "👍")}.click(), true)`);
+await alice.waitFor(noChips("hi alice"));
+await bob.waitFor(noChips("hi alice"));
+check(true, "with bob's off too, the message has no chips");
+
 // Alice deletes a message of her own: an in-page confirmation, then both
 // sides show it removed, in the conversation and in the list.
 const ownWith = (body) =>
@@ -294,6 +346,9 @@ const ownWith = (body) =>
 await fill(alice, "text", "oops wrong chat");
 await bob.waitFor(`${qa("message")}.some(li => li.querySelector(".text").textContent === "oops wrong chat")`);
 await alice.waitFor(`!!${ownWith("oops wrong chat")}`);
+await react(bob, "oops wrong chat", "😮");
+await alice.waitFor(chipShows("oops wrong chat", "😮", 1, false));
+check(true, "bob reacted to the message about to be deleted");
 check(
   await alice.eval(
     `${qa("message")}.filter(li => !li.classList.contains("mine")).every(li => !li.querySelector('[data-testid="delete-message"]'))`,
@@ -323,6 +378,11 @@ await bob.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.querySelector(".last").textContent === "Message removed")`,
 );
 check(true, "bob sees the message removed, in the conversation and the list's preview");
+check(
+  (await alice.eval(`!document.querySelector('.message.removed [data-testid="reaction"]')`)) &&
+    (await bob.eval(`!document.querySelector('.message.removed [data-testid="reaction"]')`)),
+  "the removed message's reactions are gone on both sides",
+);
 
 // Back to the list on the phone.
 await alice.eval(click(".back"));
@@ -597,10 +657,9 @@ await ivy.waitFor(
 );
 await ivy.eval(click(".row"));
 await ivy.waitFor(has("notice", `${hankName} added you`));
-check(
-  await ivy.eval(`${qa("notice")}.length === 1 && !document.querySelector(".earlier")`),
-  "ivy sees the group from the notice that added her on",
-);
+// The history check settles once the first page is loaded.
+await ivy.waitFor(`${qa("notice")}.length === 1 && !document.querySelector(".earlier")`);
+check(await ivy.eval(`${qa("notice")}.length === 1`), "ivy sees the group from the notice that added her on");
 
 // Messages from all three, each shown with the sender's name to the others.
 await fill(gina, "text", "hello all");
@@ -611,6 +670,20 @@ await fill(ivy, "text", "ivy here");
 await gina.waitFor(fromSender(hankName, "hi from hank") + " && " + fromSender(ivyName, "ivy here"));
 await hank.waitFor(fromSender(ivyName, "ivy here"));
 check(true, "messages from several members arrive with their senders' names");
+// Hank and Ivy react to Gina's message: she sees the count from both, and who.
+await react(hank, "hello all", "❤️");
+await ivy.waitFor(chipShows("hello all", "❤️", 1, false));
+await react(ivy, "hello all", "❤️");
+await gina.waitFor(chipShows("hello all", "❤️", 2, false));
+await ivy.waitFor(chipShows("hello all", "❤️", 2, true));
+check(
+  (await gina.eval(`${chip("hello all", "❤️")}.title`)) === `${hankName}, ${ivyName}`,
+  "two members reacted with ❤️; the group shows a count of two, and who",
+);
+await gina.eval(`(${messageWith("hello all")}.click(), true)`);
+await gina.waitFor(`${text("reacted-by")} === ${JSON.stringify(`❤️ ${hankName}, ${ivyName}`)}`);
+check(true, "a tap on the message lists who reacted");
+await gina.eval(`(${messageWith("hello all")}.click(), true)`);
 check(
   await gina.eval(
     `${qa("notice")}.every(li => !li.querySelector('[data-testid="delete-message"]')) && ${qa("message")}.every(li => !!li.querySelector('[data-testid="delete-message"]') === li.classList.contains("mine"))`,

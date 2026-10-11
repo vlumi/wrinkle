@@ -1,16 +1,16 @@
 // A device's end-to-end keys at work: its key pair, the directory of other
 // devices' public keys, each conversation's epoch keys, and when a
-// conversation needs a new epoch. Sending seals through it and receiving
-// opens through it.
+// conversation needs a new epoch. Sending messages and reactions seals
+// through it and receiving opens through it.
 
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { MessageInitShape } from "@bufbuild/protobuf";
 import { BackendError } from "../connection/connection";
 import type { Connection } from "../connection/connection";
-import { ContentSchema } from "../gen/wrinkle/v1/content_pb";
+import { ContentSchema, ReactionsSchema } from "../gen/wrinkle/v1/content_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { ReceivedKey } from "../gen/wrinkle/v1/messaging_pb";
-import type { Device, Message, SealedSchema } from "../gen/wrinkle/v1/model_pb";
+import type { Device, Message, Sealed, SealedSchema } from "../gen/wrinkle/v1/model_pb";
 import { fromHex, hex, sameId } from "../ids";
 import * as crypto from "./crypto";
 import type { DeviceRef } from "./crypto";
@@ -254,22 +254,26 @@ export class Keys {
     return crypto.epochKey(raw);
   }
 
+  /** The conversation's key of the epoch, fetched if not held and not missing before. */
+  private async keyFor(conversationId: Uint8Array, epoch: number): Promise<CryptoKey | undefined> {
+    const id = hex(conversationId);
+    const missing = `${id}/${epoch}`;
+    const key = this.keyOf(id, epoch);
+    if (key || this.missing.has(missing) || epoch <= 0) return key;
+    return this.locked(id, async () => {
+      if (this.keyOf(id, epoch) || this.missing.has(missing)) return this.keyOf(id, epoch);
+      await this.fetchKeys(conversationId, Math.min(epoch - 1, this.highest(id)));
+      const got = this.keyOf(id, epoch);
+      if (!got) this.missing.add(missing);
+      return got;
+    });
+  }
+
   /** A sealed message's text, or null if this device cannot open it. */
   async open(m: Message): Promise<string | null> {
     if (m.content.case !== "sealed") return null;
     const sealed = m.content.value;
-    const id = hex(m.conversationId);
-    const missing = `${id}/${sealed.epoch}`;
-    let key = this.keyOf(id, sealed.epoch);
-    if (!key && !this.missing.has(missing) && sealed.epoch > 0) {
-      key = await this.locked(id, async () => {
-        if (this.keyOf(id, sealed.epoch) || this.missing.has(missing)) return this.keyOf(id, sealed.epoch);
-        await this.fetchKeys(m.conversationId, Math.min(sealed.epoch - 1, this.highest(id)));
-        const got = this.keyOf(id, sealed.epoch);
-        if (!got) this.missing.add(missing);
-        return got;
-      });
-    }
+    const key = await this.keyFor(m.conversationId, sealed.epoch);
     if (!key) return null;
     try {
       const plaintext = await crypto.open(key, sealed.nonce, sealed.ciphertext, {
@@ -280,6 +284,28 @@ export class Keys {
       });
       const content = fromBinary(ContentSchema, plaintext);
       return content.body.case === "text" ? content.body.value : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** A user's sealed reactions to a message, or null if this device cannot open them. */
+  async openReactions(
+    conversationId: Uint8Array,
+    seq: bigint,
+    reactorUserId: Uint8Array,
+    sealed: Sealed,
+  ): Promise<string[] | null> {
+    const key = await this.keyFor(conversationId, sealed.epoch);
+    if (!key) return null;
+    try {
+      const plaintext = await crypto.openReactions(key, sealed.nonce, sealed.ciphertext, {
+        conversationId,
+        epoch: sealed.epoch,
+        reactorUserId,
+        seq,
+      });
+      return fromBinary(ReactionsSchema, plaintext).emoji;
     } catch {
       return null;
     }
@@ -305,6 +331,20 @@ export class Keys {
       epoch,
       senderUserId: this.self.userId,
       clientMessageId,
+    });
+    return { epoch, nonce, ciphertext };
+  }
+
+  /** Seals the user's reactions to a message with the conversation's current epoch. */
+  async sealReactions(conversationId: Uint8Array, seq: bigint, emoji: string[]): Promise<SealedInit> {
+    const { epoch, key } = await this.locked(hex(conversationId), () => this.current(conversationId));
+    const nonce = crypto.randomBytes(crypto.NONCE_BYTES);
+    const plaintext = toBinary(ReactionsSchema, create(ReactionsSchema, { emoji }));
+    const ciphertext = await crypto.sealReactions(key, nonce, plaintext, {
+      conversationId,
+      epoch,
+      reactorUserId: this.self.userId,
+      seq,
     });
     return { epoch, nonce, ciphertext };
   }

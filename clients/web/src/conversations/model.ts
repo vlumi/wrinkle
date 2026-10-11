@@ -19,6 +19,8 @@ import {
 } from "../groups/model";
 import type { Users } from "../groups/model";
 import { hex, sameId } from "../ids";
+import { withListed, withoutMessage, withReaction } from "../reactions/model";
+import type { Reactions } from "../reactions/model";
 
 export interface Data {
   conversations: Record<string, Conversation>;
@@ -29,11 +31,19 @@ export interface Data {
   users: Users;
   /** Sealed messages' texts as this device opened them, by textKey; null for those it cannot open. */
   texts: Texts;
+  reactions: Reactions;
 }
 
 export type Texts = Record<string, string | null>;
 
-export const emptyData = (): Data => ({ conversations: {}, messages: {}, members: {}, users: {}, texts: {} });
+export const emptyData = (): Data => ({
+  conversations: {},
+  messages: {},
+  members: {},
+  users: {},
+  texts: {},
+  reactions: {},
+});
 
 /** The key of a message's text: its conversation and seq. */
 export const textKey = (m: { conversationId: Uint8Array; seq: bigint }): string => `${hex(m.conversationId)}/${m.seq}`;
@@ -136,6 +146,19 @@ export function addMessages(data: Data, conversationId: Uint8Array, messages: Me
   return { ...data, messages: { ...data.messages, [id]: known } };
 }
 
+/** Records a page of history: its messages and their reactions. */
+export function addHistory(data: Data, conversationId: Uint8Array, messages: Message[]): Data {
+  const next = addMessages(data, conversationId, messages);
+  let reactions = next.reactions;
+  for (const m of messages) {
+    const k = textKey(m);
+    reactions = isDeleted(next.messages[key(conversationId)][key(m.seq)])
+      ? withoutMessage(reactions, k)
+      : withListed(reactions, k, m.reactions);
+  }
+  return reactions === next.reactions ? next : { ...next, reactions };
+}
+
 /** Records a message as the conversation's latest if it is newer. */
 export function noteLatest(data: Data, m: Message, readByMe: boolean): Data {
   const c = data.conversations[key(m.conversationId)];
@@ -151,7 +174,8 @@ export function noteLatest(data: Data, m: Message, readByMe: boolean): Data {
 /** Marks a message deleted, in the conversation and in the list's preview. */
 export function withDeleted(data: Data, conversationId: Uint8Array, seq: bigint, deletedAt?: Timestamp): Data {
   const id = key(conversationId);
-  let next = data;
+  const reactions = withoutMessage(data.reactions, textKey({ conversationId, seq }));
+  let next = reactions === data.reactions ? data : { ...data, reactions };
   const m = data.messages[id]?.[key(seq)];
   if (m && !isDeleted(m)) {
     next = {
@@ -222,6 +246,11 @@ export function applyEvent(data: Data, event: Event, me: Uint8Array): Applied {
       const d = event.body.value;
       const known = !!data.conversations[key(d.conversationId)];
       return { data: withDeleted(data, d.conversationId, d.seq, d.deletedAt), unknownConversation: !known };
+    }
+    case "reaction": {
+      const r = event.body.value;
+      const reactions = withReaction(data.reactions, textKey(r), r.userId, r.sealed, r.updatedAt);
+      return { data: reactions === data.reactions ? data : { ...data, reactions }, unknownConversation: false };
     }
     case "profile": {
       const u = event.body.value.user;

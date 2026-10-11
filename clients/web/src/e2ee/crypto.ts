@@ -1,6 +1,6 @@
 // The end-to-end cryptography of content.proto with WebCrypto: device key
-// pairs, wrapping epoch keys, sealing content, fingerprints and safety
-// numbers. Nonces are parameters so the shared test vectors can fix them.
+// pairs, wrapping epoch keys, sealing content and reactions, fingerprints
+// and safety numbers. Nonces are parameters so the shared test vectors can fix them.
 
 /** A byte array WebCrypto accepts. */
 export type Bytes = Uint8Array<ArrayBuffer>;
@@ -8,6 +8,7 @@ export type Bytes = Uint8Array<ArrayBuffer>;
 const encoder = new TextEncoder();
 const WRAP_INFO = encoder.encode("wrinkle wrap v1");
 const CONTENT_AAD = encoder.encode("wrinkle content v1");
+const REACTION_AAD = encoder.encode("wrinkle reaction v1");
 const FINGERPRINT = encoder.encode("wrinkle fingerprint v1");
 // The DER prefix of a PKCS #8 X25519 private key; the 32-byte scalar follows.
 const PKCS8_X25519 = Uint8Array.of(
@@ -183,6 +184,36 @@ export async function seal(key: CryptoKey, nonce: Uint8Array, plaintext: Uint8Ar
 /** The serialized Content; rejects if the ciphertext or its context was changed. */
 export async function open(key: CryptoKey, nonce: Uint8Array, ciphertext: Uint8Array, p: SealParams): Promise<Bytes> {
   return decrypt(key, nonce, ciphertext, contentAad(p));
+}
+
+export interface ReactionParams {
+  conversationId: Uint8Array;
+  epoch: number;
+  reactorUserId: Uint8Array;
+  seq: bigint;
+}
+
+export const reactionAad = (p: ReactionParams): Bytes =>
+  concat(REACTION_AAD, p.conversationId, u32(p.epoch), p.reactorUserId, u64(p.seq));
+
+/** The ciphertext, with its tag, of serialized Reactions. */
+export async function sealReactions(
+  key: CryptoKey,
+  nonce: Uint8Array,
+  plaintext: Uint8Array,
+  p: ReactionParams,
+): Promise<Bytes> {
+  return encrypt(key, nonce, plaintext, reactionAad(p));
+}
+
+/** The serialized Reactions; rejects if the ciphertext or its context was changed. */
+export async function openReactions(
+  key: CryptoKey,
+  nonce: Uint8Array,
+  ciphertext: Uint8Array,
+  p: ReactionParams,
+): Promise<Bytes> {
+  return decrypt(key, nonce, ciphertext, reactionAad(p));
 }
 
 export interface DeviceKey {
