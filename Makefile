@@ -11,6 +11,15 @@ export JAVA_HOME := $(shell /usr/libexec/java_home -v 25 2>/dev/null)
 
 GO_BACKEND := $(CURDIR)/bin/wrinkle
 JAVA_BACKEND := $(CURDIR)/backends/java/build/install/wrinkle/bin/wrinkle
+# Each backend shape as the one command conformance and measurement start: it
+# serves ws://localhost:8080/v1/ws, with its services beside it when split.
+SHAPE_go-mono := $(GO_BACKEND)
+SHAPE_java-mono := $(JAVA_BACKEND)
+SHAPE_go-gw := $(CURDIR)/backends/go/split.sh
+SHAPE_java-gw := $(CURDIR)/backends/java/split.sh
+SHAPE_elixir-gw := $(CURDIR)/backends/elixir/run.sh
+SHAPE_rust-gw := $(CURDIR)/backends/rust/run.sh
+SHAPES := go-mono go-gw java-mono java-gw elixir-gw rust-gw
 GRADLE := cd backends/java && ./gradlew --quiet --console=plain
 CARGO := cd backends/rust && cargo
 MIX := cd backends/elixir && mix
@@ -19,9 +28,13 @@ NPM := cd clients/web && npm
 GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
-IOS_SWIFT := Packages/WrinkleCore/Sources/WrinkleCore/Transport Packages/WrinkleCore/Sources/WrinkleCore/Storage Packages/WrinkleCore/Sources/WrinkleKit Packages/WrinkleCore/Tests Sources
+# Every Swift source but the generated contract, relative to clients/ios.
+IOS_SWIFT = $(shell cd clients/ios && find Packages Sources -name '*.swift' -not -path '*/Contract/*' -not -path '*/.build*')
 # Generated code is committed; proto-check fails when it is stale.
 GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto clients/web/src/gen
+SH_FILES = $(shell git ls-files --cached --others --exclude-standard '*.sh')
+SHFMT := -i 2 -ci
+HAPROXY_CHECK := docker run --rm -v $(CURDIR)/infra/haproxy:/cfg:ro --add-host host.docker.internal:host-gateway haproxy:3.4.6 haproxy -q -c -f
 
 .PHONY: help
 help:
@@ -75,10 +88,10 @@ INSTANCE ?= 1
 
 .PHONY: run-go-services run-java-services run-go-gw run-java-gw run-elixir-gw run-rust-gw
 run-go-services: build-go  ## Go services and fan-out, instance INSTANCE (RPC on :9100+n)
-	INSTANCE=$(INSTANCE) backends/go/services.sh $(ARGS)
+	INSTANCE=$(INSTANCE) backends/services.sh go $(ARGS)
 
 run-java-services: build-java  ## Java services and fan-out, instance INSTANCE; no pushes yet
-	INSTANCE=$(INSTANCE) backends/java/services.sh $(ARGS)
+	INSTANCE=$(INSTANCE) backends/services.sh java $(ARGS)
 
 run-go-gw: build-go  ## Go gateway on :8180
 	backends/gateway.sh go $(PORT)
@@ -184,7 +197,7 @@ format:  ## Rewrite sources with each language's formatter
 
 test: go-test java-test elixir-test rust-test web-unit  ## Unit tests for everything
 
-conformance: conformance-go conformance-go-split conformance-java conformance-java-split conformance-elixir conformance-rust  ## The conformance tests against every backend
+conformance: $(SHAPES:%=conformance-%)  ## The conformance tests against every backend shape
 
 smoke: infra-up  ## The change-data path: an outbox insert reaches Kafka
 	infra/smoke-test.sh
@@ -195,26 +208,20 @@ web-test: infra-up web-deps build-go  ## The web client in headless Chrome again
 ios-test: infra-up build-go  ## The iOS client's package tests, headless, against the Go backend
 	clients/ios/Scripts/test-backend.sh $(GO_BACKEND)
 
-##~ conformance-go, -go-split, -java, -java-split, -elixir, -rust test one backend.
+##~ conformance-go-mono, -go-gw, -java-mono, -java-gw, -elixir-gw, -rust-gw test one shape.
 
-.PHONY: conformance-go conformance-go-split conformance-java conformance-java-split conformance-elixir conformance-rust
-conformance-go: infra-up build-go
-	conformance/run.sh $(GO_BACKEND)
+# What each shape needs built: Go's services run beside every gateway but Java's.
+NEEDS_go-mono := build-go
+NEEDS_go-gw := build-go
+NEEDS_java-mono := build-java
+NEEDS_java-gw := build-java
+NEEDS_elixir-gw := build-go elixir-deps
+NEEDS_rust-gw := build-go build-rust
 
-conformance-go-split: infra-up build-go
-	conformance/run.sh $(CURDIR)/backends/go/split.sh
-
-conformance-java: infra-up build-java
-	conformance/run.sh $(JAVA_BACKEND)
-
-conformance-java-split: infra-up build-java
-	conformance/run.sh $(CURDIR)/backends/java/split.sh
-
-conformance-elixir: infra-up build-go elixir-deps
-	conformance/run.sh $(CURDIR)/backends/elixir/run.sh
-
-conformance-rust: infra-up build-go build-rust
-	conformance/run.sh $(CURDIR)/backends/rust/run.sh
+.PHONY: $(SHAPES:%=conformance-%)
+.SECONDEXPANSION:
+$(SHAPES:%=conformance-%): conformance-%: infra-up $$(NEEDS_%)
+	conformance/run.sh $(SHAPE_$*)
 
 ##@ Measure (docs/measuring.md)
 
@@ -222,31 +229,24 @@ CONNECTIONS ?= 1000
 RATE ?= 500
 DURATION ?= 30s
 
-.PHONY: load measure-go-mono measure-go-gw measure-java-mono measure-java-gw measure-elixir-gw measure-rust-gw measure-all
+.PHONY: load measure-all $(SHAPES:%=measure-%)
 load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s)
 	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s
 
-measure-all: measure-go-mono measure-go-gw measure-java-mono measure-java-gw measure-elixir-gw measure-rust-gw  ## The protocol against every backend, each from a fresh stack (about an hour)
+measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape, each from a fresh stack (about an hour)
 
 ##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw run the protocol for one (about 10 minutes each).
 
-measure-go-mono: infra-up build-go
-	FRESH=1 LABEL=go loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go.jsonl $(GO_BACKEND)
+# The labels name the results files, as in the earlier write-ups.
+LABEL_go-mono := go
+LABEL_java-mono := java
+LABEL_go-gw := go-gateway
+LABEL_java-gw := java-gateway
+LABEL_elixir-gw := elixir
+LABEL_rust-gw := rust
 
-measure-go-gw: infra-up build-go
-	FRESH=1 LABEL=go-gateway loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-go-gateway.jsonl $(CURDIR)/backends/go/split.sh
-
-measure-java-mono: infra-up build-java
-	FRESH=1 LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
-
-measure-java-gw: infra-up build-java
-	FRESH=1 LABEL=java-gateway loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java-gateway.jsonl $(CURDIR)/backends/java/split.sh
-
-measure-elixir-gw: infra-up build-go elixir-deps
-	FRESH=1 LABEL=elixir loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-elixir.jsonl $(CURDIR)/backends/elixir/run.sh
-
-measure-rust-gw: infra-up build-go build-rust
-	FRESH=1 LABEL=rust loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-rust.jsonl $(CURDIR)/backends/rust/run.sh
+$(SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
+	FRESH=1 LABEL=$(LABEL_$*) loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-$(LABEL_$*).jsonl $(SHAPE_$*)
 
 ##@ Contract
 
@@ -327,16 +327,12 @@ ios-lint:
 	cd clients/ios && swiftlint lint --strict --quiet
 	cd clients/ios && swift format lint --strict --recursive --configuration .swift-format $(IOS_SWIFT)
 
-SH_FILES = $(shell git ls-files '*.sh')
-SHFMT := -i 2 -ci
-HAPROXY_CHECK := docker run --rm -v $(CURDIR)/infra/haproxy:/cfg:ro --add-host host.docker.internal:host-gateway haproxy:3.4.6 haproxy -q -c -f
-
 shell-lint:
 	shellcheck $(SH_FILES)
 	shfmt -d $(SHFMT) $(SH_FILES)
 
 docker-lint:
-	hadolint $(shell git ls-files '*Dockerfile')
+	hadolint $(shell git ls-files --cached --others --exclude-standard '*Dockerfile')
 
 # The Compose files and the balancers' configurations parse.
 infra-lint:
