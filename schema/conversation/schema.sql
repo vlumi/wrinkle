@@ -90,6 +90,8 @@ CREATE TABLE message (
   -- The outbox row that carried the message, which identifies its copies
   -- in the members' logs.
   outbox_id BIGINT UNSIGNED NOT NULL,
+  -- The attachment blobs, 16 bytes each; empty once deleted.
+  blob_ids VARBINARY(160) NOT NULL DEFAULT '',
   PRIMARY KEY (conversation_id, seq),
   -- Resending with the same client id finds the stored message.
   UNIQUE KEY message_client_id (conversation_id, sender_user_id, client_message_id)
