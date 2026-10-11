@@ -45,6 +45,7 @@ final class Conn {
   private final WebSocketWriter out;
   private final String remote;
   private final long openedAt;
+  private volatile long connectBy;
   // Touched only by the inbound stream, which delivers one frame at a time.
   private final TokenBucket tokens;
   private final AckCoalescer acks;
@@ -57,9 +58,9 @@ final class Conn {
   // Touched only by the sweep.
   private long lastPing;
   private volatile boolean connected;
-  private volatile boolean pushUnavailable;
   // Guarded by this.
   private boolean left;
+  private boolean releasing;
   private volatile long userId;
   private volatile long deviceId;
 
@@ -69,6 +70,7 @@ final class Conn {
     this.out = out;
     this.remote = remote;
     this.openedAt = System.nanoTime();
+    this.connectBy = openedAt + CONNECT_DEADLINE_NANOS;
     this.lastReceived = openedAt;
     this.lastPing = openedAt;
     this.tokens = new TokenBucket(RATE_BURST, RATE_PER_SECOND, openedAt);
@@ -155,10 +157,6 @@ final class Conn {
           try {
             Response resp = dispatch(req);
             respond(req, resp, start);
-            if (req.hasConnect() && pushUnavailable) {
-              // Attached, but pushes cannot reach it; the device reconnects.
-              close(WebSocketCloseStatus.TRY_AGAIN_LATER, "push channel unavailable");
-            }
           } finally {
             inFlight.decrementAndGet();
             connections.requestFinished();
@@ -246,7 +244,7 @@ final class Conn {
     if (closed.get()) {
       return;
     }
-    if (!connected && now - openedAt >= CONNECT_DEADLINE_NANOS) {
+    if (!connected && now - connectBy >= 0) {
       close(WebSocketCloseStatus.POLICY_VIOLATION, "connect first");
     } else if (now - lastReceived >= IDLE_TIMEOUT_NANOS) {
       close(WebSocketCloseStatus.ENDPOINT_UNAVAILABLE, "idle");
@@ -262,7 +260,7 @@ final class Conn {
       return false;
     }
     left = true;
-    return connected;
+    return connected && !releasing;
   }
 
   private void writeAck(long cursor) {
@@ -312,11 +310,11 @@ final class Conn {
         subscribed.get(SUBSCRIBE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
-        pushUnavailable = true;
+        unattached();
         return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
       } catch (ExecutionException | TimeoutException e) {
         log.warn("push subscription of user {} not ready: {}", userId, e.toString());
-        pushUnavailable = true;
+        unattached();
         return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
       }
     }
@@ -335,6 +333,26 @@ final class Conn {
     deviceId = resp.getDeviceId();
     connected = true;
     return connections.attach(this);
+  }
+
+  /**
+   * Not connected after all: Connect may be retried, within a fresh deadline. A connection that has
+   * left is released by its close instead.
+   */
+  private void unattached() {
+    synchronized (this) {
+      if (left) {
+        return;
+      }
+      // Still connected meanwhile, so a second Connect is refused until the release is done.
+      releasing = true;
+    }
+    connections.release(this);
+    synchronized (this) {
+      releasing = false;
+      connected = false;
+      connectBy = System.nanoTime() + CONNECT_DEADLINE_NANOS;
+    }
   }
 
   @Override

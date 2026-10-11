@@ -81,9 +81,13 @@ final class Connections {
   }
 
   private void detach(Conn c) {
-    if (!c.leave()) {
-      return;
+    if (c.leave()) {
+      release(c);
     }
+  }
+
+  /** Undoes an attach: of a connection that has left, or of a Connect that did not complete. */
+  void release(Conn c) {
     Set<Conn> conns = byUser.get(c.userId());
     if (conns != null) {
       synchronized (conns) {
