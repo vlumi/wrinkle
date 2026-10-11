@@ -11,9 +11,11 @@ Wrinkle is a prototype one-to-one messaging backend, implemented in several lang
 - SQL keywords and types in uppercase; table and column names in lowercase snake_case.
 - Comments: minimal, English, en-US spelling.
 - Measurement results always record the date, commit, machine, and configuration. Never compare numbers taken on different machines or infrastructure settings.
-- Run the full local CI, `make ci`, before every push to `main`, and only push when it passes. It runs formatting checks, linters and unit tests for every implementation, then the conformance tests against each backend on the local infrastructure. The repository is private, so hosted CI is limited; local CI is the gate.
+- Run the full local CI, `make ci`, before every push to `main`, and only push when it passes. It runs formatting checks, linters and unit tests for every implementation, then the conformance tests against each backend and the client tests on the local infrastructure. The repository is private, so hosted CI is limited; local CI is the gate.
+- Routine operations are make targets with a `##` description under a `##@` group, so plain `make` lists them; scripts do the work, the Makefile names it. A new backend variant, client or measurement gets its targets.
+- Local, uncommitted settings (the Apple team, the APNs key) live in `.env` at the root, documented in `.env.example`; never commit secrets or keys.
 - Commit and push to `main` directly when something works; frequent small commits, no pull requests.
 
 ## Toolchains
 
-Go (current stable), Java 25, Swift 6 with Xcode, Elixir and Rust (current stable) when their phases start. Docker Desktop needs at least 8 GB of memory; 12 GB to run two backends side by side.
+Latest stable or LTS of everything: Go, JDK 25 (Homebrew `openjdk@25`, found through `java_home`), Elixir on current OTP, Rust through rustup, Node 22 or later, Xcode 26 with Swift 6. `make tools` installs the code generators and linters. Docker Desktop needs at least 8 GB of memory; 12 GB to run two backends side by side.
