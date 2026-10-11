@@ -13,6 +13,7 @@ defmodule Wrinkle.Push do
   """
   use GenServer
   import Bitwise
+  require Logger
 
   @pubsub Wrinkle.ValkeyPubSub
   @channel_prefix "push:"
@@ -32,6 +33,39 @@ defmodule Wrinkle.Push do
   def event_frame(payload) do
     <<0x1A, varint(byte_size(payload))::binary, payload::binary>>
   end
+
+  @doc """
+  Decodes a message on a user's push channel, a wrinkle.backend.v1.Push,
+  without decoding its event: `{:event, frame}` with the event wrapped in a
+  Frame, `{:signed_out, device_ids | :all}`, or `:error`. A Push of only an
+  event differs from the Frame that carries it only in the field number,
+  Push.event being field 1, so the common case swaps the tag.
+  """
+  def decode(<<0x0A, rest::binary>> = payload) do
+    case read_varint(rest, 0, 0) do
+      {len, event} when byte_size(event) == len -> {:event, <<0x1A, rest::binary>>}
+      _ -> decode_push(payload)
+    end
+  end
+
+  def decode(payload), do: decode_push(payload)
+
+  defp decode_push(payload) do
+    case Wrinkle.Backend.V1.Push.decode(payload) do
+      %{kind: {:event, event}} -> {:event, event_frame(event)}
+      %{kind: {:signed_out, %{all_devices: true}}} -> {:signed_out, :all}
+      %{kind: {:signed_out, %{device_ids: ids}}} -> {:signed_out, ids}
+      _ -> :error
+    end
+  rescue
+    Protobuf.DecodeError -> :error
+  end
+
+  defp read_varint(<<1::1, b::7, rest::binary>>, shift, acc) when shift < 63,
+    do: read_varint(rest, shift + 7, acc ||| b <<< shift)
+
+  defp read_varint(<<0::1, b::7, rest::binary>>, shift, acc), do: {acc ||| b <<< shift, rest}
+  defp read_varint(_, _, _), do: :error
 
   defp varint(n) when n < 128, do: <<n>>
   defp varint(n), do: <<1::1, n &&& 0x7F::7, varint(n >>> 7)::binary>>
@@ -80,8 +114,16 @@ defmodule Wrinkle.Push do
       ) do
     with {:ok, user_id} <- Base.decode16(id, case: :lower),
          %{pids: pids} <- state.users[user_id] do
-      frame = event_frame(payload)
-      for pid <- pids, do: send(pid, {:push, frame})
+      case decode(payload) do
+        {:event, frame} ->
+          for pid <- pids, do: send(pid, {:push, frame})
+
+        {:signed_out, devices} ->
+          for pid <- pids, do: send(pid, {:signed_out, devices})
+
+        :error ->
+          Logger.warning("undecodable push for user #{id} dropped")
+      end
     end
 
     {:noreply, state}

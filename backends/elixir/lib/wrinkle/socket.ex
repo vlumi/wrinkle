@@ -22,6 +22,7 @@ defmodule Wrinkle.Socket do
   @max_mailbox @outbound_queue + @max_in_flight
 
   @shutting_down {1001, "shutting down"}
+  @signed_out {4001, "signed out"}
 
   @doc "Sends a message to every open connection on this node."
   def broadcast(message) do
@@ -133,6 +134,14 @@ defmodule Wrinkle.Socket do
     else
       Metrics.pushed()
       {:push, {:binary, frame}, state}
+    end
+  end
+
+  def handle_info({:signed_out, devices}, %{device: {_, device_id}} = state) do
+    if devices == :all or device_id in devices do
+      {:stop, :normal, @signed_out, state}
+    else
+      {:ok, state}
     end
   end
 

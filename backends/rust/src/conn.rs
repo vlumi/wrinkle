@@ -44,6 +44,7 @@ const POLICY_VIOLATION: u16 = 1008;
 const MESSAGE_TOO_BIG: u16 = 1009;
 const INTERNAL_ERROR: u16 = 1011;
 const TRY_AGAIN_LATER: u16 = 1013;
+const SIGNED_OUT: u16 = 4001;
 
 /// What the writer sends.
 enum Out {
@@ -86,6 +87,11 @@ impl Link {
     /// the device's own requests; false once the writer is gone.
     async fn respond(&self, frame: Bytes) -> bool {
         self.queue.send(Out::Frame(frame)).await.is_ok()
+    }
+
+    /// Closes the connection of a device signed out.
+    pub fn sign_out(&self) {
+        self.close(SIGNED_OUT, "signed out");
     }
 
     /// Has the writer send a close frame and stop; the first close wins and
@@ -505,7 +511,7 @@ impl Conn {
         if !self
             .app
             .push
-            .attach(device.user_id, self.link.clone())
+            .attach(device.user_id, device.device_id, self.link.clone())
             .await
         {
             tracing::warn!("push subscription not ready, connect refused");
@@ -681,6 +687,11 @@ impl request::Body {
             Self::ChangePassword(_) => "change_password",
             Self::UpdateProfile(_) => "update_profile",
             Self::SignOut(_) => "sign_out",
+            Self::ListDevices(_) => "list_devices",
+            Self::RenameDevice(_) => "rename_device",
+            Self::SignOutDevice(_) => "sign_out_device",
+            Self::DeleteAccount(_) => "delete_account",
+            Self::CreateUpload(_) => "create_upload",
         }
     }
 }
