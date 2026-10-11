@@ -58,6 +58,28 @@ func TestConnectTwice(t *testing.T) {
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
 }
 
+func TestConnectTwiceConcurrently(t *testing.T) {
+	c := dial(t)
+	name := uniqueName(t, "racer")
+	errs := make(chan error, 2)
+	for range 2 {
+		go func() {
+			_, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: name})
+			errs <- err
+		}()
+	}
+	var failed []error
+	for range 2 {
+		if err := <-errs; err != nil {
+			failed = append(failed, err)
+		}
+	}
+	if len(failed) != 1 {
+		t.Fatalf("want exactly one of two concurrent connects to fail, got errors %v", failed)
+	}
+	wantCode(t, failed[0], pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
+}
+
 func TestPing(t *testing.T) {
 	c := dial(t)
 	if err := c.Ping(ctx(t)); err != nil {

@@ -60,7 +60,8 @@ func TestListConversations(t *testing.T) {
 	if c = findConversation(t, b, conv); c.GetReadSeq() != 2 {
 		t.Fatalf("reader's own read_seq: %v", c)
 	}
-	if c = findConversation(t, a, conv); c.GetPeerReadSeq() != 2 || c.GetReadSeq() != 0 {
+	// The sender's own position moved with each send.
+	if c = findConversation(t, a, conv); c.GetPeerReadSeq() != 2 || c.GetReadSeq() != 2 {
 		t.Fatalf("peer's read position: %v", c)
 	}
 }
@@ -98,5 +99,27 @@ func TestListOrdersByActivity(t *testing.T) {
 	}
 	if list[0].GetConversationId() != withC.GetConversationId() {
 		t.Fatalf("expected the newly active conversation first: %v", list)
+	}
+}
+
+func TestSendingMarksOwnMessageRead(t *testing.T) {
+	a, b, conv := pair(t)
+	if _, err := b.SendMessage(ctx(t), conv, "m1", "from b"); err != nil {
+		t.Fatal(err)
+	}
+	messageEvent(t, a, conv, 1)
+	messageEvent(t, b, conv, 1)
+	if _, err := a.SendMessage(ctx(t), conv, "m2", "from a"); err != nil {
+		t.Fatal(err)
+	}
+	// Once the sender's own log has the message, so has the sender's list.
+	messageEvent(t, a, conv, 2)
+	c := findConversation(t, a, conv)
+	if c.GetLastSeq() != 2 || c.GetReadSeq() != 2 {
+		t.Fatalf("after sending, the sender's list should show it read: last %d, read %d", c.GetLastSeq(), c.GetReadSeq())
+	}
+	messageEvent(t, b, conv, 2)
+	if c := findConversation(t, b, conv); c.GetReadSeq() != 1 {
+		t.Fatalf("the peer's read position moved: %d", c.GetReadSeq())
 	}
 }

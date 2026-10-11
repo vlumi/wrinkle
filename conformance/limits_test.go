@@ -44,9 +44,10 @@ func wantClose(t *testing.T, ws *websocket.Conn, want websocket.StatusCode) {
 
 func TestOversizedFrameCloses(t *testing.T) {
 	ws := rawDial(t)
-	if err := ws.Write(ctx(t), websocket.MessageBinary, make([]byte, 64*1024+1)); err != nil {
-		t.Fatal(err)
-	}
+	// The server may close before it has read the whole frame, which can
+	// fail the write; the close frame is what counts, so read meanwhile.
+	c := ctx(t)
+	go func() { _ = ws.Write(c, websocket.MessageBinary, make([]byte, 64*1024+1)) }()
 	wantClose(t, ws, websocket.StatusMessageTooBig)
 }
 
