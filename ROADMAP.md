@@ -128,6 +128,8 @@ Options, cheapest first:
 
 ## Later
 
+- [ ] The change-data path does not survive a restart of the Vitess container on its existing data: vtcombo comes back without a primary tablet for streaming, and Debezium retries forever. `make infra-reset` recovers. Rebuilding the image (a change under `infra/vitess/`) restarts it; so does Docker Desktop restarting.
+
 - [ ] A second Go gateway beside the current one, without a goroutine per connection (a poller-driven WebSocket library), to see how far the idle memory per connection falls when the model changes; see `docs/results/2026-10-10-idle-memory.md`.
 
 ## Before making the repository public
