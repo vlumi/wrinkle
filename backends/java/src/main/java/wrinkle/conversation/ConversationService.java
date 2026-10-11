@@ -1,18 +1,17 @@
 package wrinkle.conversation;
 
-import com.google.protobuf.Timestamp;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Ids;
+import wrinkle.Sql;
+import wrinkle.Timestamps;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageEvent;
@@ -34,58 +33,56 @@ public final class ConversationService {
     this.db = db;
   }
 
-  public static LocalDateTime now() {
-    return LocalDateTime.now(ZoneOffset.UTC);
-  }
-
-  public static Timestamp toProto(LocalDateTime t) {
-    Instant i = t.toInstant(ZoneOffset.UTC);
-    return Timestamp.newBuilder().setSeconds(i.getEpochSecond()).setNanos(i.getNano()).build();
-  }
-
-  public static LocalDateTime fromProto(Timestamp t) {
-    return LocalDateTime.ofEpochSecond(t.getSeconds(), t.getNanos(), ZoneOffset.UTC);
-  }
-
   /** Creates the conversation between two users if it does not exist. */
   public void ensure(long conversationId, long userA, long userB) throws SQLException {
-    try (Connection c = db.getConnection();
-        PreparedStatement ps =
-            c.prepareStatement(
-                "INSERT IGNORE INTO conversation (conversation_id, user_a, user_b, last_seq,"
-                    + " created_at) VALUES (?, ?, ?, 0, ?)")) {
-      ps.setLong(1, conversationId);
-      ps.setLong(2, userA);
-      ps.setLong(3, userB);
-      ps.setObject(4, now());
-      ps.executeUpdate();
+    try (Connection c = db.getConnection()) {
+      Sql.update(
+          c,
+          "INSERT IGNORE INTO conversation (conversation_id, user_a, user_b, last_seq, created_at)"
+              + " VALUES (?, ?, ?, 0, ?)",
+          conversationId,
+          userA,
+          userB,
+          Timestamps.now());
     }
   }
 
   private record Header(long userA, long userB, long lastSeq) {
-    boolean has(long userId) {
+    boolean includes(long userId) {
       return userId == userA || userId == userB;
     }
   }
 
-  private static Header lock(Connection c, long conversationId, long userId, boolean forUpdate)
+  /** The conversation's header, locked for the transaction, if the user is in it. */
+  private static Header lockHeader(Connection c, long conversationId, long userId)
+      throws SQLException {
+    return header(c, conversationId, userId, " FOR UPDATE");
+  }
+
+  /** The conversation's header, if the user is in it. */
+  private static Header readHeader(Connection c, long conversationId, long userId)
+      throws SQLException {
+    return header(c, conversationId, userId, "");
+  }
+
+  private static Header header(Connection c, long conversationId, long userId, String locking)
       throws SQLException {
     try (PreparedStatement ps =
-        c.prepareStatement(
-            "SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ?"
-                + (forUpdate ? " FOR UPDATE" : ""))) {
-      ps.setLong(1, conversationId);
-      try (ResultSet rs = ps.executeQuery()) {
-        if (!rs.next()) {
-          throw ApiError.notFound("conversation " + conversationId + " does not exist");
-        }
-        Header h = new Header(rs.getLong(1), rs.getLong(2), rs.getLong(3));
-        if (!h.has(userId)) {
-          throw ApiError.permissionDenied(
-              "user " + userId + " is not in conversation " + conversationId);
-        }
-        return h;
+            Sql.prepare(
+                c,
+                "SELECT user_a, user_b, last_seq FROM conversation WHERE conversation_id = ?"
+                    + locking,
+                conversationId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw ApiError.notFound("conversation " + conversationId + " does not exist");
       }
+      Header h = new Header(rs.getLong(1), rs.getLong(2), rs.getLong(3));
+      if (!h.includes(userId)) {
+        throw ApiError.permissionDenied(
+            "user " + userId + " is not in conversation " + conversationId);
+      }
+      return h;
     }
   }
 
@@ -105,64 +102,76 @@ public final class ConversationService {
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
       try {
-        Header h = lock(c, conversationId, userId, true);
-        Message.Builder msg =
+        Header h = lockHeader(c, conversationId, userId);
+        Message stored = findSent(c, userId, conversationId, clientMessageId);
+        if (stored != null) {
+          c.rollback();
+          return stored;
+        }
+        LocalDateTime sentAt = Timestamps.now();
+        long seq = h.lastSeq() + 1;
+        Message msg =
             Message.newBuilder()
                 .setConversationId(conversationId)
+                .setSeq(seq)
                 .setSenderUserId(userId)
                 .setClientMessageId(clientMessageId)
-                .setText(text);
-        try (PreparedStatement ps =
-            c.prepareStatement(
-                "SELECT seq, body, sent_at FROM message WHERE conversation_id = ? AND"
-                    + " sender_user_id = ? AND client_message_id = ?")) {
-          ps.setLong(1, conversationId);
-          ps.setLong(2, userId);
-          ps.setString(3, clientMessageId);
-          try (ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-              c.rollback();
-              return msg.setSeq(rs.getLong(1))
-                  .setText(rs.getString(2))
-                  .setSentAt(toProto(rs.getObject(3, LocalDateTime.class)))
-                  .build();
-            }
-          }
-        }
-        LocalDateTime sentAt = now();
-        long seq = h.lastSeq() + 1;
-        msg.setSeq(seq).setSentAt(toProto(sentAt));
-        try (PreparedStatement ps =
-            c.prepareStatement("UPDATE conversation SET last_seq = ? WHERE conversation_id = ?")) {
-          ps.setLong(1, seq);
-          ps.setLong(2, conversationId);
-          ps.executeUpdate();
-        }
-        try (PreparedStatement ps =
-            c.prepareStatement(
-                "INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id,"
-                    + " body, sent_at) VALUES (?, ?, ?, ?, ?, ?)")) {
-          ps.setLong(1, conversationId);
-          ps.setLong(2, seq);
-          ps.setLong(3, userId);
-          ps.setString(4, clientMessageId);
-          ps.setString(5, text);
-          ps.setObject(6, sentAt);
-          ps.executeUpdate();
-        }
-        Message built = msg.build();
+                .setText(text)
+                .setSentAt(Timestamps.toProto(sentAt))
+                .build();
+        Sql.update(
+            c,
+            "UPDATE conversation SET last_seq = ? WHERE conversation_id = ?",
+            seq,
+            conversationId);
+        Sql.update(
+            c,
+            "INSERT INTO message (conversation_id, seq, sender_user_id, client_message_id, body,"
+                + " sent_at) VALUES (?, ?, ?, ?, ?, ?)",
+            conversationId,
+            seq,
+            userId,
+            clientMessageId,
+            text,
+            sentAt);
         Event event =
             Event.newBuilder()
-                .setOccurredAt(built.getSentAt())
-                .setMessage(MessageEvent.newBuilder().setMessage(built))
+                .setOccurredAt(msg.getSentAt())
+                .setMessage(MessageEvent.newBuilder().setMessage(msg))
                 .build();
         insertOutbox(c, h, conversationId, "message", event, sentAt);
         c.commit();
-        return built;
+        return msg;
       } catch (SQLException | RuntimeException e) {
         c.rollback();
         throw e;
       }
+    }
+  }
+
+  /** The message the user already sent with this client message id, or null. */
+  private static Message findSent(
+      Connection c, long userId, long conversationId, String clientMessageId) throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT seq, body, sent_at FROM message WHERE conversation_id = ? AND"
+                    + " sender_user_id = ? AND client_message_id = ?",
+                conversationId,
+                userId,
+                clientMessageId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        return null;
+      }
+      return Message.newBuilder()
+          .setConversationId(conversationId)
+          .setSeq(rs.getLong(1))
+          .setSenderUserId(userId)
+          .setClientMessageId(clientMessageId)
+          .setText(rs.getString(2))
+          .setSentAt(Timestamps.toProto(rs.getObject(3, LocalDateTime.class)))
+          .build();
     }
   }
 
@@ -174,43 +183,29 @@ public final class ConversationService {
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
       try {
-        Header h = lock(c, conversationId, userId, true);
+        Header h = lockHeader(c, conversationId, userId);
         if (seq > h.lastSeq()) {
           throw ApiError.invalidArgument(
               "seq " + seq + " is beyond the last message " + h.lastSeq());
         }
-        long current = 0;
-        try (PreparedStatement ps =
-            c.prepareStatement(
-                "SELECT seq FROM read_mark WHERE conversation_id = ? AND user_id = ? FOR UPDATE")) {
-          ps.setLong(1, conversationId);
-          ps.setLong(2, userId);
-          try (ResultSet rs = ps.executeQuery()) {
-            if (rs.next()) {
-              current = rs.getLong(1);
-            }
-          }
-        }
-        if (current >= seq) {
+        if (lockReadMark(c, userId, conversationId) >= seq) {
           c.rollback();
           return;
         }
-        LocalDateTime at = now();
-        try (PreparedStatement ps =
-            c.prepareStatement(
-                "INSERT INTO read_mark (conversation_id, user_id, seq, updated_at) VALUES (?, ?,"
-                    + " ?, ?) ON DUPLICATE KEY UPDATE seq = ?, updated_at = ?")) {
-          ps.setLong(1, conversationId);
-          ps.setLong(2, userId);
-          ps.setLong(3, seq);
-          ps.setObject(4, at);
-          ps.setLong(5, seq);
-          ps.setObject(6, at);
-          ps.executeUpdate();
-        }
+        LocalDateTime at = Timestamps.now();
+        Sql.update(
+            c,
+            "INSERT INTO read_mark (conversation_id, user_id, seq, updated_at) VALUES (?, ?, ?, ?)"
+                + " ON DUPLICATE KEY UPDATE seq = ?, updated_at = ?",
+            conversationId,
+            userId,
+            seq,
+            at,
+            seq,
+            at);
         Event event =
             Event.newBuilder()
-                .setOccurredAt(toProto(at))
+                .setOccurredAt(Timestamps.toProto(at))
                 .setRead(
                     ReadEvent.newBuilder()
                         .setConversationId(conversationId)
@@ -226,38 +221,47 @@ public final class ConversationService {
     }
   }
 
+  /** The user's read position, locked for the transaction; 0 before the first read mark. */
+  private static long lockReadMark(Connection c, long userId, long conversationId)
+      throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT seq FROM read_mark WHERE conversation_id = ? AND user_id = ? FOR UPDATE",
+                conversationId,
+                userId);
+        ResultSet rs = ps.executeQuery()) {
+      return rs.next() ? rs.getLong(1) : 0;
+    }
+  }
+
   /** Messages with seq below beforeSeq, newest first. */
   public List<Message> messages(long userId, long conversationId, long beforeSeq, int limit)
       throws SQLException {
+    long before = beforeSeq == 0 ? Long.MAX_VALUE : beforeSeq;
+    int pageSize = limit == 0 ? DEFAULT_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE);
     try (Connection c = db.getConnection()) {
-      lock(c, conversationId, userId, false);
-      if (beforeSeq == 0) {
-        beforeSeq = Long.MAX_VALUE;
-      }
-      if (limit == 0) {
-        limit = DEFAULT_PAGE_SIZE;
-      }
-      limit = Math.min(limit, MAX_PAGE_SIZE);
+      readHeader(c, conversationId, userId);
       try (PreparedStatement ps =
-          c.prepareStatement(
-              "SELECT seq, sender_user_id, client_message_id, body, sent_at FROM message WHERE"
-                  + " conversation_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?")) {
-        ps.setLong(1, conversationId);
-        ps.setLong(2, beforeSeq);
-        ps.setInt(3, limit);
+              Sql.prepare(
+                  c,
+                  "SELECT seq, sender_user_id, client_message_id, body, sent_at FROM message WHERE"
+                      + " conversation_id = ? AND seq < ? ORDER BY seq DESC LIMIT ?",
+                  conversationId,
+                  before,
+                  pageSize);
+          ResultSet rs = ps.executeQuery()) {
         List<Message> out = new ArrayList<>();
-        try (ResultSet rs = ps.executeQuery()) {
-          while (rs.next()) {
-            out.add(
-                Message.newBuilder()
-                    .setConversationId(conversationId)
-                    .setSeq(rs.getLong(1))
-                    .setSenderUserId(rs.getLong(2))
-                    .setClientMessageId(rs.getString(3))
-                    .setText(rs.getString(4))
-                    .setSentAt(toProto(rs.getObject(5, LocalDateTime.class)))
-                    .build());
-          }
+        while (rs.next()) {
+          out.add(
+              Message.newBuilder()
+                  .setConversationId(conversationId)
+                  .setSeq(rs.getLong(1))
+                  .setSenderUserId(rs.getLong(2))
+                  .setClientMessageId(rs.getString(3))
+                  .setText(rs.getString(4))
+                  .setSentAt(Timestamps.toProto(rs.getObject(5, LocalDateTime.class)))
+                  .build());
         }
         return out;
       }
@@ -267,18 +271,16 @@ public final class ConversationService {
   private static void insertOutbox(
       Connection c, Header h, long conversationId, String kind, Event event, LocalDateTime at)
       throws SQLException {
-    try (PreparedStatement ps =
-        c.prepareStatement(
-            "INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload,"
-                + " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")) {
-      ps.setLong(1, conversationId);
-      ps.setLong(2, Ids.random());
-      ps.setLong(3, h.userA());
-      ps.setLong(4, h.userB());
-      ps.setString(5, kind);
-      ps.setBytes(6, event.toByteArray());
-      ps.setObject(7, at);
-      ps.executeUpdate();
-    }
+    Sql.update(
+        c,
+        "INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload,"
+            + " created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        conversationId,
+        Ids.random(),
+        h.userA(),
+        h.userB(),
+        kind,
+        event.toByteArray(),
+        at);
   }
 }
