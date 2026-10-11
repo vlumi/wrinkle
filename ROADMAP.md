@@ -147,6 +147,13 @@ Notes:
 - [x] Reactions as one sealed set per user and message, replaced as a whole: relayed as `ReactionEvent`s and returned with `GetMessages`, removed with the message. Go and Java implement it; both clients show chips with counts and react from a picker.
 - No push to the message's sender for a reaction: the services cannot say what the reaction was.
 
+## Stickers
+
+- [x] Users make stickers from their own images; stickers are public, permanent and read like any blob; anyone saves any sticker to a palette of up to 200, reordered and synced across devices. Sending one is sealed content naming it. Go and Java implement it; both clients send from the palette, save received stickers and manage the palette.
+- [ ] No moderation or reporting of stickers, and no way to take one down.
+- [ ] Packs, and the sticker editor (#8).
+- [ ] Animated stickers: GIF and WebP upload, but clients redraw them as still images.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -171,7 +178,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3, done), deleting one's own messages (#4, done), stickers (#5), end-to-end encryption (#6, done), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3, done), deleting one's own messages (#4, done), stickers (#5, done), end-to-end encryption (#6, done), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 
