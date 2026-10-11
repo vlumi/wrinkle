@@ -1,6 +1,6 @@
 # Metrics
 
-Every backend exposes Prometheus metrics at `/metrics` on its HTTP port, with these names, so one dashboard and one load generator work for all of them.
+Every backend exposes Prometheus metrics at `/metrics` on its HTTP port, with these names, so one dashboard and one load generator work for all of them. Split, each process reports what it does: a gateway the connection and request metrics, a services instance the fan-out and push metrics.
 
 | Metric | Type | Labels | Meaning |
 |---|---|---|---|

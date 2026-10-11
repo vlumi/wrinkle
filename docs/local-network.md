@@ -1,13 +1,13 @@
 # Running on a local network
 
-Run the stack and one backend on a Mac, then connect to it from phones and other computers on the same network for manual testing. The steps assume a fresh Apple-silicon Mac with Homebrew.
+Run the stack and the backends on a Mac, then connect to them from phones and other computers on the same network for manual testing. The steps assume a fresh Apple-silicon Mac with Homebrew. The quickest start needs only Docker: the infrastructure and the [cluster](#cluster) build and run in containers. The native backends need each language's toolchain, below.
 
 ## The host
 
-1. Install Docker Desktop and give it at least 8 GB of memory (Settings, Resources). Install the Go toolchain and git:
+1. Install Docker Desktop and give it at least 8 GB of memory, 12 GB for the cluster (Settings, Resources). Install git, and Go for the native Go backend:
 
    ```sh
-   brew install go git
+   brew install git go
    ```
 
 2. Clone the repository. While it is private, the Mac needs an SSH key or token that GitHub accepts.
@@ -35,7 +35,13 @@ The generated code is committed, so the code generators (`make tools`) are not n
 
 ## Backends
 
-`make run-go-mono` and `make run-java-mono` each run a whole backend on port 8080, so one at a time; Ctrl-C stops one. The side-by-side setup, described below, instead runs services instances and gateways as separate processes. All of them share the database, so users and conversations carry over. `make` lists every target.
+Three ways to run them, all against the same database, so users and conversations carry over between them:
+
+- **A monolith:** `make run-go-mono` or `make run-java-mono`, one process with every role on port 8080.
+- **Side by side:** services instances and gateways as separate native processes, any number of each, behind two balancers; see [Side by side](#side-by-side).
+- **The cluster:** the same in containers, from one command; see [Cluster](#cluster).
+
+Each holds port 8080, so one of them at a time; Ctrl-C stops a native process. `make` lists every target.
 
 The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
@@ -45,7 +51,7 @@ The first time each program listens, macOS asks whether to accept incoming conne
 make run-go-mono
 ```
 
-The Go gateway can also run as a separate process beside the Go services, as the Elixir and Rust gateways do; see [Side by side](#side-by-side).
+Split, as Go services instances and Go gateways, it runs side by side; see [Side by side](#side-by-side).
 
 ### Java
 
@@ -57,11 +63,11 @@ ln -sfn /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk ~/Library/Java/JavaVirt
 make run-java-mono
 ```
 
-The symlink lets `java_home` find the Homebrew JDK, which the Makefile uses. The first build downloads Gradle and the dependencies.
+The symlink lets `java_home` find the Homebrew JDK, which the Makefile uses. The first build downloads Gradle and the dependencies. Split, as Java services instances and Java gateways, it runs side by side like Go.
 
 ### Elixir
 
-The Elixir implementation is a gateway, run beside the Go services as described in [Side by side](#side-by-side). Its toolchain:
+The Elixir implementation is a gateway, run beside Go or Java services as described in [Side by side](#side-by-side). Its toolchain:
 
 ```sh
 brew install elixir
@@ -99,7 +105,7 @@ make lb-down                       # when done
 
 `http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics.
 
-Java services instances store push tokens but send no pushes yet; with only Java instances running, iOS devices get no notifications.
+Java services instances store push tokens but send no pushes yet; see [Push notifications](#push-notifications) for what that means in a mixed pool.
 
 ### Cluster
 
@@ -164,7 +170,9 @@ WRINKLE_TEAM_ID=ABCDE12345
 WRINKLE_APNS_KEY=~/path/to/AuthKey_XXXXXXXXXX.p8
 ```
 
-and restart the backend; it logs "push notifications on". Without a key everything else works and the app catches up when it is opened. Pushes are sent by the Go fan-out, so they work with the Go backend and with the Elixir and Rust gateways, which run beside it; the Java backend stores tokens but does not push yet.
+and restart the backend; it logs "push notifications on". Without a key everything else works and the app catches up when it is opened.
+
+Pushes are sent by the Go fan-out, so they need the Go monolith or Go services instances; which gateway a device uses does not matter. The Java fan-out stores tokens but does not push yet. In a pool with both, the Go and Java instances split Kafka's partitions between them, so a message whose conversation falls to a Java instance gets no push; for testing push, run only Go services.
 
 To try the app's handling of a notification without APNs, the simulator takes a payload directly:
 
@@ -177,5 +185,5 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 - Only the gateways (8080, or 8180 to 8183 side by side, with the balancer on 8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
-- `http://localhost:8081/monitor` on the host, with `make web` running, links to every monitoring page (Grafana, Prometheus, the load balancer's statistics, Kafka Connect, Vitess, each backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
+- `http://localhost:8081/monitor` on the host, with `make web` running, links to every monitoring page (Grafana, Prometheus, the balancers' statistics, Kafka Connect, Vitess, each native backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.

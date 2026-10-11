@@ -5,14 +5,14 @@ How backends are compared. Absolute numbers depend on the machine and say little
 ## Setup
 
 - The shared infrastructure runs in Docker Desktop (`make infra-up`) with the memory caps in `infra/docker-compose.yml`. Record Docker's CPU and memory allocation.
-- The backend under test runs natively on the host, listening on port 8080: Go and Java as one process with all roles; the gateways (Go split, Elixir, Rust) with the Go services and fan-out in a second process beside them, where only the gateway is measured. It is restarted fresh before every run, so memory figures start from the same baseline.
+- The backend under test runs natively on the host, listening on port 8080, without the balancers: the monoliths (Go, Java) as one process with every role; the gateways (Go, Java, Elixir, Rust) with one services process beside them, Java's own for the Java gateway and Go's for the others, where only the gateway is measured. It is restarted fresh before every run, so memory figures start from the same baseline. The side-by-side setup and the cluster are for trying the scaled shape, not for these measurements.
 - The load generator runs natively on the host too. It shares the CPU with the backend; keep the load far from saturating the machine, and compare backends against each other rather than against the hardware.
 - Each backend's protocol run starts from a freshly created stack (`FRESH=1`, which `make measure-*` sets): end-to-end latency at 500 messages per second went from 66 ms on an empty database to 1.4 s after a day of runs, with a million rows in the user logs, so runs on a grown stack are not comparable with runs on a fresh one.
 - Nothing else of note runs on the machine.
 
 ## Runs
 
-`make measure-<backend>` (`go`, `go-split`, `java`, `elixir`, `rust`, or `all`) runs `loadgen/protocol.sh`, which performs these, appending one JSON line per run to `docs/results/<date>-<backend>.jsonl`. For a single ad-hoc run against whatever backend is running, `make load CONNECTIONS=… RATE=… DURATION=…`.
+`make measure-<backend>` (`go-mono`, `java-mono`, `go-gw`, `java-gw`, `elixir-gw`, `rust-gw`, or `all`) runs `loadgen/protocol.sh`, which performs these, appending one JSON line per run to `docs/results/<date>-<backend>.jsonl`. For a single ad-hoc run against whatever backend is running, `make load CONNECTIONS=… RATE=… DURATION=…`.
 
 1. **Idle connections.** 500, 1000, 2000 and 4000 devices, one per user, no messages. Warm-up 10 s, then 30 s. Memory per connection is the slope over the connection count, from a least-squares fit across the four points, which cancels the process baseline; report the baseline too. The load generator samples both resident memory and the runtime's live memory after asking the backend to collect garbage (`POST /debug/gc`); quote the live slope, with the RSS slope beside it.
 2. **Latency at fixed rates.** 1000 devices, one per user, at 100, 500, 1000 and 2000 messages per second. Warm-up 15 s, then 60 s. Report end-to-end p50 and p99 (send on one device to receipt on the peer's device), the send round trip p50, CPU time per thousand messages, and the share of messages received within the 10 s grace after the window.
