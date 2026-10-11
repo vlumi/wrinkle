@@ -1,10 +1,10 @@
 #!/bin/bash
-# Creates or updates the outbox connector. Idempotent: PUT on the config.
+# Creates or updates the outbox connectors: the conversation keyspace's
+# outbox and the user keyspace's. Idempotent: PUT on the config.
 set -euo pipefail
 
 cd "$(dirname "$0")"
 CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
-NAME=wrinkle-outbox
 response=$(mktemp)
 
 for _ in $(seq 1 60); do
@@ -12,10 +12,16 @@ for _ in $(seq 1 60); do
   sleep 2
 done
 
-if ! curl -sf -X PUT -H 'Content-Type: application/json' \
-  --data @outbox-connector.json \
-  "$CONNECT_URL/connectors/$NAME/config" -o "$response"; then
-  echo "registering $NAME failed: $(cat "$response")" >&2
-  exit 1
-fi
-echo "connector $NAME registered"
+register() {
+  local name=$1 config=$2
+  if ! curl -sf -X PUT -H 'Content-Type: application/json' \
+    --data @"$config" \
+    "$CONNECT_URL/connectors/$name/config" -o "$response"; then
+    echo "registering $name failed: $(cat "$response")" >&2
+    exit 1
+  fi
+  echo "connector $name registered"
+}
+
+register wrinkle-outbox outbox-connector.json
+register wrinkle-user-outbox user-outbox-connector.json

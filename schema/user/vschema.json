@@ -3,11 +3,17 @@
   "vindexes": {
     "xxhash": {
       "type": "xxhash"
+    },
+    "name": {
+      "type": "unicode_loose_xxhash"
     }
   },
   "tables": {
     "user": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "user_name": {
+      "column_vindexes": [{ "column": "name", "name": "name" }]
     },
     "device": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
@@ -16,6 +22,9 @@
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
     },
     "user_conversation": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "user_outbox": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
     }
   }
