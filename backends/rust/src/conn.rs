@@ -699,6 +699,7 @@ impl request::Body {
             Self::SetTopic(_) => "set_topic",
             Self::SetAdmin(_) => "set_admin",
             Self::GetMembers(_) => "get_members",
+            Self::DeleteMessage(_) => "delete_message",
         }
     }
 }
