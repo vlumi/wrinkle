@@ -1,5 +1,7 @@
 # Shared infrastructure for every backend. Memory is capped so the whole
-# stack fits in about 4 GB; backends run beside it.
+# stack fits in about 4 GB; backends run beside it. Every port is published
+# on loopback only: the backends run on the host and reach it there.
+# GRAFANA_BIND=0.0.0.0 opens Grafana to the network.
 
 name: wrinkle
 
@@ -13,9 +15,9 @@ services:
       PORT: "15000"
       INNODB_BUFFER_POOL_SIZE: 512M
     ports:
-      - "15000:15000" # vtcombo HTTP
-      - "15001:15001" # vtcombo gRPC (VStream for Debezium)
-      - "15003:15003" # MySQL protocol through vtgate
+      - "127.0.0.1:15000:15000" # vtcombo HTTP
+      - "127.0.0.1:15001:15001" # vtcombo gRPC (VStream for Debezium)
+      - "127.0.0.1:15003:15003" # MySQL protocol through vtgate
     volumes:
       - ../schema:/vt/schema:ro
     healthcheck:
@@ -47,7 +49,7 @@ services:
       KAFKA_LOG_RETENTION_HOURS: 24
       KAFKA_HEAP_OPTS: -Xms256m -Xmx512m
     ports:
-      - "19092:19092" # from the host; inside the network use kafka:9092
+      - "127.0.0.1:19092:19092" # from the host; inside the network use kafka:9092
     healthcheck:
       test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
       interval: 5s
@@ -75,7 +77,7 @@ services:
       VALUE_CONVERTER_SCHEMAS_ENABLE: "false"
       HEAP_OPTS: -Xms256m -Xmx768m
     ports:
-      - "8083:8083"
+      - "127.0.0.1:8083:8083"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:8083/connectors"]
       interval: 5s
@@ -95,7 +97,7 @@ services:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     deploy:
@@ -115,7 +117,7 @@ services:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3000:3000"
+      - "${GRAFANA_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       - prometheus
     deploy:
@@ -127,7 +129,7 @@ services:
     image: valkey/valkey:9.1.2-alpine
     command: ["valkey-server", "--maxmemory", "128mb", "--save", ""]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 5s

@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 repo=$(cd ../.. && pwd)
 
-"$repo/bin/wrinkle" --roles services,fanout --listen :8090 --services-listen :9000 &
+"$repo/bin/wrinkle" --roles services,fanout --listen 127.0.0.1:8090 --services-listen 127.0.0.1:9000 &
 services=$!
 gateway=""
 stop() {
@@ -19,6 +19,6 @@ for _ in $(seq 1 30); do
   if curl -sf http://localhost:8090/healthz >/dev/null; then break; fi
   sleep 0.5
 done
-mix run --no-halt &
+WRINKLE_SERVICES=127.0.0.1:9000 mix run --no-halt &
 gateway=$!
 wait $gateway
