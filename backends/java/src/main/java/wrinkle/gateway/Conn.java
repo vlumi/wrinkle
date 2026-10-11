@@ -20,6 +20,7 @@ import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.MarkReadResponse;
 import wrinkle.v1.OpenConversationResponse;
 import wrinkle.v1.Pong;
+import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
 import wrinkle.v1.SendMessageResponse;
@@ -152,6 +153,7 @@ final class Conn {
       case SYNC -> "sync";
       case LIST_CONVERSATIONS -> "list_conversations";
       case GET_MESSAGES -> "get_messages";
+      case REGISTER_PUSH_TOKEN -> "register_push_token";
       default -> "unknown";
     };
   }
@@ -197,6 +199,11 @@ final class Conn {
                 .addAllMessages(
                     gateway.conversations.messages(
                         userId, r.getConversationId(), r.getBeforeSeq(), r.getLimit())));
+      }
+      case REGISTER_PUSH_TOKEN -> {
+        var r = req.getRegisterPushToken();
+        gateway.users.registerPushToken(userId, deviceId, r.getService(), r.getToken());
+        resp.setRegisterPushToken(RegisterPushTokenResponse.getDefaultInstance());
       }
       default -> throw ApiError.invalidArgument("request has no body");
     }

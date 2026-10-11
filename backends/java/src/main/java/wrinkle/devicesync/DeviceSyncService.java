@@ -17,6 +17,7 @@ import wrinkle.v1.ConnectResponse;
 import wrinkle.v1.Conversation;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
+import wrinkle.v1.PushService;
 import wrinkle.v1.SyncResponse;
 import wrinkle.v1.User;
 
@@ -121,6 +122,46 @@ public final class DeviceSyncService {
       ps.setLong(3, userId);
       ps.setLong(4, deviceId);
       ps.executeUpdate();
+    }
+  }
+
+  private static final int MAX_PUSH_TOKEN = 200;
+
+  /**
+   * Records where to push for the device while it is not connected; an empty token removes the
+   * registration.
+   */
+  public void registerPushToken(long userId, long deviceId, PushService service, String token)
+      throws SQLException {
+    try (Connection c = db.getConnection()) {
+      if (token.isEmpty()) {
+        try (PreparedStatement ps =
+            c.prepareStatement(
+                "UPDATE device SET push_service = NULL, push_token = NULL WHERE user_id = ? AND"
+                    + " device_id = ?")) {
+          ps.setLong(1, userId);
+          ps.setLong(2, deviceId);
+          ps.executeUpdate();
+        }
+        return;
+      }
+      if (service != PushService.PUSH_SERVICE_APNS
+          && service != PushService.PUSH_SERVICE_APNS_SANDBOX) {
+        throw ApiError.invalidArgument("unknown push service " + service);
+      }
+      if (token.length() > MAX_PUSH_TOKEN) {
+        throw ApiError.invalidArgument("push token is longer than " + MAX_PUSH_TOKEN + " bytes");
+      }
+      try (PreparedStatement ps =
+          c.prepareStatement(
+              "UPDATE device SET push_service = ?, push_token = ? WHERE user_id = ? AND"
+                  + " device_id = ?")) {
+        ps.setString(1, service.name());
+        ps.setString(2, token);
+        ps.setLong(3, userId);
+        ps.setLong(4, deviceId);
+        ps.executeUpdate();
+      }
     }
   }
 

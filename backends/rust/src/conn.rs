@@ -251,6 +251,7 @@ fn request_type(request: &Request) -> &'static str {
         Some(request::Body::Sync(_)) => "sync",
         Some(request::Body::ListConversations(_)) => "list_conversations",
         Some(request::Body::GetMessages(_)) => "get_messages",
+        Some(request::Body::RegisterPushToken(_)) => "register_push_token",
         None => "unknown",
     }
 }
