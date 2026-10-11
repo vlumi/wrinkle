@@ -49,55 +49,32 @@ const services = [
   {
     group: "Backends",
     items: [
-      {
-        name: "Backend or load balancer :8080",
-        probe: "http://127.0.0.1:8080/healthz",
-        links: backendLinks(8080),
-        note: "make run-go-mono, run-java-mono or lb-up",
-      },
-      ...[1, 2, 3, 4].map((n) => ({
-        name: `Services instance ${n} :${9100 + n}`,
-        probe: `http://127.0.0.1:${8190 + n}/healthz`,
-        links: backendLinks(8190 + n),
-        note: n === 1 ? "make run-go-services or run-java-services" : `INSTANCE=${n}`,
-      })),
-      {
-        name: "Go gateway :8180",
-        probe: "http://127.0.0.1:8180/healthz",
-        links: backendLinks(8180),
-        note: "make run-go-gw",
-      },
-      {
-        name: "Elixir gateway :8181",
-        probe: "http://127.0.0.1:8181/healthz",
-        links: backendLinks(8181, false),
-        note: "make run-elixir-gw",
-      },
-      {
-        name: "Rust gateway :8182",
-        probe: "http://127.0.0.1:8182/healthz",
-        links: backendLinks(8182, false),
-        note: "make run-rust-gw",
-      },
-      {
-        name: "Java gateway :8183",
-        probe: "http://127.0.0.1:8183/healthz",
-        links: backendLinks(8183, false),
-        note: "make run-java-gw",
-      },
+      backend("Backend or load balancer :8080", 8080, "make run-go-mono, run-java-mono or lb-up"),
+      ...[1, 2, 3, 4].map((n) =>
+        backend(
+          `Services instance ${n} :${9100 + n}`,
+          8190 + n,
+          n === 1 ? "make run-go-services or run-java-services" : `INSTANCE=${n}`,
+        ),
+      ),
+      backend("Go gateway :8180", 8180, "make run-go-gw"),
+      backend("Elixir gateway :8181", 8181, "make run-elixir-gw", { pprof: false }),
+      backend("Rust gateway :8182", 8182, "make run-rust-gw", { pprof: false }),
+      backend("Java gateway :8183", 8183, "make run-java-gw", { pprof: false }),
     ],
   },
 ];
 
-function backendLinks(port, pprof = true) {
+/** A backend process, probed and linked through its HTTP port. */
+function backend(name, port, note, { pprof = true } = {}) {
   const links = [["metrics", `http://localhost:${port}/metrics`]];
   if (pprof) links.push(["pprof (if Go)", `http://localhost:${port}/debug/pprof/`]);
-  return links;
+  return { name, probe: `http://127.0.0.1:${port}/healthz`, links, note };
 }
 
 const all = services.flatMap((g) => g.items);
 
-export function isLocal(req) {
+function isLocal(req) {
   const a = req.socket.remoteAddress ?? "";
   return a === "127.0.0.1" || a === "::1" || a === "::ffff:127.0.0.1";
 }
@@ -131,21 +108,17 @@ export async function monitor(req, res, pathname) {
 
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+/** One service's row; the dot's index matches its place in /monitor/status. */
+function row(s) {
+  const note = s.note ? ` <small>${esc(s.note)}</small>` : "";
+  const links = s.links
+    .map(([label, href]) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`)
+    .join(" · ");
+  return `<li><span class="dot" data-i="${all.indexOf(s)}"></span><div><strong>${esc(s.name)}</strong>${note}<br>${links}</div></li>`;
+}
+
 function page() {
-  let i = 0;
-  const groups = services
-    .map(
-      (g) =>
-        `<h2>${esc(g.group)}</h2><ul>${g.items
-          .map(
-            (s) =>
-              `<li><span class="dot" data-i="${i++}"></span><div><strong>${esc(s.name)}</strong>${s.note ? ` <small>${esc(s.note)}</small>` : ""}<br>${s.links
-                .map(([label, href]) => `<a href="${esc(href)}" target="_blank" rel="noopener">${esc(label)}</a>`)
-                .join(" · ")}</div></li>`,
-          )
-          .join("")}</ul>`,
-    )
-    .join("");
+  const groups = services.map((g) => `<h2>${esc(g.group)}</h2><ul>${g.items.map(row).join("")}</ul>`).join("");
   return `<!doctype html>
 <html lang="en">
 <head>

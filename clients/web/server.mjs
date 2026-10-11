@@ -24,7 +24,9 @@ const types = {
   ".webmanifest": "application/manifest+json",
 };
 
-async function file(path) {
+const assets = join(root, "assets");
+
+async function existingFile(path) {
   try {
     const s = await stat(path);
     return s.isFile() ? path : null;
@@ -42,16 +44,15 @@ const server = createServer(async (req, res) => {
   if (await monitor(req, res, url.pathname)) return;
   const rel = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
   // One page: anything that is not a file gets index.html.
-  const path = (await file(join(root, rel))) ?? join(root, "index.html");
+  const path = (await existingFile(join(root, rel))) ?? join(root, "index.html");
   if (!path.startsWith(root)) {
     res.writeHead(403).end();
     return;
   }
-  const isAsset = path.includes(`${join(root, "assets")}`);
   res.writeHead(200, {
     "content-type": types[extname(path)] ?? "application/octet-stream",
     // Hashed asset names never change; the page itself always revalidates.
-    "cache-control": isAsset ? "public, max-age=31536000, immutable" : "no-cache",
+    "cache-control": path.startsWith(assets) ? "public, max-age=31536000, immutable" : "no-cache",
   });
   createReadStream(path).pipe(res);
 });
