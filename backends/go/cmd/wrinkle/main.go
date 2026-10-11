@@ -49,7 +49,8 @@ func run() error {
 		svcAddr = flag.String("services", env("WRINKLE_SERVICES", ""), "gateway: forward requests to a services process at this address instead of running the services in-process")
 		svcLsn  = flag.String("services-listen", env("WRINKLE_SERVICES_LISTEN", ":9000"), "services role: gRPC listen address")
 		node    = flag.String("node", env("WRINKLE_NODE", hostname), "this node's name in presence")
-		dbConns = flag.Int("db-conns", 32, "connections per keyspace")
+		dbConns = flag.Int("db-conns", 64, "connections per keyspace")
+		fanoutN = flag.Int("fanout-concurrency", 64, "fanout: conversations delivered at a time")
 		debug   = flag.Bool("debug", false, "debug logging")
 	)
 	flag.Parse()
@@ -154,7 +155,7 @@ func run() error {
 	}
 	start("http", func(ctx context.Context) error { return serveHTTP(ctx, *listen, mux, log) })
 	if wantFanout {
-		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", userDB, pres, log.With("role", "fanout"))
+		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, pres, log.With("role", "fanout"))
 		if err != nil {
 			return err
 		}

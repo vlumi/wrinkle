@@ -32,16 +32,18 @@ type Publisher interface {
 }
 
 type Worker struct {
-	db    *sql.DB
-	kafka *kgo.Client
-	pub   Publisher
-	log   *slog.Logger
+	db          *sql.DB
+	kafka       *kgo.Client
+	pub         Publisher
+	log         *slog.Logger
+	concurrency int
 
 	namesMu sync.Mutex
 	names   map[uint64]string
 }
 
-func New(ctx context.Context, brokers []string, group string, db *sql.DB, pub Publisher, log *slog.Logger) (*Worker, error) {
+// New makes a worker that delivers up to concurrency conversations at a time.
+func New(ctx context.Context, brokers []string, group string, concurrency int, db *sql.DB, pub Publisher, log *slog.Logger) (*Worker, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
@@ -61,7 +63,7 @@ func New(ctx context.Context, brokers []string, group string, db *sql.DB, pub Pu
 		client.Close()
 		return nil, fmt.Errorf("kafka at %v: %w", brokers, err)
 	}
-	return &Worker{db: db, kafka: client, pub: pub, log: log, names: map[uint64]string{}}, nil
+	return &Worker{db: db, kafka: client, pub: pub, log: log, concurrency: max(concurrency, 1), names: map[uint64]string{}}, nil
 }
 
 // Close leaves the consumer group. Polling blocks rebalances until the
@@ -80,25 +82,31 @@ func (w *Worker) Run(ctx context.Context) error {
 		fetches.EachError(func(topic string, partition int32, err error) {
 			w.log.Warn("fetch error", "topic", topic, "partition", partition, "err", err)
 		})
-		// Partitions in parallel, records within a partition in order: a
-		// conversation's events stay in one partition.
+		// Conversations in parallel, a conversation's records in order: that
+		// is the ordering the contract promises, and a user's log is
+		// serialized by its row lock whatever the interleaving.
 		var failed atomic.Bool
 		var wg sync.WaitGroup
+		sem := make(chan struct{}, w.concurrency)
 		fetches.EachPartition(func(p kgo.FetchTopicPartition) {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for _, rec := range p.Records {
-					if failed.Load() {
-						return
+			for _, records := range byConversation(p.Records) {
+				wg.Add(1)
+				sem <- struct{}{}
+				go func() {
+					defer wg.Done()
+					defer func() { <-sem }()
+					for _, rec := range records {
+						if failed.Load() {
+							return
+						}
+						if err := w.handleWithRetry(ctx, rec); err != nil {
+							failed.Store(true)
+							w.log.Error("giving up on record", "partition", rec.Partition, "offset", rec.Offset, "err", err)
+							return
+						}
 					}
-					if err := w.handleWithRetry(ctx, rec); err != nil {
-						failed.Store(true)
-						w.log.Error("giving up on record", "partition", rec.Partition, "offset", rec.Offset, "err", err)
-						return
-					}
-				}
-			}()
+				}()
+			}
 		})
 		wg.Wait()
 		w.kafka.AllowRebalance()
@@ -111,6 +119,24 @@ func (w *Worker) Run(ctx context.Context) error {
 			w.log.Warn("commit failed", "err", err)
 		}
 	}
+}
+
+// byConversation groups records by key, the conversation id, keeping each
+// group in offset order.
+func byConversation(records []*kgo.Record) [][]*kgo.Record {
+	index := map[string]int{}
+	var groups [][]*kgo.Record
+	for _, rec := range records {
+		key := string(rec.Key)
+		i, ok := index[key]
+		if !ok {
+			i = len(groups)
+			index[key] = i
+			groups = append(groups, nil)
+		}
+		groups[i] = append(groups[i], rec)
+	}
+	return groups
 }
 
 func (w *Worker) handleWithRetry(ctx context.Context, rec *kgo.Record) error {
