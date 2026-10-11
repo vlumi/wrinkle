@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
+	"github.com/vlumi/wrinkle/backends/go/internal/blobs"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -28,12 +29,13 @@ const (
 var icons = []string{"cat", "dog", "fox", "owl", "bear", "frog", "panda", "rabbit", "tiger", "penguin", "octopus", "unicorn"}
 
 type Service struct {
-	db  *sql.DB
-	now func() time.Time
+	db    *sql.DB
+	blobs *blobs.Store
+	now   func() time.Time
 }
 
-func New(db *sql.DB) *Service {
-	return &Service{db: db, now: func() time.Time { return time.Now().UTC() }}
+func New(db *sql.DB, blobs *blobs.Store) *Service {
+	return &Service{db: db, blobs: blobs, now: func() time.Time { return time.Now().UTC() }}
 }
 
 // ValidName reports whether a user name is acceptable: valid UTF-8 of 1 to
@@ -84,12 +86,15 @@ func checkDeviceName(name string) error {
 // Profile reads a user's profile; ok is false when there is no such user.
 func (s *Service) Profile(ctx context.Context, userID ids.UUID) (*pb.User, bool, error) {
 	user := &pb.User{UserId: userID.Bytes()}
-	err := s.db.QueryRowContext(ctx, `SELECT name, icon FROM user WHERE user_id = ?`, userID).Scan(&user.Name, &user.Icon)
+	var deletedAt sql.NullTime
+	err := s.db.QueryRowContext(ctx, `SELECT name, icon, avatar, deleted_at FROM user WHERE user_id = ?`, userID).
+		Scan(&user.Name, &user.Icon, &user.Avatar, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, false, err
 	}
+	user.Deleted = deletedAt.Valid
 	return user, true, nil
 }

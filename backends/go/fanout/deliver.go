@@ -12,6 +12,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
+	backendv1 "github.com/vlumi/wrinkle/proto/go/wrinkle/backend/v1"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -68,17 +69,20 @@ func (w *Worker) peerForNewEntry(ctx context.Context, userID, conversationID, pe
 		return nil, err
 	}
 	peer := &pb.User{UserId: peerID.Bytes()}
-	err = w.db.QueryRowContext(ctx, `SELECT name, icon FROM user WHERE user_id = ?`, peerID).Scan(&peer.Name, &peer.Icon)
+	var deletedAt sql.NullTime
+	err = w.db.QueryRowContext(ctx, `SELECT name, icon, avatar, deleted_at FROM user WHERE user_id = ?`, peerID).
+		Scan(&peer.Name, &peer.Icon, &peer.Avatar, &deletedAt)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	peer.Deleted = deletedAt.Valid
 	return peer, nil
 }
 
 // append adds the event to the user's log, in one transaction with the
 // list update, and publishes it. It returns the event as stored, or none
-// when there is nothing to push: the user does not exist, or the log
-// already has the event.
+// when there is nothing to push: the user does not exist or is deleted, or
+// the log already has the event.
 func (w *Worker) append(ctx context.Context, userID, sourceID ids.UUID, outboxID uint64, source *pb.Event, update listUpdate) (*pb.Event, error) {
 	event, payload, err := w.store(ctx, userID, sourceID, outboxID, source, update)
 	if err != nil || event == nil {
@@ -86,11 +90,20 @@ func (w *Worker) append(ctx context.Context, userID, sourceID ids.UUID, outboxID
 	}
 	metrics.FanoutDeliveries.Inc()
 	metrics.FanoutLag.Observe(time.Since(event.GetOccurredAt().AsTime()).Seconds())
-	if err := w.pub.Publish(ctx, userID, payload); err != nil {
-		// The log has it; devices catch up on their next sync.
+	w.publish(ctx, userID, &backendv1.Push{Kind: &backendv1.Push_Event{Event: payload}})
+	return event, nil
+}
+
+// publish sends a push to the gateways holding the user's devices. A lost
+// event is caught up on the next sync.
+func (w *Worker) publish(ctx context.Context, userID ids.UUID, push *backendv1.Push) {
+	data, err := proto.Marshal(push)
+	if err == nil {
+		err = w.pub.Publish(ctx, userID, data)
+	}
+	if err != nil {
 		w.log.Warn("publish failed", "user", userID, "err", err)
 	}
-	return event, nil
 }
 
 func (w *Worker) store(ctx context.Context, userID, sourceID ids.UUID, outboxID uint64, source *pb.Event, update listUpdate) (*pb.Event, []byte, error) {
@@ -101,13 +114,17 @@ func (w *Worker) store(ctx context.Context, userID, sourceID ids.UUID, outboxID 
 	defer tx.Rollback()
 
 	var head uint64
-	err = tx.QueryRowContext(ctx, `SELECT log_head FROM user WHERE user_id = ? FOR UPDATE`, userID).Scan(&head)
+	var deletedAt sql.NullTime
+	err = tx.QueryRowContext(ctx, `SELECT log_head, deleted_at FROM user WHERE user_id = ? FOR UPDATE`, userID).Scan(&head, &deletedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		w.log.Warn("no such user, dropping event", "user", userID)
 		return nil, nil, nil
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if deletedAt.Valid {
+		return nil, nil, nil
 	}
 	event := proto.Clone(source).(*pb.Event)
 	event.Cursor = head + 1
@@ -170,10 +187,10 @@ func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, pee
 	}
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO user_conversation
-			(user_id, conversation_id, peer_user_id, peer_name, peer_icon, last_seq,
+			(user_id, conversation_id, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted, last_seq,
 			 last_sender_user_id, last_client_message_id, last_body, last_sent_at,
 			 read_seq, peer_read_seq, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
 		ON DUPLICATE KEY UPDATE
 			last_seq = GREATEST(last_seq, ?),
 			last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),
@@ -182,7 +199,7 @@ func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, pee
 			last_sent_at = IF(? >= last_seq, ?, last_sent_at),
 			read_seq = GREATEST(read_seq, ?),
 			updated_at = GREATEST(updated_at, ?)`,
-		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), msg.GetSeq(),
+		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(), msg.GetSeq(),
 		msg.GetSenderUserId(), msg.GetClientMessageId(), msg.GetText(), msg.GetSentAt().AsTime(),
 		ownSeq, occurredAt,
 		msg.GetSeq(),
@@ -207,4 +224,12 @@ func recordRead(ctx context.Context, tx *sql.Tx, userID, conversationID ids.UUID
 		WHERE user_id = ? AND conversation_id = ?`,
 		read.GetSeq(), userID, conversationID)
 	return err
+}
+
+// nullBytes stores an empty id as NULL.
+func nullBytes(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
 }

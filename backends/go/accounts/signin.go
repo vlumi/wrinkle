@@ -103,13 +103,32 @@ func (s *Service) passwordOf(ctx context.Context, name string) (ids.UUID, string
 	return owner, hash, nil
 }
 
+// newDevice signs a device in, with its DeviceEvent for the user's other
+// devices.
 func (s *Service) newDevice(ctx context.Context, userID ids.UUID, name string) (*pb.DeviceCredentials, error) {
 	token := newToken(userID, ids.Random())
-	now := s.now()
-	if _, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	o, err := lockOutbox(ctx, tx, userID, s.now())
+	if err != nil {
+		return nil, err
+	}
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO device (user_id, device_id, name, token_hash, acked_position, created_at, last_seen_at)
 		VALUES (?, ?, ?, ?, 0, ?, ?)`,
-		userID, token.deviceID, name, token.hash(), now, now); err != nil {
+		userID, token.deviceID, name, token.hash(), o.now, o.now); err != nil {
+		return nil, err
+	}
+	if _, err := o.addDevice(ctx, token.deviceID, false); err != nil {
+		return nil, err
+	}
+	if err := o.save(ctx); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return &pb.DeviceCredentials{UserId: userID.Bytes(), DeviceId: token.deviceID, DeviceToken: token.String()}, nil

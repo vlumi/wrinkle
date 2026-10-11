@@ -1,7 +1,8 @@
 // Package fanout turns committed outbox rows, read from Kafka, into entries
 // in the event logs of everyone concerned, and pushes them to connected
 // devices: a conversation's events to both participants, a user's profile
-// changes to the user and every conversation partner.
+// changes to the user and every conversation partner, a user's device
+// changes to the user.
 package fanout
 
 import (
@@ -233,9 +234,20 @@ func (w *Worker) handleUserRecord(ctx context.Context, rec *kgo.Record) error {
 		w.log.Error("skipping user outbox record", "offset", rec.Offset, "err", err)
 		return nil
 	}
-	if o.event.GetProfile() == nil {
-		w.log.Error("skipping user outbox record without a profile", "kind", o.kind, "offset", rec.Offset)
-		return nil
+	switch body := o.event.GetBody().(type) {
+	case *pb.Event_Profile:
+		switch {
+		case body.Profile.GetUser() == nil:
+		case body.Profile.GetUser().GetDeleted():
+			return w.deliverDeletion(ctx, o)
+		default:
+			return w.deliverProfile(ctx, o)
+		}
+	case *pb.Event_Device:
+		if body.Device.GetDevice() != nil {
+			return w.deliverDevice(ctx, o)
+		}
 	}
-	return w.deliverProfile(ctx, o)
+	w.log.Error("skipping user outbox record without a profile or device", "kind", o.kind, "offset", rec.Offset)
+	return nil
 }

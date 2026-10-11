@@ -83,7 +83,7 @@ func (o *outboxRow) peerOf(userID ids.UUID) ids.UUID {
 	return o.userA
 }
 
-// userOutboxRow is a row of a user's outbox: a profile change.
+// userOutboxRow is a row of a user's outbox: a profile or device change.
 type userOutboxRow struct {
 	userID   ids.UUID
 	outboxID uint64

@@ -13,6 +13,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/uploads"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -30,11 +31,12 @@ type Local struct {
 	accounts      *accounts.Service
 	conversations *conversation.Service
 	users         *devicesync.Service
+	uploads       *uploads.Service
 	log           *slog.Logger
 }
 
-func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, log *slog.Logger) *Local {
-	return &Local{accounts: accounts, conversations: conversations, users: users, log: log}
+func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, uploads *uploads.Service, log *slog.Logger) *Local {
+	return &Local{accounts: accounts, conversations: conversations, users: users, uploads: uploads, log: log}
 }
 
 func (l *Local) Call(ctx context.Context, userID ids.UUID, deviceID uint64, req *pb.Request) (*pb.Response, error) {
@@ -83,6 +85,34 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_SignOut{SignOut: &pb.SignOutResponse{}}
+	case *pb.Request_ListDevices:
+		list, err := l.accounts.ListDevices(ctx, userID)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_ListDevices{ListDevices: &pb.ListDevicesResponse{Devices: list}}
+	case *pb.Request_RenameDevice:
+		device, err := l.accounts.RenameDevice(ctx, userID, r.RenameDevice)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_RenameDevice{RenameDevice: &pb.RenameDeviceResponse{Device: device}}
+	case *pb.Request_SignOutDevice:
+		if err := l.accounts.SignOutDevice(ctx, userID, deviceID, r.SignOutDevice.GetDeviceId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SignOutDevice{SignOutDevice: &pb.SignOutDeviceResponse{}}
+	case *pb.Request_DeleteAccount:
+		if err := l.accounts.DeleteAccount(ctx, userID, r.DeleteAccount); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_DeleteAccount{DeleteAccount: &pb.DeleteAccountResponse{}}
+	case *pb.Request_CreateUpload:
+		upload, err := l.uploads.CreateUpload(ctx, userID, r.CreateUpload)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_CreateUpload{CreateUpload: upload}
 	case *pb.Request_OpenConversation:
 		conv, err := l.users.Open(ctx, userID, r.OpenConversation.GetPeerName())
 		if err != nil {

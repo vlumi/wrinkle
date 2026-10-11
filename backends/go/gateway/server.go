@@ -14,7 +14,6 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
-	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 	"github.com/vlumi/wrinkle/backends/go/services"
@@ -82,11 +81,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 func (s *Server) Run(ctx context.Context) error {
 	go s.keepalive(ctx)
 	go s.registry.reconcile(s.ctx)
-	s.registry.run(s.ctx, func(userID ids.UUID, payload []byte) {
-		for _, c := range s.registry.conns(userID) {
-			c.pushEvent(payload)
-		}
-	})
+	s.registry.run(s.ctx, s.deliver)
 	return nil
 }
 

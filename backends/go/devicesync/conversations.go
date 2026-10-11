@@ -44,9 +44,11 @@ func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*
 	}
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT IGNORE INTO user_conversation
-			(user_id, conversation_id, peer_user_id, peer_name, peer_icon, last_seq, read_seq, peer_read_seq, updated_at)
-		VALUES (?, ?, ?, ?, ?, 0, 0, 0, ?)`,
-		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), s.now()); err != nil {
+			(user_id, conversation_id, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted,
+			 last_seq, read_seq, peer_read_seq, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)`,
+		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(),
+		s.now()); err != nil {
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, conversationColumns+`
@@ -78,7 +80,7 @@ func (s *Service) ListConversations(ctx context.Context, userID ids.UUID) ([]*pb
 }
 
 const conversationColumns = `
-	SELECT conversation_id, peer_user_id, peer_name, peer_icon, last_seq,
+	SELECT conversation_id, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted, last_seq,
 		last_sender_user_id, last_client_message_id, last_body, last_sent_at,
 		read_seq, peer_read_seq`
 
@@ -93,7 +95,7 @@ func scanConversations(rows *sql.Rows) ([]*pb.Conversation, error) {
 			body                   sql.NullString
 			sentAt                 sql.NullTime
 		)
-		if err := rows.Scan(&conversationID, &peerID, &c.Peer.Name, &c.Peer.Icon, &c.LastSeq,
+		if err := rows.Scan(&conversationID, &peerID, &c.Peer.Name, &c.Peer.Icon, &c.Peer.Avatar, &c.Peer.Deleted, &c.LastSeq,
 			&sender, &clientID, &body, &sentAt, &c.ReadSeq, &c.PeerReadSeq); err != nil {
 			return nil, err
 		}
@@ -112,4 +114,12 @@ func scanConversations(rows *sql.Rows) ([]*pb.Conversation, error) {
 		list = append(list, c)
 	}
 	return list, rows.Err()
+}
+
+// nullBytes stores an empty id as NULL.
+func nullBytes(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
 }
