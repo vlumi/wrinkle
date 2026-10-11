@@ -9,12 +9,16 @@ struct ConversationView: View {
     @Query private var messages: [StoredMessage]
     @Query private var members: [StoredMember]
     @Query private var verifications: [StoredVerification]
+    @Query private var reactions: [StoredReaction]
     @State private var text = ""
     @State private var error: String?
     @State private var showInfo = false
     @State private var contact: Wrinkle_V1_User?
     /// The seq of the user's own message awaiting confirmation of its deletion.
     @State private var deleting: Int64?
+    /// The seq of the message being reacted to with an emoji typed in.
+    @State private var reactingWithOther: Int64?
+    @State private var otherEmoji = ""
 
     init(conversationID: IDHex) {
         self.conversationID = conversationID
@@ -24,6 +28,7 @@ struct ConversationView: View {
             filter: #Predicate<StoredMessage> { $0.conversationID == id },
             sort: \StoredMessage.seq)
         _members = Query(filter: #Predicate<StoredMember> { $0.conversationID == id })
+        _reactions = Query(filter: #Predicate<StoredReaction> { $0.conversationID == id })
     }
 
     private var conversation: StoredConversation? { conversations.first }
@@ -119,6 +124,20 @@ struct ConversationView: View {
                 if let seq = deleting { delete(seq) }
             }
         }
+        .alert(
+            "React with an emoji",
+            isPresented: Binding(
+                get: { reactingWithOther != nil }, set: { if !$0 { reactingWithOther = nil } })
+        ) {
+            TextField("Emoji", text: $otherEmoji)
+            Button("React") {
+                if let seq = reactingWithOther {
+                    toggleReaction(otherEmoji.trimmingCharacters(in: .whitespaces), on: seq)
+                }
+                otherEmoji = ""
+            }
+            Button("Cancel", role: .cancel) { otherEmoji = "" }
+        }
         .sheet(isPresented: $showInfo) {
             NavigationStack {
                 GroupInfoView(conversationID: conversationID) { showInfo = false }
@@ -179,9 +198,22 @@ struct ConversationView: View {
             let mine = m.senderID == app.myUserID
             MessageBubble(
                 message: m, mine: mine, sender: isGroup && !mine ? sender(m.senderID) : nil,
-                receipt: mine ? receipt(m) : nil
+                receipt: mine ? receipt(m) : nil,
+                chips: ReactionRules.chips(reactions.filter { $0.seq == m.seq }, me: app.myUserID),
+                names: reactorNames, toggle: { toggleReaction($0, on: m.seq) }
             )
             .contextMenu {
+                if !m.isDeleted && conversation?.isFormer == false {
+                    ControlGroup {
+                        ForEach(ReactionRules.quick, id: \.self) { e in
+                            Button(e) { toggleReaction(e, on: m.seq) }
+                        }
+                    }
+                    .controlGroupStyle(.compactMenu)
+                    Button("Other Emoji…", systemImage: "face.smiling") {
+                        reactingWithOther = m.seq
+                    }
+                }
                 if m.deletable(by: app.myUserID) {
                     Button("Delete for Everyone", systemImage: "trash", role: .destructive) {
                         deleting = m.seq
@@ -227,6 +259,34 @@ struct ConversationView: View {
         let n = members.filter { $0.current && $0.userID != app.myUserID && $0.readSeq >= m.seq }
             .count
         return n > 0 ? "Read by \(n)" : nil
+    }
+}
+
+// MARK: Actions
+
+extension ConversationView {
+    /// The names of users who reacted, as the members cache or the peer knows them.
+    private func reactorNames(_ users: [IDHex]) -> [String] {
+        users.map { id in
+            if id == app.myUserID { return "You" }
+            if let c = conversation, !c.isGroup, c.peerID == id { return c.peerDisplayName }
+            if let row = members.first(where: { $0.userID == id }), row.known {
+                return row.displayName
+            }
+            return "Someone"
+        }
+    }
+
+    private func toggleReaction(_ emoji: String, on seq: Int64) {
+        Task {
+            do {
+                try await app.toggleReaction(emoji, to: seq, in: conversationID)
+                error = nil
+            } catch {
+                self.error = errorText(
+                    error, [.permissionDenied: "You are no longer in this group."])
+            }
+        }
     }
 
     private func delete(_ seq: Int64) {

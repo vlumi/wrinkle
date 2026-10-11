@@ -22,7 +22,10 @@ extension AppState {
         let messages = try await connection.getMessages(
             conversationID: try wireID(conversationID), beforeSeq: UInt64(before ?? 0),
             limit: Self.historyPage)
-        for m in messages { store.insert(m) }
+        for m in messages {
+            store.insert(m)
+            store.replaceReactions(m)
+        }
         if messages.count < Self.historyPage, let c = store.conversation(conversationID) {
             c.historyComplete = true
         }
@@ -35,16 +38,19 @@ extension AppState {
         guard let keys, let c = store.conversation(conversationID) else {
             throw AccountError("Not connected.")
         }
-        let members: KeyManager.Members =
-            c.isGroup ? .group : .direct(peer: try wireID(c.peerID))
         let m = try await keys.send(
-            text, to: try wireID(conversationID), members: members,
+            text, to: try wireID(conversationID), members: try members(of: c),
             clientMessageID: UUID().uuidString, connection)
         store.insert(m)
         if let c = store.conversation(conversationID), c.noteLatest(m) {
             c.readSeq = Int64(m.seq)
         }
         store.save()
+    }
+
+    /// Who seals for the conversation: the peer of a direct one, or a group's members.
+    func members(of c: StoredConversation) throws -> KeyManager.Members {
+        c.isGroup ? .group : .direct(peer: try wireID(c.peerID))
     }
 
     /// Deletes one of the user's own messages for everyone; the event that follows changes

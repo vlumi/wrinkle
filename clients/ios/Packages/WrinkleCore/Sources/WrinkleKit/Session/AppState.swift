@@ -362,6 +362,8 @@ extension AppState {
         try? await conn.ack(cursor: cursor)
         if case .message(let m) = event.body, case .sealed = m.message.content {
             await openLocked(conn)
+        } else if case .reaction(let r) = event.body, r.hasSealed {
+            await openLocked(conn)
         }
     }
 }

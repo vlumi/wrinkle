@@ -25,7 +25,7 @@ extension Store {
         return content.text
     }
 
-    /// The epochs that locked messages and list previews need, by conversation.
+    /// The epochs that locked messages, list previews and reactions need, by conversation.
     public func locked() -> [IDHex: Set<UInt32>] {
         var need: [IDHex: Set<UInt32>] = [:]
         let note = { (data: Data) in
@@ -38,7 +38,7 @@ extension Store {
         let conversations = FetchDescriptor<StoredConversation>(
             predicate: #Predicate { $0.lastSealed != nil })
         for c in (try? context.fetch(conversations)) ?? [] { c.lastSealed.map(note) }
-        return need
+        return need.merging(lockedReactions()) { $0.union($1) }
     }
 
     /// Tries the held keys on everything locked in the conversation.
@@ -48,5 +48,6 @@ extension Store {
         )
         for m in (try? context.fetch(messages)) ?? [] { open(m) }
         if let c = conversation(conversationID) { open(c) }
+        reopenReactions(conversationID)
     }
 }

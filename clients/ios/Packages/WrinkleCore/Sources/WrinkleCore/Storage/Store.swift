@@ -241,12 +241,13 @@ public struct Store {
 
     public static let models: [any PersistentModel.Type] = [
         StoredConversation.self, StoredMessage.self, StoredMember.self, StoredVerification.self,
+        StoredReaction.self,
     ]
     public static let schema = Schema(models)
 
     /// Bumped whenever the models change incompatibly: the device's store is only a cache of
     /// the backend, so an older one is discarded rather than migrated.
-    static let version = 6
+    static let version = 7
 
     /// The app's container. Stores of earlier versions are deleted first.
     public static func container() throws -> ModelContainer {
@@ -270,6 +271,7 @@ public struct Store {
 
     /// Forgets everything stored, as on signing out.
     public func reset() {
+        try? context.delete(model: StoredReaction.self)
         try? context.delete(model: StoredMessage.self)
         try? context.delete(model: StoredMember.self)
         try? context.delete(model: StoredConversation.self)
@@ -309,24 +311,16 @@ public struct Store {
     @discardableResult
     public func insert(_ m: Wrinkle_V1_Message) -> Bool {
         if let stored = message(Int64(m.seq), in: m.conversationID.hex) {
-            if m.hasDeletedAt { stored.delete(at: m.deletedAt.date) }
+            if m.hasDeletedAt {
+                stored.delete(at: m.deletedAt.date)
+                dropReactions(to: stored.seq, in: stored.conversationID)
+            }
             return false
         }
         let stored = StoredMessage(m)
         open(stored)
         context.insert(stored)
         return true
-    }
-
-    /// Applies a deletion to the message and, when it is the latest, to the list.
-    @discardableResult
-    public func markDeleted(_ seq: Int64, in conversationID: IDHex, at date: Date)
-        -> StoredConversation?
-    {
-        message(seq, in: conversationID)?.delete(at: date)
-        guard let c = conversation(conversationID) else { return nil }
-        if c.lastSeq == seq { c.lastWasDeleted() }
-        return c
     }
 
     public func oldestSeq(in conversationID: IDHex) -> Int64? {
@@ -360,6 +354,8 @@ public struct Store {
         case .profile(let p):
             if p.user.userID.hex != me { updatePeer(p.user) }
             return nil
+        case .reaction(let r):
+            return apply(r)
         default:
             return nil
         }

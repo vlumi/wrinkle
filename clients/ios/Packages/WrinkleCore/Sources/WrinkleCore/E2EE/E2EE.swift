@@ -1,8 +1,8 @@
 import CryptoKit
 import Foundation
 
-/// The cryptography of content.proto: wrapping epoch keys for devices, sealing content,
-/// fingerprints and safety numbers. Nonces are parameters so the test vectors can fix them;
+/// The cryptography of content.proto: wrapping epoch keys for devices, sealing content and
+/// reactions, fingerprints and safety numbers. Nonces are parameters so the test vectors can fix them;
 /// callers pass random ones.
 public enum E2EE {
     public static let keyLength = 32
@@ -127,22 +127,70 @@ public enum E2EE {
     public static func seal(
         _ content: Wrinkle_V1_Content, key: Data, context: ContentContext, nonce: Data
     ) throws -> Wrinkle_V1_Sealed {
-        let box = try AES.GCM.seal(
-            try content.serializedBytes() as Data, using: SymmetricKey(data: key),
-            nonce: try AES.GCM.Nonce(data: nonce), authenticating: context.aad)
-        return .with {
-            $0.epoch = context.epoch
-            $0.nonce = nonce
-            $0.ciphertext = box.ciphertext + box.tag
-        }
+        try seal(
+            try content.serializedBytes(), key: key, epoch: context.epoch, aad: context.aad,
+            nonce: nonce)
     }
 
     public static func open(
         _ sealed: Wrinkle_V1_Sealed, key: Data, context: ContentContext
     ) throws -> Wrinkle_V1_Content {
-        let plain = try open(
-            sealed.nonce + sealed.ciphertext, key: SymmetricKey(data: key), aad: context.aad)
-        return try Wrinkle_V1_Content(serializedBytes: plain)
+        try Wrinkle_V1_Content(serializedBytes: try open(sealed, key: key, aad: context.aad))
+    }
+
+    /// What binds a user's sealed reactions to the message they react to.
+    public struct ReactionContext: Sendable {
+        public var conversationID: Data
+        public var epoch: UInt32
+        public var userID: Data
+        public var seq: UInt64
+
+        public init(conversationID: Data, epoch: UInt32, userID: Data, seq: UInt64) {
+            self.conversationID = conversationID
+            self.epoch = epoch
+            self.userID = userID
+            self.seq = seq
+        }
+
+        public var aad: Data {
+            var d = Data("wrinkle reaction v1".utf8)
+            d.append(conversationID)
+            d.append(bigEndian: epoch)
+            d.append(userID)
+            d.append(bigEndian: seq)
+            return d
+        }
+    }
+
+    public static func seal(
+        _ reactions: Wrinkle_V1_Reactions, key: Data, context: ReactionContext, nonce: Data
+    ) throws -> Wrinkle_V1_Sealed {
+        try seal(
+            try reactions.serializedBytes(), key: key, epoch: context.epoch, aad: context.aad,
+            nonce: nonce)
+    }
+
+    public static func open(
+        _ sealed: Wrinkle_V1_Sealed, key: Data, context: ReactionContext
+    ) throws -> Wrinkle_V1_Reactions {
+        try Wrinkle_V1_Reactions(serializedBytes: try open(sealed, key: key, aad: context.aad))
+    }
+
+    private static func seal(_ plain: Data, key: Data, epoch: UInt32, aad: Data, nonce: Data)
+        throws -> Wrinkle_V1_Sealed
+    {
+        let box = try AES.GCM.seal(
+            plain, using: SymmetricKey(data: key), nonce: try AES.GCM.Nonce(data: nonce),
+            authenticating: aad)
+        return .with {
+            $0.epoch = epoch
+            $0.nonce = nonce
+            $0.ciphertext = box.ciphertext + box.tag
+        }
+    }
+
+    private static func open(_ sealed: Wrinkle_V1_Sealed, key: Data, aad: Data) throws -> Data {
+        try open(sealed.nonce + sealed.ciphertext, key: SymmetricKey(data: key), aad: aad)
     }
 
     /// Opens nonce, ciphertext and tag.

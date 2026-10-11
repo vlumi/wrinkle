@@ -142,6 +142,44 @@ final class E2EETests: XCTestCase {
         XCTAssertThrowsError(try E2EE.open(sealed, key: hex(epochKey), context: otherSender))
     }
 
+    func testSealReactions() throws {
+        let context = E2EE.ReactionContext(
+            conversationID: hex(conversation), epoch: 2, userID: hex(b1.userID),
+            seq: 4_294_967_298)
+        let reactions = Wrinkle_V1_Reactions.with {
+            $0.emoji = [
+                "\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F469}\u{200D}\u{1F469}\u{200D}\u{1F467}",
+            ]
+        }
+        XCTAssertEqual(
+            try (reactions.serializedBytes() as Data).hex,
+            "0a04f09f918d0a06e29da4efb88f0a12f09f91a9e2808df09f91a9e2808df09f91a7")
+        XCTAssertEqual(
+            context.aad.hex,
+            "7772696e6b6c65207265616374696f6e207631c0c1c2c3c4c5c6c7c8c9cacbcccdcecf00000002"
+                + "b0b1b2b3b4b5b6b7b8b9babbbcbdbebf0000000100000002")
+        let sealed = try E2EE.seal(
+            reactions, key: hex(epochKey), context: context,
+            nonce: hex("505152535455565758595a5b"))
+        XCTAssertEqual(sealed.epoch, 2)
+        XCTAssertEqual(sealed.nonce.hex, "505152535455565758595a5b")
+        XCTAssertEqual(
+            sealed.ciphertext.hex,
+            "b88166dab6f40be08cc6afc43711da8db6eb856edea765d83d5ae6b3551376b6bed6b13a5bb740760a"
+                + "174caab460ee45e330")
+
+        XCTAssertEqual(
+            try E2EE.open(sealed, key: hex(epochKey), context: context).emoji, reactions.emoji)
+        XCTAssertEqual(ReactionRules.valid(reactions.emoji), reactions.emoji)
+        // Moved to another message or claimed by another user, they do not open.
+        var moved = context
+        moved.seq += 1
+        XCTAssertThrowsError(try E2EE.open(sealed, key: hex(epochKey), context: moved))
+        var otherUser = context
+        otherUser.userID = hex(a1.userID)
+        XCTAssertThrowsError(try E2EE.open(sealed, key: hex(epochKey), context: otherUser))
+    }
+
     func testFingerprintsAndSafetyNumber() {
         let alice = E2EE.fingerprint(
             userID: hex(a1.userID),

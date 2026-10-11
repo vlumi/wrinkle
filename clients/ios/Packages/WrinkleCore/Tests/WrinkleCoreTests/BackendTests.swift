@@ -5,7 +5,8 @@ import XCTest
 /// Against a live backend at ws://localhost:8080/v1/ws: accounts, a message each way, a read
 /// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
 /// deletion, a group of three (GroupBackendTests.swift), deleting a message
-/// (DeletionBackendTests.swift), end-to-end encryption (E2EEBackendTests.swift). Every message
+/// (DeletionBackendTests.swift), end-to-end encryption (E2EEBackendTests.swift), reactions
+/// (ReactionBackendTests.swift). Every message
 /// is sealed on the sending device and opened on the receiving ones. Skipped when nothing listens, unless
 /// WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {

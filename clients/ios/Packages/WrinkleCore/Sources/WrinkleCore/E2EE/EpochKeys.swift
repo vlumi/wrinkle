@@ -59,6 +59,19 @@ public struct EpochKeys: Sendable {
         return try? E2EE.open(sealed, key: key, context: E2EE.ContentContext(m))
     }
 
+    /// Opens a user's sealed reactions to a message with a held key; nil if the epoch's key
+    /// is not held or they do not open.
+    public func open(
+        _ sealed: Wrinkle_V1_Sealed, reactionsOf userID: Data, to seq: UInt64,
+        in conversationID: Data
+    ) -> Wrinkle_V1_Reactions? {
+        guard let key = key(conversationID, epoch: sealed.epoch) else { return nil }
+        return try? E2EE.open(
+            sealed, key: key,
+            context: E2EE.ReactionContext(
+                conversationID: conversationID, epoch: sealed.epoch, userID: userID, seq: seq))
+    }
+
     static func encode(_ keys: [UInt32: Data]) -> Data {
         var d = Data()
         for epoch in keys.keys.sorted() {
