@@ -35,9 +35,9 @@ for attempt in 1 2 3; do
   # inserts it, and the connector passes on the insert only.
   compose exec -T vitess mysql -h 127.0.0.1 -P 15003 conversation -e "
     BEGIN;
-    INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload, created_at)
-    VALUES (X'0000000000000000000000000000002a', $id, X'00000000000000000000000000000001',
-      X'00000000000000000000000000000002', 'smoke', X'00', NOW(6));
+    INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, member_count, kind, payload, created_at)
+    VALUES (X'0000000000000000000000000000002a', $id,
+      X'0000000000000000000000000000000100000000000000000000000000000002', 'direct', 2, 'smoke', X'00', NOW(6));
     DELETE FROM outbox WHERE conversation_id = X'0000000000000000000000000000002a' AND outbox_id = $id;
     COMMIT"
   for _ in $(seq 1 20); do

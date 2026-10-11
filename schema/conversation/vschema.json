@@ -9,6 +9,12 @@
     "conversation": {
       "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
     },
+    "conversation_member": {
+      "column_vindexes": [{ "column": "conversation_id", "name": "xxhash" }]
+    },
+    "group_claim": {
+      "column_vindexes": [{ "column": "creator_user_id", "name": "xxhash" }]
+    },
     "conversation_pair": {
       "column_vindexes": [{ "column": "user_a", "name": "xxhash" }]
     },

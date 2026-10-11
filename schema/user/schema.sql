@@ -70,19 +70,29 @@ CREATE TABLE user_event (
 CREATE TABLE user_conversation (
   user_id BINARY(16) NOT NULL,
   conversation_id BINARY(16) NOT NULL,
-  peer_user_id BINARY(16) NOT NULL,
-  -- The peer's profile, updated by their profile changes.
-  peer_name VARCHAR(64) NOT NULL,
+  -- direct or group.
+  kind VARCHAR(8) NOT NULL,
+  -- Direct conversations: the peer and their profile, updated by their
+  -- profile changes. NULL and empty for groups.
+  peer_user_id BINARY(16) NULL,
+  peer_name VARCHAR(64) NOT NULL DEFAULT '',
   peer_icon VARCHAR(32) NOT NULL DEFAULT '',
   peer_avatar BINARY(16) NULL,
   peer_deleted BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Groups: as of the latest change, and the user's place in it.
+  topic VARCHAR(255) NOT NULL DEFAULT '',
+  member_count INT UNSIGNED NOT NULL DEFAULT 0,
+  member BOOLEAN NOT NULL DEFAULT TRUE,
+  admin BOOLEAN NOT NULL DEFAULT FALSE,
   last_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- The last message, NULL while the conversation is empty.
   last_sender_user_id BINARY(16) NULL,
   last_client_message_id VARCHAR(64) NULL,
-  last_body TEXT NULL,
+  -- As message.body.
+  last_body BLOB NULL,
   last_sent_at DATETIME(6) NULL,
   read_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  -- Direct conversations: the peer's read position.
   peer_read_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
   updated_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, conversation_id),
