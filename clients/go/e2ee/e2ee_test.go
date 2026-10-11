@@ -82,6 +82,14 @@ type vectors struct {
 		AAD            string   `json:"aad"`
 		Ciphertext     string   `json:"ciphertext"`
 	} `json:"reaction"`
+	Blob struct {
+		Key       string `json:"key"`
+		Nonce     string `json:"nonce"`
+		Plaintext string `json:"plaintext"`
+		AAD       string `json:"aad"`
+		Blob      string `json:"blob"`
+		Digest    string `json:"digest"`
+	} `json:"blob"`
 	Fingerprints struct {
 		Users []struct {
 			UserID      string   `json:"user_id"`
@@ -156,6 +164,10 @@ func inputs() *vectors {
 	v.Reaction.Seq = 1<<32 + 2
 	// One code point, one with a variation selector, one ZWJ sequence.
 	v.Reaction.Emoji = []string{"👍", "❤️", "👩‍👩‍👧"}
+	v.Blob.Key = h(seq(0x60, 32))
+	v.Blob.Nonce = h(seq(0x70, 12))
+	// More than two AES blocks, not a multiple of one.
+	v.Blob.Plaintext = h(seq(0x00, 40))
 	v.Fingerprints.Users = make([]struct {
 		UserID      string   `json:"user_id"`
 		Devices     []string `json:"devices"`
@@ -251,6 +263,13 @@ func compute(t *testing.T, v *vectors) {
 	}
 	v.Reaction.Plaintext, v.Reaction.AAD, v.Reaction.Ciphertext = h(plaintext), h(rc.AAD()), h(ct)
 
+	blob, err := SealBlob(unhex(t, v.Blob.Key), unhex(t, v.Blob.Nonce), unhex(t, v.Blob.Plaintext))
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(blob)
+	v.Blob.AAD, v.Blob.Blob, v.Blob.Digest = h([]byte(blobLabel)), h(blob), h(digest[:])
+
 	var fps [][]byte
 	for i, u := range v.Fingerprints.Users {
 		var keys []DeviceKey
@@ -324,6 +343,10 @@ func TestVectors(t *testing.T) {
 	if err != nil || !slices.Equal(reactions.GetEmoji(), got.Reaction.Emoji) {
 		t.Fatalf("open reactions: %v, %v", reactions, err)
 	}
+	file, err := DecryptBlob(unhex(t, got.Blob.Key), unhex(t, got.Blob.Digest), unhex(t, got.Blob.Blob))
+	if err != nil || h(file) != got.Blob.Plaintext {
+		t.Fatalf("decrypt blob: %x, %v", file, err)
+	}
 }
 
 func TestRFC7748(t *testing.T) {
@@ -390,6 +413,29 @@ func TestTampering(t *testing.T) {
 	moved.SenderUserID = seq(9, 16)
 	if _, err := OpenContent(k, moved, sealed); !errors.Is(err, ErrDecrypt) {
 		t.Fatalf("open as another sender: %v", err)
+	}
+}
+
+func TestBlob(t *testing.T) {
+	file := seq(1, 1000)
+	k, blob, digest, err := EncryptBlob(file)
+	if err != nil || len(blob) != NonceSize+len(file)+TagSize {
+		t.Fatalf("encrypt: %d bytes, %v", len(blob), err)
+	}
+	if got, err := DecryptBlob(k, digest, blob); err != nil || !bytes.Equal(got, file) {
+		t.Fatalf("decrypt: %v", err)
+	}
+	tampered := slices.Clone(blob)
+	tampered[NonceSize] ^= 1
+	if _, err := DecryptBlob(k, digest, tampered); !errors.Is(err, ErrDigest) {
+		t.Fatalf("tampered blob: %v", err)
+	}
+	sum := sha256.Sum256(tampered)
+	if _, err := DecryptBlob(k, sum[:], tampered); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("tampered blob with its digest: %v", err)
+	}
+	if _, err := DecryptBlob(NewEpochKey(), digest, blob); !errors.Is(err, ErrDecrypt) {
+		t.Fatalf("another key: %v", err)
 	}
 }
 

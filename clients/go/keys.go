@@ -144,12 +144,17 @@ func (c *Client) SendText(ctx context.Context, conversationID []byte, clientMess
 	return c.SendContent(ctx, conversationID, clientMessageID, &pb.Content{Body: &pb.Content_Text{Text: text}})
 }
 
-// SendContent is SendText for any content. A send refused for its epoch
-// is retried once after checking the keys again.
+// SendContent is SendText for any content; attachments' blob ids go with
+// it. A send refused for its epoch is retried once after checking the keys
+// again.
 func (c *Client) SendContent(ctx context.Context, conversationID []byte, clientMessageID string, content *pb.Content) (*pb.Message, error) {
 	k, err := c.requireKeys()
 	if err != nil {
 		return nil, err
+	}
+	var blobIDs [][]byte
+	for _, a := range content.GetAttachments().GetItems() {
+		blobIDs = append(blobIDs, a.GetBlobId())
 	}
 	for attempt := 0; ; attempt++ {
 		epoch, key, err := k.sendKey(ctx, c, conversationID)
@@ -162,7 +167,7 @@ func (c *Client) SendContent(ctx context.Context, conversationID []byte, clientM
 		if err != nil {
 			return nil, err
 		}
-		msg, err := c.SendMessage(ctx, conversationID, clientMessageID, sealed)
+		msg, err := c.SendMessage(ctx, conversationID, clientMessageID, sealed, blobIDs...)
 		if Code(err) == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION && attempt == 0 {
 			k.Invalidate(conversationID)
 			continue

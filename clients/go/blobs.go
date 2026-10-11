@@ -49,3 +49,21 @@ func Upload(ctx context.Context, blobAddress, uploadPath, mediaType string, data
 func BlobURL(blobAddress string, blobID []byte) string {
 	return fmt.Sprintf("%s/blobs/%x", strings.TrimSuffix(blobAddress, "/"), blobID)
 }
+
+// Download GETs a blob; it fails unless the blob address answers 200.
+func Download(ctx context.Context, blobAddress string, blobID []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, BlobURL(blobAddress, blobID), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return nil, fmt.Errorf("blob %x: HTTP %d", blobID, resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
+}

@@ -72,9 +72,9 @@ func (c *Client) OpenConversation(ctx context.Context, peerName string) (*pb.Con
 }
 
 // SendMessage sends sealed content as it is; SendText seals and sends.
-func (c *Client) SendMessage(ctx context.Context, conversationID []byte, clientMessageID string, sealed *pb.Sealed) (*pb.Message, error) {
+func (c *Client) SendMessage(ctx context.Context, conversationID []byte, clientMessageID string, sealed *pb.Sealed, blobIDs ...[]byte) (*pb.Message, error) {
 	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SendMessage{
-		SendMessage: &pb.SendMessageRequest{ConversationId: conversationID, ClientMessageId: clientMessageID, Sealed: sealed}}})
+		SendMessage: &pb.SendMessageRequest{ConversationId: conversationID, ClientMessageId: clientMessageID, Sealed: sealed, BlobIds: blobIDs}}})
 	if err != nil {
 		return nil, err
 	}

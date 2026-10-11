@@ -1,7 +1,6 @@
 // Package e2ee is the end-to-end cryptography of content.proto: device key
 // pairs, wrapping conversation epoch keys for devices, sealing content and
-// reactions,
-// fingerprints and safety numbers. Functions that need a nonce take it, so
+// reactions, encrypting attachment blobs, fingerprints and safety numbers. Functions that need a nonce take it, so
 // the test vectors are reproducible; callers pass random ones.
 package e2ee
 
@@ -32,10 +31,14 @@ const (
 	wrapLabel        = "wrinkle wrap v1"
 	contentLabel     = "wrinkle content v1"
 	reactionLabel    = "wrinkle reaction v1"
+	blobLabel        = "wrinkle blob v1"
 	fingerprintLabel = "wrinkle fingerprint v1"
 )
 
-var ErrDecrypt = errors.New("e2ee: cannot decrypt")
+var (
+	ErrDecrypt = errors.New("e2ee: cannot decrypt")
+	ErrDigest  = errors.New("e2ee: blob digest differs")
+)
 
 // GenerateKey makes a device key pair.
 func GenerateKey() (*ecdh.PrivateKey, error) {
@@ -292,6 +295,51 @@ func OpenReactions(k []byte, c ReactionContext, sealed *pb.Sealed) (*pb.Reaction
 		return nil, ErrDecrypt
 	}
 	return r, nil
+}
+
+// SealBlob encrypts a file under its key k: nonce || AES-GCM(k, nonce,
+// file, "wrinkle blob v1"), as uploaded.
+func SealBlob(k, nonce, file []byte) ([]byte, error) {
+	if len(nonce) != NonceSize {
+		return nil, errors.New("e2ee: wrong nonce size")
+	}
+	gcm, err := newGCM(k)
+	if err != nil {
+		return nil, err
+	}
+	return gcm.Seal(slices.Clone(nonce), nonce, file, []byte(blobLabel)), nil
+}
+
+// EncryptBlob encrypts a file with a new random key, returning the key,
+// the blob to upload and its SHA-256.
+func EncryptBlob(file []byte) (k, blob, digest []byte, err error) {
+	k = NewEpochKey()
+	if blob, err = SealBlob(k, NewNonce(), file); err != nil {
+		return nil, nil, nil, err
+	}
+	sum := sha256.Sum256(blob)
+	return k, blob, sum[:], nil
+}
+
+// DecryptBlob checks a downloaded blob against its digest and decrypts it
+// with the file's key.
+func DecryptBlob(k, digest, blob []byte) ([]byte, error) {
+	sum := sha256.Sum256(blob)
+	if !bytes.Equal(sum[:], digest) {
+		return nil, ErrDigest
+	}
+	if len(blob) < NonceSize+TagSize {
+		return nil, ErrDecrypt
+	}
+	gcm, err := newGCM(k)
+	if err != nil {
+		return nil, err
+	}
+	file, err := gcm.Open(nil, blob[:NonceSize], blob[NonceSize:], []byte(blobLabel))
+	if err != nil {
+		return nil, ErrDecrypt
+	}
+	return file, nil
 }
 
 // DeviceKey is a device's public key in a user's fingerprint.
