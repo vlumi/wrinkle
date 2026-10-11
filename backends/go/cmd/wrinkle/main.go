@@ -1,7 +1,8 @@
 // Command wrinkle is the Go backend: one binary whose roles are chosen by
-// configuration. The gateway role serves WebSocket connections with the
-// conversation and sync services in the same process; the fanout role
-// consumes the outbox from Kafka.
+// configuration. The gateway role serves WebSocket connections, with the
+// conversation and sync services in the same process unless it forwards to
+// a services process; the services role serves them over the internal RPC;
+// the fanout role consumes the outbox from Kafka.
 package main
 
 import (
@@ -10,22 +11,16 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
-	"net/http"
-	"net/http/pprof"
 	"os"
 	"os/signal"
-	"runtime"
-	rtdebug "runtime/debug"
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/fanout"
 	"github.com/vlumi/wrinkle/backends/go/gateway"
-	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 	"github.com/vlumi/wrinkle/backends/go/push"
@@ -61,12 +56,7 @@ func run() error {
 	)
 	flag.Parse()
 
-	level := slog.LevelInfo
-	if *debug {
-		level = slog.LevelDebug
-	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-	slog.SetDefault(log)
+	log := newLogger(*debug)
 	if dotenv != "" {
 		log.Info("settings read", "file", dotenv)
 	}
@@ -74,25 +64,16 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	wantGateway, wantFanout, wantServices := false, false, false
-	for _, role := range strings.Split(*roles, ",") {
-		switch strings.TrimSpace(role) {
-		case "gateway":
-			wantGateway = true
-		case "fanout":
-			wantFanout = true
-		case "services":
-			wantServices = true
-		default:
-			return fmt.Errorf("unknown role %q", role)
-		}
+	want, err := parseRoles(*roles)
+	if err != nil {
+		return err
 	}
 
 	// The database is needed by the services (in-process or as a role) and
 	// by fan-out; a gateway forwarding to a services process does without.
 	var local *services.Local
 	var userDB *sql.DB
-	if wantServices || wantFanout || (wantGateway && *svcAddr == "") {
+	if want.services || want.fanout || (want.gateway && *svcAddr == "") {
 		conversationDB, err := vtdb.Open(ctx, *mysql, "conversation", *dbConns)
 		if err != nil {
 			return err
@@ -125,29 +106,13 @@ func run() error {
 		}()
 	}
 
-	mux := http.NewServeMux()
-	mux.Handle("GET /metrics", metrics.Handler())
-	// Profiles for tuning; a prototype has no reason to hide them.
-	mux.HandleFunc("GET /debug/pprof/", pprof.Index)
-	mux.HandleFunc("GET /debug/pprof/profile", pprof.Profile)
-	mux.Handle("GET /debug/pprof/heap", pprof.Handler("heap"))
-	mux.Handle("GET /debug/pprof/goroutine", pprof.Handler("goroutine"))
-	mux.Handle("GET /debug/pprof/allocs", pprof.Handler("allocs"))
-	// Lets a measurement collect garbage before sampling memory.
-	mux.HandleFunc("POST /debug/gc", func(w http.ResponseWriter, r *http.Request) {
-		runtime.GC()
-		rtdebug.FreeOSMemory()
-		fmt.Fprintln(w, "ok")
-	})
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintln(w, "ok")
-	})
-	if wantServices {
+	mux := newMux()
+	if want.services {
 		srv := services.NewServer(local)
 		log.Info("services listening", "addr", *svcLsn)
 		start("services", func(ctx context.Context) error { return srv.Serve(ctx, *svcLsn) })
 	}
-	if wantGateway {
+	if want.gateway {
 		var backend services.Backend = local
 		if *svcAddr != "" {
 			client, err := services.Dial(*svcAddr)
@@ -163,19 +128,15 @@ func run() error {
 		start("gateway push", gw.Run)
 	}
 	start("http", func(ctx context.Context) error { return serveHTTP(ctx, *listen, mux, log) })
-	if wantFanout {
+	if want.fanout {
 		var notifier fanout.Notifier
 		if *apnsKey != "" {
-			keyFile := expandHome(*apnsKey)
-			keyID := *apnsKID
-			if keyID == "" {
-				keyID = keyIDFromFile(keyFile)
-			}
-			apns, err := push.NewAPNs(push.APNsConfig{KeyFile: keyFile, KeyID: keyID, TeamID: *apnsTID, Topic: *apnsTop})
+			n, err := newNotifier(push.APNsConfig{KeyFile: *apnsKey, KeyID: *apnsKID, TeamID: *apnsTID, Topic: *apnsTop},
+				userDB, pres, log.With("role", "push"))
 			if err != nil {
 				return err
 			}
-			notifier = push.NewNotifier(apns, userDB, pres, log.With("role", "push"))
+			notifier = n
 			log.Info("push notifications on", "topic", *apnsTop)
 		}
 		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, pres, notifier, log.With("role", "fanout"))
@@ -199,26 +160,33 @@ func run() error {
 	}
 }
 
-// serveHTTP serves until the context ends. WebSocket connections are
-// hijacked, so shutdown does not wait for them; the registry drains them.
-func serveHTTP(ctx context.Context, addr string, handler http.Handler, log *slog.Logger) error {
-	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 10 * time.Second}
-	errc := make(chan error, 1)
-	go func() { errc <- srv.ListenAndServe() }()
-	log.Info("listening", "addr", addr)
-	select {
-	case err := <-errc:
-		return err
-	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		return srv.Shutdown(shutdownCtx)
+func newLogger(debug bool) *slog.Logger {
+	level := slog.LevelInfo
+	if debug {
+		level = slog.LevelDebug
 	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	slog.SetDefault(log)
+	return log
 }
 
-func env(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
+type roleSet struct {
+	gateway, fanout, services bool
+}
+
+func parseRoles(list string) (roleSet, error) {
+	var want roleSet
+	for _, role := range strings.Split(list, ",") {
+		switch strings.TrimSpace(role) {
+		case "gateway":
+			want.gateway = true
+		case "fanout":
+			want.fanout = true
+		case "services":
+			want.services = true
+		default:
+			return want, fmt.Errorf("unknown role %q", role)
+		}
 	}
-	return fallback
+	return want, nil
 }

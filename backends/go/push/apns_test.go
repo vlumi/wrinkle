@@ -38,6 +38,16 @@ func testKey(t *testing.T) (*ecdsa.PrivateKey, string) {
 	return key, path
 }
 
+// http2Server is a TLS server speaking HTTP/2, as APNs requires.
+func http2Server(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(handler)
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	t.Cleanup(srv.Close)
+	return srv
+}
+
 // verifyJWT checks the provider token's signature and claims.
 func verifyJWT(t *testing.T, token string, pub *ecdsa.PublicKey) {
 	t.Helper()
@@ -72,15 +82,12 @@ func TestSendSignsAndAddressesTheRequest(t *testing.T) {
 	key, path := testKey(t)
 	var got *http.Request
 	var body map[string]any
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := http2Server(t, func(w http.ResponseWriter, r *http.Request) {
 		got = r
 		raw, _ := io.ReadAll(r.Body)
 		_ = json.Unmarshal(raw, &body)
 		w.WriteHeader(http.StatusOK)
-	}))
-	srv.EnableHTTP2 = true
-	srv.StartTLS()
-	defer srv.Close()
+	})
 
 	a, err := NewAPNs(APNsConfig{
 		KeyFile: path, KeyID: "KEY123", TeamID: "TEAM456", Topic: "fi.example.app",
@@ -123,12 +130,10 @@ func TestSendReportsUnregisteredTokens(t *testing.T) {
 		status int
 		reason string
 	}{{http.StatusGone, "Unregistered"}, {http.StatusBadRequest, "BadDeviceToken"}} {
-		srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv := http2Server(t, func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(tc.status)
 			_, _ = w.Write([]byte(`{"reason":"` + tc.reason + `"}`))
-		}))
-		srv.EnableHTTP2 = true
-		srv.StartTLS()
+		})
 		a, err := NewAPNs(APNsConfig{KeyFile: path, KeyID: "KEY123", TeamID: "TEAM456", Topic: "t",
 			ProductionURL: srv.URL, HTTPClient: srv.Client()})
 		if err != nil {
@@ -138,7 +143,6 @@ func TestSendReportsUnregisteredTokens(t *testing.T) {
 		if !errors.Is(err, ErrUnregistered) {
 			t.Fatalf("%d %s: got %v, want ErrUnregistered", tc.status, tc.reason, err)
 		}
-		srv.Close()
 	}
 }
 
@@ -160,6 +164,15 @@ func TestTruncate(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	if got := truncate("short", 10); got != "short" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestKeyIDFromFileName(t *testing.T) {
+	if got := keyIDFromFileName("/x/AuthKey_ABCDE12345.p8"); got != "ABCDE12345" {
+		t.Fatalf("got %q", got)
+	}
+	if got := keyIDFromFileName("/x/key.p8"); got != "" {
 		t.Fatalf("got %q", got)
 	}
 }

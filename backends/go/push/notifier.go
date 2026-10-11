@@ -69,66 +69,88 @@ type registration struct {
 }
 
 func (n *Notifier) notify(ctx context.Context, userID uint64, peerName string, msg *pb.Message) error {
-	rows, err := n.db.QueryContext(ctx, `
-		SELECT device_id, push_service, push_token FROM device
-		WHERE user_id = ? AND push_token IS NOT NULL`, userID)
-	if err != nil {
-		return err
-	}
-	var regs []registration
-	for rows.Next() {
-		var r registration
-		if err := rows.Scan(&r.deviceID, &r.service, &r.token); err != nil {
-			rows.Close()
-			return err
-		}
-		regs = append(regs, r)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil || len(regs) == 0 {
+	regs, err := n.registrations(ctx, userID)
+	if err != nil || len(regs) == 0 {
 		return err
 	}
 	connected, err := n.presence.ConnectedDevices(ctx, userID)
 	if err != nil {
 		return err
 	}
-	var badge int
-	if err := n.db.QueryRowContext(ctx, `
-		SELECT COALESCE(SUM(last_seq - read_seq), 0) FROM user_conversation WHERE user_id = ?`,
-		userID).Scan(&badge); err != nil {
+	badge, err := n.unread(ctx, userID)
+	if err != nil {
 		return err
 	}
+	conversationID := strconv.FormatUint(msg.GetConversationId(), 10)
 	alert := Alert{
 		Title:    peerName,
 		Body:     truncate(msg.GetText(), maxBodyRunes),
 		Badge:    badge,
-		ThreadID: strconv.FormatUint(msg.GetConversationId(), 10),
-		Data:     map[string]string{"conversation_id": strconv.FormatUint(msg.GetConversationId(), 10)},
+		ThreadID: conversationID,
+		Data:     map[string]string{"conversation_id": conversationID},
 	}
 	for _, r := range regs {
-		if connected[r.deviceID] {
-			continue
-		}
-		sandbox := r.service == pb.PushService_PUSH_SERVICE_APNS_SANDBOX.String()
-		err := n.apns.Send(ctx, sandbox, r.token, alert)
-		switch {
-		case err == nil:
-			metrics.PushSent.WithLabelValues("ok").Inc()
-		case errors.Is(err, ErrUnregistered):
-			metrics.PushSent.WithLabelValues("unregistered").Inc()
-			// Only if the device has not registered a new token meanwhile.
-			if _, err := n.db.ExecContext(ctx, `
-				UPDATE device SET push_service = NULL, push_token = NULL
-				WHERE user_id = ? AND device_id = ? AND push_token = ?`,
-				userID, r.deviceID, r.token); err != nil {
-				n.log.Warn("clearing push token failed", "err", err)
-			}
-		default:
-			metrics.PushSent.WithLabelValues("error").Inc()
-			n.log.Warn("push send failed", "user", userID, "device", r.deviceID, "err", err)
+		if !connected[r.deviceID] {
+			n.send(ctx, userID, r, alert)
 		}
 	}
 	return nil
+}
+
+func (n *Notifier) send(ctx context.Context, userID uint64, r registration, alert Alert) {
+	sandbox := r.service == pb.PushService_PUSH_SERVICE_APNS_SANDBOX.String()
+	err := n.apns.Send(ctx, sandbox, r.token, alert)
+	switch {
+	case err == nil:
+		metrics.PushSent.WithLabelValues("ok").Inc()
+	case errors.Is(err, ErrUnregistered):
+		metrics.PushSent.WithLabelValues("unregistered").Inc()
+		if err := n.unregister(ctx, userID, r); err != nil {
+			n.log.Warn("clearing push token failed", "err", err)
+		}
+	default:
+		metrics.PushSent.WithLabelValues("error").Inc()
+		n.log.Warn("push send failed", "user", userID, "device", r.deviceID, "err", err)
+	}
+}
+
+func (n *Notifier) registrations(ctx context.Context, userID uint64) ([]registration, error) {
+	rows, err := n.db.QueryContext(ctx, `
+		SELECT device_id, push_service, push_token FROM device
+		WHERE user_id = ? AND push_token IS NOT NULL`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var regs []registration
+	for rows.Next() {
+		var r registration
+		if err := rows.Scan(&r.deviceID, &r.service, &r.token); err != nil {
+			return nil, err
+		}
+		regs = append(regs, r)
+	}
+	return regs, rows.Err()
+}
+
+// unread counts the user's unread messages across conversations, for the
+// badge.
+func (n *Notifier) unread(ctx context.Context, userID uint64) (int, error) {
+	var count int
+	err := n.db.QueryRowContext(ctx, `
+		SELECT COALESCE(SUM(last_seq - read_seq), 0) FROM user_conversation WHERE user_id = ?`,
+		userID).Scan(&count)
+	return count, err
+}
+
+// unregister removes a token APNs rejected, unless the device has
+// registered a new one meanwhile.
+func (n *Notifier) unregister(ctx context.Context, userID uint64, r registration) error {
+	_, err := n.db.ExecContext(ctx, `
+		UPDATE device SET push_service = NULL, push_token = NULL
+		WHERE user_id = ? AND device_id = ? AND push_token = ?`,
+		userID, r.deviceID, r.token)
+	return err
 }
 
 func truncate(s string, n int) string {

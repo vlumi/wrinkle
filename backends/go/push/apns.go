@@ -19,6 +19,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -31,6 +32,7 @@ const (
 
 // APNsConfig is a token-based provider: a .p8 key from the developer
 // account, its key id, the team id, and the app's bundle id as the topic.
+// Without a key id, the one in the key's file name is used.
 type APNsConfig struct {
 	KeyFile       string
 	KeyID         string
@@ -76,6 +78,9 @@ func NewAPNs(cfg APNsConfig) (*APNs, error) {
 	if !ok {
 		return nil, errors.New("apns key: not an EC key")
 	}
+	if cfg.KeyID == "" {
+		cfg.KeyID = keyIDFromFileName(cfg.KeyFile)
+	}
 	if cfg.KeyID == "" || cfg.TeamID == "" || cfg.Topic == "" {
 		return nil, errors.New("apns: key id, team id and topic are all required")
 	}
@@ -90,6 +95,17 @@ func NewAPNs(cfg APNsConfig) (*APNs, error) {
 		client = &http.Client{Timeout: 10 * time.Second}
 	}
 	return &APNs{cfg: cfg, key: key, http: client}, nil
+}
+
+var keyIDInFileName = regexp.MustCompile(`AuthKey_([A-Z0-9]{10})\.p8$`)
+
+// keyIDFromFileName reads the key id from the name Apple gives the
+// download, AuthKey_<id>.p8.
+func keyIDFromFileName(path string) string {
+	if m := keyIDInFileName.FindStringSubmatch(path); m != nil {
+		return m[1]
+	}
+	return ""
 }
 
 // providerToken returns the current JWT, signing a new one when it is old.
