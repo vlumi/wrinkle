@@ -1,9 +1,11 @@
 // Drives the web client in headless Chrome over the DevTools protocol:
 // two users register in two pages, send a message each way, see a read
-// receipt, a deleted message, a rename and a picture, sign a second device in and out from the
-// first, delete an account, reload, sign out and in again; then three
-// users in a group: members added, messages, a topic change, read counts
-// and a removal.
+// receipt, a deleted message, matching safety numbers, a rename and a
+// picture, sign a second device in, share the history with it and sign it
+// out from the first, delete an account, reload, sign out and in again;
+// then three users in a group: members added, messages, a topic change,
+// read counts and a removal, after which the group has a new key epoch.
+// Every message is end-to-end encrypted.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -14,10 +16,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PORT = 9333;
-// A name Chrome maps to loopback: unlike localhost, it is not a secure
-// context, which is how the page is served on a LAN, so APIs that need one
-// fail here too.
+// A name Chrome maps to loopback. Unlike localhost it is not a secure
+// context by itself, but WebCrypto needs one: Chrome treats these origins as
+// secure, as a LAN deployment over HTTPS is.
 const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/";
+const SECURE_ORIGINS = ["http://wrinkle.test:8081", "ws://wrinkle.test:8080", "http://wrinkle.test:9200"];
 
 // A hard deadline: a hang anywhere (a dialog, a paused page, the backend)
 // fails the run instead of stalling the gate.
@@ -37,6 +40,7 @@ const chrome = spawn(
     "--no-default-browser-check",
     `--user-data-dir=${profile}`,
     "--host-resolver-rules=MAP wrinkle.test 127.0.0.1",
+    `--unsafely-treat-insecure-origin-as-secure=${SECURE_ORIGINS.join(",")}`,
     "about:blank",
   ],
   { stdio: "ignore" },
@@ -185,7 +189,10 @@ const visible = (sel) =>
 const click = (sel) => `(document.querySelector(${JSON.stringify(sel)}).click(), true)`;
 const text = (testid) => `${q(testid)}?.textContent`;
 
-check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
+check(
+  (await alice.eval("isSecureContext && !!crypto.subtle")) === true,
+  "the page runs in a secure context, with WebCrypto",
+);
 await alice.waitFor(`!!${q("url")}`);
 check(
   (await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8080/v1/ws",
@@ -261,6 +268,24 @@ await bob.waitFor(
   `${qa("message")}.some(li => li.classList.contains("mine") && li.textContent.startsWith("hi alice") && li.querySelector(".meta").textContent.endsWith("read"))`,
 );
 check(true, "alice marked the reply read while viewing");
+
+// Both see the same safety number; Alice marks Bob verified.
+const safetyNumber = async (p) => {
+  await p.waitFor(`/^(\\d{5} ){5}\\d{5}$/.test(${text("safety-number")})`);
+  return p.eval(text("safety-number"));
+};
+await alice.eval(click('[data-testid="verify"]'));
+await bob.eval(click('[data-testid="verify"]'));
+const aliceNumber = await safetyNumber(alice);
+const bobNumber = await safetyNumber(bob);
+check(aliceNumber === bobNumber, `the safety number is the same on both sides: ${aliceNumber}`);
+await alice.eval(click('[data-testid="mark-verified"]'));
+await alice.waitFor(`!!${q("verified")} && !${q("mark-verified")}`);
+check(true, "alice marked bob verified");
+await alice.eval(click('[data-testid="close-verify"]'));
+await bob.eval(click('[data-testid="close-verify"]'));
+await alice.waitFor(`!!${q("peer-name")} && !${q("fingerprint-warning")}`);
+await bob.waitFor(`!!${q("peer-name")}`);
 
 // Alice deletes a message of her own: an in-page confirmation, then both
 // sides show it removed, in the conversation and in the list.
@@ -373,6 +398,29 @@ const phone = new Page("bob-phone", 390);
 await phone.open();
 await authenticate(phone, "signIn", robertName, PASSWORD + "!");
 await phone.waitFor(`${text("status")} === "online"`);
+// Bob's first device is asked whether to share the history with the phone;
+// until it does, the phone cannot read the earlier messages.
+await bob.waitFor(`${text("share-prompt")}?.includes("signed in. Share your message history with it?")`);
+check(true, "bob's first device asks whether to share the history with the new one");
+await phone.eval(click(".row"));
+await phone.waitFor(
+  `${qa("message")}.filter(li => li.classList.contains("undecryptable") && li.querySelector(".text").textContent === "Can't decrypt this message").length === 2`,
+);
+check(true, "before that, the phone cannot read the earlier messages");
+await bob.eval(click('[data-testid="share-history"]'));
+await bob.waitFor(`${text("security-notice")}?.startsWith("Your message history was shared with")`);
+await phone.eval(click(".back"));
+await phone.waitFor(visible(".list"));
+await phone.eval(click(".row"));
+await phone.waitFor(
+  `${qa("message")}.some(li => li.querySelector(".text").textContent === "hello bob") && ${qa("message")}.some(li => li.querySelector(".text").textContent === "hi alice")`,
+);
+check(true, "after bob approves, the phone reads the earlier messages");
+await alice.waitFor(`${text("fingerprint-warning")}?.includes(${JSON.stringify(robertName)})`);
+check(true, "alice is warned that verified bob's devices changed");
+await fill(phone, "text", "from the phone");
+await alice.waitFor(`${qa("message")}.some(li => li.querySelector(".text").textContent === "from the phone")`);
+check(true, "the phone's message reaches alice");
 await bob.waitFor(
   `${qa("device")}.length === 2 && !!${nthDevice(0, "this-device")} && !${nthDevice(1, "this-device")}`,
 );
@@ -426,8 +474,13 @@ await alice.send("Page.reload");
 await sleep(1500);
 await alice.waitFor(`${text("status")} === "online"`);
 await alice.eval(click(".row"));
-await alice.waitFor(`${qa("message")}.length === 3`);
-check((await alice.eval(text("me"))) === aliceName, "alice reloaded as herself and sees the messages from history");
+await alice.waitFor(
+  `${qa("message")}.length === 4 && ${qa("message")}.some(li => li.querySelector(".text").textContent === "hello bob")`,
+);
+check(
+  (await alice.eval(text("me"))) === aliceName,
+  "alice reloaded as herself and reads the messages from history with the keys she kept",
+);
 check(await alice.eval(removedShown), "the removed message stays removed in history");
 const revoked = await alice.eval(`localStorage.getItem("wrinkle.credentials")`);
 
@@ -607,6 +660,20 @@ check(
   await ivy.eval(`${qa("message")}.length === 3`),
   "ivy sees she is no longer in the group, without a composer, the history kept",
 );
+
+// After the removal the group needs a new epoch: the next message has one,
+// and the remaining members read it; Ivy gets nothing more.
+await fill(gina, "text", "without ivy");
+await hank.waitFor(fromSender(ginaName, "without ivy"));
+const epochOf = (body) =>
+  `Number(${qa("message")}.find(li => li.querySelector(".text").textContent === ${JSON.stringify(body)})?.dataset.epoch)`;
+const [before, after] = [await hank.eval(epochOf("hello all")), await hank.eval(epochOf("without ivy"))];
+check(after > before, `the removal led to a new epoch (${before} then ${after}), which hank reads`);
+await fill(hank, "text", "hank still here");
+await gina.waitFor(fromSender(hankName, "hank still here"));
+check((await gina.eval(epochOf("hank still here"))) === after, "hank replies in the new epoch");
+await sleep(500);
+check(await ivy.eval(`${qa("message")}.length === 3`), "ivy gets no messages after her removal");
 for (const p of [gina, hank, ivy]) {
   check(await p.eval(`!${q("error")}`), `${p.name} saw no error banner`);
 }

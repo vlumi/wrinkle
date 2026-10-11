@@ -894,3 +894,47 @@ button:disabled {
     color: var(--muted);
   }
 }
+
+.message.undecryptable .text {
+  font-style: italic;
+  color: var(--muted);
+}
+
+.banner.security {
+  color: var(--ink);
+}
+
+.banner.security.warning {
+  color: var(--danger);
+}
+
+.banner .banner-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.banner .banner-actions button {
+  margin-left: 0;
+  padding: 4px 12px;
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.banner .banner-actions button.secondary,
+.banner.security.warning button {
+  color: var(--ink);
+  background: var(--theirs);
+}
+
+.safety-number {
+  margin: 4px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 20px;
+  letter-spacing: 0.05em;
+  word-spacing: 0.3em;
+}
+
+.verify .verified {
+  margin: 0;
+}

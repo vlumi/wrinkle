@@ -8,7 +8,7 @@ import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { BlobPurpose } from "../gen/wrinkle/v1/messaging_pb";
 import type { DeviceCredentials } from "../gen/wrinkle/v1/messaging_pb";
-import type { Conversation, Device, User } from "../gen/wrinkle/v1/model_pb";
+import type { Conversation, Device, Message, User } from "../gen/wrinkle/v1/model_pb";
 import { blobAddress } from "../blobs/blobs";
 import { BackendError, Connection } from "../connection/connection";
 import type { ConnectionState } from "../connection/connection";
@@ -16,18 +16,28 @@ import {
   addMessages,
   applyEvent,
   emptyData,
+  isDeleted,
   key,
   noteLatest,
+  textKey,
   unread,
   upsertConversation,
   withDeleted,
   withMembers,
+  withTexts,
   withUsers,
 } from "../conversations/model";
 import type { Data } from "../conversations/model";
 import { addPending, confirmPending, failPending, newMessageId } from "../conversations/pending";
 import type { PendingByConversation } from "../conversations/pending";
-import { sortDevices, withDevice } from "../devices/model";
+import { deviceLabel, sortDevices, withDevice } from "../devices/model";
+import { available } from "../e2ee/crypto";
+import { Keys } from "../e2ee/keys";
+import type { Call } from "../e2ee/keys";
+import { deleteStore, openStore, storeName } from "../e2ee/store";
+import type { KeyStore } from "../e2ee/store";
+import { loadVerified, saveVerified } from "../e2ee/verified";
+import type { Verified } from "../e2ee/verified";
 import { isFormer, isGroup, noticeUsers } from "../groups/model";
 import { fromHex, hex, sameId } from "../ids";
 import { rememberGateway } from "../signin/gateways";
@@ -38,6 +48,13 @@ const SYNC_LIMIT = 200;
 const HISTORY_PAGE = 50;
 
 export type AuthMode = "signIn" | "register";
+
+/** Another device of the user that signed in and may get the message history. */
+export interface NewDevice {
+  deviceId: bigint;
+  name: string;
+  publicKey: Uint8Array;
+}
 
 export interface Session extends Data {
   credentials: Credentials | null;
@@ -56,6 +73,14 @@ export interface Session extends Data {
   error: string | null;
   /** Why the device was signed out, for the sign-in screen. */
   notice: string | null;
+  /** Users' fingerprints in hex, by hex id, for those looked up. */
+  fingerprints: Record<string, string>;
+  /** Contacts the user verified, with the fingerprint verified. */
+  verified: Verified;
+  /** A new device of the user waiting for the decision on sharing the history. */
+  newDevice: NewDevice | null;
+  /** What changed about the account's encryption, until dismissed. */
+  securityNotice: string | null;
   /** Reconnects with the saved credentials, if any. */
   resume(): void;
   /** Registers or signs in, then connects; rejects with the backend's error. */
@@ -87,6 +112,15 @@ export interface Session extends Data {
   deleteMessage(seq: bigint): Promise<void>;
   markReadIfVisible(): void;
   clearError(): void;
+  /** Shares the message history with the new device, or not; either way it is no longer new. */
+  decideSharing(share: boolean): Promise<void>;
+  dismissSecurityNotice(): void;
+  /** Looks up the users' devices, for their fingerprints. */
+  lookUpDevices(userIds: Uint8Array[]): Promise<void>;
+  /** The safety number of the user and another, from their current devices. */
+  safetyNumber(userId: Uint8Array): Promise<string>;
+  /** Marks a contact verified with their current fingerprint. */
+  markVerified(userId: Uint8Array): Promise<void>;
 }
 
 interface PendingAuth {
@@ -104,6 +138,17 @@ let pendingAuth: PendingAuth | null = null;
 const loaded = new Set<string>();
 /** A sign-out this device asked for, with the notice to show when the server closes the connection for it. */
 let leaving: { notice: string | null } | null = null;
+/** The device's end-to-end keys, once signed in, and whether they started. */
+let keys: Keys | null = null;
+let keyStore: KeyStore | null = null;
+let keysReady: Promise<boolean> = Promise.resolve(false);
+/** New devices of the user after the one being asked about. */
+let newDevices: NewDevice[] = [];
+/** Messages being opened, by textKey. */
+const opening = new Set<string>();
+
+const NO_CRYPTO = "End-to-end encryption needs a secure page: open the client over HTTPS.";
+const KEY_LOST = "This device lost its encryption keys. Sign in again.";
 
 /** The state with no user's data in it. */
 const blank = {
@@ -114,6 +159,10 @@ const blank = {
   settings: false,
   pending: {},
   devices: null,
+  fingerprints: {},
+  verified: {},
+  newDevice: null,
+  securityNotice: null,
 } satisfies Partial<Session>;
 
 const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
@@ -121,6 +170,102 @@ const deviceName = () => (typeof navigator === "undefined" ? "" : navigator.user
 
 export const useSession = create<Session>((set, get) => {
   const fail = (err: unknown) => set({ error: err instanceof Error ? err.message : String(err) });
+
+  const call: Call = (expected, body) => {
+    if (!conn) return Promise.reject(new Error("not connected"));
+    return conn.call(expected, body);
+  };
+
+  /** Starts the device's keys for the signed-in device; false if it signed out for having lost them. */
+  async function startKeys(credentials: Credentials): Promise<boolean> {
+    if (keys?.ready) return true;
+    if (!available()) {
+      set({ error: NO_CRYPTO });
+      return true;
+    }
+    if (!keys) {
+      const self = { userId: fromHex(credentials.userId), deviceId: BigInt(credentials.deviceId) };
+      keyStore = await openStore(storeName(credentials.userId, credentials.deviceId));
+      keys = new Keys(call, self, keyStore, { members: membersOf, directoryChanged });
+    }
+    const k = keys;
+    keysReady = k.start();
+    let ok;
+    try {
+      ok = await keysReady;
+    } catch (err) {
+      keysReady = Promise.resolve(false);
+      fail(err);
+      return true;
+    }
+    if (!ok) {
+      // The backend has another key for this device: it signs in again as a new one.
+      leaving = { notice: KEY_LOST };
+      await conn?.call("signOut", { case: "signOut", value: {} }).catch(() => {});
+      signedOut(KEY_LOST);
+      return false;
+    }
+    set({ verified: loadVerified(credentials.userId) });
+    // Verified contacts' devices, so a change since shows.
+    const verified = Object.keys(get().verified).map(fromHex);
+    if (verified.length > 0) k.devicesOf(verified, true).catch(fail);
+    return true;
+  }
+
+  /** The conversation's current members, for the key epochs. */
+  async function membersOf(conversationId: Uint8Array, fresh: boolean): Promise<Uint8Array[]> {
+    const id = key(conversationId);
+    const c = get().conversations[id];
+    const me = get().me;
+    if (!c || !me) throw new Error("unknown conversation");
+    if (!isGroup(c)) return c.peer ? [me.userId, c.peer.userId] : [me.userId];
+    if (fresh || !get().members[id]) await refreshMembers(id);
+    return (get().members[id] ?? []).flatMap((m) => (m.user ? [m.user.userId] : []));
+  }
+
+  function directoryChanged(userIds: string[]) {
+    const k = keys;
+    if (!k) return;
+    for (const u of userIds) {
+      k.fingerprint(fromHex(u))
+        .then((fp) => {
+          if (keys === k) set({ fingerprints: { ...get().fingerprints, [u]: hex(fp) } });
+        })
+        .catch(fail);
+    }
+  }
+
+  /** Opens sealed messages not opened yet; again, those that could not be opened before. */
+  function openMessages(messages: (Message | undefined)[], again = false) {
+    const k = keys;
+    if (!k?.ready) return;
+    for (const m of messages) {
+      if (!m || m.content.case !== "sealed" || isDeleted(m)) continue;
+      const t = textKey(m);
+      const known = get().texts[t];
+      if (opening.has(t) || (known !== undefined && !(again && known === null))) continue;
+      opening.add(t);
+      k.open(m)
+        .then((text) => {
+          if (keys === k && (text !== null || get().texts[t] == null)) set(withTexts(get(), { [t]: text }));
+        })
+        .catch(() => {
+          // Not reachable now: tried again on the next look.
+        })
+        .finally(() => opening.delete(t));
+    }
+  }
+
+  function openLatest() {
+    openMessages(Object.values(get().conversations).map((c) => c.lastMessage));
+  }
+
+  function offerSharing(device: Device) {
+    const d = { deviceId: device.deviceId, name: deviceLabel(device), publicKey: device.publicKey };
+    if (get().newDevice?.deviceId === d.deviceId || newDevices.some((x) => x.deviceId === d.deviceId)) return;
+    if (get().newDevice) newDevices.push(d);
+    else set({ newDevice: d });
+  }
 
   function saveCursor(next: bigint) {
     cursor = next;
@@ -160,6 +305,15 @@ export const useSession = create<Session>((set, get) => {
     loaded.clear();
     conn?.close();
     conn = null;
+    // A signed-out device's keys are of no further use.
+    const credentials = get().credentials;
+    keyStore?.close();
+    if (credentials) deleteStore(storeName(credentials.userId, credentials.deviceId));
+    keys = null;
+    keyStore = null;
+    keysReady = Promise.resolve(false);
+    newDevices = [];
+    opening.clear();
     saved.forget();
     set({ ...blank, credentials: null, status: "offline", error: null, notice });
   }
@@ -218,6 +372,7 @@ export const useSession = create<Session>((set, get) => {
       saveCursor(resp.logHead);
     }
     set({ me: resp.user ?? null, status: "connected", error: null });
+    if (!(await startKeys(credentials))) return;
     await refreshConversations();
     await syncFromCursor();
     const current = get().current;
@@ -234,6 +389,7 @@ export const useSession = create<Session>((set, get) => {
     for (const c of resp.conversations) data = upsertConversation(data, c);
     set({ conversations: data.conversations, users: data.users });
     for (const c of resp.conversations) learnSender(key(c.conversationId));
+    openLatest();
   }
 
   /** Groups listing members right now, so each is asked once at a time. */
@@ -292,8 +448,17 @@ export const useSession = create<Session>((set, get) => {
     }
     if (event.body.case === "device") {
       const { device, signedOut } = event.body.value;
+      // Others' devices reach the user too, with only their keys.
+      const owner = event.body.value.userId.length > 0 ? event.body.value.userId : me.userId;
       const devices = get().devices;
-      if (device && devices) set({ devices: withDevice(devices, device, signedOut) });
+      if (device && devices && sameId(owner, me.userId)) set({ devices: withDevice(devices, device, signedOut) });
+      if (device) {
+        keysReady
+          .then((ok) => {
+            if (ok && keys?.deviceChanged(owner, device, signedOut)) offerSharing(device);
+          })
+          .catch(fail);
+      }
       return;
     }
     const { data, unknownConversation, membersChanged } = applyEvent(get(), event, me.userId);
@@ -309,8 +474,11 @@ export const useSession = create<Session>((set, get) => {
     if (unknownConversation) refreshConversations().catch(fail);
     if (m) {
       const id = key(m.conversationId);
+      // A membership change needs a new epoch before the next send.
+      if (membersChanged) keys?.invalidate(id);
       if (membersChanged && (get().members[id] || get().current === id)) refreshMembers(id).catch(fail);
       else learnSender(id);
+      openMessages([m]);
     }
   }
 
@@ -343,6 +511,7 @@ export const useSession = create<Session>((set, get) => {
     const complete =
       resp.messages.length < HISTORY_PAGE ? { ...get().complete, [conversationId]: true as const } : get().complete;
     set({ messages: data.messages, users, complete });
+    openMessages(resp.messages);
   }
 
   // Back on screen: reconnect now instead of waiting out the backoff.
@@ -458,6 +627,7 @@ export const useSession = create<Session>((set, get) => {
       const resp = await conn.call("openConversation", { case: "openConversation", value: { peerName } });
       if (!resp.conversation) return;
       set({ conversations: upsertConversation(get(), resp.conversation).conversations });
+      openLatest();
       await get().show(key(resp.conversation.conversationId));
     },
 
@@ -505,9 +675,16 @@ export const useSession = create<Session>((set, get) => {
     async show(conversationId) {
       set({ current: conversationId, settings: false });
       if (!conversationId) return;
+      // Keys may have arrived since, as from another device of the user.
+      keys?.retry(conversationId);
+      const c = get().conversations[conversationId];
+      openMessages([...Object.values(get().messages[conversationId] ?? {}), c?.lastMessage], true);
       if (!loaded.has(conversationId)) await loadHistory(conversationId, 0n);
       get().markReadIfVisible();
       await refreshMembers(conversationId).catch(fail);
+      membersOf(fromHex(conversationId), false)
+        .then((members) => get().lookUpDevices(members))
+        .catch(fail);
     },
 
     showSettings(open) {
@@ -529,13 +706,26 @@ export const useSession = create<Session>((set, get) => {
       const clientMessageId = newMessageId();
       set({ pending: addPending(get().pending, id, { clientMessageId, text }) });
       try {
-        const resp = await conn.call("sendMessage", {
-          case: "sendMessage",
-          value: { conversationId: fromHex(id), clientMessageId, text },
-        });
+        const conversationId = fromHex(id);
+        let resp;
+        for (let attempt = 1; ; attempt++) {
+          if (!keys?.ready) throw new Error(available() ? "Encryption is not ready yet." : NO_CRYPTO);
+          const sealed = await keys.seal(conversationId, clientMessageId, text);
+          try {
+            resp = await call("sendMessage", {
+              case: "sendMessage",
+              value: { conversationId, clientMessageId, sealed },
+            });
+            break;
+          } catch (err) {
+            // Another device made a newer epoch, or the members changed: look again, once.
+            if (attempt > 1 || !(err instanceof BackendError) || err.code !== ErrorCode.FAILED_PRECONDITION) throw err;
+            keys.invalidate(id);
+          }
+        }
         const m = resp.message;
         if (!m) return;
-        const data = noteLatest(addMessages(get(), m.conversationId, [m]), m, true);
+        const data = withTexts(noteLatest(addMessages(get(), m.conversationId, [m]), m, true), { [textKey(m)]: text });
         set({ ...data, pending: confirmPending(get().pending, m.conversationId, m.clientMessageId) });
       } catch (err) {
         set({ pending: failPending(get().pending, id, clientMessageId) });
@@ -564,6 +754,44 @@ export const useSession = create<Session>((set, get) => {
 
     clearError() {
       set({ error: null });
+    },
+
+    async decideSharing(share) {
+      const d = get().newDevice;
+      const k = keys;
+      if (!d || !k) return;
+      let notice;
+      if (share) {
+        await k.share(d);
+        notice = `Your message history was shared with ${d.name}.`;
+      } else {
+        notice = `${d.name} signed in. Your message history was not shared with it.`;
+      }
+      await k.markKnown(d.deviceId);
+      set({ newDevice: newDevices.shift() ?? null, securityNotice: notice });
+    },
+
+    dismissSecurityNotice() {
+      set({ securityNotice: null });
+    },
+
+    async lookUpDevices(userIds) {
+      await keys?.devicesOf(userIds);
+    },
+
+    async safetyNumber(userId) {
+      if (!keys?.ready) throw new Error(NO_CRYPTO);
+      return keys.safetyNumber(userId);
+    },
+
+    async markVerified(userId) {
+      const me = get().credentials?.userId;
+      if (!keys?.ready || !me) throw new Error(NO_CRYPTO);
+      const fp = hex(await keys.fingerprint(userId, true));
+      const u = hex(userId);
+      const verified = { ...get().verified, [u]: fp };
+      saveVerified(me, verified);
+      set({ verified, fingerprints: { ...get().fingerprints, [u]: fp } });
     },
   };
 });

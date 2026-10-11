@@ -27,12 +27,35 @@ export interface Data {
   /** Groups' current members, by conversation id, once listed. */
   members: Record<string, Member[]>;
   users: Users;
+  /** Sealed messages' texts as this device opened them, by textKey; null for those it cannot open. */
+  texts: Texts;
 }
 
-export const emptyData = (): Data => ({ conversations: {}, messages: {}, members: {}, users: {} });
+export type Texts = Record<string, string | null>;
 
-/** A message's text; empty for a notice. */
-export const textOf = (m: Message): string => (m.content.case === "text" ? m.content.value : "");
+export const emptyData = (): Data => ({ conversations: {}, messages: {}, members: {}, users: {}, texts: {} });
+
+/** The key of a message's text: its conversation and seq. */
+export const textKey = (m: { conversationId: Uint8Array; seq: bigint }): string => `${hex(m.conversationId)}/${m.seq}`;
+
+/** What a message this device cannot open shows in its place. */
+export const UNDECRYPTABLE = "Can't decrypt this message";
+
+/** A message's text: empty for a notice, a deleted message or one still being opened. */
+export function textOf(m: Message, texts: Texts): string {
+  if (m.content.case !== "sealed" || isDeleted(m)) return "";
+  const t = texts[textKey(m)];
+  return t === undefined ? "" : (t ?? UNDECRYPTABLE);
+}
+
+/** Whether the message is sealed and this device could not open it. */
+export const isUndecryptable = (m: Message, texts: Texts): boolean =>
+  m.content.case === "sealed" && !isDeleted(m) && texts[textKey(m)] === null;
+
+/** Records opened texts. */
+export function withTexts(data: Data, texts: Texts): Data {
+  return Object.keys(texts).length === 0 ? data : { ...data, texts: { ...data.texts, ...texts } };
+}
 
 /** What a deleted message shows in its place. */
 export const REMOVED = "Message removed";
@@ -230,13 +253,13 @@ export function inOrder(messages: Record<string, Message> | undefined): Message[
 }
 
 /** The list's line under a conversation: its latest message, with who sent it. */
-export function preview(c: Conversation, me: Uint8Array | undefined, users: Users): string {
+export function preview(c: Conversation, me: Uint8Array | undefined, users: Users, texts: Texts): string {
   const m = c.lastMessage;
   if (!m) return "No messages yet";
   const notice = noticeOf(m);
   if (notice) return noticeText(notice, m.senderUserId, me, users);
   if (isDeleted(m)) return REMOVED;
-  const text = textOf(m);
+  const text = textOf(m, texts);
   if (sameId(m.senderUserId, me)) return `You: ${text}`;
   const sender = isGroup(c) ? users[hex(m.senderUserId)] : undefined;
   return sender ? `${displayName(sender)}: ${text}` : text;

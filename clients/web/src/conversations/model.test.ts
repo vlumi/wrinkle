@@ -6,6 +6,7 @@ import {
   MemberSchema,
   MessageSchema,
   NoticeSchema,
+  SealedSchema,
 } from "../gen/wrinkle/v1/model_pb";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { hex } from "../ids";
@@ -16,10 +17,13 @@ import {
   inOrder,
   isDeleted,
   preview,
+  textKey,
   textOf,
+  UNDECRYPTABLE,
   unread,
   upsertConversation,
   withMembers,
+  withTexts,
 } from "./model";
 import type { Data } from "./model";
 
@@ -28,6 +32,16 @@ const me = id(1);
 const peer = id(2);
 const c7 = id(7);
 const k7 = hex(c7);
+// The model only tells sealed content apart; the texts come from opening it.
+const sealed = { case: "sealed", value: create(SealedSchema, { epoch: 1 }) } as const;
+
+/** The data with the texts of the conversation's messages, as this device opened them. */
+function opened(data: Data, conversationId = c7): Data {
+  const texts: Record<string, string> = {};
+  for (const m of Object.values(data.messages[hex(conversationId)] ?? {}))
+    texts[textKey(m)] = m.clientMessageId || `m${m.seq}`;
+  return withTexts(data, texts);
+}
 
 function oneConversation(): Data {
   const c = create(ConversationSchema, { conversationId: c7, peer: { userId: peer, name: "bob" } });
@@ -44,7 +58,7 @@ function messageEvent(seq: bigint, sender: Uint8Array, seconds = 0n) {
           conversationId: c7,
           seq,
           senderUserId: sender,
-          content: { case: "text", value: `m${seq}` },
+          content: sealed,
           sentAt: { seconds },
         }),
       },
@@ -57,7 +71,8 @@ test("a peer's message becomes the latest and unread", () => {
   expect(unknownConversation).toBe(false);
   const c = data.conversations[k7];
   expect(c.lastSeq).toBe(1n);
-  expect(textOf(c.lastMessage!)).toBe("m1");
+  expect(textOf(c.lastMessage!, data.texts)).toBe("");
+  expect(textOf(c.lastMessage!, opened(data).texts)).toBe("m1");
   expect(unread(c)).toBe(1n);
 });
 
@@ -127,14 +142,15 @@ describe("deleted messages", () => {
   test("a deletion tombstones the message and the latest preview", () => {
     let data = oneConversation();
     for (const seq of [1n, 2n]) data = applyEvent(data, messageEvent(seq, me), me).data;
-    const { data: next, unknownConversation } = applyEvent(data, deleted(2n), me);
+    const { data: applied, unknownConversation } = applyEvent(opened(data), deleted(2n), me);
+    const next = applied;
     expect(unknownConversation).toBe(false);
     const m = next.messages[k7]["2"];
     expect(isDeleted(m)).toBe(true);
     expect(m.deletedAt?.seconds).toBe(50n);
-    expect(textOf(m)).toBe("");
-    expect(textOf(next.messages[k7]["1"])).toBe("m1");
-    expect(preview(next.conversations[k7], me, next.users)).toBe("Message removed");
+    expect(textOf(m, next.texts)).toBe("");
+    expect(textOf(next.messages[k7]["1"], next.texts)).toBe("m1");
+    expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe("Message removed");
   });
 
   test("deleting an earlier message leaves the preview", () => {
@@ -142,14 +158,14 @@ describe("deleted messages", () => {
     for (const seq of [1n, 2n]) data = applyEvent(data, messageEvent(seq, peer), me).data;
     data = applyEvent(data, deleted(1n), me).data;
     expect(isDeleted(data.messages[k7]["1"])).toBe(true);
-    expect(preview(data.conversations[k7], me, data.users)).toBe("m2");
+    expect(preview(data.conversations[k7], me, data.users, opened(data, c7).texts)).toBe("m2");
   });
 
   test("a later message replaces the removed preview", () => {
     let data = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
     data = applyEvent(data, deleted(1n), me).data;
     data = applyEvent(data, messageEvent(2n, peer), me).data;
-    expect(preview(data.conversations[k7], me, data.users)).toBe("m2");
+    expect(preview(data.conversations[k7], me, data.users, opened(data, c7).texts)).toBe("m2");
   });
 
   test("an older copy of a deleted message does not bring its text back", () => {
@@ -157,7 +173,7 @@ describe("deleted messages", () => {
     data = applyEvent(data, deleted(1n), me).data;
     data = applyEvent(data, messageEvent(1n, peer), me).data;
     expect(isDeleted(data.messages[k7]["1"])).toBe(true);
-    expect(preview(data.conversations[k7], me, data.users)).toBe("Message removed");
+    expect(preview(data.conversations[k7], me, data.users, opened(data, c7).texts)).toBe("Message removed");
   });
 
   test("a deletion in an unknown conversation asks for the list", () => {
@@ -180,7 +196,7 @@ describe("deleted messages", () => {
       },
     });
     const data = applyEvent(oneConversation(), tomb, me).data;
-    expect(preview(data.conversations[k7], me, data.users)).toBe("Message removed");
+    expect(preview(data.conversations[k7], me, data.users, opened(data, c7).texts)).toBe("Message removed");
   });
 });
 
@@ -214,15 +230,31 @@ describe("groups", () => {
       cursor: seq,
       body: {
         case: "message",
-        value: { message: create(MessageSchema, { conversationId: g, seq, senderUserId: sender, content }) },
+        value: {
+          message: create(MessageSchema, {
+            conversationId: g,
+            seq,
+            senderUserId: sender,
+            content,
+            clientMessageId: seq === 2n ? "hi" : "yo",
+          }),
+        },
       },
     });
 
   test("previews name the sender in groups and tell notices as sentences", () => {
-    let data = applyEvent(group(), groupMessage(2n, peer, { case: "text", value: "hi" }), me).data;
-    expect(preview(data.conversations[kg], me, data.users)).toBe("bob: hi");
-    data = applyEvent(data, groupMessage(3n, me, { case: "text", value: "yo" }), me).data;
-    expect(preview(data.conversations[kg], me, data.users)).toBe("You: yo");
+    let data = applyEvent(
+      group(),
+      groupMessage(2n, peer, { case: "sealed", value: create(SealedSchema, { epoch: 1 }) }),
+      me,
+    ).data;
+    expect(preview(data.conversations[kg], me, data.users, opened(data, g).texts)).toBe("bob: hi");
+    data = applyEvent(
+      data,
+      groupMessage(3n, me, { case: "sealed", value: create(SealedSchema, { epoch: 1 }) }),
+      me,
+    ).data;
+    expect(preview(data.conversations[kg], me, data.users, opened(data, g).texts)).toBe("You: yo");
     data = applyEvent(
       data,
       groupMessage(4n, carol, {
@@ -231,13 +263,19 @@ describe("groups", () => {
       }),
       me,
     ).data;
-    expect(preview(data.conversations[kg], me, data.users)).toBe("carol changed the topic to “Trip 2”");
+    expect(preview(data.conversations[kg], me, data.users, opened(data, g).texts)).toBe(
+      "carol changed the topic to “Trip 2”",
+    );
     expect(data.conversations[kg].topic).toBe("Trip 2");
   });
 
   test("an unknown sender's text is shown alone", () => {
-    const data = applyEvent(group(), groupMessage(2n, id(8), { case: "text", value: "hi" }), me).data;
-    expect(preview(data.conversations[kg], me, data.users)).toBe("hi");
+    const data = applyEvent(
+      group(),
+      groupMessage(2n, id(8), { case: "sealed", value: create(SealedSchema, { epoch: 1 }) }),
+      me,
+    ).data;
+    expect(preview(data.conversations[kg], me, data.users, opened(data, g).texts)).toBe("hi");
   });
 
   test("a removal notice ends membership once, and asks for the members", () => {
@@ -261,4 +299,12 @@ describe("groups", () => {
     expect(data.conversations[kg].peerReadSeq).toBe(0n);
     expect(data.members[kg].find((m) => hex(m.user!.userId) === hex(carol))?.readSeq).toBe(5n);
   });
+});
+
+test("a sealed message this device cannot open says so", () => {
+  const data = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
+  const m = data.messages[k7]["1"];
+  const next = withTexts(data, { [textKey(m)]: null });
+  expect(textOf(m, next.texts)).toBe(UNDECRYPTABLE);
+  expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe(UNDECRYPTABLE);
 });

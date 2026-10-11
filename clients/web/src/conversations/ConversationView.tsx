@@ -7,7 +7,10 @@ import { GroupInfo } from "../groups/GroupInfo";
 import { isFormer, isGroup, noticeOf, noticeText, readBy } from "../groups/model";
 import { hex, sameId } from "../ids";
 import { useSession } from "../session/session";
-import { inOrder, isDeleted, REMOVED, textOf } from "./model";
+import { FingerprintWarning } from "../e2ee/FingerprintWarning";
+import { Verify } from "../e2ee/Verify";
+import { inOrder, isDeleted, isUndecryptable, REMOVED, textOf } from "./model";
+import type { Texts } from "./model";
 import type { Pending } from "./pending";
 
 /** How close to the end still counts as scrolled to the bottom, in pixels. */
@@ -19,6 +22,7 @@ export function ConversationView({ id }: { id: string }) {
   const pending = useSession((s) => s.pending[id]);
   const members = useSession((s) => s.members[id]);
   const users = useSession((s) => s.users);
+  const texts = useSession((s) => s.texts);
   const complete = useSession((s) => s.complete[id]);
   const me = useSession((s) => s.me);
   const show = useSession((s) => s.show);
@@ -29,6 +33,7 @@ export function ConversationView({ id }: { id: string }) {
   // Whether to follow new messages: not while the user reads further up.
   const atBottom = useRef(true);
   const [info, setInfo] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const messages = inOrder(messageMap);
   const count = messages.length + (pending?.length ?? 0);
 
@@ -44,6 +49,9 @@ export function ConversationView({ id }: { id: string }) {
   if (!conversation) return null;
   const group = isGroup(conversation);
   if (group && info) return <GroupInfo id={id} onClose={() => setInfo(false)} />;
+  if (!group && verifying && conversation.peer) {
+    return <Verify user={conversation.peer} onClose={() => setVerifying(false)} />;
+  }
   const oldest = messages[0];
   const peerName = displayName(conversation.peer);
   const lastMine = [...messages]
@@ -85,9 +93,25 @@ export function ConversationView({ id }: { id: string }) {
           <>
             <Avatar user={conversation.peer} />
             <h2 data-testid="peer-name">{peerName}</h2>
+            {!conversation.peer?.deleted && (
+              <button className="info secondary" data-testid="verify" onClick={() => setVerifying(true)}>
+                Verify
+              </button>
+            )}
           </>
         )}
       </header>
+      <FingerprintWarning
+        users={
+          group
+            ? (members ?? []).flatMap((m) => (m.user ? [m.user] : []))
+            : conversation.peer
+              ? [conversation.peer]
+              : []
+        }
+        me={me?.userId}
+        onVerify={group ? () => setInfo(true) : () => setVerifying(true)}
+      />
       <ol
         ref={scroller}
         className="messages"
@@ -123,6 +147,7 @@ export function ConversationView({ id }: { id: string }) {
             <MessageItem
               key={m.seq.toString()}
               message={m}
+              texts={texts}
               mine={mine}
               sender={group && !mine ? (users[hex(m.senderUserId)] ?? null) : undefined}
               receipt={mine ? receipt(m) : ""}
@@ -154,12 +179,14 @@ export function ConversationView({ id }: { id: string }) {
 
 function MessageItem({
   message: m,
+  texts,
   mine,
   sender,
   receipt,
   onDelete,
 }: {
   message: Message;
+  texts: Texts;
   mine: boolean;
   /** In groups, others' messages show who sent them; null for a sender not known yet. */
   sender?: User | null;
@@ -172,16 +199,24 @@ function MessageItem({
   const [confirming, setConfirming] = useState(false);
   const [failed, setFailed] = useState(false);
   const removed = isDeleted(m);
-  const classes = ["message", mine && "mine", removed && "removed", open && "open"].filter(Boolean).join(" ");
+  const undecryptable = isUndecryptable(m, texts);
+  const classes = ["message", mine && "mine", removed && "removed", undecryptable && "undecryptable", open && "open"]
+    .filter(Boolean)
+    .join(" ");
   return (
-    <li className={classes} data-testid="message" onClick={onDelete ? () => setOpen(!open) : undefined}>
+    <li
+      className={classes}
+      data-testid="message"
+      data-epoch={m.content.case === "sealed" ? m.content.value.epoch : undefined}
+      onClick={onDelete ? () => setOpen(!open) : undefined}
+    >
       {sender !== undefined && (
         <span className="sender" data-testid="sender">
           <Avatar user={sender} />
           <span className="sender-name">{sender ? displayName(sender) : "…"}</span>
         </span>
       )}
-      <span className="text">{removed ? REMOVED : textOf(m)}</span>
+      <span className="text">{removed ? REMOVED : textOf(m, texts)}</span>
       <span className="meta">
         {onDelete && !confirming && (
           <button

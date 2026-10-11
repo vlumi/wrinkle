@@ -3,7 +3,8 @@ import { Avatar } from "../account/Avatar";
 import { displayName } from "../account/icons";
 import { errorText } from "../connection/connection";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
-import type { Member } from "../gen/wrinkle/v1/model_pb";
+import { Verify } from "../e2ee/Verify";
+import type { Member, User } from "../gen/wrinkle/v1/model_pb";
 import { hex, sameId } from "../ids";
 import { useSession } from "../session/session";
 import { GroupAvatar } from "./GroupAvatar";
@@ -16,6 +17,7 @@ export function GroupInfo({ id, onClose }: { id: string; onClose(): void }) {
   const me = useSession((s) => s.me);
   const loadMembers = useSession((s) => s.loadMembers);
   const [error, setError] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState<User | null>(null);
   const report = (err: unknown) =>
     setError(
       errorText(err, {
@@ -31,6 +33,7 @@ export function GroupInfo({ id, onClose }: { id: string; onClose(): void }) {
   }, [id, loadMembers]);
 
   if (!conversation) return null;
+  if (verifying) return <Verify user={verifying} onClose={() => setVerifying(null)} />;
   const mine = members?.find((m) => sameId(m.user?.userId, me?.userId));
   const admin = mine ? mine.admin : conversation.admin;
 
@@ -68,6 +71,7 @@ export function GroupInfo({ id, onClose }: { id: string; onClose(): void }) {
                     self={sameId(m.user?.userId, me?.userId)}
                     canManage={admin}
                     onError={report}
+                    onVerify={() => m.user && setVerifying(m.user)}
                   />
                 ))}
               </ul>
@@ -124,11 +128,13 @@ function MemberItem({
   self,
   canManage,
   onError,
+  onVerify,
 }: {
   member: Member;
   self: boolean;
   canManage: boolean;
   onError(err: unknown): void;
+  onVerify(): void;
 }) {
   const setAdmin = useSession((s) => s.setAdmin);
   const removeMember = useSession((s) => s.removeMember);
@@ -150,24 +156,31 @@ function MemberItem({
           {self && <span>{m.admin ? " · you" : "You"}</span>}
         </span>
       </span>
-      {canManage && !self && (
+      {!self && (
         <span className="device-actions">
-          <button
-            type="button"
-            className="secondary"
-            data-testid="toggle-admin"
-            onClick={() => setAdmin(userId, !m.admin).catch(onError)}
-          >
-            {m.admin ? "Remove admin" : "Make admin"}
+          <button type="button" className="secondary" data-testid="verify-member" onClick={onVerify}>
+            Verify
           </button>
-          <button
-            type="button"
-            className="signout"
-            data-testid="remove-member"
-            onClick={() => removeMember(userId).catch(onError)}
-          >
-            Remove
-          </button>
+          {canManage && (
+            <>
+              <button
+                type="button"
+                className="secondary"
+                data-testid="toggle-admin"
+                onClick={() => setAdmin(userId, !m.admin).catch(onError)}
+              >
+                {m.admin ? "Remove admin" : "Make admin"}
+              </button>
+              <button
+                type="button"
+                className="signout"
+                data-testid="remove-member"
+                onClick={() => removeMember(userId).catch(onError)}
+              >
+                Remove
+              </button>
+            </>
+          )}
         </span>
       )}
     </li>

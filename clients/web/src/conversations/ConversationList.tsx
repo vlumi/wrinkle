@@ -9,13 +9,15 @@ import { isGroup } from "../groups/model";
 import type { Users } from "../groups/model";
 import { NewGroup } from "../groups/NewGroup";
 import { useSession } from "../session/session";
-import { byActivity, isDeleted, key, preview, unread } from "./model";
+import { byActivity, isDeleted, isUndecryptable, key, preview, unread } from "./model";
+import type { Texts } from "./model";
 
 export function ConversationList() {
   const conversations = useSession((s) => s.conversations);
   const current = useSession((s) => s.current);
   const me = useSession((s) => s.me);
   const users = useSession((s) => s.users);
+  const texts = useSession((s) => s.texts);
   const show = useSession((s) => s.show);
   const [creating, setCreating] = useState(false);
 
@@ -38,6 +40,7 @@ export function ConversationList() {
                 conversation={c}
                 me={me?.userId}
                 users={users}
+                texts={texts}
                 current={id === current}
                 onClick={() => show(id)}
               />
@@ -101,12 +104,14 @@ function ConversationRow({
   conversation: c,
   me,
   users,
+  texts,
   current,
   onClick,
 }: {
   conversation: Conversation;
   me: Uint8Array | undefined;
   users: Users;
+  texts: Texts;
   current: boolean;
   onClick(): void;
 }) {
@@ -123,8 +128,12 @@ function ConversationRow({
           </span>
         )}
       </span>
-      <span className={c.lastMessage && isDeleted(c.lastMessage) ? "last removed" : "last"}>
-        {preview(c, me, users)}
+      <span
+        className={
+          c.lastMessage && (isDeleted(c.lastMessage) || isUndecryptable(c.lastMessage, texts)) ? "last removed" : "last"
+        }
+      >
+        {preview(c, me, users, texts)}
       </span>
     </button>
   );

@@ -4,6 +4,7 @@ import { Settings } from "./account/Settings";
 import { StatusBadge } from "./connection/StatusBadge";
 import { ConversationList } from "./conversations/ConversationList";
 import { ConversationView } from "./conversations/ConversationView";
+import { SecurityBanners } from "./e2ee/SecurityBanners";
 import { useSession } from "./session/session";
 import { SignIn } from "./signin/SignIn";
 
@@ -51,6 +52,7 @@ export function App() {
           </button>
         </div>
       )}
+      <SecurityBanners />
       <div className="panes">
         <ConversationList />
         {settings ? (
