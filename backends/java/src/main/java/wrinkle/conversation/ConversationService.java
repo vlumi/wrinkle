@@ -1,5 +1,6 @@
 package wrinkle.conversation;
 
+import com.google.protobuf.InvalidProtocolBufferException;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -7,9 +8,12 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
@@ -22,6 +26,8 @@ import wrinkle.conversation.Rows.Header;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageDeletedEvent;
+import wrinkle.v1.Reaction;
+import wrinkle.v1.ReactionEvent;
 import wrinkle.v1.ReadEvent;
 import wrinkle.v1.Sealed;
 
@@ -34,6 +40,7 @@ public final class ConversationService {
   private static final int MAX_CLIENT_MESSAGE_ID = 64;
   private static final int NONCE_BYTES = 12;
   private static final int MAX_CIPHERTEXT_BYTES = 49152;
+  private static final int MAX_REACTION_CIPHERTEXT_BYTES = 1024;
   private static final int DEFAULT_PAGE_SIZE = 50;
   private static final int MAX_PAGE_SIZE = 500;
   // How many of the newest messages a read covers are searched for senders to tell.
@@ -182,24 +189,7 @@ public final class ConversationService {
       c.setAutoCommit(false);
       try {
         Header h = Rows.header(c, conversationId, true);
-        long from;
-        long to;
-        try (PreparedStatement ps =
-                Sql.prepare(
-                    c,
-                    "SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ?"
-                        + " AND user_id = ?",
-                    conversationId,
-                    userId);
-            ResultSet rs = ps.executeQuery()) {
-          if (!rs.next()) {
-            throw ApiError.permissionDenied(
-                "user " + userId + " is not in conversation " + conversationId);
-          }
-          from = rs.getLong(1);
-          long left = rs.getLong(2);
-          to = rs.wasNull() ? Long.MAX_VALUE : left;
-        }
+        Readable r = readable(c, conversationId, userId);
         Message msg;
         long targetOutboxId;
         try (PreparedStatement ps =
@@ -212,7 +202,7 @@ public final class ConversationService {
                     conversationId,
                     seq);
             ResultSet rs = ps.executeQuery()) {
-          if (!rs.next() || seq < from || seq > to) {
+          if (!rs.next() || !r.covers(seq)) {
             throw ApiError.notFound("message " + seq + " does not exist");
           }
           msg = Rows.message(conversationId, rs);
@@ -236,6 +226,9 @@ public final class ConversationService {
             MessageBody.encode(deleted),
             conversationId,
             seq);
+        // The deleted event tells the members to drop the reactions too.
+        Sql.update(
+            c, "DELETE FROM reaction WHERE conversation_id = ? AND seq = ?", conversationId, seq);
         Event event =
             Event.newBuilder()
                 .setOccurredAt(deleted.getDeletedAt())
@@ -261,6 +254,128 @@ public final class ConversationService {
             event,
             at,
             targetOutboxId);
+        c.commit();
+      } catch (SQLException | RuntimeException e) {
+        c.rollback();
+        throw e;
+      }
+    }
+  }
+
+  /**
+   * Sets the user's sealed reactions to a message, replacing earlier ones; without sealed, removes
+   * them. Only current members may react, with the current key epoch, and not to notices or deleted
+   * messages. A change reaches the current members; no change sends nothing.
+   */
+  public void setReaction(Uuid userId, Uuid conversationId, long seq, Sealed sealed)
+      throws SQLException {
+    if (seq <= 0) {
+      throw ApiError.invalidArgument("seq must be positive");
+    }
+    if (sealed != null) {
+      if (sealed.getNonce().size() != NONCE_BYTES) {
+        throw ApiError.invalidArgument("sealed.nonce must be " + NONCE_BYTES + " bytes");
+      }
+      int ciphertext = sealed.getCiphertext().size();
+      if (ciphertext == 0 || ciphertext > MAX_REACTION_CIPHERTEXT_BYTES) {
+        throw ApiError.invalidArgument(
+            "sealed.ciphertext must be 1 to " + MAX_REACTION_CIPHERTEXT_BYTES + " bytes");
+      }
+    }
+    try (Connection c = db.getConnection()) {
+      c.setAutoCommit(false);
+      try {
+        Header h = Rows.memberHeader(c, conversationId, userId, true);
+        Readable r = readable(c, conversationId, userId);
+        Message msg;
+        try (PreparedStatement ps =
+                Sql.prepare(
+                    c,
+                    "SELECT "
+                        + Rows.MESSAGE_COLUMNS
+                        + " FROM message WHERE conversation_id = ? AND seq = ?",
+                    conversationId,
+                    seq);
+            ResultSet rs = ps.executeQuery()) {
+          if (!rs.next() || !r.covers(seq)) {
+            throw ApiError.notFound("message " + seq + " does not exist");
+          }
+          msg = Rows.message(conversationId, rs);
+        }
+        if (msg.hasNotice()) {
+          throw ApiError.invalidArgument("a notice cannot be reacted to");
+        }
+        if (msg.hasDeletedAt()) {
+          throw ApiError.failedPrecondition("message " + seq + " was deleted");
+        }
+        if (sealed != null) {
+          if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
+            throw ApiError.failedPrecondition("stale key epoch");
+          }
+          if (h.rotate()) {
+            throw ApiError.failedPrecondition("keys must rotate");
+          }
+        }
+        byte[] previous;
+        try (PreparedStatement ps =
+                Sql.prepare(
+                    c,
+                    "SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?"
+                        + " FOR UPDATE",
+                    conversationId,
+                    seq,
+                    userId);
+            ResultSet rs = ps.executeQuery()) {
+          previous = rs.next() ? rs.getBytes(1) : null;
+        }
+        byte[] body = sealed == null ? null : sealed.toByteArray();
+        if (Arrays.equals(previous, body)) {
+          c.rollback();
+          return;
+        }
+        LocalDateTime at = Timestamps.now();
+        if (body == null) {
+          Sql.update(
+              c,
+              "DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?",
+              conversationId,
+              seq,
+              userId);
+        } else {
+          Sql.update(
+              c,
+              "INSERT INTO reaction (conversation_id, seq, user_id, body, updated_at) VALUES (?, ?,"
+                  + " ?, ?, ?) ON DUPLICATE KEY UPDATE body = ?, updated_at = ?",
+              conversationId,
+              seq,
+              userId,
+              body,
+              at,
+              body,
+              at);
+        }
+        ReactionEvent.Builder reaction =
+            ReactionEvent.newBuilder()
+                .setConversationId(conversationId.toByteString())
+                .setSeq(seq)
+                .setUserId(userId.toByteString())
+                .setUpdatedAt(Timestamps.toProto(at));
+        if (sealed != null) {
+          reaction.setSealed(sealed);
+        }
+        Event event =
+            Event.newBuilder().setOccurredAt(Timestamps.toProto(at)).setReaction(reaction).build();
+        Rows.insertOutbox(
+            c,
+            conversationId,
+            Ids.random(),
+            h.members(),
+            h.kind(),
+            h.topic(),
+            h.members().size(),
+            "reaction",
+            event,
+            at);
         c.commit();
       } catch (SQLException | RuntimeException e) {
         c.rollback();
@@ -400,24 +515,8 @@ public final class ConversationService {
     int pageSize = limit == 0 ? DEFAULT_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE);
     try (Connection c = db.getConnection()) {
       Rows.header(c, conversationId, false);
-      long from;
-      long to;
-      try (PreparedStatement ps =
-              Sql.prepare(
-                  c,
-                  "SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ?"
-                      + " AND user_id = ?",
-                  conversationId,
-                  userId);
-          ResultSet rs = ps.executeQuery()) {
-        if (!rs.next()) {
-          throw ApiError.permissionDenied(
-              "user " + userId + " is not in conversation " + conversationId);
-        }
-        from = rs.getLong(1);
-        long left = rs.getLong(2);
-        to = rs.wasNull() ? Long.MAX_VALUE : left;
-      }
+      Readable r = readable(c, conversationId, userId);
+      List<Message> page = new ArrayList<>();
       try (PreparedStatement ps =
               Sql.prepare(
                   c,
@@ -426,17 +525,94 @@ public final class ConversationService {
                       + " FROM message WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq"
                       + " < ? ORDER BY seq DESC LIMIT ?",
                   conversationId,
-                  from,
-                  to,
+                  r.from(),
+                  r.to(),
                   before,
                   pageSize);
           ResultSet rs = ps.executeQuery()) {
-        List<Message> out = new ArrayList<>();
         while (rs.next()) {
-          out.add(Rows.message(conversationId, rs));
+          page.add(Rows.message(conversationId, rs));
         }
-        return out;
       }
+      if (page.isEmpty()) {
+        return page;
+      }
+      Map<Long, List<Reaction>> reactions =
+          reactions(c, conversationId, page.getLast().getSeq(), page.getFirst().getSeq());
+      List<Message> out = new ArrayList<>(page.size());
+      for (Message m : page) {
+        List<Reaction> forMessage = reactions.get(m.getSeq());
+        out.add(
+            forMessage == null || m.hasDeletedAt()
+                ? m
+                : m.toBuilder().addAllReactions(forMessage).build());
+      }
+      return out;
+    }
+  }
+
+  /** The reactions to the messages from seq from to seq to, by seq, oldest first. */
+  private static Map<Long, List<Reaction>> reactions(
+      Connection c, Uuid conversationId, long from, long to) throws SQLException {
+    Map<Long, List<Reaction>> out = new HashMap<>();
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT seq, user_id, body, updated_at FROM reaction WHERE conversation_id = ? AND"
+                    + " seq >= ? AND seq <= ? ORDER BY updated_at, user_id",
+                conversationId,
+                from,
+                to);
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        Reaction reaction =
+            Reaction.newBuilder()
+                .setUserId(Uuid.of(rs.getBytes(2)).toByteString())
+                .setSealed(sealedBody(rs.getBytes(3)))
+                .setUpdatedAt(Timestamps.toProto(rs.getObject(4, LocalDateTime.class)))
+                .build();
+        out.computeIfAbsent(rs.getLong(1), k -> new ArrayList<>()).add(reaction);
+      }
+    }
+    return out;
+  }
+
+  private static Sealed sealedBody(byte[] body) {
+    try {
+      return Sealed.parseFrom(body);
+    } catch (InvalidProtocolBufferException e) {
+      throw new IllegalStateException("corrupt reaction body", e);
+    }
+  }
+
+  /**
+   * The part of the sequence a user may read: from the notice that added them to the one removing
+   * them.
+   */
+  private record Readable(long from, long to) {
+    boolean covers(long seq) {
+      return seq >= from && seq <= to;
+    }
+  }
+
+  /** The user's readable range; PERMISSION_DENIED if they were never a member. */
+  private static Readable readable(Connection c, Uuid conversationId, Uuid userId)
+      throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ?"
+                    + " AND user_id = ?",
+                conversationId,
+                userId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw ApiError.permissionDenied(
+            "user " + userId + " is not in conversation " + conversationId);
+      }
+      long from = rs.getLong(1);
+      long left = rs.getLong(2);
+      return new Readable(from, rs.wasNull() ? Long.MAX_VALUE : left);
     }
   }
 }
