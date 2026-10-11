@@ -409,10 +409,9 @@ func (x *ProfileEvent) GetUser() *User {
 
 // A device signed in, was renamed, set its key or signed out. The user's
 // own devices receive every change, with the whole Device. A change to a
-// device's key (set, or the device signed out) also reaches the user's
-// direct partners and the members of the user's groups, with only the
-// device id and key, so they can encrypt for it and check its user's
-// safety number.
+// device that has a key also reaches the user's direct partners and the
+// members of the user's groups, with only the device id and key, so they
+// can encrypt for it and check its user's safety number.
 type DeviceEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Device        *Device                `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`

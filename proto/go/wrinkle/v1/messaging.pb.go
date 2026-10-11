@@ -2457,8 +2457,13 @@ func (x *UserDevices) GetDevices() []*Device {
 // epoch, every recipient a current member; the current epoch takes more
 // recipients, current members; an older epoch only this user's own devices
 // (sharing history with a new device). Any other epoch fails with
-// ERROR_CODE_FAILED_PRECONDITION: another device published first. Wraps a
-// recipient already has are kept. At most 1000 keys.
+// ERROR_CODE_FAILED_PRECONDITION: another device published first. So does a
+// request for an existing epoch with a key for the requesting device itself,
+// unless that device made the epoch: a device publishing a new epoch
+// includes itself, so the loser of two publishing the same epoch learns it
+// lost instead of joining the winner's epoch with its own key. Wraps a
+// recipient already has are kept. At most 500 keys; a new epoch with more
+// recipients continues as the current epoch.
 type PublishKeysRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`

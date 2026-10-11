@@ -106,7 +106,8 @@ CREATE TABLE user_conversation (
 -- keyspace's: each row is deleted in the transaction that inserts it, and
 -- Debezium streams the insert to Kafka. Fan-out appends a ProfileEvent to
 -- the user's log and to each conversation partner's, a DeviceEvent to the
--- user's log only.
+-- user's log and, for a device with a key, to the partners and the members
+-- of the user's groups.
 CREATE TABLE user_outbox (
   user_id BINARY(16) NOT NULL,
   -- From user.last_outbox_id.
