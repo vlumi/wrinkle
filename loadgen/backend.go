@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"io"
 	"net/http"
 	"net/url"
 	"os/exec"
@@ -19,27 +20,46 @@ type sample struct {
 	connections float64
 }
 
-// scrape reads the backend's Prometheus text metrics. Live memory is what the
-// runtime reports after a collection: Go's allocated heap and stacks, the
-// JVM's memory pools, the BEAM's process and system memory. A runtime that does not report resident memory (the JVM on
+// scrape asks the backend to collect garbage, then reads its Prometheus
+// text metrics. A runtime that does not report resident memory (the JVM on
 // macOS) is measured with ps instead, found by the port it listens on.
 func scrape(metricsURL string) sample {
 	if metricsURL == "" {
 		return sample{}
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
-	if gc, err := url.JoinPath(metricsURL, "..", "debug", "gc"); err == nil {
-		if r, err := client.Post(gc, "text/plain", nil); err == nil {
-			r.Body.Close()
-		}
-	}
+	collectGarbage(client, metricsURL)
 	resp, err := client.Get(metricsURL)
 	if err != nil {
 		return sample{}
 	}
 	defer resp.Body.Close()
+	s := parseMetrics(resp.Body)
+	if s.rss == 0 {
+		s.rss = rssOfListener(metricsURL)
+	}
+	return s
+}
+
+// collectGarbage asks the backend to collect, through the debug endpoint
+// beside its metrics, so live memory is what survives a collection. A
+// backend without the endpoint is sampled as it is.
+func collectGarbage(client *http.Client, metricsURL string) {
+	gc, err := url.JoinPath(metricsURL, "..", "debug", "gc")
+	if err != nil {
+		return
+	}
+	if r, err := client.Post(gc, "text/plain", nil); err == nil {
+		r.Body.Close()
+	}
+}
+
+// parseMetrics reads the metrics a sample needs. Live memory is what each
+// runtime reports in use: Go's allocated heap and stacks, the JVM's memory
+// pools, the BEAM's process and system memory.
+func parseMetrics(r io.Reader) sample {
 	s := sample{ok: true}
-	sc := bufio.NewScanner(resp.Body)
+	sc := bufio.NewScanner(r)
 	sc.Buffer(make([]byte, 1<<20), 1<<20)
 	for sc.Scan() {
 		line := sc.Text()
@@ -67,9 +87,6 @@ func scrape(metricsURL string) sample {
 		case "wrinkle_connections":
 			s.connections += v
 		}
-	}
-	if s.rss == 0 {
-		s.rss = rssOfListener(metricsURL)
 	}
 	return s
 }

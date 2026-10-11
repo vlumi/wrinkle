@@ -6,14 +6,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"math/rand/v2"
 	"os"
 	"os/signal"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -61,9 +59,49 @@ func run(cfg config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	stats := &stats{}
+	devices := newDevices(cfg, stats)
+	fmt.Fprintf(os.Stderr, "connecting %d devices (%d users) at %d/s\n", cfg.connections, cfg.connections/cfg.devicesPerUser, cfg.ramp)
+	start := time.Now()
+	connectAll(ctx, devices, cfg.url, cfg.ramp, stats)
+	fmt.Fprintf(os.Stderr, "connected in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
+	ready := openAll(ctx, devices, stats)
+	if len(ready) == 0 {
+		return fmt.Errorf("no device is ready")
+	}
+	for _, d := range ready {
+		go d.receive(ctx)
+	}
+
+	fmt.Fprintf(os.Stderr, "warm-up %s, then measuring %s at %.0f msg/s\n", cfg.warmup, cfg.duration, cfg.rate)
+	sendCtx, stopSending := context.WithCancel(ctx)
+	senders := startSenders(ctx, sendCtx, ready, cfg.rate)
+	sleepCtx(ctx, cfg.warmup)
+	before := scrape(cfg.metricsURL)
+	stats.startWindow()
+	sleepCtx(ctx, cfg.duration)
+	stats.endWindow()
+	after := scrape(cfg.metricsURL)
+	stopSending()
+	senders.Wait()
+
+	waitForReceipts(ctx, stats, cfg.devicesPerUser, 10*time.Second)
+	for _, d := range ready {
+		d.client.Close()
+	}
+
+	r := stats.result(cfg, before, after)
+	fmt.Println(r.String())
+	if cfg.out != "" {
+		return appendResult(cfg.out, r)
+	}
+	return nil
+}
+
+// newDevices makes the devices of users paired into conversations: user
+// 2n talks to user 2n+1. Names carry a run id so runs do not share data.
+func newDevices(cfg config, stats *stats) []*device {
 	runID := fmt.Sprintf("%06x", rand.IntN(1<<24))
-	users := cfg.connections / cfg.devicesPerUser
-	stats := newStats()
 	devices := make([]*device, 0, cfg.connections)
 	for i := range cfg.connections {
 		user := i / cfg.devicesPerUser
@@ -74,27 +112,33 @@ func run(cfg config) error {
 			markRead: cfg.markRead,
 		})
 	}
+	return devices
+}
 
-	fmt.Fprintf(os.Stderr, "connecting %d devices (%d users) at %d/s\n", cfg.connections, users, cfg.ramp)
-	start := time.Now()
+// connectAll connects the devices, ramp per second, and waits for all of
+// them; a device that fails is left without a client.
+func connectAll(ctx context.Context, devices []*device, url string, ramp int, stats *stats) {
 	var wg sync.WaitGroup
 	for i, d := range devices {
 		if i > 0 {
-			time.Sleep(time.Second / time.Duration(cfg.ramp))
+			time.Sleep(time.Second / time.Duration(ramp))
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if err := d.connect(ctx, cfg.url); err != nil {
+			if err := d.connect(ctx, url); err != nil {
 				stats.connectErrors.Add(1)
 				fmt.Fprintf(os.Stderr, "connect %s: %v\n", d.userName, err)
 			}
 		}()
 	}
 	wg.Wait()
-	fmt.Fprintf(os.Stderr, "connected in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
+}
 
-	// Every device needs its peer to exist before opening the conversation.
+// openAll opens every connected device's conversation, which needs every
+// peer connected first, and returns the devices that are ready.
+func openAll(ctx context.Context, devices []*device, stats *stats) []*device {
+	var wg sync.WaitGroup
 	for _, d := range devices {
 		if d.client == nil {
 			continue
@@ -113,95 +157,16 @@ func run(cfg config) error {
 	for _, d := range devices {
 		if d.client != nil && d.conversationID != 0 {
 			ready = append(ready, d)
-			go d.receive(ctx)
 		}
 	}
-	if len(ready) == 0 {
-		return fmt.Errorf("no device is ready")
-	}
-
-	fmt.Fprintf(os.Stderr, "warm-up %s, then measuring %s at %.0f msg/s\n", cfg.warmup, cfg.duration, cfg.rate)
-	sendCtx, stopSending := context.WithCancel(ctx)
-	var senders sync.WaitGroup
-	if cfg.rate > 0 {
-		n := min(len(ready), 64)
-		for s := range n {
-			var share []*device
-			for i := s; i < len(ready); i += n {
-				share = append(share, ready[i])
-			}
-			senders.Add(1)
-			go func() {
-				defer senders.Done()
-				sendLoop(ctx, sendCtx, share, cfg.rate/float64(n))
-			}()
-		}
-	}
-	sleepCtx(ctx, cfg.warmup)
-	before := scrape(cfg.metricsURL)
-	stats.startWindow()
-	sleepCtx(ctx, cfg.duration)
-	stats.endWindow()
-	after := scrape(cfg.metricsURL)
-	stopSending()
-	senders.Wait()
-
-	// Let messages sent at the end of the window arrive.
-	grace := time.Now().Add(10 * time.Second)
-	for time.Now().Before(grace) && stats.received.Load() < stats.expectedReceipts(cfg.devicesPerUser) {
-		sleepCtx(ctx, 200*time.Millisecond)
-	}
-	for _, d := range ready {
-		d.client.Close()
-	}
-
-	r := stats.result(cfg, before, after)
-	r.Time = time.Now().UTC().Format(time.RFC3339)
-	r.Label = cfg.label
-	r.Commit = cfg.commit
-	fmt.Println(r.String())
-	if cfg.out != "" {
-		line, err := json.Marshal(r)
-		if err != nil {
-			return err
-		}
-		f, err := os.OpenFile(cfg.out, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if _, err := f.Write(append(line, '\n')); err != nil {
-			return err
-		}
-	}
-	return nil
+	return ready
 }
 
-// sendLoop sends on a fixed schedule, round-robin over its devices, without
-// waiting for responses: an open loop, so overload shows up as latency.
-// The schedule stops with scheduleCtx; sends in flight finish under ctx.
-func sendLoop(ctx, scheduleCtx context.Context, devices []*device, rate float64) {
-	interval := time.Duration(float64(time.Second) / rate)
-	next := time.Now()
-	var wg sync.WaitGroup
-	defer wg.Wait()
-	for i := 0; ; i++ {
-		next = next.Add(interval)
-		if d := time.Until(next); d > 0 {
-			select {
-			case <-scheduleCtx.Done():
-				return
-			case <-time.After(d):
-			}
-		} else if scheduleCtx.Err() != nil {
-			return
-		}
-		dev := devices[i%len(devices)]
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			dev.send(ctx)
-		}()
+// waitForReceipts lets messages sent at the end of the window arrive.
+func waitForReceipts(ctx context.Context, stats *stats, devicesPerUser int, grace time.Duration) {
+	deadline := time.Now().Add(grace)
+	for time.Now().Before(deadline) && stats.received.Load() < stats.expectedReceipts(devicesPerUser) {
+		sleepCtx(ctx, 200*time.Millisecond)
 	}
 }
 
@@ -211,5 +176,3 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 	case <-time.After(d):
 	}
 }
-
-var seq atomic.Uint64

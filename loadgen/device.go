@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	wrinkleclient "github.com/vlumi/wrinkle/clients/go"
@@ -13,6 +14,10 @@ import (
 )
 
 const callTimeout = 10 * time.Second
+
+// sendSeq keeps client message ids unique among sends in the same
+// nanosecond.
+var sendSeq atomic.Uint64
 
 type device struct {
 	userName       string
@@ -58,15 +63,15 @@ func (d *device) send(ctx context.Context) {
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	now := time.Now()
-	id := fmt.Sprintf("%d-%d", now.UnixNano(), seq.Add(1))
-	d.stats.sent(now)
+	id := fmt.Sprintf("%d-%d", now.UnixNano(), sendSeq.Add(1))
+	d.stats.recordSent(now)
 	if _, err := d.client.SendMessage(cctx, d.conversationID, id, "load"); err != nil {
 		if d.stats.sendErrors.Add(1) <= 3 {
 			fmt.Fprintf(os.Stderr, "send from %s: %v\n", d.userName, err)
 		}
 		return
 	}
-	d.stats.sendLatency(now, time.Since(now))
+	d.stats.recordSendRTT(now, time.Since(now))
 }
 
 // receive drains events, recording the latency of the peer's messages and
