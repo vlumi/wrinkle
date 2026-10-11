@@ -4,7 +4,7 @@
 
 Wrinkle is a prototype backend for one-to-one text messaging across multiple devices per user: real-time delivery to connected devices, incremental sync for the rest, and read receipts. The same architecture is implemented in several languages, with shared clients and a load generator, to see how each implementation behaves as load grows.
 
-It is an experiment, not a product. Nothing here is production-hardened.
+It is an experiment, not a product. Nothing here is production-hardened; [docs/production.md](docs/production.md) lists what that would take, with deployment options and their costs.
 
 **Status:** Go and Java backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements and the four-way comparison are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
 
@@ -116,7 +116,7 @@ backends/     go/, java/, elixir/ and rust/ (gateways), each with a Dockerfile f
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)
 conformance/  backend-agnostic tests against the contract
-docs/         measuring, metrics, capacity, running on a local network, and results
+docs/         measuring, metrics, capacity, running on a local network, toward production, and results
 ```
 
 Local settings that are not committed, the Apple team and the APNs key, go in `.env` at the root; see `.env.example`.
