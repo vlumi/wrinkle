@@ -49,7 +49,7 @@ All backends implement the same Protobuf contract and pass the same conformance 
 | Elixir | gateway, measured |
 | Rust | gateway, measured |
 
-Clients: a web client (plain JavaScript) and an iOS client (SwiftUI), both working against either backend.
+Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
 
 ## Measuring
 
@@ -64,7 +64,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters.
+Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters.
 
 ```sh
 make infra-up          # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
@@ -82,7 +82,7 @@ make java-build && backends/java/build/install/wrinkle/bin/wrinkle   # the Java 
 backends/go/split.sh               # the Go backend as a gateway and a services process
 backends/elixir/run.sh             # the Elixir gateway with the Go services beside it
 backends/rust/run.sh               # the Rust gateway likewise (make rust-build first)
-make web                           # the web client at http://localhost:8081/clients/web/
+make web                           # the web client, built and served on port 8081
 clients/ios/Scripts/run-ios.sh     # the iOS client in an iPhone simulator
 go run ./loadgen -h                # the load generator
 ```

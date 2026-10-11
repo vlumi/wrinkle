@@ -98,13 +98,15 @@ backends/rust/run.sh
 
 ### Web client
 
-`make web` serves only to the Mac itself. To reach it from other devices, serve the repository root on all interfaces:
+A React app built to static files and served by a small Node server. It needs Node 22 or later (`brew install node`):
 
 ```sh
-python3 -m http.server 8081 --directory . --bind 0.0.0.0
+make web
 ```
 
-Open `http://<address>:8081/clients/web/` on the device. The gateway field defaults to the same host on port 8080; a browser that signed in before remembers the address it used. The page loads protobuf.js from a CDN, so devices need internet access as well as the local network. Each browser is a separate device; a private window is a quick second one.
+That installs the dependencies, builds the app, and serves it on port 8081 to the network. Open `http://<address>:8081/` on the device. The gateway field defaults to the same host on port 8080; a browser that signed in before remembers the address it used. On a phone it shows one pane at a time, the conversations and then a conversation with a back button; on a wider screen both side by side. Each browser is a separate device; a private window is a quick second one.
+
+For working on the client itself, `npm run dev` in `clients/web` serves it with live reload on the same port.
 
 ### iOS client in the simulator
 
@@ -150,6 +152,6 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 ## Things to know
 
-- Only the gateway (8080) and the page server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
+- Only the gateway (8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.

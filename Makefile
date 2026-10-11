@@ -13,15 +13,25 @@ GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
 GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 
-.PHONY: rust-lint rust-test rust-build conformance-rust measure-rust elixir-deps elixir-lint elixir-test conformance-elixir measure-elixir web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
+.PHONY: web-deps web-unit rust-lint rust-test rust-build conformance-rust measure-rust elixir-deps elixir-lint elixir-test conformance-elixir measure-elixir web web-lint web-test ios-project ios-lint ios-format ios-build ios-test measure-go measure-java ci lint proto-lint go-lint go-test java-lint java-test java-build proto proto-check infra-up infra-down smoke conformance-go conformance-go-split conformance-java tools
 
-ci: lint proto-check go-test java-test elixir-test rust-test ios-build smoke conformance-go conformance-go-split conformance-java conformance-elixir conformance-rust web-test ios-test
+ci: lint proto-check go-test java-test elixir-test rust-test web-unit ios-build smoke conformance-go conformance-go-split conformance-java conformance-elixir conformance-rust web-test ios-test
 
 lint: proto-lint go-lint java-lint elixir-lint rust-lint web-lint ios-lint
 
-web-lint:
-	node --check clients/web/app.js
+# The web client: React and TypeScript, built with Vite, served by server.mjs.
+NPM := cd clients/web && npm
+
+web-deps:
+	$(NPM) ci --no-audit --no-fund --silent
+
+web-lint: web-deps
+	$(NPM) run --silent typecheck
+	$(NPM) run --silent lint
 	node --check clients/web/test/browser_test.mjs
+
+web-unit: web-deps
+	$(NPM) test --silent
 
 java-lint:
 	$(GRADLE) spotlessCheck compileJava
@@ -88,12 +98,13 @@ proto-lint:
 
 # Generated code (Go module, Swift contract, Elixir contract) is committed;
 # proto-check fails when it is stale.
-GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto
+GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto clients/web/src/gen
 
-proto:
+proto: web-deps
 	buf generate
-	# The iOS client speaks the device contract only.
+	# The clients speak the device contract only.
 	rm -f clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract/services.pb.swift
+	rm -rf clients/web/src/gen/wrinkle/backend
 
 proto-check: proto
 	@git status --porcelain -- $(GENERATED) | grep . && { echo "generated code is stale, commit the output of make proto"; exit 1; } || true
@@ -132,7 +143,7 @@ conformance-elixir: infra-up elixir-deps
 	conformance/run.sh $(CURDIR)/backends/elixir/run.sh
 
 # The web client in headless Chrome against the Go backend.
-web-test: infra-up
+web-test: infra-up web-deps
 	go build -o bin/wrinkle ./backends/go/cmd/wrinkle
 	clients/web/test/run.sh $(CURDIR)/bin/wrinkle
 
@@ -157,10 +168,10 @@ measure-elixir: infra-up elixir-deps
 measure-java: infra-up java-build
 	FRESH=1 LABEL=java loadgen/protocol.sh docs/results/$$(date +%Y-%m-%d)-java.jsonl $(JAVA_BACKEND)
 
-# Serves the repository root so the web client can load /proto/.
-web:
-	@echo "web client at http://localhost:8081/clients/web/"
-	python3 -m http.server 8081 --directory . --bind 127.0.0.1
+# Builds the web client and serves it to the network on port 8081.
+web: web-deps
+	$(NPM) run --silent build
+	$(NPM) run --silent serve
 
 tools:
 	brew install xcodegen swift-protobuf swiftlint elixir rustup
