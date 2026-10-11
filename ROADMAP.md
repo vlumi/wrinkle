@@ -84,10 +84,11 @@ Notes:
 
 Notes:
 
-- An internal RPC between gateway and services (`proto/wrinkle/backend/v1`): the gateway forwards a device's request with its identity and gets back the response as it goes to the device; pushes keep going through Valkey. The Go backend gained a `services` role and a forwarding mode for its gateway; `backends/go/split.sh` (`make run-go-split`) runs the two. The Elixir and Rust implementations are gateways only, run beside the Go services (`run.sh` in each; `make run-elixir`, `make run-rust`).
+- An internal RPC between gateway and services (`proto/wrinkle/backend/v1`): the gateway forwards a device's request with its identity and gets back the response as it goes to the device; pushes keep going through Valkey. The Go backend gained a `services` role and a forwarding mode for its gateway; `make run-go-services` and `make run-go-gw` run the two, and `backends/go/split.sh` runs them together for measurement. The Elixir and Rust implementations are gateways only, run beside the Go services (`run.sh` in each; `make run-elixir`, `make run-rust`).
 - Elixir: Bandit, a process per connection, requests in a task each, elixir-grpc over Mint. Rust: axum over tokio, a task per connection, tonic. Both pass the conformance tests.
 - Comparison in `docs/results/2026-10-11-gateways.md`: all three gateways within 15 ms at p50; Rust a fifth of Go's memory at 4000 connections and 60 % of its CPU per message, with the tightest tail; Elixir's per-connection memory the highest, its baseline above 100 MiB.
 - Two protocol flaws found: the stack degrades as it grows (1.4 s against 94 ms p50 at 500/s), so each backend now runs from a fresh stack; and grpc-go's default of 100 concurrent streams per connection broke the Elixir client under a connect storm.
+- [ ] Pending: a services role for the Java backend (`make run-java-services`), so the gateways can run beside the Java services as they do beside the Go ones.
 - Full Elixir and Rust backends were not worthwhile for the question asked: the services are SQL and a Kafka consumer, where the languages differ least.
 
 ## Push notifications
