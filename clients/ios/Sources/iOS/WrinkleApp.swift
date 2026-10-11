@@ -14,7 +14,7 @@ struct WrinkleApp: App {
             RootView()
                 .environment(delegate.app)
         }
-        .modelContainer(for: [StoredConversation.self, StoredMessage.self])
+        .modelContainer(for: Store.models)
     }
 }
 

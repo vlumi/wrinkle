@@ -41,7 +41,8 @@ public final class AppState {
 
     public var isSignedIn: Bool { userName != nil }
 
-    private func key(_ name: String, _ what: String) -> String { "wrinkle.\(name).\(what)" }
+    /// The signed-in user's id, or 0 before the first connect.
+    var myUserID: Int64 { me.map { Int64($0.userID) } ?? 0 }
 
     public func signIn(name: String, url: String, context: ModelContext) {
         signOut()
@@ -52,23 +53,17 @@ public final class AppState {
         userName = name
         self.url = wsURL
         store = Store(context: context)
-        let defaults = UserDefaults.standard
-        deviceID = UInt64(defaults.string(forKey: key(name, "device")) ?? "0") ?? 0
-        cursor = UInt64(defaults.string(forKey: key(name, "cursor")) ?? "0") ?? 0
-        defaults.set(name, forKey: "wrinkle.last.name")
-        defaults.set(url, forKey: "wrinkle.last.url")
-        sessionTask = Task { await self.runSession(name: name, url: wsURL) }
+        deviceID = SavedSession.deviceID(for: name)
+        cursor = SavedSession.cursor(for: name)
+        SavedSession.setLast(name: name, url: url)
+        startSession(name: name, url: wsURL)
     }
 
     public func signOut() {
-        sessionTask?.cancel()
-        sessionTask = nil
-        if let c = connection { Task { await c.close() } }
-        connection = nil
+        stopSession()
         userName = nil
         me = nil
-        state = .offline
-        UserDefaults.standard.removeObject(forKey: "wrinkle.last.name")
+        SavedSession.forgetLast()
     }
 
     /// The app went to the background: close the connection, so the backend
@@ -76,17 +71,13 @@ public final class AppState {
     /// socket within seconds anyway, leaving it half-open.
     public func enterBackground() {
         guard sessionTask != nil else { return }
-        sessionTask?.cancel()
-        sessionTask = nil
-        if let c = connection { Task { await c.close() } }
-        connection = nil
-        state = .offline
+        stopSession()
     }
 
     /// The app is active again: reconnect and sync what was missed.
     public func enterForeground() {
         guard let userName, let url, sessionTask == nil else { return }
-        sessionTask = Task { await self.runSession(name: userName, url: url) }
+        startSession(name: userName, url: url)
     }
 
     /// The token APNs issued this device; registered now if connected, and
@@ -101,12 +92,21 @@ public final class AppState {
 
     /// Resumes the last session, if there was one.
     public func resume(context: ModelContext) {
-        let defaults = UserDefaults.standard
-        if let name = defaults.string(forKey: "wrinkle.last.name"),
-            let url = defaults.string(forKey: "wrinkle.last.url")
-        {
-            signIn(name: name, url: url, context: context)
+        if let last = SavedSession.last {
+            signIn(name: last.name, url: last.url, context: context)
         }
+    }
+
+    private func startSession(name: String, url: URL) {
+        sessionTask = Task { await self.runSession(name: name, url: url) }
+    }
+
+    private func stopSession() {
+        sessionTask?.cancel()
+        sessionTask = nil
+        if let c = connection { Task { await c.close() } }
+        connection = nil
+        state = .offline
     }
 
     private func runSession(name: String, url: URL) async {
@@ -140,12 +140,11 @@ public final class AppState {
             userName: name, deviceID: deviceID, deviceName: Self.deviceName)
         me = resp.user
         deviceID = resp.deviceID
-        UserDefaults.standard.set(String(deviceID), forKey: key(name, "device"))
+        SavedSession.setDeviceID(deviceID, for: name)
         if cursor == 0 {
             // A device without history starts at the head; the past comes from the
             // conversation list and history requests.
-            cursor = resp.logHead
-            persistCursor()
+            advanceCursor(to: resp.logHead)
         }
         if let pushToken {
             try await conn.registerPushToken(service: pushToken.service, token: pushToken.token)
@@ -154,10 +153,9 @@ public final class AppState {
         try await syncFromCursor(conn)
     }
 
-    private func persistCursor() {
-        if let userName {
-            UserDefaults.standard.set(String(cursor), forKey: key(userName, "cursor"))
-        }
+    private func advanceCursor(to next: UInt64) {
+        cursor = next
+        if let userName { SavedSession.setCursor(cursor, for: userName) }
     }
 
     private func refreshConversations(_ conn: Connection) async throws {
@@ -173,8 +171,7 @@ public final class AppState {
             let resp = try await conn.sync(cursor: cursor, limit: Self.syncLimit)
             for e in resp.events { _ = store.apply(e, me: Int64(me.userID)) }
             store.save()
-            cursor = resp.cursor
-            persistCursor()
+            advanceCursor(to: resp.cursor)
             if !resp.hasMore_p { break }
         }
         try await conn.ack(cursor: cursor)
@@ -194,8 +191,7 @@ public final class AppState {
             try? await refreshConversations(conn)
         }
         store.save()
-        cursor = event.cursor
-        persistCursor()
+        advanceCursor(to: event.cursor)
         try? await conn.ack(cursor: cursor)
     }
 
@@ -223,12 +219,7 @@ public final class AppState {
         let m = try await connection.sendMessage(
             conversationID: UInt64(conversationID), clientMessageID: UUID().uuidString, text: text)
         store.insert(m)
-        if let c = store.conversation(conversationID), Int64(m.seq) > c.lastSeq {
-            c.lastSeq = Int64(m.seq)
-            c.lastSenderID = Int64(m.senderUserID)
-            c.lastText = m.text
-            c.lastSentAt = m.sentAt.date
-            c.updatedAt = m.sentAt.date
+        if let c = store.conversation(conversationID), c.noteLatest(m) {
             c.readSeq = Int64(m.seq)
         }
         store.save()

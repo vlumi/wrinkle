@@ -69,4 +69,22 @@ final class StoreTests: XCTestCase {
         _ = store.apply(mine, me: 1)
         XCTAssertEqual(stored.readSeq, 2)
     }
+
+    func testOnlyANewerMessageBecomesTheLatest() throws {
+        let store = try makeStore()
+        var conv = Wrinkle_V1_Conversation()
+        conv.conversationID = 7
+        let stored = store.upsert(conv)
+        let message = { (seq: UInt64, text: String) in
+            Wrinkle_V1_Message.with {
+                $0.conversationID = 7
+                $0.seq = seq
+                $0.text = text
+            }
+        }
+        XCTAssertTrue(stored.noteLatest(message(2, "second")))
+        XCTAssertFalse(stored.noteLatest(message(1, "first")))
+        XCTAssertEqual(stored.lastSeq, 2)
+        XCTAssertEqual(stored.lastText, "second")
+    }
 }

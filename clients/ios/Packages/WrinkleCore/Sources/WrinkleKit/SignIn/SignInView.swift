@@ -8,6 +8,8 @@ struct SignInView: View {
     @State private var name = ""
     @State private var url = AppState.defaultURL
 
+    private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -19,10 +21,9 @@ struct SignInView: View {
                         .urlKeyboard()
                 }
                 Button("Sign in") {
-                    app.signIn(
-                        name: name.trimmingCharacters(in: .whitespaces), url: url, context: context)
+                    app.signIn(name: trimmedName, url: url, context: context)
                 }
-                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(trimmedName.isEmpty)
                 if let error = app.lastError {
                     Text(error).foregroundStyle(.secondary).font(.footnote)
                 }

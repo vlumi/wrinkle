@@ -31,14 +31,25 @@ public final class StoredConversation {
         peerID = Int64(c.peer.userID)
         peerName = c.peer.name
         lastSeq = max(lastSeq, Int64(c.lastSeq))
-        if c.hasLastMessage {
-            lastSenderID = Int64(c.lastMessage.senderUserID)
-            lastText = c.lastMessage.text
-            lastSentAt = c.lastMessage.sentAt.date
-            updatedAt = c.lastMessage.sentAt.date
-        }
+        if c.hasLastMessage { showLast(c.lastMessage) }
         readSeq = max(readSeq, Int64(c.readSeq))
         peerReadSeq = max(peerReadSeq, Int64(c.peerReadSeq))
+    }
+
+    /// Records a message as the latest if it is newer; returns whether it was.
+    @discardableResult
+    public func noteLatest(_ m: Wrinkle_V1_Message) -> Bool {
+        guard Int64(m.seq) > lastSeq else { return false }
+        lastSeq = Int64(m.seq)
+        showLast(m)
+        return true
+    }
+
+    private func showLast(_ m: Wrinkle_V1_Message) {
+        lastSenderID = Int64(m.senderUserID)
+        lastText = m.text
+        lastSentAt = m.sentAt.date
+        updatedAt = m.sentAt.date
     }
 }
 
@@ -70,7 +81,10 @@ public struct Store {
 
     public init(context: ModelContext) { self.context = context }
 
-    public static let schema = Schema([StoredConversation.self, StoredMessage.self])
+    public static let models: [any PersistentModel.Type] = [
+        StoredConversation.self, StoredMessage.self,
+    ]
+    public static let schema = Schema(models)
 
     public func conversation(_ id: Int64) -> StoredConversation? {
         var d = FetchDescriptor<StoredConversation>(predicate: #Predicate { $0.id == id })
@@ -117,13 +131,7 @@ public struct Store {
             let m = e.message
             insert(m)
             guard let c = conversation(Int64(m.conversationID)) else { return nil }
-            if Int64(m.seq) > c.lastSeq {
-                c.lastSeq = Int64(m.seq)
-                c.lastSenderID = Int64(m.senderUserID)
-                c.lastText = m.text
-                c.lastSentAt = m.sentAt.date
-                c.updatedAt = m.sentAt.date
-            }
+            c.noteLatest(m)
             return c
         case .read(let r):
             guard let c = conversation(Int64(r.conversationID)) else { return nil }

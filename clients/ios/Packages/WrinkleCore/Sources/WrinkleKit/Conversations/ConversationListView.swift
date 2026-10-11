@@ -28,8 +28,7 @@ struct ConversationListView: View {
                 Section {
                     ForEach(conversations) { c in
                         NavigationLink(value: c.id) {
-                            ConversationRow(
-                                conversation: c, me: app.me.map { Int64($0.userID) } ?? 0)
+                            ConversationRow(conversation: c, me: app.myUserID)
                         }
                     }
                 }
@@ -72,49 +71,5 @@ struct ConversationListView: View {
                 self.error = "\(error)"
             }
         }
-    }
-}
-
-struct ConversationRow: View {
-    let conversation: StoredConversation
-    let me: Int64
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(conversation.peerName).font(.headline)
-                if let last = conversation.lastText {
-                    Text((conversation.lastSenderID == me ? "You: " : "") + last)
-                        .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
-                } else {
-                    Text("No messages yet").font(.subheadline).foregroundStyle(.secondary)
-                }
-            }
-            Spacer()
-            if conversation.unread > 0 {
-                Text("\(conversation.unread)")
-                    .font(.caption).padding(.horizontal, 8).padding(.vertical, 2)
-                    .background(.tint, in: Capsule()).foregroundStyle(.white)
-            }
-        }
-    }
-}
-
-struct StatusBadge: View {
-    let state: ConnectionState
-
-    var body: some View {
-        let (text, color): (String, Color) =
-            switch state {
-            case .connected: ("online", .green)
-            case .connecting: ("connecting", .orange)
-            case .offline: ("offline", .red)
-            }
-        Label {
-            Text(text).font(.caption).fixedSize()
-        } icon: {
-            Circle().fill(color).frame(width: 8, height: 8)
-        }
-        .labelStyle(.titleAndIcon)
     }
 }
