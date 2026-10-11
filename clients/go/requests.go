@@ -78,6 +78,13 @@ func (c *Client) SendMessage(ctx context.Context, conversationID []byte, clientM
 	return resp.GetSendMessage().GetMessage(), nil
 }
 
+// DeleteMessage deletes one of the user's own messages for everyone.
+func (c *Client) DeleteMessage(ctx context.Context, conversationID []byte, seq uint64) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_DeleteMessage{
+		DeleteMessage: &pb.DeleteMessageRequest{ConversationId: conversationID, Seq: seq}}})
+	return err
+}
+
 func (c *Client) MarkRead(ctx context.Context, conversationID []byte, seq uint64) error {
 	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_MarkRead{
 		MarkRead: &pb.MarkReadRequest{ConversationId: conversationID, Seq: seq}}})
