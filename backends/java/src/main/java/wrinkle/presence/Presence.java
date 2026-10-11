@@ -33,7 +33,7 @@ public final class Presence implements AutoCloseable {
   }
 
   /** The user a push channel belongs to, or -1. */
-  public static long userOf(byte[] channel) {
+  private static long userOf(byte[] channel) {
     String s = new String(channel, StandardCharsets.US_ASCII);
     if (!s.startsWith(CHANNEL_PREFIX)) {
       return -1;
