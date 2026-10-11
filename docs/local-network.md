@@ -18,7 +18,7 @@ Run the stack and one backend on a Mac, then connect to it from phones and other
    make infra-up
    ```
 
-   The first run builds the arm64 Vitess image from source and takes a few minutes; later runs start in about 20 seconds. `make infra-down` stops everything and discards the data.
+   The first run builds the arm64 Vitess image from source and takes a few minutes; later runs start in about 20 seconds. `make infra-status` shows how it is doing, `make infra-down` stops everything and discards the data.
 
 4. Keep the Mac awake: System Settings, Energy, turn on "Prevent automatic sleeping when the display is off".
 
@@ -35,21 +35,20 @@ The generated code is committed, so the code generators (`make tools`) are not n
 
 ## Backends
 
-Run one backend at a time: they all serve port 8080. Stop one with Ctrl-C before starting the next; they share the database, so users and conversations carry over.
+Run one backend at a time: they all serve port 8080. Stop one with Ctrl-C before starting the next; they share the database, so users and conversations carry over. `make` lists every target.
 
-The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. Build binaries to a fixed path rather than using `go run`, which builds to a new temporary path every time and so asks again.
+The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
 ### Go
 
 ```sh
-go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-bin/wrinkle
+make run-go
 ```
 
 The same backend as a gateway and a services process, the shape the Elixir and Rust gateways use:
 
 ```sh
-backends/go/split.sh
+make run-go-split
 ```
 
 ### Java
@@ -58,26 +57,22 @@ backends/go/split.sh
 brew install openjdk@25
 mkdir -p ~/Library/Java/JavaVirtualMachines
 ln -sfn /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk ~/Library/Java/JavaVirtualMachines/openjdk-25.jdk
-export JAVA_HOME=$(/usr/libexec/java_home -v 25)
 
-make java-build
-backends/java/build/install/wrinkle/bin/wrinkle
+make run-java
 ```
 
 The symlink lets `java_home` find the Homebrew JDK, which the Makefile uses. The first build downloads Gradle and the dependencies.
 
 ### Elixir
 
-The Elixir implementation is a gateway; its run script starts the Go services and fan-out beside it, so the Go binary has to be built first.
+The Elixir implementation is a gateway; the Go services and fan-out run beside it.
 
 ```sh
 brew install elixir
 mix local.hex --force
 mix local.rebar --force
 
-go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-make elixir-deps
-backends/elixir/run.sh
+make run-elixir
 ```
 
 ### Rust
@@ -89,9 +84,7 @@ brew install rustup
 export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 rustup default stable
 
-go build -o bin/wrinkle ./backends/go/cmd/wrinkle
-make rust-build
-backends/rust/run.sh
+make run-rust
 ```
 
 ## Clients
@@ -106,7 +99,7 @@ make web
 
 That installs the dependencies, builds the app, and serves it on port 8081 to the network. Open `http://<address>:8081/` on the device. The gateway field defaults to the same host on port 8080; a browser that signed in before remembers the address it used. On a phone it shows one pane at a time, the conversations and then a conversation with a back button; on a wider screen both side by side. Each browser is a separate device; a private window is a quick second one.
 
-For working on the client itself, `npm run dev` in `clients/web` serves it with live reload on the same port.
+For working on the client itself, `make web-dev` serves it with live reload on the same port.
 
 ### iOS client in the simulator
 
@@ -114,7 +107,7 @@ On the host itself, with Xcode 26:
 
 ```sh
 brew install xcodegen
-clients/ios/Scripts/run-ios.sh
+make ios-sim
 ```
 
 The simulator shares the host's network, so the default `ws://localhost:8080/v1/ws` works.
@@ -125,10 +118,10 @@ Needs an Apple developer team. Copy `.env.example` to `.env` at the repository r
 
 ```sh
 brew install xcodegen
-clients/ios/Scripts/run-device.sh
+make ios-device
 ```
 
-The script builds, installs and launches the app; with several phones paired, pass part of the phone's name. The first build registers the app id and a development profile through Xcode's automatic signing, so the Mac's Xcode must be signed in to the team's account (Xcode, Settings, Accounts). On the phone, the app asks to find devices on the local network and to send notifications; allow both, then enter the host's address on the sign-in screen.
+That builds, installs and launches the app; with several phones paired, pick one with `DEVICE=<part of its name>`. The first build registers the app id and a development profile through Xcode's automatic signing, so the Mac's Xcode must be signed in to the team's account (Xcode, Settings, Accounts). On the phone, the app asks to find devices on the local network and to send notifications; allow both, then enter the host's address on the sign-in screen.
 
 ### Push notifications
 

@@ -64,34 +64,22 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters.
+Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters. Plain `make` lists every routine operation, grouped; the common ones:
 
 ```sh
-make infra-up          # Vitess, Kafka, Debezium and Valkey, with the outbox connector registered
-make ci                # everything below, plus lint and unit tests
-make smoke             # the change-data path: an outbox insert reaches Kafka
-make conformance-go    # the conformance tests against the Go backend; -go-split, -java, -elixir, -rust likewise
-make web-test          # the web client in headless Chrome against the Go backend
-make ios-test          # the iOS client's package tests, headless, against the Go backend
-make ios-build         # the iOS app for the simulator, unsigned
-make measure-go        # the measurement protocol against the Go backend (about 10 minutes); -java, -elixir, -rust likewise
+make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
+make run-go            # a backend on ws://localhost:8080/v1/ws; also run-go-split, run-java, run-elixir, run-rust
+make web               # the web client, built and served on port 8081
+make ios-sim           # the iOS app in a simulator; ios-device on a paired iPhone
+make load              # a quick load run against the running backend
+make ci                # the gate before every push: lint, tests, conformance against every backend
+make measure-go        # the measurement protocol for one backend; measure-all for every one
 make infra-down        # stop and discard all data
-
-go run ./backends/go/cmd/wrinkle   # the Go backend on ws://localhost:8080/v1/ws
-make java-build && backends/java/build/install/wrinkle/bin/wrinkle   # the Java backend, same address
-backends/go/split.sh               # the Go backend as a gateway and a services process
-backends/elixir/run.sh             # the Elixir gateway with the Go services beside it
-backends/rust/run.sh               # the Rust gateway likewise (make rust-build first)
-make web                           # the web client, built and served on port 8081
-clients/ios/Scripts/run-ios.sh     # the iOS client in an iPhone simulator
-go run ./loadgen -h                # the load generator
 ```
 
 Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090.
 
 To run it on one Mac and connect from phones and other computers on the same network, see [docs/local-network.md](docs/local-network.md).
-
-From the host: MySQL protocol through vtgate at `127.0.0.1:15003` (keyspaces `conversation` and `user`, no password), Kafka at `localhost:19092`, Kafka Connect at `localhost:8083`, Valkey at `localhost:6379`.
 
 ## Layout
 
