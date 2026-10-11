@@ -69,10 +69,12 @@ final class BackendTests: XCTestCase {
             conversationID: conv.conversationID, clientMessageID: "m2", text: "hi alice")
         XCTAssertEqual(reply.seq, 2)
         _ = try await next(alice.events) { $0.message.message.seq == 2 }
+        _ = try await next(bob.events) { $0.message.message.seq == 2 }
 
+        // Replying moved bob's own read position to his reply.
         let list = try await bob.listConversations()
         XCTAssertEqual(list.first?.conversationID, conv.conversationID)
-        XCTAssertEqual(list.first?.readSeq, 1)
+        XCTAssertEqual(list.first?.readSeq, 2)
 
         let history = try await alice.getMessages(
             conversationID: conv.conversationID, beforeSeq: 0, limit: 10)
