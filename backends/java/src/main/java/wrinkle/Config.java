@@ -38,6 +38,11 @@ public record Config(
     return runsGateway() && !services.isEmpty();
   }
 
+  /** Gateways hold push subscriptions and presence; fan-out publishes pushes. */
+  public boolean needsValkey() {
+    return runsGateway() || runsFanout();
+  }
+
   /** The services, in-process or as a role, and fan-out work on the database. */
   public boolean needsDatabase() {
     return runsServices() || runsFanout() || (runsGateway() && !forwardsToServices());
@@ -52,7 +57,7 @@ public record Config(
     String services = env("WRINKLE_SERVICES", "");
     String servicesListen = env("WRINKLE_SERVICES_LISTEN", ":9000");
     String node = env("WRINKLE_NODE", hostname());
-    int dbConns = 64;
+    String dbConns = env("WRINKLE_DB_CONNS", "64");
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
       String value = null;
@@ -75,7 +80,7 @@ public record Config(
         case "services" -> services = value;
         case "services-listen" -> servicesListen = value;
         case "node" -> node = value;
-        case "db-conns" -> dbConns = Integer.parseInt(value);
+        case "db-conns" -> dbConns = value;
         default -> throw new IllegalArgumentException("unknown flag " + a);
       }
     }
@@ -94,7 +99,7 @@ public record Config(
         services,
         address(servicesListen),
         node,
-        dbConns);
+        Integer.parseInt(dbConns));
   }
 
   /** host:port, or :port for every interface. */

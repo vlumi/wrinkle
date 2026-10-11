@@ -1,6 +1,7 @@
 package wrinkle.presence;
 
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisURI;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.SetArgs;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -9,6 +10,7 @@ import io.lettuce.core.pubsub.RedisPubSubAdapter;
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.HexFormat;
 import java.util.function.BiConsumer;
 
@@ -21,6 +23,7 @@ public final class Presence implements AutoCloseable {
   private static final String CHANNEL_PREFIX = "push:";
   private static final String INSTANCE_PREFIX = "gateway:";
   private static final long INSTANCE_TTL_SECONDS = 90;
+  private static final Duration COMMAND_TIMEOUT = Duration.ofSeconds(5);
   private static final byte[] ALIVE = bytes("1");
   // Removes a device's entry only if it still names this instance.
   private static final byte[] REMOVE_OWN =
@@ -35,7 +38,10 @@ public final class Presence implements AutoCloseable {
   private final byte[] instanceKey;
 
   public Presence(String addr, String node) {
-    this.client = RedisClient.create("redis://" + addr);
+    RedisURI uri = RedisURI.create("redis://" + addr);
+    uri.setTimeout(COMMAND_TIMEOUT);
+    // Lettuce reconnects with exponential backoff and resubscribes the channels it holds.
+    this.client = RedisClient.create(uri);
     this.commands = client.connect(ByteArrayCodec.INSTANCE);
     this.pubsub = client.connectPubSub(ByteArrayCodec.INSTANCE);
     byte[] random = new byte[8];
@@ -91,10 +97,12 @@ public final class Presence implements AutoCloseable {
         });
   }
 
+  /** Blocks until Valkey confirms; not for an event-loop thread. */
   public void subscribe(long userId) {
     pubsub.sync().subscribe(channel(userId));
   }
 
+  /** Blocks until Valkey confirms; not for an event-loop thread. */
   public void unsubscribe(long userId) {
     pubsub.sync().unsubscribe(channel(userId));
   }

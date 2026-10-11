@@ -5,6 +5,7 @@ import com.google.protobuf.WireFormat;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,12 +24,15 @@ final class Connections {
   private static final long DRAIN_POLL_MILLIS = 20;
 
   private final Presence presence;
+  private final Subscriptions subscriptions;
   private final Set<Conn> all = ConcurrentHashMap.newKeySet();
   private final Map<Long, Set<Conn>> byUser = new ConcurrentHashMap<>();
   private final AtomicInteger inFlight = new AtomicInteger();
 
   Connections(Presence presence) {
     this.presence = presence;
+    this.subscriptions =
+        new Subscriptions(presence::subscribe, presence::unsubscribe, Thread::startVirtualThread);
     presence.listen(this::push);
   }
 
@@ -56,17 +60,24 @@ final class Connections {
     }
   }
 
-  void attach(Conn c) {
-    Set<Conn> conns = byUser.computeIfAbsent(c.userId(), k -> ConcurrentHashMap.newKeySet());
-    boolean first;
-    synchronized (conns) {
-      first = conns.isEmpty();
-      conns.add(c);
+  /**
+   * Routes the user's pushes to the connection; completes once the user's channel is subscribed. No
+   * network call happens on the caller's thread.
+   */
+  CompletableFuture<Void> attach(Conn c) {
+    // A detach may remove the set it finds before it is locked.
+    while (true) {
+      Set<Conn> conns = byUser.computeIfAbsent(c.userId(), k -> ConcurrentHashMap.newKeySet());
+      synchronized (conns) {
+        if (byUser.get(c.userId()) == conns) {
+          conns.add(c);
+          break;
+        }
+      }
     }
-    if (first) {
-      presence.subscribe(c.userId());
-    }
+    CompletableFuture<Void> subscribed = subscriptions.add(c.userId());
     presence.deviceConnected(c.userId(), c.deviceId());
+    return subscribed;
   }
 
   private void detach(Conn c) {
@@ -74,20 +85,16 @@ final class Connections {
       return;
     }
     Set<Conn> conns = byUser.get(c.userId());
-    boolean last = false;
     if (conns != null) {
       synchronized (conns) {
         conns.remove(c);
         if (conns.isEmpty()) {
           byUser.remove(c.userId(), conns);
-          last = true;
         }
       }
     }
+    subscriptions.remove(c.userId());
     try {
-      if (last) {
-        presence.unsubscribe(c.userId());
-      }
       presence.deviceDisconnected(c.userId(), c.deviceId());
     } catch (RuntimeException e) {
       log.warn("presence update failed", e);
@@ -107,6 +114,7 @@ final class Connections {
     while ((inFlight.get() > 0 || !all.isEmpty()) && System.nanoTime() < deadline) {
       Thread.sleep(DRAIN_POLL_MILLIS);
     }
+    subscriptions.stop();
   }
 
   private void push(long userId, byte[] event) {
@@ -116,8 +124,9 @@ final class Connections {
     }
     byte[] frame = eventFrame(event);
     for (Conn c : conns) {
-      c.push(frame);
-      Metrics.EVENTS_PUSHED.inc();
+      if (c.push(frame)) {
+        Metrics.EVENTS_PUSHED.inc();
+      }
     }
   }
 

@@ -15,6 +15,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
+import org.apache.kafka.clients.consumer.CloseOptions;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -36,11 +37,13 @@ public final class FanoutWorker {
   public static final String TOPIC = "wrinkle.conversation.outbox";
   private static final Logger log = LoggerFactory.getLogger(FanoutWorker.class);
   private static final int ATTEMPTS = 5;
+  private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(3);
 
   private final KafkaConsumer<byte[], byte[]> consumer;
   private final UserLog userLog;
   private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
   private final AtomicBoolean stopped = new AtomicBoolean();
+  private volatile Thread thread;
 
   public FanoutWorker(String brokers, String group, DataSource userDb, Presence presence) {
     Properties p = new Properties();
@@ -56,13 +59,24 @@ public final class FanoutWorker {
     this.userLog = new UserLog(userDb, presence);
   }
 
+  /** Consumes on a platform thread of its own until stopped. */
+  public void start() {
+    thread = Thread.ofPlatform().name("fanout").start(this::run);
+  }
+
+  /** Asks the consumer to stop; it leaves the group as it closes. */
   public void stop() {
     stopped.set(true);
     consumer.wakeup();
   }
 
+  /** Waits until the consumer has closed, or the time passes; true if it has. */
+  public boolean awaitStopped(long millis) throws InterruptedException {
+    return thread == null || thread.join(Duration.ofMillis(Math.max(millis, 1)));
+  }
+
   /** Consumes until stopped. A batch is committed only after every record in it is delivered. */
-  public void run() {
+  private void run() {
     consumer.subscribe(List.of(TOPIC));
     try {
       while (!stopped.get()) {
@@ -85,7 +99,7 @@ public final class FanoutWorker {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } finally {
-      consumer.close();
+      consumer.close(CloseOptions.timeout(CLOSE_TIMEOUT));
     }
   }
 

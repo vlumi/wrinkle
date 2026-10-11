@@ -6,7 +6,10 @@ import com.linecorp.armeria.common.websocket.WebSocketFrame;
 import com.linecorp.armeria.common.websocket.WebSocketWriter;
 import com.linecorp.armeria.server.websocket.WebSocketProtocolViolationException;
 import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.reactivestreams.Subscription;
@@ -32,6 +35,7 @@ final class Conn {
   private static final int RATE_PER_SECOND = 50;
   private static final int MAX_IN_FLIGHT = 32;
   private static final int MAX_QUEUED_FRAMES = 32;
+  private static final long SUBSCRIBE_TIMEOUT_MILLIS = 5000;
 
   private static final byte[] PONG =
       Frame.newBuilder().setPong(Pong.getDefaultInstance()).build().toByteArray();
@@ -53,6 +57,7 @@ final class Conn {
   // Touched only by the sweep.
   private long lastPing;
   private volatile boolean connected;
+  private volatile boolean pushUnavailable;
   // Guarded by this.
   private boolean left;
   private volatile long userId;
@@ -148,7 +153,12 @@ final class Conn {
     Thread.startVirtualThread(
         () -> {
           try {
-            respond(req, dispatch(req), start);
+            Response resp = dispatch(req);
+            respond(req, resp, start);
+            if (req.hasConnect() && pushUnavailable) {
+              // Attached, but pushes cannot reach it; the device reconnects.
+              close(WebSocketCloseStatus.TRY_AGAIN_LATER, "push channel unavailable");
+            }
           } finally {
             inFlight.decrementAndGet();
             connections.requestFinished();
@@ -158,9 +168,9 @@ final class Conn {
 
   /**
    * Queues a pushed event, closing the connection if the client has not kept up. A closed writer
-   * drops it; the device syncs on reconnect.
+   * drops it; the device syncs on reconnect. False if the event was dropped.
    */
-  void push(byte[] frame) {
+  boolean push(byte[] frame) {
     if (queued.get() >= MAX_QUEUED_FRAMES) {
       // Aborting skips the queued frames, so the close frame goes out next.
       if (closed.compareAndSet(false, true)) {
@@ -168,24 +178,27 @@ final class Conn {
             new WebSocketProtocolViolationException(
                 WebSocketCloseStatus.TRY_AGAIN_LATER, "too slow"));
       }
-      return;
+      return false;
     }
-    send(frame);
+    return send(frame);
   }
 
-  private void send(byte[] frame) {
-    send(WebSocketFrame.ofBinary(frame));
+  private boolean send(byte[] frame) {
+    return send(WebSocketFrame.ofBinary(frame));
   }
 
   /**
    * Queues a frame. Replies are bounded by the requests in flight and by reading pausing while the
-   * queue is full.
+   * queue is full. False if the writer is closed.
    */
-  private void send(WebSocketFrame frame) {
+  private boolean send(WebSocketFrame frame) {
     queued.incrementAndGet();
-    if (out.tryWrite(frame)) {
-      out.whenConsumed().thenRun(this::written);
+    if (!out.tryWrite(frame)) {
+      written();
+      return false;
     }
+    out.whenConsumed().thenRun(this::written);
+    return true;
   }
 
   private void written() {
@@ -289,25 +302,39 @@ final class Conn {
       log.error("backend call for request {} failed", req.getId(), e);
       return ApiError.response(req, ApiError.unavailable("services unavailable"));
     }
-    if (resp.hasConnect() && !attached(resp.getConnect())) {
-      return ApiError.response(req, ApiError.failedPrecondition("already connected"));
+    if (resp.hasConnect()) {
+      CompletableFuture<Void> subscribed = attached(resp.getConnect());
+      if (subscribed == null) {
+        return ApiError.response(req, ApiError.failedPrecondition("already connected"));
+      }
+      // Pushes that follow the response must not be missed.
+      try {
+        subscribed.get(SUBSCRIBE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        pushUnavailable = true;
+        return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
+      } catch (ExecutionException | TimeoutException e) {
+        log.warn("push subscription of user {} not ready: {}", userId, e.toString());
+        pushUnavailable = true;
+        return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
+      }
     }
     return resp;
   }
 
   /**
-   * Records the identity Connect established; false if another Connect got there first or the
-   * connection has left.
+   * Records the identity Connect established; null if another Connect got there first or the
+   * connection has left, otherwise completes once the user's push channel is subscribed.
    */
-  private synchronized boolean attached(ConnectResponse resp) {
+  private synchronized CompletableFuture<Void> attached(ConnectResponse resp) {
     if (connected || left) {
-      return false;
+      return null;
     }
     userId = resp.getUser().getUserId();
     deviceId = resp.getDeviceId();
     connected = true;
-    connections.attach(this);
-    return true;
+    return connections.attach(this);
   }
 
   @Override

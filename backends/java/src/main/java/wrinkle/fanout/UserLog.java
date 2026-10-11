@@ -105,16 +105,19 @@ final class UserLog {
       throws SQLException {
     Message msg = event.getMessage().getMessage();
     LocalDateTime sentAt = Timestamps.fromProto(msg.getSentAt());
+    // Sending a message moves the sender's own read position to it.
+    long ownReadSeq = msg.getSenderUserId() == userId ? msg.getSeq() : 0;
     Sql.update(
         c,
         "INSERT INTO user_conversation (user_id, conversation_id, peer_user_id, peer_name,"
             + " last_seq, last_sender_user_id, last_client_message_id, last_body, last_sent_at,"
-            + " read_seq, peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?)"
+            + " read_seq, peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)"
             + " ON DUPLICATE KEY UPDATE last_seq = GREATEST(last_seq, ?),"
             + " last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),"
             + " last_client_message_id = IF(? >= last_seq, ?, last_client_message_id),"
             + " last_body = IF(? >= last_seq, ?, last_body),"
             + " last_sent_at = IF(? >= last_seq, ?, last_sent_at),"
+            + " read_seq = GREATEST(read_seq, ?),"
             + " updated_at = GREATEST(updated_at, ?)",
         userId,
         o.conversationId(),
@@ -125,6 +128,7 @@ final class UserLog {
         msg.getClientMessageId(),
         msg.getText(),
         sentAt,
+        ownReadSeq,
         occurredAt,
         msg.getSeq(),
         msg.getSeq(),
@@ -135,6 +139,7 @@ final class UserLog {
         msg.getText(),
         msg.getSeq(),
         sentAt,
+        ownReadSeq,
         occurredAt);
   }
 

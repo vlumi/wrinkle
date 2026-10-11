@@ -7,6 +7,7 @@ import com.linecorp.armeria.server.ServerBuilder;
 import com.linecorp.armeria.server.grpc.GrpcService;
 import com.linecorp.armeria.server.prometheus.PrometheusExpositionService;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -34,6 +35,11 @@ public final class Main {
   private static final String FANOUT_GROUP = "wrinkle-fanout";
   // A drain that has not finished by then exits anyway.
   private static final long SHUTDOWN_LIMIT_MILLIS = 9500;
+  // Leaves the fan-out consumer time to leave its group before the limit.
+  private static final long FANOUT_STOP_MARGIN_MILLIS = 300;
+  // Requests in flight when the server stops get this long to finish.
+  private static final Duration GRACE_QUIET = Duration.ofMillis(200);
+  private static final Duration GRACE_TIMEOUT = Duration.ofSeconds(3);
 
   private Main() {}
 
@@ -49,10 +55,11 @@ public final class Main {
       ConversationService conversations = new ConversationService(conversationDb);
       local = new LocalBackend(conversations, new DeviceSyncService(userDb, conversations));
     }
-    Presence presence = new Presence(cfg.valkey(), cfg.node());
+    Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;
 
     AtomicBoolean draining = new AtomicBoolean();
-    ServerBuilder sb = Server.builder().http(cfg.listen());
+    ServerBuilder sb =
+        Server.builder().http(cfg.listen()).gracefulShutdownTimeout(GRACE_QUIET, GRACE_TIMEOUT);
     addOperationalEndpoints(sb, draining);
 
     Gateway gateway = null;
@@ -74,7 +81,7 @@ public final class Main {
     FanoutWorker fanout = null;
     if (cfg.runsFanout()) {
       fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, presence);
-      Thread.ofPlatform().name("fanout").start(fanout::run);
+      fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPIC);
     }
 
@@ -119,7 +126,8 @@ public final class Main {
 
   /**
    * Drains on SIGTERM or SIGINT: refuses new work, closes the connections and lets requests in
-   * flight finish, stops the roles that run, and exits 0 within the limit.
+   * flight finish, stops the roles that run, and exits 0 within the limit. The fan-out consumer
+   * stops alongside the rest and is waited for, so it leaves its group before the exit.
    */
   private static void shutDown(
       AtomicBoolean draining,
@@ -128,6 +136,7 @@ public final class Main {
       FanoutWorker fanout,
       Presence presence) {
     log.info("shutting down");
+    long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SHUTDOWN_LIMIT_MILLIS);
     draining.set(true);
     Thread.ofPlatform()
         .daemon()
@@ -149,7 +158,16 @@ public final class Main {
         gateway.drain();
       }
       server.stop().join();
-      presence.close();
+      if (fanout != null) {
+        long left =
+            TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()) - FANOUT_STOP_MARGIN_MILLIS;
+        if (!fanout.awaitStopped(left)) {
+          log.warn("fanout consumer did not stop in time");
+        }
+      }
+      if (presence != null) {
+        presence.close();
+      }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } catch (RuntimeException e) {
