@@ -101,6 +101,22 @@ make lb-down                       # when done
 
 Java services instances store push tokens but send no pushes yet; with only Java instances running, iOS devices get no notifications.
 
+### Cluster
+
+The side-by-side setup in containers, from one command: the balancer, the services instances and the gateways, each in any number, on the infrastructure's network. The first run builds an image per backend, a few minutes; later runs take seconds.
+
+```sh
+make cluster-up                                  # 2 Go and 1 Java services, one gateway of each language
+make cluster-up GO_GW=3 RUST_GW=0 JAVA_SERVICES=0  # again with other counts: rescales in place
+make cluster-status                              # every container
+make cluster-logs SERVICE=go-gw                  # follow one kind, or all without SERVICE
+make cluster-down                                # remove the cluster; the infrastructure keeps running
+```
+
+The counts are `GO_SERVICES`, `JAVA_SERVICES`, `GO_GW`, `ELIXIR_GW`, `RUST_GW` and `JAVA_GW`, 0 to 8 each. Devices connect to `ws://<address>:8080/v1/ws` as before, and `http://localhost:8404/` shows every replica the balancer has found. The balancer finds them by name through Docker's DNS: a kind scaled up joins within a few seconds, one scaled down drops out. Push settings come from `.env` as for the other targets.
+
+The cluster is for trying the scaled shape, not for measuring: the containers run in Docker Desktop's virtual machine, behind its networking, so their numbers are not comparable with the native processes the measurements use. Code changes reach it on the next `cluster-up`, which rebuilds the images. The cluster holds port 8080, like the native balancer and the monoliths, so one of them at a time. Its processes don't show in Grafana.
+
 ## Clients
 
 ### Web client

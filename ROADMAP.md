@@ -89,6 +89,7 @@ Notes:
 - Comparison in `docs/results/2026-10-11-gateways.md`: all three gateways within 15 ms at p50; Rust a fifth of Go's memory at 4000 connections and 60 % of its CPU per message, with the tightest tail; Elixir's per-connection memory the highest, its baseline above 100 MiB.
 - Two protocol flaws found: the stack degrades as it grows (1.4 s against 94 ms p50 at 500/s), so each backend now runs from a fresh stack; and grpc-go's default of 100 concurrent streams per connection broke the Elixir client under a connect storm.
 - [x] Side by side, the shape the design scales in: services instances and gateways in any number and language behind two HAProxy balancers (`make lb-up`). Devices' connections go to the gateway with the fewest; each gateway keeps one HTTP/2 connection to the services balancer, which spreads requests, not connections, over the instances. Go and Java instances share one pool and one fan-out consumer group.
+- [x] The same in containers (`make cluster-up`): an image per backend, counts per language and role, replicas found by HAProxy through Docker's DNS, rescaled in place. For trying the scaled shape; measurements stay native. Images are not built by `make ci`.
 - [ ] Open: services in Elixir and Rust. They were left out because the services are SQL and a Kafka consumer, where the languages differ least; a full implementation in each would complete the matrix.
 
 ## Push notifications
