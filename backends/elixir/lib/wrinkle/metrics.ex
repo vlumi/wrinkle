@@ -19,27 +19,21 @@ defmodule Wrinkle.Metrics do
   def pushed, do: :ets.update_counter(@table, :pushed, 1)
 
   def request(type, code, native_duration) do
-    seconds = System.convert_time_unit(native_duration, :native, :nanosecond) / 1.0e9
-    :ets.update_counter(@table, {:requests, type, code}, 1, {{:requests, type, code}, 0})
-    :ets.update_counter(@table, {:duration_count, type}, 1, {{:duration_count, type}, 0})
-
-    :ets.update_counter(
-      @table,
-      {:duration_sum_ns, type},
-      round(seconds * 1.0e9),
-      {{:duration_sum_ns, type}, 0}
-    )
-
-    for le <- @buckets, seconds <= le do
-      :ets.update_counter(@table, {:bucket, type, le}, 1, {{:bucket, type, le}, 0})
-    end
-
+    nanoseconds = System.convert_time_unit(native_duration, :native, :nanosecond)
+    seconds = nanoseconds / 1.0e9
+    increment({:requests, type, code}, 1)
+    increment({:duration_count, type}, 1)
+    increment({:duration_sum_ns, type}, nanoseconds)
+    for le <- @buckets, seconds <= le, do: increment({:bucket, type, le}, 1)
     :ok
   end
 
+  defp increment(key, by), do: :ets.update_counter(@table, key, by, {key, 0})
+
   def render do
     rows = :ets.tab2list(@table)
-    get = fn key -> Enum.find_value(rows, 0, fn {k, v} -> if k == key, do: v end) end
+    values = Map.new(rows)
+    get = &Map.get(values, &1, 0)
     {runtime_ms, _} = :erlang.statistics(:runtime)
 
     requests =
@@ -47,28 +41,8 @@ defmodule Wrinkle.Metrics do
         ~s(wrinkle_requests_total{type="#{type}",code="#{code}"} #{n})
       end
 
-    types =
-      rows
-      |> Enum.flat_map(fn
-        {{:duration_count, t}, _} -> [t]
-        _ -> []
-      end)
-      |> Enum.uniq()
-
     histograms =
-      Enum.flat_map(types, fn type ->
-        buckets =
-          Enum.map(@buckets, fn le ->
-            ~s(wrinkle_request_duration_seconds_bucket{type="#{type}",le="#{le}"} #{get.({:bucket, type, le})})
-          end)
-
-        buckets ++
-          [
-            ~s(wrinkle_request_duration_seconds_bucket{type="#{type}",le="+Inf"} #{get.({:duration_count, type})}),
-            ~s(wrinkle_request_duration_seconds_count{type="#{type}"} #{get.({:duration_count, type})}),
-            ~s(wrinkle_request_duration_seconds_sum{type="#{type}"} #{get.({:duration_sum_ns, type}) / 1.0e9})
-          ]
-      end)
+      for {{:duration_count, type}, count} <- rows, line <- histogram(type, count, get), do: line
 
     lines =
       [
@@ -90,5 +64,21 @@ defmodule Wrinkle.Metrics do
         ]
 
     Enum.join(lines, "\n") <> "\n"
+  end
+
+  defp histogram(type, count, get) do
+    name = "wrinkle_request_duration_seconds"
+
+    buckets =
+      for le <- @buckets do
+        ~s(#{name}_bucket{type="#{type}",le="#{le}"} #{get.({:bucket, type, le})})
+      end
+
+    buckets ++
+      [
+        ~s(#{name}_bucket{type="#{type}",le="+Inf"} #{count}),
+        ~s(#{name}_count{type="#{type}"} #{count}),
+        ~s(#{name}_sum{type="#{type}"} #{get.({:duration_sum_ns, type}) / 1.0e9})
+      ]
   end
 end

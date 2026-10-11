@@ -31,18 +31,15 @@ defmodule Wrinkle.Backend do
   def call(user_id, device_id, request) do
     req = %CallRequest{user_id: user_id, device_id: device_id, request: request}
 
-    case BackendService.Stub.call(channel(), req, timeout: @timeout) do
-      {:ok, %{response: response}} -> {:ok, response}
-      {:error, reason} -> {:error, reason}
+    with {:ok, %{response: response}} <-
+           BackendService.Stub.call(channel(), req, timeout: @timeout) do
+      {:ok, response}
     end
   end
 
   def ack(user_id, device_id, cursor) do
     req = %AckRequest{user_id: user_id, device_id: device_id, cursor: cursor}
 
-    case BackendService.Stub.ack(channel(), req, timeout: @timeout) do
-      {:ok, _} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
+    with {:ok, _} <- BackendService.Stub.ack(channel(), req, timeout: @timeout), do: :ok
   end
 end
