@@ -728,6 +728,104 @@ button:disabled {
   background: var(--panel);
 }
 
+/* Groups */
+
+.avatar.group {
+  color: var(--on-accent);
+  background: var(--accent);
+}
+
+.new-group-open {
+  margin: 8px calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px);
+  padding: 6px 12px;
+  align-self: flex-start;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--theirs);
+}
+
+.new-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px calc(env(safe-area-inset-right) + 12px) 10px calc(env(safe-area-inset-left) + 12px);
+  border-bottom: 1px solid var(--line);
+}
+
+.new-group-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.new-group .error {
+  padding: 0;
+}
+
+.titles {
+  flex: 1;
+  display: grid;
+  min-width: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.conversation header .info,
+.close-info {
+  flex: none;
+  margin-left: auto;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.sender {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.sender .avatar {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+
+.sender .avatar.icon {
+  font-size: 13px;
+}
+
+.sender-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messages .system {
+  align-self: center;
+  max-width: 90%;
+  padding: 2px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.members li > .avatar {
+  flex: none;
+}
+
+.group-info .confirm {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
 /* Narrow: one pane at a time. */
 @media (max-width: 719px) {
   .app[data-view="conversation"] .list {

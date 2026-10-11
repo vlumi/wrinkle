@@ -4,25 +4,43 @@ import { displayName } from "../account/icons";
 import { errorText } from "../connection/connection";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { Conversation } from "../gen/wrinkle/v1/model_pb";
-import { sameId } from "../ids";
+import { GroupAvatar } from "../groups/GroupAvatar";
+import { isGroup } from "../groups/model";
+import type { Users } from "../groups/model";
+import { NewGroup } from "../groups/NewGroup";
 import { useSession } from "../session/session";
-import { byActivity, key, unread } from "./model";
+import { byActivity, key, preview, unread } from "./model";
 
 export function ConversationList() {
   const conversations = useSession((s) => s.conversations);
   const current = useSession((s) => s.current);
   const me = useSession((s) => s.me);
+  const users = useSession((s) => s.users);
   const show = useSession((s) => s.show);
+  const [creating, setCreating] = useState(false);
 
   return (
     <section className="list" aria-label="Conversations">
       <OpenConversation />
+      {creating ? (
+        <NewGroup onDone={() => setCreating(false)} />
+      ) : (
+        <button className="new-group-open" data-testid="new-group" onClick={() => setCreating(true)}>
+          New group
+        </button>
+      )}
       <ul data-testid="conversations">
         {byActivity(conversations).map((c) => {
           const id = key(c.conversationId);
           return (
             <li key={id}>
-              <ConversationRow conversation={c} me={me?.userId} current={id === current} onClick={() => show(id)} />
+              <ConversationRow
+                conversation={c}
+                me={me?.userId}
+                users={users}
+                current={id === current}
+                onClick={() => show(id)}
+              />
             </li>
           );
         })}
@@ -82,33 +100,30 @@ function OpenConversation() {
 function ConversationRow({
   conversation: c,
   me,
+  users,
   current,
   onClick,
 }: {
   conversation: Conversation;
   me: Uint8Array | undefined;
+  users: Users;
   current: boolean;
   onClick(): void;
 }) {
   const n = unread(c);
+  const group = isGroup(c);
   return (
-    <button className={current ? "row current" : "row"} onClick={onClick}>
-      <Avatar user={c.peer} />
+    <button className={current ? "row current" : "row"} onClick={onClick} data-testid="row">
+      {group ? <GroupAvatar /> : <Avatar user={c.peer} />}
       <span className="peer">
-        <span className="name">{displayName(c.peer)}</span>
+        <span className="name">{group ? c.topic : displayName(c.peer)}</span>
         {n > 0n && (
           <span className="unread" data-testid="unread">
             {n.toString()}
           </span>
         )}
       </span>
-      <span className="last">{preview(c, me)}</span>
+      <span className="last">{preview(c, me, users)}</span>
     </button>
   );
-}
-
-function preview(c: Conversation, me: Uint8Array | undefined): string {
-  const m = c.lastMessage;
-  if (!m) return "No messages yet";
-  return `${sameId(m.senderUserId, me) ? "You: " : ""}${m.text}`;
 }

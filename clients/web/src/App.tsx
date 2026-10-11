@@ -56,7 +56,7 @@ export function App() {
         {settings ? (
           <Settings onClose={() => showSettings(false)} />
         ) : current ? (
-          <ConversationView id={current} />
+          <ConversationView key={current} id={current} />
         ) : (
           <p className="empty">Pick a conversation or start one.</p>
         )}

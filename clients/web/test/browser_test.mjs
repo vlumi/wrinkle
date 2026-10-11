@@ -1,7 +1,9 @@
 // Drives the web client in headless Chrome over the DevTools protocol:
 // two users register in two pages, send a message each way, see a read
 // receipt, a rename and a picture, sign a second device in and out from the
-// first, delete an account, reload, sign out and in again.
+// first, delete an account, reload, sign out and in again; then three
+// users in a group: members added, messages, a topic change, read counts
+// and a removal.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -19,7 +21,7 @@ const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/";
 
 // A hard deadline: a hang anywhere (a dialog, a paused page, the backend)
 // fails the run instead of stalling the gate.
-const DEADLINE_MS = 180_000;
+const DEADLINE_MS = 300_000;
 setTimeout(() => {
   console.error(`browser test: no result within ${DEADLINE_MS / 1000} s`);
   process.exit(1);
@@ -430,15 +432,146 @@ await alice.send("Page.reload");
 await alice.waitFor(`!!${q("url")} && document.querySelector(".notice")?.textContent.includes("signed out")`);
 check(true, "a revoked token returns to sign-in with a note");
 
+// A group of three: Gina on a phone creates it with Hank, Hank adds Ivy.
+const gina = new Page("gina", 390),
+  hank = new Page("hank", 1100),
+  ivy = new Page("ivy", 1100);
+const ginaName = "web-gina-" + suffix;
+const hankName = "web-hank-" + suffix;
+const ivyName = "web-ivy-" + suffix;
+for (const [p, name] of [
+  [gina, ginaName],
+  [hank, hankName],
+  [ivy, ivyName],
+]) {
+  await p.open();
+  await authenticate(p, "register", name, PASSWORD);
+  await p.waitFor(`${text("status")} === "online" && ${text("me")} === ${JSON.stringify(name)}`);
+}
+check(true, "gina, hank and ivy registered");
+
+const topic = "Trip " + suffix;
+const topic2 = "Trip plans " + suffix;
+const has = (testid, s) => `${qa(testid)}.some(el => el.textContent === ${JSON.stringify(s)})`;
+const noOverflow = `document.documentElement.scrollWidth <= window.innerWidth`;
+/** The message from the given sender with the given text, shown with the sender's name. */
+const fromSender = (name, body) =>
+  `${qa("message")}.some(li => li.querySelector('[data-testid="sender"] .sender-name')?.textContent === ${JSON.stringify(name)} && li.querySelector(".text").textContent === ${JSON.stringify(body)})`;
+
+await gina.eval(click('[data-testid="new-group"]'));
+await gina.waitFor(`!!${q("group-topic")}`);
+await gina.eval(type("group-topic", topic));
+await gina.waitFor(`${q("group-topic")}.value === ${JSON.stringify(topic)}`);
+await fill(gina, "group-members", hankName.toUpperCase());
+await gina.waitFor(`${text("topic")} === ${JSON.stringify(topic)} && ${text("member-count")} === "2 members"`);
+check(await gina.eval(`!${visible(".list")}`), "gina created the group; on a phone it replaces the list");
+await gina.waitFor(has("notice", `You created the group “${topic}” with ${hankName}`));
+check(true, "the group starts with a notice of its creation");
+check(await gina.eval(noOverflow), "the group fits the phone's width");
+
+await hank.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(topic)} && r.querySelector('[data-testid="group-avatar"]') && r.querySelector(".last").textContent === ${JSON.stringify(`${ginaName} created the group “${topic}” with you`)})`,
+);
+check(true, "hank's list shows the group by its topic, a group avatar and the notice");
+await hank.eval(click(".row"));
+await hank.waitFor(`${text("topic")} === ${JSON.stringify(topic)}`);
+
+// Hank, not an admin, adds Ivy from the group's info.
+await hank.eval(click('[data-testid="group-info"]'));
+await hank.waitFor(`${qa("member")}.length === 2`);
+const memberRows = `${qa("member")}.map(li => li.querySelector('[data-testid="member-name"]').textContent + (li.querySelector('[data-testid="admin-tag"]') ? "*" : "")).sort().join(",")`;
+await hank
+  .waitFor(`${memberRows} === ${JSON.stringify([ginaName + "*", hankName].sort().join(","))}`)
+  .catch(async (err) => {
+    console.error("members:", await hank.eval(memberRows));
+    throw err;
+  });
+check(
+  await hank.eval(`!${q("remove-member")} && !${q("toggle-admin")}`),
+  "the info lists the members, the creator as admin; a non-admin cannot remove anyone",
+);
+await fill(hank, "add-members", ivyName);
+await hank.waitFor(`${qa("member")}.length === 3`);
+await hank.eval(click('[data-testid="close-info"]'));
+await hank.waitFor(has("notice", `You added ${ivyName}`));
+await gina.waitFor(has("notice", `${hankName} added ${ivyName}`) + ` && ${text("member-count")} === "3 members"`);
+check(true, "hank added ivy; gina sees the notice and three members");
+
+await ivy.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(topic)})`,
+);
+await ivy.eval(click(".row"));
+await ivy.waitFor(has("notice", `${hankName} added you`));
+check(
+  await ivy.eval(`${qa("notice")}.length === 1 && !document.querySelector(".earlier")`),
+  "ivy sees the group from the notice that added her on",
+);
+
+// Messages from all three, each shown with the sender's name to the others.
+await fill(gina, "text", "hello all");
+await hank.waitFor(fromSender(ginaName, "hello all"));
+await fill(hank, "text", "hi from hank");
+await ivy.waitFor(fromSender(hankName, "hi from hank") + " && " + fromSender(ginaName, "hello all"));
+await fill(ivy, "text", "ivy here");
+await gina.waitFor(fromSender(hankName, "hi from hank") + " && " + fromSender(ivyName, "ivy here"));
+await hank.waitFor(fromSender(ivyName, "ivy here"));
+check(true, "messages from several members arrive with their senders' names");
+await hank.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".last").textContent === ${JSON.stringify(`${ivyName}: ivy here`)})`,
+);
+check(true, "hank's list previews the latest message with its sender's name");
+await gina.waitFor(
+  `${qa("message")}.some(li => li.classList.contains("mine") && li.querySelector(".text").textContent === "hello all" && li.querySelector(".meta").textContent.endsWith("Read by 2"))`,
+);
+check(true, "gina's message shows it was read by both others");
+check(await gina.eval(noOverflow), "the conversation fits the phone's width");
+
+// Ivy changes the topic; everyone sees it.
+await ivy.eval(click('[data-testid="group-info"]'));
+await ivy.waitFor(`${qa("member")}.length === 3`);
+await fill(ivy, "new-topic", topic2);
+await ivy.waitFor(`${text("info-topic")} === ${JSON.stringify(topic2)}`);
+await ivy.eval(click('[data-testid="close-info"]'));
+for (const p of [gina, hank, ivy]) {
+  await p.waitFor(`${text("topic")} === ${JSON.stringify(topic2)}`);
+}
+await gina.waitFor(has("notice", `${ivyName} changed the topic to “${topic2}”`));
+await hank.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(topic2)})`,
+);
+check(true, "ivy changed the topic; everyone sees the new one");
+
+// Gina, the admin, removes Ivy on her phone.
+await gina.eval(click('[data-testid="group-info"]'));
+await gina.waitFor(`${qa("member")}.length === 3 && !!${q("remove-member")}`);
+check(await gina.eval(noOverflow), "the group info fits the phone's width");
+await gina.eval(
+  `(${qa("member")}.find(li => li.querySelector('[data-testid="member-name"]').textContent === ${JSON.stringify(ivyName)}).querySelector('[data-testid="remove-member"]').click(), true)`,
+);
+await gina.waitFor(`${qa("member")}.length === 2`);
+await gina.eval(click('[data-testid="close-info"]'));
+await gina.waitFor(has("notice", `You removed ${ivyName}`) + ` && ${text("member-count")} === "2 members"`);
+await hank.waitFor(has("notice", `${ginaName} removed ${ivyName}`));
+await ivy.waitFor(
+  `${text("former-member")} === "You are no longer in this group" && !${q("text")} && ${has("notice", `${ginaName} removed you`)}`,
+);
+check(
+  await ivy.eval(`${qa("message")}.length === 3`),
+  "ivy sees she is no longer in the group, without a composer, the history kept",
+);
+for (const p of [gina, hank, ivy]) {
+  check(await p.eval(`!${q("error")}`), `${p.name} saw no error banner`);
+}
+
 if (process.env.SCREENSHOT) {
   const { writeFileSync } = await import("node:fs");
-  for (const p of [alice, bob, phone]) {
+  for (const p of [alice, bob, phone, gina, hank, ivy]) {
     const shot = await p.send("Page.captureScreenshot", { format: "png" });
     writeFileSync(process.env.SCREENSHOT.replace(/\.png$/, `-${p.name}.png`), Buffer.from(shot.result.data, "base64"));
   }
 }
 
-for (const p of [alice, bob, phone]) {
+for (const p of [alice, bob, phone, gina, hank, ivy]) {
   const errors = p.logs.filter((l) => l.startsWith("EXCEPTION") || l.startsWith("DIALOG"));
   check(
     errors.length === 0,

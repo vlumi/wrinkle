@@ -1,8 +1,25 @@
 import { create } from "@bufbuild/protobuf";
 import { EventSchema } from "../gen/wrinkle/v1/event_pb";
-import { ConversationSchema, MessageSchema } from "../gen/wrinkle/v1/model_pb";
+import {
+  ConversationKind,
+  ConversationSchema,
+  MemberSchema,
+  MessageSchema,
+  NoticeSchema,
+} from "../gen/wrinkle/v1/model_pb";
+import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { hex } from "../ids";
-import { applyEvent, byActivity, inOrder, unread, upsertConversation } from "./model";
+import {
+  applyEvent,
+  byActivity,
+  emptyData,
+  inOrder,
+  preview,
+  textOf,
+  unread,
+  upsertConversation,
+  withMembers,
+} from "./model";
 import type { Data } from "./model";
 
 const id = (n: number) => new Uint8Array(16).fill(n);
@@ -13,7 +30,7 @@ const k7 = hex(c7);
 
 function oneConversation(): Data {
   const c = create(ConversationSchema, { conversationId: c7, peer: { userId: peer, name: "bob" } });
-  return upsertConversation({ conversations: {}, messages: {} }, c);
+  return upsertConversation(emptyData(), c);
 }
 
 function messageEvent(seq: bigint, sender: Uint8Array, seconds = 0n) {
@@ -26,7 +43,7 @@ function messageEvent(seq: bigint, sender: Uint8Array, seconds = 0n) {
           conversationId: c7,
           seq,
           senderUserId: sender,
-          text: `m${seq}`,
+          content: { case: "text", value: `m${seq}` },
           sentAt: { seconds },
         }),
       },
@@ -39,7 +56,7 @@ test("a peer's message becomes the latest and unread", () => {
   expect(unknownConversation).toBe(false);
   const c = data.conversations[k7];
   expect(c.lastSeq).toBe(1n);
-  expect(c.lastMessage?.text).toBe("m1");
+  expect(textOf(c.lastMessage!)).toBe("m1");
   expect(unread(c)).toBe(1n);
 });
 
@@ -69,7 +86,7 @@ test("read events tell the reader from the peer and never go backwards", () => {
 });
 
 test("a message in an unknown conversation asks for the list", () => {
-  const { unknownConversation } = applyEvent({ conversations: {}, messages: {} }, messageEvent(1n, peer), me);
+  const { unknownConversation } = applyEvent(emptyData(), messageEvent(1n, peer), me);
   expect(unknownConversation).toBe(true);
 });
 
@@ -98,4 +115,83 @@ test("another user's profile event changes nothing", () => {
     body: { case: "profile", value: { user: { userId: id(3), name: "carol" } } },
   });
   expect(applyEvent(data, profile, me).data).toBe(data);
+});
+
+describe("groups", () => {
+  const carol = id(3);
+  const g = id(9);
+  const kg = hex(g);
+  const users = {
+    [hex(peer)]: { userId: peer, name: "bob" },
+    [hex(carol)]: { userId: carol, name: "carol" },
+  } as Data["users"];
+
+  function group(): Data {
+    const c = create(ConversationSchema, {
+      conversationId: g,
+      kind: ConversationKind.GROUP,
+      topic: "Trip",
+      memberCount: 3,
+      member: true,
+      lastSeq: 1n,
+    });
+    const data = upsertConversation(emptyData(), c);
+    const members = [{ userId: me, name: "me" }, users[hex(peer)], users[hex(carol)]].map((user) =>
+      create(MemberSchema, { user, readSeq: 1n }),
+    );
+    return withMembers({ ...data, users }, g, members);
+  }
+
+  const groupMessage = (seq: bigint, sender: Uint8Array, content: Message["content"]) =>
+    create(EventSchema, {
+      cursor: seq,
+      body: {
+        case: "message",
+        value: { message: create(MessageSchema, { conversationId: g, seq, senderUserId: sender, content }) },
+      },
+    });
+
+  test("previews name the sender in groups and tell notices as sentences", () => {
+    let data = applyEvent(group(), groupMessage(2n, peer, { case: "text", value: "hi" }), me).data;
+    expect(preview(data.conversations[kg], me, data.users)).toBe("bob: hi");
+    data = applyEvent(data, groupMessage(3n, me, { case: "text", value: "yo" }), me).data;
+    expect(preview(data.conversations[kg], me, data.users)).toBe("You: yo");
+    data = applyEvent(
+      data,
+      groupMessage(4n, carol, {
+        case: "notice",
+        value: create(NoticeSchema, { kind: { case: "topicChanged", value: { topic: "Trip 2" } } }),
+      }),
+      me,
+    ).data;
+    expect(preview(data.conversations[kg], me, data.users)).toBe("carol changed the topic to “Trip 2”");
+    expect(data.conversations[kg].topic).toBe("Trip 2");
+  });
+
+  test("an unknown sender's text is shown alone", () => {
+    const data = applyEvent(group(), groupMessage(2n, id(8), { case: "text", value: "hi" }), me).data;
+    expect(preview(data.conversations[kg], me, data.users)).toBe("hi");
+  });
+
+  test("a removal notice ends membership once, and asks for the members", () => {
+    const removed = {
+      case: "notice",
+      value: create(NoticeSchema, { kind: { case: "memberRemoved", value: { user: { userId: me, name: "me" } } } }),
+    } as const;
+    const applied = applyEvent(group(), groupMessage(2n, peer, removed), me);
+    expect(applied.membersChanged).toBe(true);
+    const c = applied.data.conversations[kg];
+    expect([c.member, c.memberCount]).toEqual([false, 2]);
+    expect(applied.data.members[kg]).toHaveLength(2);
+    const again = applyEvent(applied.data, groupMessage(2n, peer, removed), me);
+    expect(again.data.conversations[kg].memberCount).toBe(2);
+    expect(again.membersChanged).toBe(false);
+  });
+
+  test("others' read events move their member read positions, not the peer's", () => {
+    const read = create(EventSchema, { body: { case: "read", value: { conversationId: g, userId: carol, seq: 5n } } });
+    const data = applyEvent(group(), read, me).data;
+    expect(data.conversations[kg].peerReadSeq).toBe(0n);
+    expect(data.members[kg].find((m) => hex(m.user!.userId) === hex(carol))?.readSeq).toBe(5n);
+  });
 });

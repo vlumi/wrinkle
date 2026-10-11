@@ -7,15 +7,26 @@ import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { BlobPurpose } from "../gen/wrinkle/v1/messaging_pb";
 import type { DeviceCredentials } from "../gen/wrinkle/v1/messaging_pb";
-import type { Device, User } from "../gen/wrinkle/v1/model_pb";
+import type { Conversation, Device, User } from "../gen/wrinkle/v1/model_pb";
 import { blobAddress } from "../blobs/blobs";
 import { BackendError, Connection } from "../connection/connection";
 import type { ConnectionState } from "../connection/connection";
-import { addMessages, applyEvent, key, noteLatest, unread, upsertConversation } from "../conversations/model";
+import {
+  addMessages,
+  applyEvent,
+  emptyData,
+  key,
+  noteLatest,
+  unread,
+  upsertConversation,
+  withMembers,
+  withUsers,
+} from "../conversations/model";
 import type { Data } from "../conversations/model";
 import { addPending, confirmPending, failPending, newMessageId } from "../conversations/pending";
 import type { PendingByConversation } from "../conversations/pending";
 import { sortDevices, withDevice } from "../devices/model";
+import { isFormer, isGroup, noticeUsers } from "../groups/model";
 import { fromHex, hex, sameId } from "../ids";
 import { rememberGateway } from "../signin/gateways";
 import { saved } from "./saved";
@@ -33,6 +44,8 @@ export interface Session extends Data {
   status: ConnectionState;
   /** The conversation on screen. */
   current: string | null;
+  /** Conversations whose history is loaded back to its start, by id. */
+  complete: Record<string, true>;
   /** Settings on screen, in place of the conversation. */
   settings: boolean;
   pending: PendingByConversation;
@@ -55,6 +68,15 @@ export interface Session extends Data {
   signOutDevice(deviceId: bigint): Promise<void>;
   deleteAccount(password: string): Promise<void>;
   openConversation(peerName: string): Promise<void>;
+  /** Creates a group and shows it; the same clientGroupId on a retry returns the group created first. */
+  createGroup(topic: string, memberNames: string[], clientGroupId: string): Promise<void>;
+  /** Lists the current group's members again. */
+  loadMembers(conversationId: string): Promise<void>;
+  addMembers(memberNames: string[]): Promise<void>;
+  removeMember(userId: Uint8Array): Promise<void>;
+  setAdmin(userId: Uint8Array, admin: boolean): Promise<void>;
+  setTopic(topic: string): Promise<void>;
+  leaveGroup(): Promise<void>;
   show(conversationId: string | null): Promise<void>;
   showSettings(open: boolean): void;
   loadEarlier(): Promise<void>;
@@ -74,15 +96,17 @@ interface PendingAuth {
 let conn: Connection | null = null;
 let cursor = 0n;
 let pendingAuth: PendingAuth | null = null;
+/** Conversations whose newest page of history was loaded since connecting; events alone may bring only the latest messages. */
+const loaded = new Set<string>();
 /** A sign-out this device asked for, with the notice to show when the server closes the connection for it. */
 let leaving: { notice: string | null } | null = null;
 
 /** The state with no user's data in it. */
 const blank = {
-  conversations: {},
-  messages: {},
+  ...emptyData(),
   me: null,
   current: null,
+  complete: {},
   settings: false,
   pending: {},
   devices: null,
@@ -129,6 +153,7 @@ export const useSession = create<Session>((set, get) => {
   function signedOut(notice: string | null) {
     pendingAuth = null;
     leaving = null;
+    loaded.clear();
     conn?.close();
     conn = null;
     saved.forget();
@@ -192,7 +217,10 @@ export const useSession = create<Session>((set, get) => {
     await refreshConversations();
     await syncFromCursor();
     const current = get().current;
-    if (current) await loadHistory(current, 0n);
+    if (current) {
+      await loadHistory(current, 0n);
+      await refreshMembers(current);
+    }
   }
 
   async function refreshConversations() {
@@ -200,7 +228,43 @@ export const useSession = create<Session>((set, get) => {
     const resp = await conn.call("listConversations", { case: "listConversations", value: {} });
     let data: Data = get();
     for (const c of resp.conversations) data = upsertConversation(data, c);
-    set({ conversations: data.conversations });
+    set({ conversations: data.conversations, users: data.users });
+    for (const c of resp.conversations) learnSender(key(c.conversationId));
+  }
+
+  /** Groups listing members right now, so each is asked once at a time. */
+  const listing = new Set<string>();
+
+  /** Lists a group's members when its latest message is from someone not known yet, for the list's preview. */
+  function learnSender(conversationId: string) {
+    const { conversations, users, members, me } = get();
+    const c = conversations[conversationId];
+    const m = c?.lastMessage;
+    if (!m || !isGroup(c) || sameId(m.senderUserId, me?.userId) || users[hex(m.senderUserId)]) return;
+    if (members[conversationId] || listing.has(conversationId)) return;
+    refreshMembers(conversationId).catch(fail);
+  }
+
+  /** Lists a group's members, if the user is still in it. */
+  async function refreshMembers(conversationId: string) {
+    const c = get().conversations[conversationId];
+    if (!conn || !c || !isGroup(c) || !c.member) return;
+    listing.add(conversationId);
+    let resp;
+    try {
+      resp = await conn.call("getMembers", { case: "getMembers", value: { conversationId: c.conversationId } });
+    } finally {
+      listing.delete(conversationId);
+    }
+    const data = withMembers(get(), c.conversationId, resp.members);
+    set({ conversations: data.conversations, members: data.members, users: data.users });
+  }
+
+  function current(): Conversation {
+    const id = get().current;
+    const c = id ? get().conversations[id] : undefined;
+    if (!c || !conn) throw new Error("not connected");
+    return c;
   }
 
   async function syncFromCursor() {
@@ -228,11 +292,22 @@ export const useSession = create<Session>((set, get) => {
       if (device && devices) set({ devices: withDevice(devices, device, signedOut) });
       return;
     }
-    const { data, unknownConversation } = applyEvent(get(), event, me.userId);
+    const { data, unknownConversation, membersChanged } = applyEvent(get(), event, me.userId);
     const m = event.body.case === "message" ? event.body.value.message : undefined;
     const pending = m ? confirmPending(get().pending, m.conversationId, m.clientMessageId) : get().pending;
-    set({ conversations: data.conversations, messages: data.messages, pending });
+    set({
+      conversations: data.conversations,
+      messages: data.messages,
+      members: data.members,
+      users: data.users,
+      pending,
+    });
     if (unknownConversation) refreshConversations().catch(fail);
+    if (m) {
+      const id = key(m.conversationId);
+      if (membersChanged && (get().members[id] || get().current === id)) refreshMembers(id).catch(fail);
+      else learnSender(id);
+    }
   }
 
   function onEvent(event: Event) {
@@ -256,7 +331,14 @@ export const useSession = create<Session>((set, get) => {
       case: "getMessages",
       value: { conversationId: id, beforeSeq, limit: HISTORY_PAGE },
     });
-    set({ messages: addMessages(get(), id, resp.messages).messages });
+    if (beforeSeq === 0n) loaded.add(conversationId);
+    const data = addMessages(get(), id, resp.messages);
+    const notices = resp.messages.flatMap((m) => (m.content.case === "notice" ? [m.content.value] : []));
+    const users = withUsers(data, notices.flatMap(noticeUsers)).users;
+    // A short page reaches the start: of the conversation, or of what a group member may see.
+    const complete =
+      resp.messages.length < HISTORY_PAGE ? { ...get().complete, [conversationId]: true as const } : get().complete;
+    set({ messages: data.messages, users, complete });
   }
 
   // Back on screen: reconnect now instead of waiting out the backoff.
@@ -375,11 +457,53 @@ export const useSession = create<Session>((set, get) => {
       await get().show(key(resp.conversation.conversationId));
     },
 
+    async createGroup(topic, memberNames, clientGroupId) {
+      if (!conn) throw new Error("not connected");
+      const resp = await conn.call("createGroup", {
+        case: "createGroup",
+        value: { topic, memberNames, clientGroupId },
+      });
+      if (!resp.conversation) return;
+      set({ conversations: upsertConversation(get(), resp.conversation).conversations });
+      await get().show(key(resp.conversation.conversationId));
+    },
+
+    loadMembers: refreshMembers,
+
+    async addMembers(memberNames) {
+      const c = current();
+      await conn!.call("addMembers", { case: "addMembers", value: { conversationId: c.conversationId, memberNames } });
+      await refreshMembers(key(c.conversationId));
+    },
+
+    async removeMember(userId) {
+      const c = current();
+      await conn!.call("removeMember", { case: "removeMember", value: { conversationId: c.conversationId, userId } });
+      await refreshMembers(key(c.conversationId));
+    },
+
+    async setAdmin(userId, admin) {
+      const c = current();
+      await conn!.call("setAdmin", { case: "setAdmin", value: { conversationId: c.conversationId, userId, admin } });
+      await refreshMembers(key(c.conversationId));
+    },
+
+    async setTopic(topic) {
+      const c = current();
+      await conn!.call("setTopic", { case: "setTopic", value: { conversationId: c.conversationId, topic } });
+    },
+
+    async leaveGroup() {
+      const c = current();
+      await conn!.call("leaveGroup", { case: "leaveGroup", value: { conversationId: c.conversationId } });
+    },
+
     async show(conversationId) {
       set({ current: conversationId, settings: false });
       if (!conversationId) return;
-      if (!get().messages[conversationId]) await loadHistory(conversationId, 0n);
+      if (!loaded.has(conversationId)) await loadHistory(conversationId, 0n);
       get().markReadIfVisible();
+      await refreshMembers(conversationId).catch(fail);
     },
 
     showSettings(open) {
@@ -421,6 +545,8 @@ export const useSession = create<Session>((set, get) => {
       if (!id || !c || !conn || unread(c) === 0n || !isVisible()) return;
       const seq = c.lastSeq;
       set({ conversations: { ...get().conversations, [id]: { ...c, readSeq: seq } } });
+      // Former members cannot move their read position on the backend.
+      if (isFormer(c)) return;
       conn.call("markRead", { case: "markRead", value: { conversationId: c.conversationId, seq } }).catch(fail);
     },
 
