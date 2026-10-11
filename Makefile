@@ -170,7 +170,7 @@ build-loadgen:  ## Load generator (bin/loadgen)
 .PHONY: ci lint format test conformance smoke web-test ios-test
 ci: lint proto-check test build-ios smoke conformance web-test ios-test  ## The local CI: lint, unit tests, builds, conformance, client tests
 
-lint:  proto-lint go-lint java-lint elixir-lint rust-lint web-lint ios-lint  ## Formatting checks and linters for everything
+lint:  proto-lint go-lint java-lint elixir-lint rust-lint web-lint ios-lint shell-lint docker-lint infra-lint  ## Formatting checks and linters for everything
 
 format:  ## Rewrite sources with each language's formatter
 	buf format -w
@@ -178,6 +178,8 @@ format:  ## Rewrite sources with each language's formatter
 	$(GRADLE) spotlessApply
 	$(MIX) format
 	$(CARGO) fmt
+	$(NPM) run --silent format
+	shfmt -w $(SHFMT) $(SH_FILES)
 	cd clients/ios && swift format --in-place --recursive --configuration .swift-format $(IOS_SWIFT)
 
 test: go-test java-test elixir-test rust-test web-unit  ## Unit tests for everything
@@ -262,7 +264,7 @@ proto-check: proto  ## Fail when the committed generated code is stale
 
 .PHONY: tools clean
 tools:  ## Install the code generators and linters (Homebrew, go install, mix)
-	brew install xcodegen swift-protobuf swiftlint elixir rustup node
+	brew install xcodegen swift-protobuf swiftlint elixir rustup node shellcheck shfmt hadolint
 	go install github.com/bufbuild/buf/cmd/buf@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
@@ -274,7 +276,7 @@ clean:  ## Remove build output (not dependencies, not the stack)
 
 # Parts the targets above are made of.
 
-.PHONY: proto-lint go-lint go-test java-lint java-test elixir-deps elixir-lint elixir-test rust-lint rust-test web-deps web-lint web-unit ios-lint
+.PHONY: proto-lint go-lint go-test java-lint java-test elixir-deps elixir-lint elixir-test rust-lint rust-test web-deps web-lint web-unit ios-lint shell-lint docker-lint infra-lint
 proto-lint:
 	buf lint
 	buf format --diff --exit-code
@@ -315,6 +317,7 @@ web-deps:
 web-lint: web-deps
 	$(NPM) run --silent typecheck
 	$(NPM) run --silent lint
+	$(NPM) run --silent format-check
 	node --check clients/web/test/browser_test.mjs
 
 web-unit: web-deps
@@ -323,3 +326,21 @@ web-unit: web-deps
 ios-lint:
 	cd clients/ios && swiftlint lint --strict --quiet
 	cd clients/ios && swift format lint --strict --recursive --configuration .swift-format $(IOS_SWIFT)
+
+SH_FILES = $(shell git ls-files '*.sh')
+SHFMT := -i 2 -ci
+HAPROXY_CHECK := docker run --rm -v $(CURDIR)/infra/haproxy:/cfg:ro --add-host host.docker.internal:host-gateway haproxy:3.4.6 haproxy -q -c -f
+
+shell-lint:
+	shellcheck $(SH_FILES)
+	shfmt -d $(SHFMT) $(SH_FILES)
+
+docker-lint:
+	hadolint $(shell git ls-files '*Dockerfile')
+
+# The Compose files and the balancers' configurations parse.
+infra-lint:
+	$(COMPOSE) config --quiet
+	$(COMPOSE) -f infra/cluster.yml config --quiet
+	$(HAPROXY_CHECK) /cfg/haproxy.cfg
+	$(HAPROXY_CHECK) /cfg/cluster.cfg

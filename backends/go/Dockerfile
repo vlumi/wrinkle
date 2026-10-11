@@ -10,6 +10,6 @@ COPY proto/go proto/go
 RUN --mount=type=cache,target=/root/.cache/go-build,sharing=locked --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     CGO_ENABLED=0 go build -o /wrinkle ./backends/go/cmd/wrinkle
 
-FROM gcr.io/distroless/static-debian13
+FROM gcr.io/distroless/static-debian13:nonroot
 COPY --from=build /wrinkle /wrinkle
 ENTRYPOINT ["/wrinkle"]
