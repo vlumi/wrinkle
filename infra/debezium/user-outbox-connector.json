@@ -7,6 +7,7 @@
   "vitess.keyspace": "user",
   "vitess.tablet.type": "MASTER",
   "snapshot.mode": "never",
+  "custom.metric.tags": "connector=wrinkle-user-outbox",
   "poll.interval.ms": "20",
   "vitess.vgtid": "current",
   "table.include.list": "user.user_outbox",
