@@ -27,6 +27,47 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
+/// A direct conversation has exactly two participants, for good; a group
+/// has a topic, an admin or more, and members who join and leave. The kind
+/// is fixed when the conversation is created.
+public nonisolated enum Wrinkle_V1_ConversationKind: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+  case direct // = 1
+  case group // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .direct
+    case 2: self = .group
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .direct: return 1
+    case .group: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Wrinkle_V1_ConversationKind] = [
+    .unspecified,
+    .direct,
+    .group,
+  ]
+
+}
+
 public nonisolated struct Wrinkle_V1_User: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -111,9 +152,8 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
 
   /// Chosen by the sending device, unique per sender and conversation. Resending
   /// with the same id returns the message already stored instead of a duplicate.
+  /// The server chooses it for notices.
   public var clientMessageID: String = String()
-
-  public var text: String = String()
 
   public var sentAt: SwiftProtobuf.Google_Protobuf_Timestamp {
     get {_sentAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
@@ -124,61 +164,342 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
   /// Clears the value of `sentAt`. Subsequent reads from it will return its default value.
   public mutating func clearSentAt() {self._sentAt = nil}
 
+  public var content: Wrinkle_V1_Message.OneOf_Content? = nil
+
+  public var text: String {
+    get {
+      if case .text(let v)? = content {return v}
+      return String()
+    }
+    set {content = .text(newValue)}
+  }
+
+  /// A change to a group, made by the sender.
+  public var notice: Wrinkle_V1_Notice {
+    get {
+      if case .notice(let v)? = content {return v}
+      return Wrinkle_V1_Notice()
+    }
+    set {content = .notice(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Content: Equatable, Sendable {
+    case text(String)
+    /// A change to a group, made by the sender.
+    case notice(Wrinkle_V1_Notice)
+
+  }
 
   public init() {}
 
   fileprivate var _sentAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
-/// A conversation as seen by the requesting user.
-public nonisolated struct Wrinkle_V1_Conversation: Sendable {
+/// A change to a group, as a message in its sequence, so every member sees
+/// changes and messages in the same order.
+public nonisolated struct Wrinkle_V1_Notice: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: Data = Data()
+  public var kind: Wrinkle_V1_Notice.OneOf_Kind? = nil
 
-  public var peer: Wrinkle_V1_User {
-    get {_peer ?? Wrinkle_V1_User()}
-    set {_peer = newValue}
+  public var groupCreated: Wrinkle_V1_GroupCreated {
+    get {
+      if case .groupCreated(let v)? = kind {return v}
+      return Wrinkle_V1_GroupCreated()
+    }
+    set {kind = .groupCreated(newValue)}
   }
-  /// Returns true if `peer` has been explicitly set.
-  public var hasPeer: Bool {self._peer != nil}
-  /// Clears the value of `peer`. Subsequent reads from it will return its default value.
-  public mutating func clearPeer() {self._peer = nil}
 
-  /// Highest message seq in the conversation; 0 when empty.
-  public var lastSeq: UInt64 = 0
-
-  /// Unset when the conversation is empty.
-  public var lastMessage: Wrinkle_V1_Message {
-    get {_lastMessage ?? Wrinkle_V1_Message()}
-    set {_lastMessage = newValue}
+  public var membersAdded: Wrinkle_V1_MembersAdded {
+    get {
+      if case .membersAdded(let v)? = kind {return v}
+      return Wrinkle_V1_MembersAdded()
+    }
+    set {kind = .membersAdded(newValue)}
   }
-  /// Returns true if `lastMessage` has been explicitly set.
-  public var hasLastMessage: Bool {self._lastMessage != nil}
-  /// Clears the value of `lastMessage`. Subsequent reads from it will return its default value.
-  public mutating func clearLastMessage() {self._lastMessage = nil}
 
-  /// The requesting user's read position; messages with seq above it are
-  /// unread. Sending a message moves the sender's own position to it.
-  public var readSeq: UInt64 = 0
+  public var memberRemoved: Wrinkle_V1_MemberRemoved {
+    get {
+      if case .memberRemoved(let v)? = kind {return v}
+      return Wrinkle_V1_MemberRemoved()
+    }
+    set {kind = .memberRemoved(newValue)}
+  }
 
-  /// The peer's read position.
-  public var peerReadSeq: UInt64 = 0
+  public var memberLeft: Wrinkle_V1_MemberLeft {
+    get {
+      if case .memberLeft(let v)? = kind {return v}
+      return Wrinkle_V1_MemberLeft()
+    }
+    set {kind = .memberLeft(newValue)}
+  }
+
+  public var topicChanged: Wrinkle_V1_TopicChanged {
+    get {
+      if case .topicChanged(let v)? = kind {return v}
+      return Wrinkle_V1_TopicChanged()
+    }
+    set {kind = .topicChanged(newValue)}
+  }
+
+  public var adminChanged: Wrinkle_V1_AdminChanged {
+    get {
+      if case .adminChanged(let v)? = kind {return v}
+      return Wrinkle_V1_AdminChanged()
+    }
+    set {kind = .adminChanged(newValue)}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public nonisolated enum OneOf_Kind: Equatable, Sendable {
+    case groupCreated(Wrinkle_V1_GroupCreated)
+    case membersAdded(Wrinkle_V1_MembersAdded)
+    case memberRemoved(Wrinkle_V1_MemberRemoved)
+    case memberLeft(Wrinkle_V1_MemberLeft)
+    case topicChanged(Wrinkle_V1_TopicChanged)
+    case adminChanged(Wrinkle_V1_AdminChanged)
+
+  }
+
+  public init() {}
+}
+
+/// The sender created the group, as its admin.
+public nonisolated struct Wrinkle_V1_GroupCreated: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var topic: String = String()
+
+  /// The members invited at creation, besides the sender.
+  public var members: [Wrinkle_V1_User] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_MembersAdded: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var users: [Wrinkle_V1_User] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// An admin removed the user.
+public nonisolated struct Wrinkle_V1_MemberRemoved: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var user: Wrinkle_V1_User {
+    get {_user ?? Wrinkle_V1_User()}
+    set {_user = newValue}
+  }
+  /// Returns true if `user` has been explicitly set.
+  public var hasUser: Bool {self._user != nil}
+  /// Clears the value of `user`. Subsequent reads from it will return its default value.
+  public mutating func clearUser() {self._user = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _peer: Wrinkle_V1_User? = nil
-  fileprivate var _lastMessage: Wrinkle_V1_Message? = nil
+  fileprivate var _user: Wrinkle_V1_User? = nil
+}
+
+/// The sender left.
+public nonisolated struct Wrinkle_V1_MemberLeft: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// Made admin because the sender was the last one; unset otherwise.
+  public var promoted: Wrinkle_V1_User {
+    get {_promoted ?? Wrinkle_V1_User()}
+    set {_promoted = newValue}
+  }
+  /// Returns true if `promoted` has been explicitly set.
+  public var hasPromoted: Bool {self._promoted != nil}
+  /// Clears the value of `promoted`. Subsequent reads from it will return its default value.
+  public mutating func clearPromoted() {self._promoted = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _promoted: Wrinkle_V1_User? = nil
+}
+
+public nonisolated struct Wrinkle_V1_TopicChanged: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var topic: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_AdminChanged: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var user: Wrinkle_V1_User {
+    get {_user ?? Wrinkle_V1_User()}
+    set {_user = newValue}
+  }
+  /// Returns true if `user` has been explicitly set.
+  public var hasUser: Bool {self._user != nil}
+  /// Clears the value of `user`. Subsequent reads from it will return its default value.
+  public mutating func clearUser() {self._user = nil}
+
+  public var admin: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _user: Wrinkle_V1_User? = nil
+}
+
+/// A conversation as seen by the requesting user.
+public nonisolated struct Wrinkle_V1_Conversation: @unchecked Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversationID: Data {
+    get {_storage._conversationID}
+    set {_uniqueStorage()._conversationID = newValue}
+  }
+
+  public var kind: Wrinkle_V1_ConversationKind {
+    get {_storage._kind}
+    set {_uniqueStorage()._kind = newValue}
+  }
+
+  /// Direct conversations: the other participant.
+  public var peer: Wrinkle_V1_User {
+    get {_storage._peer ?? Wrinkle_V1_User()}
+    set {_uniqueStorage()._peer = newValue}
+  }
+  /// Returns true if `peer` has been explicitly set.
+  public var hasPeer: Bool {_storage._peer != nil}
+  /// Clears the value of `peer`. Subsequent reads from it will return its default value.
+  public mutating func clearPeer() {_uniqueStorage()._peer = nil}
+
+  /// Highest message seq in the conversation; 0 when empty.
+  public var lastSeq: UInt64 {
+    get {_storage._lastSeq}
+    set {_uniqueStorage()._lastSeq = newValue}
+  }
+
+  /// Unset when the conversation is empty.
+  public var lastMessage: Wrinkle_V1_Message {
+    get {_storage._lastMessage ?? Wrinkle_V1_Message()}
+    set {_uniqueStorage()._lastMessage = newValue}
+  }
+  /// Returns true if `lastMessage` has been explicitly set.
+  public var hasLastMessage: Bool {_storage._lastMessage != nil}
+  /// Clears the value of `lastMessage`. Subsequent reads from it will return its default value.
+  public mutating func clearLastMessage() {_uniqueStorage()._lastMessage = nil}
+
+  /// The requesting user's read position; messages with seq above it are
+  /// unread. Sending a message moves the sender's own position to it.
+  public var readSeq: UInt64 {
+    get {_storage._readSeq}
+    set {_uniqueStorage()._readSeq = newValue}
+  }
+
+  /// Direct conversations: the peer's read position.
+  public var peerReadSeq: UInt64 {
+    get {_storage._peerReadSeq}
+    set {_uniqueStorage()._peerReadSeq = newValue}
+  }
+
+  /// Groups: the topic, the number of members, whether the requesting user
+  /// is still a member (false once they left or were removed; the
+  /// conversation stays, with the history they had) and an admin.
+  public var topic: String {
+    get {_storage._topic}
+    set {_uniqueStorage()._topic = newValue}
+  }
+
+  public var memberCount: UInt32 {
+    get {_storage._memberCount}
+    set {_uniqueStorage()._memberCount = newValue}
+  }
+
+  public var member: Bool {
+    get {_storage._member}
+    set {_uniqueStorage()._member = newValue}
+  }
+
+  public var admin: Bool {
+    get {_storage._admin}
+    set {_uniqueStorage()._admin = newValue}
+  }
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
+}
+
+/// A current member of a group.
+public nonisolated struct Wrinkle_V1_Member: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var user: Wrinkle_V1_User {
+    get {_user ?? Wrinkle_V1_User()}
+    set {_user = newValue}
+  }
+  /// Returns true if `user` has been explicitly set.
+  public var hasUser: Bool {self._user != nil}
+  /// Clears the value of `user`. Subsequent reads from it will return its default value.
+  public mutating func clearUser() {self._user = nil}
+
+  public var admin: Bool = false
+
+  /// The member's read position.
+  public var readSeq: UInt64 = 0
+
+  /// The seq of the notice that added the member; they see messages from
+  /// there on.
+  public var joinedSeq: UInt64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _user: Wrinkle_V1_User? = nil
 }
 
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
+
+nonisolated extension Wrinkle_V1_ConversationKind: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_KIND_UNSPECIFIED\0\u{1}CONVERSATION_KIND_DIRECT\0\u{1}CONVERSATION_KIND_GROUP\0")
+}
 
 nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".User"
@@ -286,7 +607,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{1}text\0\u{3}sent_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{1}text\0\u{3}sent_at\0\u{1}notice\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -298,8 +619,28 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self.senderUserID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
-      case 5: try { try decoder.decodeSingularStringField(value: &self.text) }()
+      case 5: try {
+        var v: String?
+        try decoder.decodeSingularStringField(value: &v)
+        if let v = v {
+          if self.content != nil {try decoder.handleConflictingOneOf()}
+          self.content = .text(v)
+        }
+      }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._sentAt) }()
+      case 7: try {
+        var v: Wrinkle_V1_Notice?
+        var hadOneofValue = false
+        if let current = self.content {
+          hadOneofValue = true
+          if case .notice(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.content = .notice(v)
+        }
+      }()
       default: break
       }
     }
@@ -322,11 +663,14 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.clientMessageID.isEmpty {
       try visitor.visitSingularStringField(value: self.clientMessageID, fieldNumber: 4)
     }
-    if !self.text.isEmpty {
-      try visitor.visitSingularStringField(value: self.text, fieldNumber: 5)
-    }
+    try { if case .text(let v)? = self.content {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
+    } }()
     try { if let v = self._sentAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    } }()
+    try { if case .notice(let v)? = self.content {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
     } }()
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -336,16 +680,16 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs.seq != rhs.seq {return false}
     if lhs.senderUserID != rhs.senderUserID {return false}
     if lhs.clientMessageID != rhs.clientMessageID {return false}
-    if lhs.text != rhs.text {return false}
     if lhs._sentAt != rhs._sentAt {return false}
+    if lhs.content != rhs.content {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-nonisolated extension Wrinkle_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Conversation"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}peer\0\u{3}last_seq\0\u{3}last_message\0\u{3}read_seq\0\u{3}peer_read_seq\0")
+nonisolated extension Wrinkle_V1_Notice: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Notice"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}group_created\0\u{3}members_added\0\u{3}member_removed\0\u{3}member_left\0\u{3}topic_changed\0\u{3}admin_changed\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -353,12 +697,84 @@ nonisolated extension Wrinkle_V1_Conversation: SwiftProtobuf.Message, SwiftProto
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._peer) }()
-      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.lastSeq) }()
-      case 4: try { try decoder.decodeSingularMessageField(value: &self._lastMessage) }()
-      case 5: try { try decoder.decodeSingularUInt64Field(value: &self.readSeq) }()
-      case 6: try { try decoder.decodeSingularUInt64Field(value: &self.peerReadSeq) }()
+      case 1: try {
+        var v: Wrinkle_V1_GroupCreated?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .groupCreated(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .groupCreated(v)
+        }
+      }()
+      case 2: try {
+        var v: Wrinkle_V1_MembersAdded?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .membersAdded(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .membersAdded(v)
+        }
+      }()
+      case 3: try {
+        var v: Wrinkle_V1_MemberRemoved?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .memberRemoved(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .memberRemoved(v)
+        }
+      }()
+      case 4: try {
+        var v: Wrinkle_V1_MemberLeft?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .memberLeft(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .memberLeft(v)
+        }
+      }()
+      case 5: try {
+        var v: Wrinkle_V1_TopicChanged?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .topicChanged(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .topicChanged(v)
+        }
+      }()
+      case 6: try {
+        var v: Wrinkle_V1_AdminChanged?
+        var hadOneofValue = false
+        if let current = self.kind {
+          hadOneofValue = true
+          if case .adminChanged(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.kind = .adminChanged(v)
+        }
+      }()
       default: break
       }
     }
@@ -369,34 +785,429 @@ nonisolated extension Wrinkle_V1_Conversation: SwiftProtobuf.Message, SwiftProto
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if !self.conversationID.isEmpty {
-      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
-    }
-    try { if let v = self._peer {
+    switch self.kind {
+    case .groupCreated?: try {
+      guard case .groupCreated(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    }()
+    case .membersAdded?: try {
+      guard case .membersAdded(let v)? = self.kind else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
-    if self.lastSeq != 0 {
-      try visitor.visitSingularUInt64Field(value: self.lastSeq, fieldNumber: 3)
-    }
-    try { if let v = self._lastMessage {
+    }()
+    case .memberRemoved?: try {
+      guard case .memberRemoved(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
+    case .memberLeft?: try {
+      guard case .memberLeft(let v)? = self.kind else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
-    } }()
-    if self.readSeq != 0 {
-      try visitor.visitSingularUInt64Field(value: self.readSeq, fieldNumber: 5)
+    }()
+    case .topicChanged?: try {
+      guard case .topicChanged(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    }()
+    case .adminChanged?: try {
+      guard case .adminChanged(let v)? = self.kind else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
+    }()
+    case nil: break
     }
-    if self.peerReadSeq != 0 {
-      try visitor.visitSingularUInt64Field(value: self.peerReadSeq, fieldNumber: 6)
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Notice, rhs: Wrinkle_V1_Notice) -> Bool {
+    if lhs.kind != rhs.kind {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_GroupCreated: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".GroupCreated"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}topic\0\u{1}members\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.topic) }()
+      case 2: try { try decoder.decodeRepeatedMessageField(value: &self.members) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.topic.isEmpty {
+      try visitor.visitSingularStringField(value: self.topic, fieldNumber: 1)
+    }
+    if !self.members.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.members, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_GroupCreated, rhs: Wrinkle_V1_GroupCreated) -> Bool {
+    if lhs.topic != rhs.topic {return false}
+    if lhs.members != rhs.members {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_MembersAdded: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MembersAdded"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}users\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.users) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.users.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.users, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_MembersAdded, rhs: Wrinkle_V1_MembersAdded) -> Bool {
+    if lhs.users != rhs.users {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_MemberRemoved: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MemberRemoved"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._user) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._user {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_MemberRemoved, rhs: Wrinkle_V1_MemberRemoved) -> Bool {
+    if lhs._user != rhs._user {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_MemberLeft: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MemberLeft"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}promoted\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._promoted) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._promoted {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_MemberLeft, rhs: Wrinkle_V1_MemberLeft) -> Bool {
+    if lhs._promoted != rhs._promoted {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_TopicChanged: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".TopicChanged"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}topic\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.topic) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.topic.isEmpty {
+      try visitor.visitSingularStringField(value: self.topic, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_TopicChanged, rhs: Wrinkle_V1_TopicChanged) -> Bool {
+    if lhs.topic != rhs.topic {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_AdminChanged: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".AdminChanged"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0\u{1}admin\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._user) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.admin) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._user {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.admin != false {
+      try visitor.visitSingularBoolField(value: self.admin, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_AdminChanged, rhs: Wrinkle_V1_AdminChanged) -> Bool {
+    if lhs._user != rhs._user {return false}
+    if lhs.admin != rhs.admin {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Conversation: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Conversation"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}peer\0\u{3}last_seq\0\u{3}last_message\0\u{3}read_seq\0\u{3}peer_read_seq\0\u{1}kind\0\u{1}topic\0\u{3}member_count\0\u{1}member\0\u{1}admin\0")
+
+  fileprivate class _StorageClass {
+    var _conversationID: Data = Data()
+    var _kind: Wrinkle_V1_ConversationKind = .unspecified
+    var _peer: Wrinkle_V1_User? = nil
+    var _lastSeq: UInt64 = 0
+    var _lastMessage: Wrinkle_V1_Message? = nil
+    var _readSeq: UInt64 = 0
+    var _peerReadSeq: UInt64 = 0
+    var _topic: String = String()
+    var _memberCount: UInt32 = 0
+    var _member: Bool = false
+    var _admin: Bool = false
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _conversationID = source._conversationID
+      _kind = source._kind
+      _peer = source._peer
+      _lastSeq = source._lastSeq
+      _lastMessage = source._lastMessage
+      _readSeq = source._readSeq
+      _peerReadSeq = source._peerReadSeq
+      _topic = source._topic
+      _memberCount = source._memberCount
+      _member = source._member
+      _admin = source._admin
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularBytesField(value: &_storage._conversationID) }()
+        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._peer) }()
+        case 3: try { try decoder.decodeSingularUInt64Field(value: &_storage._lastSeq) }()
+        case 4: try { try decoder.decodeSingularMessageField(value: &_storage._lastMessage) }()
+        case 5: try { try decoder.decodeSingularUInt64Field(value: &_storage._readSeq) }()
+        case 6: try { try decoder.decodeSingularUInt64Field(value: &_storage._peerReadSeq) }()
+        case 7: try { try decoder.decodeSingularEnumField(value: &_storage._kind) }()
+        case 8: try { try decoder.decodeSingularStringField(value: &_storage._topic) }()
+        case 9: try { try decoder.decodeSingularUInt32Field(value: &_storage._memberCount) }()
+        case 10: try { try decoder.decodeSingularBoolField(value: &_storage._member) }()
+        case 11: try { try decoder.decodeSingularBoolField(value: &_storage._admin) }()
+        default: break
+        }
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if !_storage._conversationID.isEmpty {
+        try visitor.visitSingularBytesField(value: _storage._conversationID, fieldNumber: 1)
+      }
+      try { if let v = _storage._peer {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      } }()
+      if _storage._lastSeq != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._lastSeq, fieldNumber: 3)
+      }
+      try { if let v = _storage._lastMessage {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      } }()
+      if _storage._readSeq != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._readSeq, fieldNumber: 5)
+      }
+      if _storage._peerReadSeq != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._peerReadSeq, fieldNumber: 6)
+      }
+      if _storage._kind != .unspecified {
+        try visitor.visitSingularEnumField(value: _storage._kind, fieldNumber: 7)
+      }
+      if !_storage._topic.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._topic, fieldNumber: 8)
+      }
+      if _storage._memberCount != 0 {
+        try visitor.visitSingularUInt32Field(value: _storage._memberCount, fieldNumber: 9)
+      }
+      if _storage._member != false {
+        try visitor.visitSingularBoolField(value: _storage._member, fieldNumber: 10)
+      }
+      if _storage._admin != false {
+        try visitor.visitSingularBoolField(value: _storage._admin, fieldNumber: 11)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_Conversation, rhs: Wrinkle_V1_Conversation) -> Bool {
-    if lhs.conversationID != rhs.conversationID {return false}
-    if lhs._peer != rhs._peer {return false}
-    if lhs.lastSeq != rhs.lastSeq {return false}
-    if lhs._lastMessage != rhs._lastMessage {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._conversationID != rhs_storage._conversationID {return false}
+        if _storage._kind != rhs_storage._kind {return false}
+        if _storage._peer != rhs_storage._peer {return false}
+        if _storage._lastSeq != rhs_storage._lastSeq {return false}
+        if _storage._lastMessage != rhs_storage._lastMessage {return false}
+        if _storage._readSeq != rhs_storage._readSeq {return false}
+        if _storage._peerReadSeq != rhs_storage._peerReadSeq {return false}
+        if _storage._topic != rhs_storage._topic {return false}
+        if _storage._memberCount != rhs_storage._memberCount {return false}
+        if _storage._member != rhs_storage._member {return false}
+        if _storage._admin != rhs_storage._admin {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Member: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Member"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0\u{1}admin\0\u{3}read_seq\0\u{3}joined_seq\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._user) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.admin) }()
+      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.readSeq) }()
+      case 4: try { try decoder.decodeSingularUInt64Field(value: &self.joinedSeq) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._user {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.admin != false {
+      try visitor.visitSingularBoolField(value: self.admin, fieldNumber: 2)
+    }
+    if self.readSeq != 0 {
+      try visitor.visitSingularUInt64Field(value: self.readSeq, fieldNumber: 3)
+    }
+    if self.joinedSeq != 0 {
+      try visitor.visitSingularUInt64Field(value: self.joinedSeq, fieldNumber: 4)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Member, rhs: Wrinkle_V1_Member) -> Bool {
+    if lhs._user != rhs._user {return false}
+    if lhs.admin != rhs.admin {return false}
     if lhs.readSeq != rhs.readSeq {return false}
-    if lhs.peerReadSeq != rhs.peerReadSeq {return false}
+    if lhs.joinedSeq != rhs.joinedSeq {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

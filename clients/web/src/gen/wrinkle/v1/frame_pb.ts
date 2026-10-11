@@ -54,7 +54,7 @@ import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2"
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Event } from "./event_pb";
 import { file_wrinkle_v1_event } from "./event_pb";
-import type { ChangePasswordRequest, ChangePasswordResponse, ConnectRequest, ConnectResponse, CreateUploadRequest, CreateUploadResponse, DeleteAccountRequest, DeleteAccountResponse, GetMessagesRequest, GetMessagesResponse, ListConversationsRequest, ListConversationsResponse, ListDevicesRequest, ListDevicesResponse, MarkReadRequest, MarkReadResponse, OpenConversationRequest, OpenConversationResponse, RegisterPushTokenRequest, RegisterPushTokenResponse, RegisterRequest, RegisterResponse, RenameDeviceRequest, RenameDeviceResponse, SendMessageRequest, SendMessageResponse, SignInRequest, SignInResponse, SignOutDeviceRequest, SignOutDeviceResponse, SignOutRequest, SignOutResponse, SyncRequest, SyncResponse, UpdateProfileRequest, UpdateProfileResponse } from "./messaging_pb";
+import type { AddMembersRequest, AddMembersResponse, ChangePasswordRequest, ChangePasswordResponse, ConnectRequest, ConnectResponse, CreateGroupRequest, CreateGroupResponse, CreateUploadRequest, CreateUploadResponse, DeleteAccountRequest, DeleteAccountResponse, GetMembersRequest, GetMembersResponse, GetMessagesRequest, GetMessagesResponse, LeaveGroupRequest, LeaveGroupResponse, ListConversationsRequest, ListConversationsResponse, ListDevicesRequest, ListDevicesResponse, MarkReadRequest, MarkReadResponse, OpenConversationRequest, OpenConversationResponse, RegisterPushTokenRequest, RegisterPushTokenResponse, RegisterRequest, RegisterResponse, RemoveMemberRequest, RemoveMemberResponse, RenameDeviceRequest, RenameDeviceResponse, SendMessageRequest, SendMessageResponse, SetAdminRequest, SetAdminResponse, SetTopicRequest, SetTopicResponse, SignInRequest, SignInResponse, SignOutDeviceRequest, SignOutDeviceResponse, SignOutRequest, SignOutResponse, SyncRequest, SyncResponse, UpdateProfileRequest, UpdateProfileResponse } from "./messaging_pb";
 import { file_wrinkle_v1_messaging } from "./messaging_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -62,7 +62,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/frame.proto.
  */
 export const file_wrinkle_v1_frame: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2ZyYW1lLnByb3RvEgp3cmlua2xlLnYxIukBCgVGcmFtZRImCgdyZXF1ZXN0GAEgASgLMhMud3JpbmtsZS52MS5SZXF1ZXN0SAASKAoIcmVzcG9uc2UYAiABKAsyFC53cmlua2xlLnYxLlJlc3BvbnNlSAASIgoFZXZlbnQYAyABKAsyES53cmlua2xlLnYxLkV2ZW50SAASHgoDYWNrGAQgASgLMg8ud3JpbmtsZS52MS5BY2tIABIgCgRwaW5nGAUgASgLMhAud3JpbmtsZS52MS5QaW5nSAASIAoEcG9uZxgGIAEoCzIQLndyaW5rbGUudjEuUG9uZ0gAQgYKBGtpbmQikAgKB1JlcXVlc3QSCgoCaWQYASABKAQSLQoHY29ubmVjdBgKIAEoCzIaLndyaW5rbGUudjEuQ29ubmVjdFJlcXVlc3RIABJAChFvcGVuX2NvbnZlcnNhdGlvbhgLIAEoCzIjLndyaW5rbGUudjEuT3BlbkNvbnZlcnNhdGlvblJlcXVlc3RIABI2CgxzZW5kX21lc3NhZ2UYDCABKAsyHi53cmlua2xlLnYxLlNlbmRNZXNzYWdlUmVxdWVzdEgAEjAKCW1hcmtfcmVhZBgNIAEoCzIbLndyaW5rbGUudjEuTWFya1JlYWRSZXF1ZXN0SAASJwoEc3luYxgOIAEoCzIXLndyaW5rbGUudjEuU3luY1JlcXVlc3RIABJCChJsaXN0X2NvbnZlcnNhdGlvbnMYDyABKAsyJC53cmlua2xlLnYxLkxpc3RDb252ZXJzYXRpb25zUmVxdWVzdEgAEjYKDGdldF9tZXNzYWdlcxgQIAEoCzIeLndyaW5rbGUudjEuR2V0TWVzc2FnZXNSZXF1ZXN0SAASQwoTcmVnaXN0ZXJfcHVzaF90b2tlbhgRIAEoCzIkLndyaW5rbGUudjEuUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0SAASLwoIcmVnaXN0ZXIYEiABKAsyGy53cmlua2xlLnYxLlJlZ2lzdGVyUmVxdWVzdEgAEiwKB3NpZ25faW4YEyABKAsyGS53cmlua2xlLnYxLlNpZ25JblJlcXVlc3RIABI8Cg9jaGFuZ2VfcGFzc3dvcmQYFCABKAsyIS53cmlua2xlLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdEgAEjoKDnVwZGF0ZV9wcm9maWxlGBUgASgLMiAud3JpbmtsZS52MS5VcGRhdGVQcm9maWxlUmVxdWVzdEgAEi4KCHNpZ25fb3V0GBYgASgLMhoud3JpbmtsZS52MS5TaWduT3V0UmVxdWVzdEgAEjYKDGxpc3RfZGV2aWNlcxgXIAEoCzIeLndyaW5rbGUudjEuTGlzdERldmljZXNSZXF1ZXN0SAASOAoNcmVuYW1lX2RldmljZRgYIAEoCzIfLndyaW5rbGUudjEuUmVuYW1lRGV2aWNlUmVxdWVzdEgAEjsKD3NpZ25fb3V0X2RldmljZRgZIAEoCzIgLndyaW5rbGUudjEuU2lnbk91dERldmljZVJlcXVlc3RIABI6Cg5kZWxldGVfYWNjb3VudBgaIAEoCzIgLndyaW5rbGUudjEuRGVsZXRlQWNjb3VudFJlcXVlc3RIABI4Cg1jcmVhdGVfdXBsb2FkGBsgASgLMh8ud3JpbmtsZS52MS5DcmVhdGVVcGxvYWRSZXF1ZXN0SABCBgoEYm9keSLPCAoIUmVzcG9uc2USEgoKcmVxdWVzdF9pZBgBIAEoBBIiCgVlcnJvchgCIAEoCzIRLndyaW5rbGUudjEuRXJyb3JIABIuCgdjb25uZWN0GAogASgLMhsud3JpbmtsZS52MS5Db25uZWN0UmVzcG9uc2VIABJBChFvcGVuX2NvbnZlcnNhdGlvbhgLIAEoCzIkLndyaW5rbGUudjEuT3BlbkNvbnZlcnNhdGlvblJlc3BvbnNlSAASNwoMc2VuZF9tZXNzYWdlGAwgASgLMh8ud3JpbmtsZS52MS5TZW5kTWVzc2FnZVJlc3BvbnNlSAASMQoJbWFya19yZWFkGA0gASgLMhwud3JpbmtsZS52MS5NYXJrUmVhZFJlc3BvbnNlSAASKAoEc3luYxgOIAEoCzIYLndyaW5rbGUudjEuU3luY1Jlc3BvbnNlSAASQwoSbGlzdF9jb252ZXJzYXRpb25zGA8gASgLMiUud3JpbmtsZS52MS5MaXN0Q29udmVyc2F0aW9uc1Jlc3BvbnNlSAASNwoMZ2V0X21lc3NhZ2VzGBAgASgLMh8ud3JpbmtsZS52MS5HZXRNZXNzYWdlc1Jlc3BvbnNlSAASRAoTcmVnaXN0ZXJfcHVzaF90b2tlbhgRIAEoCzIlLndyaW5rbGUudjEuUmVnaXN0ZXJQdXNoVG9rZW5SZXNwb25zZUgAEjAKCHJlZ2lzdGVyGBIgASgLMhwud3JpbmtsZS52MS5SZWdpc3RlclJlc3BvbnNlSAASLQoHc2lnbl9pbhgTIAEoCzIaLndyaW5rbGUudjEuU2lnbkluUmVzcG9uc2VIABI9Cg9jaGFuZ2VfcGFzc3dvcmQYFCABKAsyIi53cmlua2xlLnYxLkNoYW5nZVBhc3N3b3JkUmVzcG9uc2VIABI7Cg51cGRhdGVfcHJvZmlsZRgVIAEoCzIhLndyaW5rbGUudjEuVXBkYXRlUHJvZmlsZVJlc3BvbnNlSAASLwoIc2lnbl9vdXQYFiABKAsyGy53cmlua2xlLnYxLlNpZ25PdXRSZXNwb25zZUgAEjcKDGxpc3RfZGV2aWNlcxgXIAEoCzIfLndyaW5rbGUudjEuTGlzdERldmljZXNSZXNwb25zZUgAEjkKDXJlbmFtZV9kZXZpY2UYGCABKAsyIC53cmlua2xlLnYxLlJlbmFtZURldmljZVJlc3BvbnNlSAASPAoPc2lnbl9vdXRfZGV2aWNlGBkgASgLMiEud3JpbmtsZS52MS5TaWduT3V0RGV2aWNlUmVzcG9uc2VIABI7Cg5kZWxldGVfYWNjb3VudBgaIAEoCzIhLndyaW5rbGUudjEuRGVsZXRlQWNjb3VudFJlc3BvbnNlSAASOQoNY3JlYXRlX3VwbG9hZBgbIAEoCzIgLndyaW5rbGUudjEuQ3JlYXRlVXBsb2FkUmVzcG9uc2VIAEIGCgRib2R5Ij0KBUVycm9yEiMKBGNvZGUYASABKA4yFS53cmlua2xlLnYxLkVycm9yQ29kZRIPCgdtZXNzYWdlGAIgASgJIhUKA0FjaxIOCgZjdXJzb3IYASABKAQiBgoEUGluZyIGCgRQb25nKr8CCglFcnJvckNvZGUSGgoWRVJST1JfQ09ERV9VTlNQRUNJRklFRBAAEh8KG0VSUk9SX0NPREVfSU5WQUxJRF9BUkdVTUVOVBABEh4KGkVSUk9SX0NPREVfVU5BVVRIRU5USUNBVEVEEAISIAocRVJST1JfQ09ERV9QRVJNSVNTSU9OX0RFTklFRBADEhgKFEVSUk9SX0NPREVfTk9UX0ZPVU5EEAQSIgoeRVJST1JfQ09ERV9GQUlMRURfUFJFQ09ORElUSU9OEAUSGgoWRVJST1JfQ09ERV9VTkFWQUlMQUJMRRAGEhcKE0VSUk9SX0NPREVfSU5URVJOQUwQBxIhCh1FUlJPUl9DT0RFX1JFU09VUkNFX0VYSEFVU1RFRBAIEh0KGUVSUk9SX0NPREVfQUxSRUFEWV9FWElTVFMQCUKdAQoOY29tLndyaW5rbGUudjFCCkZyYW1lUHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw", [file_wrinkle_v1_event, file_wrinkle_v1_messaging]);
+  fileDesc("ChZ3cmlua2xlL3YxL2ZyYW1lLnByb3RvEgp3cmlua2xlLnYxIukBCgVGcmFtZRImCgdyZXF1ZXN0GAEgASgLMhMud3JpbmtsZS52MS5SZXF1ZXN0SAASKAoIcmVzcG9uc2UYAiABKAsyFC53cmlua2xlLnYxLlJlc3BvbnNlSAASIgoFZXZlbnQYAyABKAsyES53cmlua2xlLnYxLkV2ZW50SAASHgoDYWNrGAQgASgLMg8ud3JpbmtsZS52MS5BY2tIABIgCgRwaW5nGAUgASgLMhAud3JpbmtsZS52MS5QaW5nSAASIAoEcG9uZxgGIAEoCzIQLndyaW5rbGUudjEuUG9uZ0gAQgYKBGtpbmQiiAsKB1JlcXVlc3QSCgoCaWQYASABKAQSLQoHY29ubmVjdBgKIAEoCzIaLndyaW5rbGUudjEuQ29ubmVjdFJlcXVlc3RIABJAChFvcGVuX2NvbnZlcnNhdGlvbhgLIAEoCzIjLndyaW5rbGUudjEuT3BlbkNvbnZlcnNhdGlvblJlcXVlc3RIABI2CgxzZW5kX21lc3NhZ2UYDCABKAsyHi53cmlua2xlLnYxLlNlbmRNZXNzYWdlUmVxdWVzdEgAEjAKCW1hcmtfcmVhZBgNIAEoCzIbLndyaW5rbGUudjEuTWFya1JlYWRSZXF1ZXN0SAASJwoEc3luYxgOIAEoCzIXLndyaW5rbGUudjEuU3luY1JlcXVlc3RIABJCChJsaXN0X2NvbnZlcnNhdGlvbnMYDyABKAsyJC53cmlua2xlLnYxLkxpc3RDb252ZXJzYXRpb25zUmVxdWVzdEgAEjYKDGdldF9tZXNzYWdlcxgQIAEoCzIeLndyaW5rbGUudjEuR2V0TWVzc2FnZXNSZXF1ZXN0SAASQwoTcmVnaXN0ZXJfcHVzaF90b2tlbhgRIAEoCzIkLndyaW5rbGUudjEuUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0SAASLwoIcmVnaXN0ZXIYEiABKAsyGy53cmlua2xlLnYxLlJlZ2lzdGVyUmVxdWVzdEgAEiwKB3NpZ25faW4YEyABKAsyGS53cmlua2xlLnYxLlNpZ25JblJlcXVlc3RIABI8Cg9jaGFuZ2VfcGFzc3dvcmQYFCABKAsyIS53cmlua2xlLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdEgAEjoKDnVwZGF0ZV9wcm9maWxlGBUgASgLMiAud3JpbmtsZS52MS5VcGRhdGVQcm9maWxlUmVxdWVzdEgAEi4KCHNpZ25fb3V0GBYgASgLMhoud3JpbmtsZS52MS5TaWduT3V0UmVxdWVzdEgAEjYKDGxpc3RfZGV2aWNlcxgXIAEoCzIeLndyaW5rbGUudjEuTGlzdERldmljZXNSZXF1ZXN0SAASOAoNcmVuYW1lX2RldmljZRgYIAEoCzIfLndyaW5rbGUudjEuUmVuYW1lRGV2aWNlUmVxdWVzdEgAEjsKD3NpZ25fb3V0X2RldmljZRgZIAEoCzIgLndyaW5rbGUudjEuU2lnbk91dERldmljZVJlcXVlc3RIABI6Cg5kZWxldGVfYWNjb3VudBgaIAEoCzIgLndyaW5rbGUudjEuRGVsZXRlQWNjb3VudFJlcXVlc3RIABI4Cg1jcmVhdGVfdXBsb2FkGBsgASgLMh8ud3JpbmtsZS52MS5DcmVhdGVVcGxvYWRSZXF1ZXN0SAASNgoMY3JlYXRlX2dyb3VwGBwgASgLMh4ud3JpbmtsZS52MS5DcmVhdGVHcm91cFJlcXVlc3RIABI0CgthZGRfbWVtYmVycxgdIAEoCzIdLndyaW5rbGUudjEuQWRkTWVtYmVyc1JlcXVlc3RIABI4Cg1yZW1vdmVfbWVtYmVyGB4gASgLMh8ud3JpbmtsZS52MS5SZW1vdmVNZW1iZXJSZXF1ZXN0SAASNAoLbGVhdmVfZ3JvdXAYHyABKAsyHS53cmlua2xlLnYxLkxlYXZlR3JvdXBSZXF1ZXN0SAASMAoJc2V0X3RvcGljGCAgASgLMhsud3JpbmtsZS52MS5TZXRUb3BpY1JlcXVlc3RIABIwCglzZXRfYWRtaW4YISABKAsyGy53cmlua2xlLnYxLlNldEFkbWluUmVxdWVzdEgAEjQKC2dldF9tZW1iZXJzGCIgASgLMh0ud3JpbmtsZS52MS5HZXRNZW1iZXJzUmVxdWVzdEgAQgYKBGJvZHkizgsKCFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAQSIgoFZXJyb3IYAiABKAsyES53cmlua2xlLnYxLkVycm9ySAASLgoHY29ubmVjdBgKIAEoCzIbLndyaW5rbGUudjEuQ29ubmVjdFJlc3BvbnNlSAASQQoRb3Blbl9jb252ZXJzYXRpb24YCyABKAsyJC53cmlua2xlLnYxLk9wZW5Db252ZXJzYXRpb25SZXNwb25zZUgAEjcKDHNlbmRfbWVzc2FnZRgMIAEoCzIfLndyaW5rbGUudjEuU2VuZE1lc3NhZ2VSZXNwb25zZUgAEjEKCW1hcmtfcmVhZBgNIAEoCzIcLndyaW5rbGUudjEuTWFya1JlYWRSZXNwb25zZUgAEigKBHN5bmMYDiABKAsyGC53cmlua2xlLnYxLlN5bmNSZXNwb25zZUgAEkMKEmxpc3RfY29udmVyc2F0aW9ucxgPIAEoCzIlLndyaW5rbGUudjEuTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZUgAEjcKDGdldF9tZXNzYWdlcxgQIAEoCzIfLndyaW5rbGUudjEuR2V0TWVzc2FnZXNSZXNwb25zZUgAEkQKE3JlZ2lzdGVyX3B1c2hfdG9rZW4YESABKAsyJS53cmlua2xlLnYxLlJlZ2lzdGVyUHVzaFRva2VuUmVzcG9uc2VIABIwCghyZWdpc3RlchgSIAEoCzIcLndyaW5rbGUudjEuUmVnaXN0ZXJSZXNwb25zZUgAEi0KB3NpZ25faW4YEyABKAsyGi53cmlua2xlLnYxLlNpZ25JblJlc3BvbnNlSAASPQoPY2hhbmdlX3Bhc3N3b3JkGBQgASgLMiIud3JpbmtsZS52MS5DaGFuZ2VQYXNzd29yZFJlc3BvbnNlSAASOwoOdXBkYXRlX3Byb2ZpbGUYFSABKAsyIS53cmlua2xlLnYxLlVwZGF0ZVByb2ZpbGVSZXNwb25zZUgAEi8KCHNpZ25fb3V0GBYgASgLMhsud3JpbmtsZS52MS5TaWduT3V0UmVzcG9uc2VIABI3CgxsaXN0X2RldmljZXMYFyABKAsyHy53cmlua2xlLnYxLkxpc3REZXZpY2VzUmVzcG9uc2VIABI5Cg1yZW5hbWVfZGV2aWNlGBggASgLMiAud3JpbmtsZS52MS5SZW5hbWVEZXZpY2VSZXNwb25zZUgAEjwKD3NpZ25fb3V0X2RldmljZRgZIAEoCzIhLndyaW5rbGUudjEuU2lnbk91dERldmljZVJlc3BvbnNlSAASOwoOZGVsZXRlX2FjY291bnQYGiABKAsyIS53cmlua2xlLnYxLkRlbGV0ZUFjY291bnRSZXNwb25zZUgAEjkKDWNyZWF0ZV91cGxvYWQYGyABKAsyIC53cmlua2xlLnYxLkNyZWF0ZVVwbG9hZFJlc3BvbnNlSAASNwoMY3JlYXRlX2dyb3VwGBwgASgLMh8ud3JpbmtsZS52MS5DcmVhdGVHcm91cFJlc3BvbnNlSAASNQoLYWRkX21lbWJlcnMYHSABKAsyHi53cmlua2xlLnYxLkFkZE1lbWJlcnNSZXNwb25zZUgAEjkKDXJlbW92ZV9tZW1iZXIYHiABKAsyIC53cmlua2xlLnYxLlJlbW92ZU1lbWJlclJlc3BvbnNlSAASNQoLbGVhdmVfZ3JvdXAYHyABKAsyHi53cmlua2xlLnYxLkxlYXZlR3JvdXBSZXNwb25zZUgAEjEKCXNldF90b3BpYxggIAEoCzIcLndyaW5rbGUudjEuU2V0VG9waWNSZXNwb25zZUgAEjEKCXNldF9hZG1pbhghIAEoCzIcLndyaW5rbGUudjEuU2V0QWRtaW5SZXNwb25zZUgAEjUKC2dldF9tZW1iZXJzGCIgASgLMh4ud3JpbmtsZS52MS5HZXRNZW1iZXJzUmVzcG9uc2VIAEIGCgRib2R5Ij0KBUVycm9yEiMKBGNvZGUYASABKA4yFS53cmlua2xlLnYxLkVycm9yQ29kZRIPCgdtZXNzYWdlGAIgASgJIhUKA0FjaxIOCgZjdXJzb3IYASABKAQiBgoEUGluZyIGCgRQb25nKr8CCglFcnJvckNvZGUSGgoWRVJST1JfQ09ERV9VTlNQRUNJRklFRBAAEh8KG0VSUk9SX0NPREVfSU5WQUxJRF9BUkdVTUVOVBABEh4KGkVSUk9SX0NPREVfVU5BVVRIRU5USUNBVEVEEAISIAocRVJST1JfQ09ERV9QRVJNSVNTSU9OX0RFTklFRBADEhgKFEVSUk9SX0NPREVfTk9UX0ZPVU5EEAQSIgoeRVJST1JfQ09ERV9GQUlMRURfUFJFQ09ORElUSU9OEAUSGgoWRVJST1JfQ09ERV9VTkFWQUlMQUJMRRAGEhcKE0VSUk9SX0NPREVfSU5URVJOQUwQBxIhCh1FUlJPUl9DT0RFX1JFU09VUkNFX0VYSEFVU1RFRBAIEh0KGUVSUk9SX0NPREVfQUxSRUFEWV9FWElTVFMQCUKdAQoOY29tLndyaW5rbGUudjFCCkZyYW1lUHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw", [file_wrinkle_v1_event, file_wrinkle_v1_messaging]);
 
 /**
  * @generated from message wrinkle.v1.Frame
@@ -239,6 +239,48 @@ export type Request = Message<"wrinkle.v1.Request"> & {
      */
     value: CreateUploadRequest;
     case: "createUpload";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.CreateGroupRequest create_group = 28;
+     */
+    value: CreateGroupRequest;
+    case: "createGroup";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.AddMembersRequest add_members = 29;
+     */
+    value: AddMembersRequest;
+    case: "addMembers";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.RemoveMemberRequest remove_member = 30;
+     */
+    value: RemoveMemberRequest;
+    case: "removeMember";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.LeaveGroupRequest leave_group = 31;
+     */
+    value: LeaveGroupRequest;
+    case: "leaveGroup";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SetTopicRequest set_topic = 32;
+     */
+    value: SetTopicRequest;
+    case: "setTopic";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SetAdminRequest set_admin = 33;
+     */
+    value: SetAdminRequest;
+    case: "setAdmin";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.GetMembersRequest get_members = 34;
+     */
+    value: GetMembersRequest;
+    case: "getMembers";
   } | { case: undefined; value?: undefined };
 };
 
@@ -375,6 +417,48 @@ export type Response = Message<"wrinkle.v1.Response"> & {
      */
     value: CreateUploadResponse;
     case: "createUpload";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.CreateGroupResponse create_group = 28;
+     */
+    value: CreateGroupResponse;
+    case: "createGroup";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.AddMembersResponse add_members = 29;
+     */
+    value: AddMembersResponse;
+    case: "addMembers";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.RemoveMemberResponse remove_member = 30;
+     */
+    value: RemoveMemberResponse;
+    case: "removeMember";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.LeaveGroupResponse leave_group = 31;
+     */
+    value: LeaveGroupResponse;
+    case: "leaveGroup";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SetTopicResponse set_topic = 32;
+     */
+    value: SetTopicResponse;
+    case: "setTopic";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SetAdminResponse set_admin = 33;
+     */
+    value: SetAdminResponse;
+    case: "setAdmin";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.GetMembersResponse get_members = 34;
+     */
+    value: GetMembersResponse;
+    case: "getMembers";
   } | { case: undefined; value?: undefined };
 };
 
@@ -482,7 +566,8 @@ export enum ErrorCode {
   UNAUTHENTICATED = 2,
 
   /**
-   * The user is not a participant of the conversation.
+   * The user is not a participant of the conversation, or not allowed the
+   * change, such as removing a member without being an admin.
    *
    * @generated from enum value: ERROR_CODE_PERMISSION_DENIED = 3;
    */

@@ -90,6 +90,13 @@ message Request {
     SignOutDeviceRequest sign_out_device = 25;
     DeleteAccountRequest delete_account = 26;
     CreateUploadRequest create_upload = 27;
+    CreateGroupRequest create_group = 28;
+    AddMembersRequest add_members = 29;
+    RemoveMemberRequest remove_member = 30;
+    LeaveGroupRequest leave_group = 31;
+    SetTopicRequest set_topic = 32;
+    SetAdminRequest set_admin = 33;
+    GetMembersRequest get_members = 34;
   }
 }
 
@@ -115,6 +122,13 @@ message Response {
     SignOutDeviceResponse sign_out_device = 25;
     DeleteAccountResponse delete_account = 26;
     CreateUploadResponse create_upload = 27;
+    CreateGroupResponse create_group = 28;
+    AddMembersResponse add_members = 29;
+    RemoveMemberResponse remove_member = 30;
+    LeaveGroupResponse leave_group = 31;
+    SetTopicResponse set_topic = 32;
+    SetAdminResponse set_admin = 33;
+    GetMembersResponse get_members = 34;
   }
 }
 
@@ -130,7 +144,8 @@ enum ErrorCode {
   ERROR_CODE_INVALID_ARGUMENT = 1;
   // The connection has not completed Connect, or the credentials are wrong.
   ERROR_CODE_UNAUTHENTICATED = 2;
-  // The user is not a participant of the conversation.
+  // The user is not a participant of the conversation, or not allowed the
+  // change, such as removing a member without being an admin.
   ERROR_CODE_PERMISSION_DENIED = 3;
   // The user or conversation does not exist.
   ERROR_CODE_NOT_FOUND = 4;

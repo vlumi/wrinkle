@@ -1279,8 +1279,8 @@ func (x *CreateUploadResponse) GetExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
-// Finds or creates the conversation between the requesting user and the peer.
-// The peer is found by name, ignoring case.
+// Finds or creates the direct conversation between the requesting user and
+// the peer. The peer is found by name, ignoring case.
 type OpenConversationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PeerName      string                 `protobuf:"bytes,1,opt,name=peer_name,json=peerName,proto3" json:"peer_name,omitempty"`
@@ -1369,6 +1369,661 @@ func (x *OpenConversationResponse) GetConversation() *Conversation {
 	return nil
 }
 
+// Creates a group with the requesting user as its admin. The topic is 1 to
+// 200 bytes of UTF-8, without control characters or white space at either
+// end. Members are invited by name, ignoring case; an unknown name fails
+// with ERROR_CODE_NOT_FOUND, and the requesting user and repeated names
+// are ignored. A group has at most 256 members. Sending again with the same
+// client_group_id returns the group created the first time. The group's
+// first message is a GroupCreated notice.
+type CreateGroupRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Topic       string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
+	MemberNames []string               `protobuf:"bytes,2,rep,name=member_names,json=memberNames,proto3" json:"member_names,omitempty"`
+	// Chosen by the device, 1 to 64 bytes, unique per user.
+	ClientGroupId string `protobuf:"bytes,3,opt,name=client_group_id,json=clientGroupId,proto3" json:"client_group_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateGroupRequest) Reset() {
+	*x = CreateGroupRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateGroupRequest) ProtoMessage() {}
+
+func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
+func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *CreateGroupRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+func (x *CreateGroupRequest) GetMemberNames() []string {
+	if x != nil {
+		return x.MemberNames
+	}
+	return nil
+}
+
+func (x *CreateGroupRequest) GetClientGroupId() string {
+	if x != nil {
+		return x.ClientGroupId
+	}
+	return ""
+}
+
+type CreateGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Conversation  *Conversation          `protobuf:"bytes,1,opt,name=conversation,proto3" json:"conversation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CreateGroupResponse) Reset() {
+	*x = CreateGroupResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CreateGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateGroupResponse) ProtoMessage() {}
+
+func (x *CreateGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateGroupResponse.ProtoReflect.Descriptor instead.
+func (*CreateGroupResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *CreateGroupResponse) GetConversation() *Conversation {
+	if x != nil {
+		return x.Conversation
+	}
+	return nil
+}
+
+// Adds users to a group; any member may. Names as in CreateGroup; users
+// already members are ignored, and when none is left nothing happens. More
+// than 256 members fails with ERROR_CODE_FAILED_PRECONDITION.
+type AddMembersRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	MemberNames    []string               `protobuf:"bytes,2,rep,name=member_names,json=memberNames,proto3" json:"member_names,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AddMembersRequest) Reset() {
+	*x = AddMembersRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddMembersRequest) ProtoMessage() {}
+
+func (x *AddMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddMembersRequest.ProtoReflect.Descriptor instead.
+func (*AddMembersRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *AddMembersRequest) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+func (x *AddMembersRequest) GetMemberNames() []string {
+	if x != nil {
+		return x.MemberNames
+	}
+	return nil
+}
+
+type AddMembersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddMembersResponse) Reset() {
+	*x = AddMembersResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddMembersResponse) ProtoMessage() {}
+
+func (x *AddMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddMembersResponse.ProtoReflect.Descriptor instead.
+func (*AddMembersResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{28}
+}
+
+// Removes a member from a group; only admins may. Removing oneself fails
+// with ERROR_CODE_INVALID_ARGUMENT (use LeaveGroup), a user who is not a
+// member with ERROR_CODE_NOT_FOUND.
+type RemoveMemberRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	UserId         []byte                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RemoveMemberRequest) Reset() {
+	*x = RemoveMemberRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveMemberRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveMemberRequest) ProtoMessage() {}
+
+func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveMemberRequest.ProtoReflect.Descriptor instead.
+func (*RemoveMemberRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *RemoveMemberRequest) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+func (x *RemoveMemberRequest) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
+type RemoveMemberResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveMemberResponse) Reset() {
+	*x = RemoveMemberResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveMemberResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveMemberResponse) ProtoMessage() {}
+
+func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveMemberResponse.ProtoReflect.Descriptor instead.
+func (*RemoveMemberResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{30}
+}
+
+// Leaves a group. When the last admin leaves, the member who joined first
+// becomes admin.
+type LeaveGroupRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *LeaveGroupRequest) Reset() {
+	*x = LeaveGroupRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaveGroupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaveGroupRequest) ProtoMessage() {}
+
+func (x *LeaveGroupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaveGroupRequest.ProtoReflect.Descriptor instead.
+func (*LeaveGroupRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *LeaveGroupRequest) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+type LeaveGroupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LeaveGroupResponse) Reset() {
+	*x = LeaveGroupResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LeaveGroupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LeaveGroupResponse) ProtoMessage() {}
+
+func (x *LeaveGroupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LeaveGroupResponse.ProtoReflect.Descriptor instead.
+func (*LeaveGroupResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{32}
+}
+
+// Changes a group's topic; any member may. The topic as in CreateGroup.
+type SetTopicRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	Topic          string                 `protobuf:"bytes,2,opt,name=topic,proto3" json:"topic,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SetTopicRequest) Reset() {
+	*x = SetTopicRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTopicRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTopicRequest) ProtoMessage() {}
+
+func (x *SetTopicRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTopicRequest.ProtoReflect.Descriptor instead.
+func (*SetTopicRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *SetTopicRequest) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+func (x *SetTopicRequest) GetTopic() string {
+	if x != nil {
+		return x.Topic
+	}
+	return ""
+}
+
+type SetTopicResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetTopicResponse) Reset() {
+	*x = SetTopicResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTopicResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTopicResponse) ProtoMessage() {}
+
+func (x *SetTopicResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTopicResponse.ProtoReflect.Descriptor instead.
+func (*SetTopicResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{34}
+}
+
+// Makes a member an admin or no longer one; only admins may. Taking it
+// from the last admin fails with ERROR_CODE_FAILED_PRECONDITION; a user who
+// is not a member, ERROR_CODE_NOT_FOUND.
+type SetAdminRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	UserId         []byte                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Admin          bool                   `protobuf:"varint,3,opt,name=admin,proto3" json:"admin,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SetAdminRequest) Reset() {
+	*x = SetAdminRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAdminRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAdminRequest) ProtoMessage() {}
+
+func (x *SetAdminRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAdminRequest.ProtoReflect.Descriptor instead.
+func (*SetAdminRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SetAdminRequest) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+func (x *SetAdminRequest) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
+func (x *SetAdminRequest) GetAdmin() bool {
+	if x != nil {
+		return x.Admin
+	}
+	return false
+}
+
+type SetAdminResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetAdminResponse) Reset() {
+	*x = SetAdminResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetAdminResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetAdminResponse) ProtoMessage() {}
+
+func (x *SetAdminResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetAdminResponse.ProtoReflect.Descriptor instead.
+func (*SetAdminResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{36}
+}
+
+// Returns a group's current members, those who joined first first.
+type GetMembersRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GetMembersRequest) Reset() {
+	*x = GetMembersRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMembersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMembersRequest) ProtoMessage() {}
+
+func (x *GetMembersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMembersRequest.ProtoReflect.Descriptor instead.
+func (*GetMembersRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *GetMembersRequest) GetConversationId() []byte {
+	if x != nil {
+		return x.ConversationId
+	}
+	return nil
+}
+
+type GetMembersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Members       []*Member              `protobuf:"bytes,1,rep,name=members,proto3" json:"members,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMembersResponse) Reset() {
+	*x = GetMembersResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMembersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMembersResponse) ProtoMessage() {}
+
+func (x *GetMembersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMembersResponse.ProtoReflect.Descriptor instead.
+func (*GetMembersResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *GetMembersResponse) GetMembers() []*Member {
+	if x != nil {
+		return x.Members
+	}
+	return nil
+}
+
+// Sends a text message. Only members may; in a group, someone who left or
+// was removed gets ERROR_CODE_PERMISSION_DENIED.
 type SendMessageRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId  []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -1380,7 +2035,7 @@ type SendMessageRequest struct {
 
 func (x *SendMessageRequest) Reset() {
 	*x = SendMessageRequest{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[25]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1392,7 +2047,7 @@ func (x *SendMessageRequest) String() string {
 func (*SendMessageRequest) ProtoMessage() {}
 
 func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[25]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1405,7 +2060,7 @@ func (x *SendMessageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageRequest.ProtoReflect.Descriptor instead.
 func (*SendMessageRequest) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{25}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SendMessageRequest) GetConversationId() []byte {
@@ -1438,7 +2093,7 @@ type SendMessageResponse struct {
 
 func (x *SendMessageResponse) Reset() {
 	*x = SendMessageResponse{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[26]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1450,7 +2105,7 @@ func (x *SendMessageResponse) String() string {
 func (*SendMessageResponse) ProtoMessage() {}
 
 func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[26]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1463,7 +2118,7 @@ func (x *SendMessageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendMessageResponse.ProtoReflect.Descriptor instead.
 func (*SendMessageResponse) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{26}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SendMessageResponse) GetMessage() *Message {
@@ -1485,7 +2140,7 @@ type MarkReadRequest struct {
 
 func (x *MarkReadRequest) Reset() {
 	*x = MarkReadRequest{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[27]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1497,7 +2152,7 @@ func (x *MarkReadRequest) String() string {
 func (*MarkReadRequest) ProtoMessage() {}
 
 func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[27]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1510,7 +2165,7 @@ func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadRequest.ProtoReflect.Descriptor instead.
 func (*MarkReadRequest) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{27}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MarkReadRequest) GetConversationId() []byte {
@@ -1535,7 +2190,7 @@ type MarkReadResponse struct {
 
 func (x *MarkReadResponse) Reset() {
 	*x = MarkReadResponse{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[28]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1547,7 +2202,7 @@ func (x *MarkReadResponse) String() string {
 func (*MarkReadResponse) ProtoMessage() {}
 
 func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[28]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1560,7 +2215,7 @@ func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadResponse.ProtoReflect.Descriptor instead.
 func (*MarkReadResponse) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{28}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{42}
 }
 
 // Returns events from the user's log after the cursor, oldest first.
@@ -1576,7 +2231,7 @@ type SyncRequest struct {
 
 func (x *SyncRequest) Reset() {
 	*x = SyncRequest{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[29]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1588,7 +2243,7 @@ func (x *SyncRequest) String() string {
 func (*SyncRequest) ProtoMessage() {}
 
 func (x *SyncRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[29]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1601,7 +2256,7 @@ func (x *SyncRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncRequest.ProtoReflect.Descriptor instead.
 func (*SyncRequest) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{29}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *SyncRequest) GetCursor() uint64 {
@@ -1632,7 +2287,7 @@ type SyncResponse struct {
 
 func (x *SyncResponse) Reset() {
 	*x = SyncResponse{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[30]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1644,7 +2299,7 @@ func (x *SyncResponse) String() string {
 func (*SyncResponse) ProtoMessage() {}
 
 func (x *SyncResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[30]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1657,7 +2312,7 @@ func (x *SyncResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncResponse.ProtoReflect.Descriptor instead.
 func (*SyncResponse) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{30}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *SyncResponse) GetEvents() []*Event {
@@ -1689,7 +2344,7 @@ type ListConversationsRequest struct {
 
 func (x *ListConversationsRequest) Reset() {
 	*x = ListConversationsRequest{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[31]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1701,7 +2356,7 @@ func (x *ListConversationsRequest) String() string {
 func (*ListConversationsRequest) ProtoMessage() {}
 
 func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[31]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1714,7 +2369,7 @@ func (x *ListConversationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsRequest.ProtoReflect.Descriptor instead.
 func (*ListConversationsRequest) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{31}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{45}
 }
 
 // Conversations with the most recently active first.
@@ -1727,7 +2382,7 @@ type ListConversationsResponse struct {
 
 func (x *ListConversationsResponse) Reset() {
 	*x = ListConversationsResponse{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[32]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1739,7 +2394,7 @@ func (x *ListConversationsResponse) String() string {
 func (*ListConversationsResponse) ProtoMessage() {}
 
 func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[32]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1752,7 +2407,7 @@ func (x *ListConversationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConversationsResponse.ProtoReflect.Descriptor instead.
 func (*ListConversationsResponse) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{32}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ListConversationsResponse) GetConversations() []*Conversation {
@@ -1762,7 +2417,9 @@ func (x *ListConversationsResponse) GetConversations() []*Conversation {
 	return nil
 }
 
-// Returns messages of a conversation, newest first.
+// Returns messages of a conversation, newest first. Group members get the
+// messages from the notice that added them on; a former member those up to
+// the notice that removed them.
 type GetMessagesRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -1776,7 +2433,7 @@ type GetMessagesRequest struct {
 
 func (x *GetMessagesRequest) Reset() {
 	*x = GetMessagesRequest{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[33]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1788,7 +2445,7 @@ func (x *GetMessagesRequest) String() string {
 func (*GetMessagesRequest) ProtoMessage() {}
 
 func (x *GetMessagesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[33]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1801,7 +2458,7 @@ func (x *GetMessagesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessagesRequest.ProtoReflect.Descriptor instead.
 func (*GetMessagesRequest) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{33}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *GetMessagesRequest) GetConversationId() []byte {
@@ -1834,7 +2491,7 @@ type GetMessagesResponse struct {
 
 func (x *GetMessagesResponse) Reset() {
 	*x = GetMessagesResponse{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[34]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1846,7 +2503,7 @@ func (x *GetMessagesResponse) String() string {
 func (*GetMessagesResponse) ProtoMessage() {}
 
 func (x *GetMessagesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[34]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1859,7 +2516,7 @@ func (x *GetMessagesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMessagesResponse.ProtoReflect.Descriptor instead.
 func (*GetMessagesResponse) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{34}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetMessagesResponse) GetMessages() []*Message {
@@ -1884,7 +2541,7 @@ type RegisterPushTokenRequest struct {
 
 func (x *RegisterPushTokenRequest) Reset() {
 	*x = RegisterPushTokenRequest{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[35]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1896,7 +2553,7 @@ func (x *RegisterPushTokenRequest) String() string {
 func (*RegisterPushTokenRequest) ProtoMessage() {}
 
 func (x *RegisterPushTokenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[35]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1909,7 +2566,7 @@ func (x *RegisterPushTokenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterPushTokenRequest.ProtoReflect.Descriptor instead.
 func (*RegisterPushTokenRequest) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{35}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *RegisterPushTokenRequest) GetService() PushService {
@@ -1934,7 +2591,7 @@ type RegisterPushTokenResponse struct {
 
 func (x *RegisterPushTokenResponse) Reset() {
 	*x = RegisterPushTokenResponse{}
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[36]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1946,7 +2603,7 @@ func (x *RegisterPushTokenResponse) String() string {
 func (*RegisterPushTokenResponse) ProtoMessage() {}
 
 func (x *RegisterPushTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_messaging_proto_msgTypes[36]
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1959,7 +2616,7 @@ func (x *RegisterPushTokenResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RegisterPushTokenResponse.ProtoReflect.Descriptor instead.
 func (*RegisterPushTokenResponse) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{36}
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{50}
 }
 
 var File_wrinkle_v1_messaging_proto protoreflect.FileDescriptor
@@ -2036,7 +2693,37 @@ const file_wrinkle_v1_messaging_proto_rawDesc = "" +
 	"\x17OpenConversationRequest\x12\x1b\n" +
 	"\tpeer_name\x18\x01 \x01(\tR\bpeerName\"X\n" +
 	"\x18OpenConversationResponse\x12<\n" +
-	"\fconversation\x18\x01 \x01(\v2\x18.wrinkle.v1.ConversationR\fconversation\"}\n" +
+	"\fconversation\x18\x01 \x01(\v2\x18.wrinkle.v1.ConversationR\fconversation\"u\n" +
+	"\x12CreateGroupRequest\x12\x14\n" +
+	"\x05topic\x18\x01 \x01(\tR\x05topic\x12!\n" +
+	"\fmember_names\x18\x02 \x03(\tR\vmemberNames\x12&\n" +
+	"\x0fclient_group_id\x18\x03 \x01(\tR\rclientGroupId\"S\n" +
+	"\x13CreateGroupResponse\x12<\n" +
+	"\fconversation\x18\x01 \x01(\v2\x18.wrinkle.v1.ConversationR\fconversation\"_\n" +
+	"\x11AddMembersRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12!\n" +
+	"\fmember_names\x18\x02 \x03(\tR\vmemberNames\"\x14\n" +
+	"\x12AddMembersResponse\"W\n" +
+	"\x13RemoveMemberRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\fR\x06userId\"\x16\n" +
+	"\x14RemoveMemberResponse\"<\n" +
+	"\x11LeaveGroupRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\"\x14\n" +
+	"\x12LeaveGroupResponse\"P\n" +
+	"\x0fSetTopicRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x14\n" +
+	"\x05topic\x18\x02 \x01(\tR\x05topic\"\x12\n" +
+	"\x10SetTopicResponse\"i\n" +
+	"\x0fSetAdminRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\fR\x06userId\x12\x14\n" +
+	"\x05admin\x18\x03 \x01(\bR\x05admin\"\x12\n" +
+	"\x10SetAdminResponse\"<\n" +
+	"\x11GetMembersRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\"B\n" +
+	"\x12GetMembersResponse\x12,\n" +
+	"\amembers\x18\x01 \x03(\v2\x12.wrinkle.v1.MemberR\amembers\"}\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12*\n" +
 	"\x11client_message_id\x18\x02 \x01(\tR\x0fclientMessageId\x12\x12\n" +
@@ -2094,7 +2781,7 @@ func file_wrinkle_v1_messaging_proto_rawDescGZIP() []byte {
 }
 
 var file_wrinkle_v1_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_wrinkle_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 37)
+var file_wrinkle_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_wrinkle_v1_messaging_proto_goTypes = []any{
 	(BlobPurpose)(0),                  // 0: wrinkle.v1.BlobPurpose
 	(PushService)(0),                  // 1: wrinkle.v1.PushService
@@ -2123,45 +2810,62 @@ var file_wrinkle_v1_messaging_proto_goTypes = []any{
 	(*CreateUploadResponse)(nil),      // 24: wrinkle.v1.CreateUploadResponse
 	(*OpenConversationRequest)(nil),   // 25: wrinkle.v1.OpenConversationRequest
 	(*OpenConversationResponse)(nil),  // 26: wrinkle.v1.OpenConversationResponse
-	(*SendMessageRequest)(nil),        // 27: wrinkle.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),       // 28: wrinkle.v1.SendMessageResponse
-	(*MarkReadRequest)(nil),           // 29: wrinkle.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),          // 30: wrinkle.v1.MarkReadResponse
-	(*SyncRequest)(nil),               // 31: wrinkle.v1.SyncRequest
-	(*SyncResponse)(nil),              // 32: wrinkle.v1.SyncResponse
-	(*ListConversationsRequest)(nil),  // 33: wrinkle.v1.ListConversationsRequest
-	(*ListConversationsResponse)(nil), // 34: wrinkle.v1.ListConversationsResponse
-	(*GetMessagesRequest)(nil),        // 35: wrinkle.v1.GetMessagesRequest
-	(*GetMessagesResponse)(nil),       // 36: wrinkle.v1.GetMessagesResponse
-	(*RegisterPushTokenRequest)(nil),  // 37: wrinkle.v1.RegisterPushTokenRequest
-	(*RegisterPushTokenResponse)(nil), // 38: wrinkle.v1.RegisterPushTokenResponse
-	(*User)(nil),                      // 39: wrinkle.v1.User
-	(*Device)(nil),                    // 40: wrinkle.v1.Device
-	(*timestamppb.Timestamp)(nil),     // 41: google.protobuf.Timestamp
-	(*Conversation)(nil),              // 42: wrinkle.v1.Conversation
-	(*Message)(nil),                   // 43: wrinkle.v1.Message
-	(*Event)(nil),                     // 44: wrinkle.v1.Event
+	(*CreateGroupRequest)(nil),        // 27: wrinkle.v1.CreateGroupRequest
+	(*CreateGroupResponse)(nil),       // 28: wrinkle.v1.CreateGroupResponse
+	(*AddMembersRequest)(nil),         // 29: wrinkle.v1.AddMembersRequest
+	(*AddMembersResponse)(nil),        // 30: wrinkle.v1.AddMembersResponse
+	(*RemoveMemberRequest)(nil),       // 31: wrinkle.v1.RemoveMemberRequest
+	(*RemoveMemberResponse)(nil),      // 32: wrinkle.v1.RemoveMemberResponse
+	(*LeaveGroupRequest)(nil),         // 33: wrinkle.v1.LeaveGroupRequest
+	(*LeaveGroupResponse)(nil),        // 34: wrinkle.v1.LeaveGroupResponse
+	(*SetTopicRequest)(nil),           // 35: wrinkle.v1.SetTopicRequest
+	(*SetTopicResponse)(nil),          // 36: wrinkle.v1.SetTopicResponse
+	(*SetAdminRequest)(nil),           // 37: wrinkle.v1.SetAdminRequest
+	(*SetAdminResponse)(nil),          // 38: wrinkle.v1.SetAdminResponse
+	(*GetMembersRequest)(nil),         // 39: wrinkle.v1.GetMembersRequest
+	(*GetMembersResponse)(nil),        // 40: wrinkle.v1.GetMembersResponse
+	(*SendMessageRequest)(nil),        // 41: wrinkle.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),       // 42: wrinkle.v1.SendMessageResponse
+	(*MarkReadRequest)(nil),           // 43: wrinkle.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),          // 44: wrinkle.v1.MarkReadResponse
+	(*SyncRequest)(nil),               // 45: wrinkle.v1.SyncRequest
+	(*SyncResponse)(nil),              // 46: wrinkle.v1.SyncResponse
+	(*ListConversationsRequest)(nil),  // 47: wrinkle.v1.ListConversationsRequest
+	(*ListConversationsResponse)(nil), // 48: wrinkle.v1.ListConversationsResponse
+	(*GetMessagesRequest)(nil),        // 49: wrinkle.v1.GetMessagesRequest
+	(*GetMessagesResponse)(nil),       // 50: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenRequest)(nil),  // 51: wrinkle.v1.RegisterPushTokenRequest
+	(*RegisterPushTokenResponse)(nil), // 52: wrinkle.v1.RegisterPushTokenResponse
+	(*User)(nil),                      // 53: wrinkle.v1.User
+	(*Device)(nil),                    // 54: wrinkle.v1.Device
+	(*timestamppb.Timestamp)(nil),     // 55: google.protobuf.Timestamp
+	(*Conversation)(nil),              // 56: wrinkle.v1.Conversation
+	(*Member)(nil),                    // 57: wrinkle.v1.Member
+	(*Message)(nil),                   // 58: wrinkle.v1.Message
+	(*Event)(nil),                     // 59: wrinkle.v1.Event
 }
 var file_wrinkle_v1_messaging_proto_depIdxs = []int32{
 	6,  // 0: wrinkle.v1.RegisterResponse.credentials:type_name -> wrinkle.v1.DeviceCredentials
 	6,  // 1: wrinkle.v1.SignInResponse.credentials:type_name -> wrinkle.v1.DeviceCredentials
-	39, // 2: wrinkle.v1.ConnectResponse.user:type_name -> wrinkle.v1.User
-	39, // 3: wrinkle.v1.UpdateProfileResponse.user:type_name -> wrinkle.v1.User
-	40, // 4: wrinkle.v1.ListDevicesResponse.devices:type_name -> wrinkle.v1.Device
-	40, // 5: wrinkle.v1.RenameDeviceResponse.device:type_name -> wrinkle.v1.Device
+	53, // 2: wrinkle.v1.ConnectResponse.user:type_name -> wrinkle.v1.User
+	53, // 3: wrinkle.v1.UpdateProfileResponse.user:type_name -> wrinkle.v1.User
+	54, // 4: wrinkle.v1.ListDevicesResponse.devices:type_name -> wrinkle.v1.Device
+	54, // 5: wrinkle.v1.RenameDeviceResponse.device:type_name -> wrinkle.v1.Device
 	0,  // 6: wrinkle.v1.CreateUploadRequest.purpose:type_name -> wrinkle.v1.BlobPurpose
-	41, // 7: wrinkle.v1.CreateUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	42, // 8: wrinkle.v1.OpenConversationResponse.conversation:type_name -> wrinkle.v1.Conversation
-	43, // 9: wrinkle.v1.SendMessageResponse.message:type_name -> wrinkle.v1.Message
-	44, // 10: wrinkle.v1.SyncResponse.events:type_name -> wrinkle.v1.Event
-	42, // 11: wrinkle.v1.ListConversationsResponse.conversations:type_name -> wrinkle.v1.Conversation
-	43, // 12: wrinkle.v1.GetMessagesResponse.messages:type_name -> wrinkle.v1.Message
-	1,  // 13: wrinkle.v1.RegisterPushTokenRequest.service:type_name -> wrinkle.v1.PushService
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	55, // 7: wrinkle.v1.CreateUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	56, // 8: wrinkle.v1.OpenConversationResponse.conversation:type_name -> wrinkle.v1.Conversation
+	56, // 9: wrinkle.v1.CreateGroupResponse.conversation:type_name -> wrinkle.v1.Conversation
+	57, // 10: wrinkle.v1.GetMembersResponse.members:type_name -> wrinkle.v1.Member
+	58, // 11: wrinkle.v1.SendMessageResponse.message:type_name -> wrinkle.v1.Message
+	59, // 12: wrinkle.v1.SyncResponse.events:type_name -> wrinkle.v1.Event
+	56, // 13: wrinkle.v1.ListConversationsResponse.conversations:type_name -> wrinkle.v1.Conversation
+	58, // 14: wrinkle.v1.GetMessagesResponse.messages:type_name -> wrinkle.v1.Message
+	1,  // 15: wrinkle.v1.RegisterPushTokenRequest.service:type_name -> wrinkle.v1.PushService
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_messaging_proto_init() }
@@ -2178,7 +2882,7 @@ func file_wrinkle_v1_messaging_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_messaging_proto_rawDesc), len(file_wrinkle_v1_messaging_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   37,
+			NumMessages:   51,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

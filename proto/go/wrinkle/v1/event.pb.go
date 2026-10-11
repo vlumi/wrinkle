@@ -219,7 +219,9 @@ func (x *MessageEvent) GetMessage() *Message {
 	return nil
 }
 
-// A participant moved their read position. Received by both participants, so
+// A participant moved their read position. In a direct conversation both
+// participants receive it; in a group, the reader and the senders of the
+// messages it covers, so each sender sees who has read their messages and
 // a user's other devices learn what they read elsewhere.
 type ReadEvent struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`

@@ -127,7 +127,9 @@ public nonisolated struct Wrinkle_V1_MessageEvent: Sendable {
   fileprivate var _message: Wrinkle_V1_Message? = nil
 }
 
-/// A participant moved their read position. Received by both participants, so
+/// A participant moved their read position. In a direct conversation both
+/// participants receive it; in a group, the reader and the senders of the
+/// messages it covers, so each sender sees who has read their messages and
 /// a user's other devices learn what they read elsewhere.
 public nonisolated struct Wrinkle_V1_ReadEvent: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the

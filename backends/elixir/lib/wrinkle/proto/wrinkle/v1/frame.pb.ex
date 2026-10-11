@@ -106,6 +106,19 @@ defmodule Wrinkle.V1.Request do
     type: Wrinkle.V1.CreateUploadRequest,
     json_name: "createUpload",
     oneof: 0
+
+  field :create_group, 28, type: Wrinkle.V1.CreateGroupRequest, json_name: "createGroup", oneof: 0
+  field :add_members, 29, type: Wrinkle.V1.AddMembersRequest, json_name: "addMembers", oneof: 0
+
+  field :remove_member, 30,
+    type: Wrinkle.V1.RemoveMemberRequest,
+    json_name: "removeMember",
+    oneof: 0
+
+  field :leave_group, 31, type: Wrinkle.V1.LeaveGroupRequest, json_name: "leaveGroup", oneof: 0
+  field :set_topic, 32, type: Wrinkle.V1.SetTopicRequest, json_name: "setTopic", oneof: 0
+  field :set_admin, 33, type: Wrinkle.V1.SetAdminRequest, json_name: "setAdmin", oneof: 0
+  field :get_members, 34, type: Wrinkle.V1.GetMembersRequest, json_name: "getMembers", oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -189,6 +202,23 @@ defmodule Wrinkle.V1.Response do
     type: Wrinkle.V1.CreateUploadResponse,
     json_name: "createUpload",
     oneof: 0
+
+  field :create_group, 28,
+    type: Wrinkle.V1.CreateGroupResponse,
+    json_name: "createGroup",
+    oneof: 0
+
+  field :add_members, 29, type: Wrinkle.V1.AddMembersResponse, json_name: "addMembers", oneof: 0
+
+  field :remove_member, 30,
+    type: Wrinkle.V1.RemoveMemberResponse,
+    json_name: "removeMember",
+    oneof: 0
+
+  field :leave_group, 31, type: Wrinkle.V1.LeaveGroupResponse, json_name: "leaveGroup", oneof: 0
+  field :set_topic, 32, type: Wrinkle.V1.SetTopicResponse, json_name: "setTopic", oneof: 0
+  field :set_admin, 33, type: Wrinkle.V1.SetAdminResponse, json_name: "setAdmin", oneof: 0
+  field :get_members, 34, type: Wrinkle.V1.GetMembersResponse, json_name: "getMembers", oneof: 0
 end
 
 defmodule Wrinkle.V1.Error do

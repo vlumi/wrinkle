@@ -307,6 +307,157 @@ defmodule Wrinkle.V1.OpenConversationResponse do
   field :conversation, 1, type: Wrinkle.V1.Conversation
 end
 
+defmodule Wrinkle.V1.CreateGroupRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.CreateGroupRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :topic, 1, type: :string
+  field :member_names, 2, repeated: true, type: :string, json_name: "memberNames"
+  field :client_group_id, 3, type: :string, json_name: "clientGroupId"
+end
+
+defmodule Wrinkle.V1.CreateGroupResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.CreateGroupResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation, 1, type: Wrinkle.V1.Conversation
+end
+
+defmodule Wrinkle.V1.AddMembersRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.AddMembersRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :member_names, 2, repeated: true, type: :string, json_name: "memberNames"
+end
+
+defmodule Wrinkle.V1.AddMembersResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.AddMembersResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.RemoveMemberRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RemoveMemberRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :user_id, 2, type: :bytes, json_name: "userId"
+end
+
+defmodule Wrinkle.V1.RemoveMemberResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RemoveMemberResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.LeaveGroupRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.LeaveGroupRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+end
+
+defmodule Wrinkle.V1.LeaveGroupResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.LeaveGroupResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.SetTopicRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetTopicRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :topic, 2, type: :string
+end
+
+defmodule Wrinkle.V1.SetTopicResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetTopicResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.SetAdminRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetAdminRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :user_id, 2, type: :bytes, json_name: "userId"
+  field :admin, 3, type: :bool
+end
+
+defmodule Wrinkle.V1.SetAdminResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetAdminResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.GetMembersRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetMembersRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+end
+
+defmodule Wrinkle.V1.GetMembersResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetMembersResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :members, 1, repeated: true, type: Wrinkle.V1.Member
+end
+
 defmodule Wrinkle.V1.SendMessageRequest do
   @moduledoc false
 

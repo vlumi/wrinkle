@@ -10,7 +10,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event } from "./event_pb";
 import { file_wrinkle_v1_event } from "./event_pb";
-import type { Conversation, Device, Message as Message$1, User } from "./model_pb";
+import type { Conversation, Device, Member, Message as Message$1, User } from "./model_pb";
 import { file_wrinkle_v1_model } from "./model_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/messaging.proto.
  */
 export const file_wrinkle_v1_messaging: GenFile = /*@__PURE__*/
-  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UibgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBARITCgZhdmF0YXIYAyABKAxIAogBAUIHCgVfbmFtZUIHCgVfaWNvbkIJCgdfYXZhdGFyIjcKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIhAKDlNpZ25PdXRSZXF1ZXN0IhEKD1NpZ25PdXRSZXNwb25zZSIUChJMaXN0RGV2aWNlc1JlcXVlc3QiOgoTTGlzdERldmljZXNSZXNwb25zZRIjCgdkZXZpY2VzGAEgAygLMhIud3JpbmtsZS52MS5EZXZpY2UiNgoTUmVuYW1lRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCSI6ChRSZW5hbWVEZXZpY2VSZXNwb25zZRIiCgZkZXZpY2UYASABKAsyEi53cmlua2xlLnYxLkRldmljZSIpChRTaWduT3V0RGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQiFwoVU2lnbk91dERldmljZVJlc3BvbnNlIigKFERlbGV0ZUFjY291bnRSZXF1ZXN0EhAKCHBhc3N3b3JkGAEgASgJIhcKFURlbGV0ZUFjY291bnRSZXNwb25zZSJhChNDcmVhdGVVcGxvYWRSZXF1ZXN0EigKB3B1cnBvc2UYASABKA4yFy53cmlua2xlLnYxLkJsb2JQdXJwb3NlEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoBCJsChRDcmVhdGVVcGxvYWRSZXNwb25zZRIPCgdibG9iX2lkGAEgASgMEhMKC3VwbG9hZF9wYXRoGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiwKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhEKCXBlZXJfbmFtZRgBIAEoCSJKChhPcGVuQ29udmVyc2F0aW9uUmVzcG9uc2USLgoMY29udmVyc2F0aW9uGAEgASgLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iVgoSU2VuZE1lc3NhZ2VSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIMCgR0ZXh0GAMgASgJIjsKE1NlbmRNZXNzYWdlUmVzcG9uc2USJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSI3Cg9NYXJrUmVhZFJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBCISChBNYXJrUmVhZFJlc3BvbnNlIiwKC1N5bmNSZXF1ZXN0Eg4KBmN1cnNvchgBIAEoBBINCgVsaW1pdBgCIAEoDSJTCgxTeW5jUmVzcG9uc2USIQoGZXZlbnRzGAEgAygLMhEud3JpbmtsZS52MS5FdmVudBIOCgZjdXJzb3IYAiABKAQSEAoIaGFzX21vcmUYAyABKAgiGgoYTGlzdENvbnZlcnNhdGlvbnNSZXF1ZXN0IkwKGUxpc3RDb252ZXJzYXRpb25zUmVzcG9uc2USLwoNY29udmVyc2F0aW9ucxgBIAMoCzIYLndyaW5rbGUudjEuQ29udmVyc2F0aW9uIlAKEkdldE1lc3NhZ2VzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSEgoKYmVmb3JlX3NlcRgCIAEoBBINCgVsaW1pdBgDIAEoDSI8ChNHZXRNZXNzYWdlc1Jlc3BvbnNlEiUKCG1lc3NhZ2VzGAEgAygLMhMud3JpbmtsZS52MS5NZXNzYWdlIlMKGFJlZ2lzdGVyUHVzaFRva2VuUmVxdWVzdBIoCgdzZXJ2aWNlGAEgASgOMhcud3JpbmtsZS52MS5QdXNoU2VydmljZRINCgV0b2tlbhgCIAEoCSIbChlSZWdpc3RlclB1c2hUb2tlblJlc3BvbnNlKnsKC0Jsb2JQdXJwb3NlEhwKGEJMT0JfUFVSUE9TRV9VTlNQRUNJRklFRBAAEhcKE0JMT0JfUFVSUE9TRV9BVkFUQVIQARIYChRCTE9CX1BVUlBPU0VfU1RJQ0tFUhACEhsKF0JMT0JfUFVSUE9TRV9BVFRBQ0hNRU5UEAMqYQoLUHVzaFNlcnZpY2USHAoYUFVTSF9TRVJWSUNFX1VOU1BFQ0lGSUVEEAASHQoZUFVTSF9TRVJWSUNFX0FQTlNfU0FOREJPWBABEhUKEVBVU0hfU0VSVklDRV9BUE5TEAJCoQEKDmNvbS53cmlua2xlLnYxQg5NZXNzYWdpbmdQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_event, file_wrinkle_v1_model]);
+  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UibgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBARITCgZhdmF0YXIYAyABKAxIAogBAUIHCgVfbmFtZUIHCgVfaWNvbkIJCgdfYXZhdGFyIjcKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIhAKDlNpZ25PdXRSZXF1ZXN0IhEKD1NpZ25PdXRSZXNwb25zZSIUChJMaXN0RGV2aWNlc1JlcXVlc3QiOgoTTGlzdERldmljZXNSZXNwb25zZRIjCgdkZXZpY2VzGAEgAygLMhIud3JpbmtsZS52MS5EZXZpY2UiNgoTUmVuYW1lRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCSI6ChRSZW5hbWVEZXZpY2VSZXNwb25zZRIiCgZkZXZpY2UYASABKAsyEi53cmlua2xlLnYxLkRldmljZSIpChRTaWduT3V0RGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQiFwoVU2lnbk91dERldmljZVJlc3BvbnNlIigKFERlbGV0ZUFjY291bnRSZXF1ZXN0EhAKCHBhc3N3b3JkGAEgASgJIhcKFURlbGV0ZUFjY291bnRSZXNwb25zZSJhChNDcmVhdGVVcGxvYWRSZXF1ZXN0EigKB3B1cnBvc2UYASABKA4yFy53cmlua2xlLnYxLkJsb2JQdXJwb3NlEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoBCJsChRDcmVhdGVVcGxvYWRSZXNwb25zZRIPCgdibG9iX2lkGAEgASgMEhMKC3VwbG9hZF9wYXRoGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiwKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhEKCXBlZXJfbmFtZRgBIAEoCSJKChhPcGVuQ29udmVyc2F0aW9uUmVzcG9uc2USLgoMY29udmVyc2F0aW9uGAEgASgLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUgoSQ3JlYXRlR3JvdXBSZXF1ZXN0Eg0KBXRvcGljGAEgASgJEhQKDG1lbWJlcl9uYW1lcxgCIAMoCRIXCg9jbGllbnRfZ3JvdXBfaWQYAyABKAkiRQoTQ3JlYXRlR3JvdXBSZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJCChFBZGRNZW1iZXJzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSFAoMbWVtYmVyX25hbWVzGAIgAygJIhQKEkFkZE1lbWJlcnNSZXNwb25zZSI/ChNSZW1vdmVNZW1iZXJSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIPCgd1c2VyX2lkGAIgASgMIhYKFFJlbW92ZU1lbWJlclJlc3BvbnNlIiwKEUxlYXZlR3JvdXBSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCIUChJMZWF2ZUdyb3VwUmVzcG9uc2UiOQoPU2V0VG9waWNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBINCgV0b3BpYxgCIAEoCSISChBTZXRUb3BpY1Jlc3BvbnNlIkoKD1NldEFkbWluUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBINCgVhZG1pbhgDIAEoCCISChBTZXRBZG1pblJlc3BvbnNlIiwKEUdldE1lbWJlcnNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCI5ChJHZXRNZW1iZXJzUmVzcG9uc2USIwoHbWVtYmVycxgBIAMoCzISLndyaW5rbGUudjEuTWVtYmVyIlYKElNlbmRNZXNzYWdlUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDAoEdGV4dBgDIAEoCSI7ChNTZW5kTWVzc2FnZVJlc3BvbnNlEiQKB21lc3NhZ2UYASABKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiNwoPTWFya1JlYWRSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBILCgNzZXEYAiABKAQiEgoQTWFya1JlYWRSZXNwb25zZSIsCgtTeW5jUmVxdWVzdBIOCgZjdXJzb3IYASABKAQSDQoFbGltaXQYAiABKA0iUwoMU3luY1Jlc3BvbnNlEiEKBmV2ZW50cxgBIAMoCzIRLndyaW5rbGUudjEuRXZlbnQSDgoGY3Vyc29yGAIgASgEEhAKCGhhc19tb3JlGAMgASgIIhoKGExpc3RDb252ZXJzYXRpb25zUmVxdWVzdCJMChlMaXN0Q29udmVyc2F0aW9uc1Jlc3BvbnNlEi8KDWNvbnZlcnNhdGlvbnMYASADKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJQChJHZXRNZXNzYWdlc1JlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEhIKCmJlZm9yZV9zZXEYAiABKAQSDQoFbGltaXQYAyABKA0iPAoTR2V0TWVzc2FnZXNSZXNwb25zZRIlCghtZXNzYWdlcxgBIAMoCzITLndyaW5rbGUudjEuTWVzc2FnZSJTChhSZWdpc3RlclB1c2hUb2tlblJlcXVlc3QSKAoHc2VydmljZRgBIAEoDjIXLndyaW5rbGUudjEuUHVzaFNlcnZpY2USDQoFdG9rZW4YAiABKAkiGwoZUmVnaXN0ZXJQdXNoVG9rZW5SZXNwb25zZSp7CgtCbG9iUHVycG9zZRIcChhCTE9CX1BVUlBPU0VfVU5TUEVDSUZJRUQQABIXChNCTE9CX1BVUlBPU0VfQVZBVEFSEAESGAoUQkxPQl9QVVJQT1NFX1NUSUNLRVIQAhIbChdCTE9CX1BVUlBPU0VfQVRUQUNITUVOVBADKmEKC1B1c2hTZXJ2aWNlEhwKGFBVU0hfU0VSVklDRV9VTlNQRUNJRklFRBAAEh0KGVBVU0hfU0VSVklDRV9BUE5TX1NBTkRCT1gQARIVChFQVVNIX1NFUlZJQ0VfQVBOUxACQqEBCg5jb20ud3JpbmtsZS52MUIOTWVzc2FnaW5nUHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_wrinkle_v1_event, file_wrinkle_v1_model]);
 
 /**
  * Creates an account and signs this device in. Names are unique ignoring
@@ -543,8 +543,8 @@ export const CreateUploadResponseSchema: GenMessage<CreateUploadResponse> = /*@_
   messageDesc(file_wrinkle_v1_messaging, 22);
 
 /**
- * Finds or creates the conversation between the requesting user and the peer.
- * The peer is found by name, ignoring case.
+ * Finds or creates the direct conversation between the requesting user and
+ * the peer. The peer is found by name, ignoring case.
  *
  * @generated from message wrinkle.v1.OpenConversationRequest
  */
@@ -580,6 +580,291 @@ export const OpenConversationResponseSchema: GenMessage<OpenConversationResponse
   messageDesc(file_wrinkle_v1_messaging, 24);
 
 /**
+ * Creates a group with the requesting user as its admin. The topic is 1 to
+ * 200 bytes of UTF-8, without control characters or white space at either
+ * end. Members are invited by name, ignoring case; an unknown name fails
+ * with ERROR_CODE_NOT_FOUND, and the requesting user and repeated names
+ * are ignored. A group has at most 256 members. Sending again with the same
+ * client_group_id returns the group created the first time. The group's
+ * first message is a GroupCreated notice.
+ *
+ * @generated from message wrinkle.v1.CreateGroupRequest
+ */
+export type CreateGroupRequest = Message<"wrinkle.v1.CreateGroupRequest"> & {
+  /**
+   * @generated from field: string topic = 1;
+   */
+  topic: string;
+
+  /**
+   * @generated from field: repeated string member_names = 2;
+   */
+  memberNames: string[];
+
+  /**
+   * Chosen by the device, 1 to 64 bytes, unique per user.
+   *
+   * @generated from field: string client_group_id = 3;
+   */
+  clientGroupId: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.CreateGroupRequest.
+ * Use `create(CreateGroupRequestSchema)` to create a new message.
+ */
+export const CreateGroupRequestSchema: GenMessage<CreateGroupRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 25);
+
+/**
+ * @generated from message wrinkle.v1.CreateGroupResponse
+ */
+export type CreateGroupResponse = Message<"wrinkle.v1.CreateGroupResponse"> & {
+  /**
+   * @generated from field: wrinkle.v1.Conversation conversation = 1;
+   */
+  conversation?: Conversation | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.CreateGroupResponse.
+ * Use `create(CreateGroupResponseSchema)` to create a new message.
+ */
+export const CreateGroupResponseSchema: GenMessage<CreateGroupResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 26);
+
+/**
+ * Adds users to a group; any member may. Names as in CreateGroup; users
+ * already members are ignored, and when none is left nothing happens. More
+ * than 256 members fails with ERROR_CODE_FAILED_PRECONDITION.
+ *
+ * @generated from message wrinkle.v1.AddMembersRequest
+ */
+export type AddMembersRequest = Message<"wrinkle.v1.AddMembersRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: repeated string member_names = 2;
+   */
+  memberNames: string[];
+};
+
+/**
+ * Describes the message wrinkle.v1.AddMembersRequest.
+ * Use `create(AddMembersRequestSchema)` to create a new message.
+ */
+export const AddMembersRequestSchema: GenMessage<AddMembersRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 27);
+
+/**
+ * @generated from message wrinkle.v1.AddMembersResponse
+ */
+export type AddMembersResponse = Message<"wrinkle.v1.AddMembersResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.AddMembersResponse.
+ * Use `create(AddMembersResponseSchema)` to create a new message.
+ */
+export const AddMembersResponseSchema: GenMessage<AddMembersResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 28);
+
+/**
+ * Removes a member from a group; only admins may. Removing oneself fails
+ * with ERROR_CODE_INVALID_ARGUMENT (use LeaveGroup), a user who is not a
+ * member with ERROR_CODE_NOT_FOUND.
+ *
+ * @generated from message wrinkle.v1.RemoveMemberRequest
+ */
+export type RemoveMemberRequest = Message<"wrinkle.v1.RemoveMemberRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: bytes user_id = 2;
+   */
+  userId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.RemoveMemberRequest.
+ * Use `create(RemoveMemberRequestSchema)` to create a new message.
+ */
+export const RemoveMemberRequestSchema: GenMessage<RemoveMemberRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 29);
+
+/**
+ * @generated from message wrinkle.v1.RemoveMemberResponse
+ */
+export type RemoveMemberResponse = Message<"wrinkle.v1.RemoveMemberResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.RemoveMemberResponse.
+ * Use `create(RemoveMemberResponseSchema)` to create a new message.
+ */
+export const RemoveMemberResponseSchema: GenMessage<RemoveMemberResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 30);
+
+/**
+ * Leaves a group. When the last admin leaves, the member who joined first
+ * becomes admin.
+ *
+ * @generated from message wrinkle.v1.LeaveGroupRequest
+ */
+export type LeaveGroupRequest = Message<"wrinkle.v1.LeaveGroupRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.LeaveGroupRequest.
+ * Use `create(LeaveGroupRequestSchema)` to create a new message.
+ */
+export const LeaveGroupRequestSchema: GenMessage<LeaveGroupRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 31);
+
+/**
+ * @generated from message wrinkle.v1.LeaveGroupResponse
+ */
+export type LeaveGroupResponse = Message<"wrinkle.v1.LeaveGroupResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.LeaveGroupResponse.
+ * Use `create(LeaveGroupResponseSchema)` to create a new message.
+ */
+export const LeaveGroupResponseSchema: GenMessage<LeaveGroupResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 32);
+
+/**
+ * Changes a group's topic; any member may. The topic as in CreateGroup.
+ *
+ * @generated from message wrinkle.v1.SetTopicRequest
+ */
+export type SetTopicRequest = Message<"wrinkle.v1.SetTopicRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: string topic = 2;
+   */
+  topic: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.SetTopicRequest.
+ * Use `create(SetTopicRequestSchema)` to create a new message.
+ */
+export const SetTopicRequestSchema: GenMessage<SetTopicRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 33);
+
+/**
+ * @generated from message wrinkle.v1.SetTopicResponse
+ */
+export type SetTopicResponse = Message<"wrinkle.v1.SetTopicResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.SetTopicResponse.
+ * Use `create(SetTopicResponseSchema)` to create a new message.
+ */
+export const SetTopicResponseSchema: GenMessage<SetTopicResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 34);
+
+/**
+ * Makes a member an admin or no longer one; only admins may. Taking it
+ * from the last admin fails with ERROR_CODE_FAILED_PRECONDITION; a user who
+ * is not a member, ERROR_CODE_NOT_FOUND.
+ *
+ * @generated from message wrinkle.v1.SetAdminRequest
+ */
+export type SetAdminRequest = Message<"wrinkle.v1.SetAdminRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: bytes user_id = 2;
+   */
+  userId: Uint8Array;
+
+  /**
+   * @generated from field: bool admin = 3;
+   */
+  admin: boolean;
+};
+
+/**
+ * Describes the message wrinkle.v1.SetAdminRequest.
+ * Use `create(SetAdminRequestSchema)` to create a new message.
+ */
+export const SetAdminRequestSchema: GenMessage<SetAdminRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 35);
+
+/**
+ * @generated from message wrinkle.v1.SetAdminResponse
+ */
+export type SetAdminResponse = Message<"wrinkle.v1.SetAdminResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.SetAdminResponse.
+ * Use `create(SetAdminResponseSchema)` to create a new message.
+ */
+export const SetAdminResponseSchema: GenMessage<SetAdminResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 36);
+
+/**
+ * Returns a group's current members, those who joined first first.
+ *
+ * @generated from message wrinkle.v1.GetMembersRequest
+ */
+export type GetMembersRequest = Message<"wrinkle.v1.GetMembersRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.GetMembersRequest.
+ * Use `create(GetMembersRequestSchema)` to create a new message.
+ */
+export const GetMembersRequestSchema: GenMessage<GetMembersRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 37);
+
+/**
+ * @generated from message wrinkle.v1.GetMembersResponse
+ */
+export type GetMembersResponse = Message<"wrinkle.v1.GetMembersResponse"> & {
+  /**
+   * @generated from field: repeated wrinkle.v1.Member members = 1;
+   */
+  members: Member[];
+};
+
+/**
+ * Describes the message wrinkle.v1.GetMembersResponse.
+ * Use `create(GetMembersResponseSchema)` to create a new message.
+ */
+export const GetMembersResponseSchema: GenMessage<GetMembersResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 38);
+
+/**
+ * Sends a text message. Only members may; in a group, someone who left or
+ * was removed gets ERROR_CODE_PERMISSION_DENIED.
+ *
  * @generated from message wrinkle.v1.SendMessageRequest
  */
 export type SendMessageRequest = Message<"wrinkle.v1.SendMessageRequest"> & {
@@ -604,7 +889,7 @@ export type SendMessageRequest = Message<"wrinkle.v1.SendMessageRequest"> & {
  * Use `create(SendMessageRequestSchema)` to create a new message.
  */
 export const SendMessageRequestSchema: GenMessage<SendMessageRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 25);
+  messageDesc(file_wrinkle_v1_messaging, 39);
 
 /**
  * @generated from message wrinkle.v1.SendMessageResponse
@@ -621,7 +906,7 @@ export type SendMessageResponse = Message<"wrinkle.v1.SendMessageResponse"> & {
  * Use `create(SendMessageResponseSchema)` to create a new message.
  */
 export const SendMessageResponseSchema: GenMessage<SendMessageResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 26);
+  messageDesc(file_wrinkle_v1_messaging, 40);
 
 /**
  * Marks the conversation read up to seq for the requesting user. Lower than
@@ -646,7 +931,7 @@ export type MarkReadRequest = Message<"wrinkle.v1.MarkReadRequest"> & {
  * Use `create(MarkReadRequestSchema)` to create a new message.
  */
 export const MarkReadRequestSchema: GenMessage<MarkReadRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 27);
+  messageDesc(file_wrinkle_v1_messaging, 41);
 
 /**
  * @generated from message wrinkle.v1.MarkReadResponse
@@ -659,7 +944,7 @@ export type MarkReadResponse = Message<"wrinkle.v1.MarkReadResponse"> & {
  * Use `create(MarkReadResponseSchema)` to create a new message.
  */
 export const MarkReadResponseSchema: GenMessage<MarkReadResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 28);
+  messageDesc(file_wrinkle_v1_messaging, 42);
 
 /**
  * Returns events from the user's log after the cursor, oldest first.
@@ -686,7 +971,7 @@ export type SyncRequest = Message<"wrinkle.v1.SyncRequest"> & {
  * Use `create(SyncRequestSchema)` to create a new message.
  */
 export const SyncRequestSchema: GenMessage<SyncRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 29);
+  messageDesc(file_wrinkle_v1_messaging, 43);
 
 /**
  * @generated from message wrinkle.v1.SyncResponse
@@ -718,7 +1003,7 @@ export type SyncResponse = Message<"wrinkle.v1.SyncResponse"> & {
  * Use `create(SyncResponseSchema)` to create a new message.
  */
 export const SyncResponseSchema: GenMessage<SyncResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 30);
+  messageDesc(file_wrinkle_v1_messaging, 44);
 
 /**
  * @generated from message wrinkle.v1.ListConversationsRequest
@@ -731,7 +1016,7 @@ export type ListConversationsRequest = Message<"wrinkle.v1.ListConversationsRequ
  * Use `create(ListConversationsRequestSchema)` to create a new message.
  */
 export const ListConversationsRequestSchema: GenMessage<ListConversationsRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 31);
+  messageDesc(file_wrinkle_v1_messaging, 45);
 
 /**
  * Conversations with the most recently active first.
@@ -750,10 +1035,12 @@ export type ListConversationsResponse = Message<"wrinkle.v1.ListConversationsRes
  * Use `create(ListConversationsResponseSchema)` to create a new message.
  */
 export const ListConversationsResponseSchema: GenMessage<ListConversationsResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 32);
+  messageDesc(file_wrinkle_v1_messaging, 46);
 
 /**
- * Returns messages of a conversation, newest first.
+ * Returns messages of a conversation, newest first. Group members get the
+ * messages from the notice that added them on; a former member those up to
+ * the notice that removed them.
  *
  * @generated from message wrinkle.v1.GetMessagesRequest
  */
@@ -783,7 +1070,7 @@ export type GetMessagesRequest = Message<"wrinkle.v1.GetMessagesRequest"> & {
  * Use `create(GetMessagesRequestSchema)` to create a new message.
  */
 export const GetMessagesRequestSchema: GenMessage<GetMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 33);
+  messageDesc(file_wrinkle_v1_messaging, 47);
 
 /**
  * @generated from message wrinkle.v1.GetMessagesResponse
@@ -800,7 +1087,7 @@ export type GetMessagesResponse = Message<"wrinkle.v1.GetMessagesResponse"> & {
  * Use `create(GetMessagesResponseSchema)` to create a new message.
  */
 export const GetMessagesResponseSchema: GenMessage<GetMessagesResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 34);
+  messageDesc(file_wrinkle_v1_messaging, 48);
 
 /**
  * Registers where to push notifications for the requesting device while it
@@ -829,7 +1116,7 @@ export type RegisterPushTokenRequest = Message<"wrinkle.v1.RegisterPushTokenRequ
  * Use `create(RegisterPushTokenRequestSchema)` to create a new message.
  */
 export const RegisterPushTokenRequestSchema: GenMessage<RegisterPushTokenRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 35);
+  messageDesc(file_wrinkle_v1_messaging, 49);
 
 /**
  * @generated from message wrinkle.v1.RegisterPushTokenResponse
@@ -842,7 +1129,7 @@ export type RegisterPushTokenResponse = Message<"wrinkle.v1.RegisterPushTokenRes
  * Use `create(RegisterPushTokenResponseSchema)` to create a new message.
  */
 export const RegisterPushTokenResponseSchema: GenMessage<RegisterPushTokenResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 36);
+  messageDesc(file_wrinkle_v1_messaging, 50);
 
 /**
  * @generated from enum wrinkle.v1.BlobPurpose

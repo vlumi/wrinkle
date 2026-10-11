@@ -4,8 +4,8 @@
 // @generated from file wrinkle/v1/model.proto (package wrinkle.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message as Message$1 } from "@bufbuild/protobuf";
@@ -14,7 +14,7 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/model.proto.
  */
 export const file_wrinkle_v1_model: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL21vZGVsLnByb3RvEgp3cmlua2xlLnYxIlQKBFVzZXISDwoHdXNlcl9pZBgBIAEoDBIMCgRuYW1lGAIgASgJEgwKBGljb24YAyABKAkSDgoGYXZhdGFyGAQgASgMEg8KB2RlbGV0ZWQYBSABKAgimQEKBkRldmljZRIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCRIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3NlZW5fYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgwKBHB1c2gYBSABKAginQEKB01lc3NhZ2USFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIWCg5zZW5kZXJfdXNlcl9pZBgDIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgEIAEoCRIMCgR0ZXh0GAUgASgJEisKB3NlbnRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIq0BCgxDb252ZXJzYXRpb24SFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEh4KBHBlZXIYAiABKAsyEC53cmlua2xlLnYxLlVzZXISEAoIbGFzdF9zZXEYAyABKAQSKQoMbGFzdF9tZXNzYWdlGAQgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlEhAKCHJlYWRfc2VxGAUgASgEEhUKDXBlZXJfcmVhZF9zZXEYBiABKARCnQEKDmNvbS53cmlua2xlLnYxQgpNb2RlbFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChZ3cmlua2xlL3YxL21vZGVsLnByb3RvEgp3cmlua2xlLnYxIlQKBFVzZXISDwoHdXNlcl9pZBgBIAEoDBIMCgRuYW1lGAIgASgJEgwKBGljb24YAyABKAkSDgoGYXZhdGFyGAQgASgMEg8KB2RlbGV0ZWQYBSABKAgimQEKBkRldmljZRIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCRIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3NlZW5fYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgwKBHB1c2gYBSABKAgi0AEKB01lc3NhZ2USFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIWCg5zZW5kZXJfdXNlcl9pZBgDIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgEIAEoCRIrCgdzZW50X2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIOCgR0ZXh0GAUgASgJSAASJAoGbm90aWNlGAcgASgLMhIud3JpbmtsZS52MS5Ob3RpY2VIAEIJCgdjb250ZW50IsACCgZOb3RpY2USMQoNZ3JvdXBfY3JlYXRlZBgBIAEoCzIYLndyaW5rbGUudjEuR3JvdXBDcmVhdGVkSAASMQoNbWVtYmVyc19hZGRlZBgCIAEoCzIYLndyaW5rbGUudjEuTWVtYmVyc0FkZGVkSAASMwoObWVtYmVyX3JlbW92ZWQYAyABKAsyGS53cmlua2xlLnYxLk1lbWJlclJlbW92ZWRIABItCgttZW1iZXJfbGVmdBgEIAEoCzIWLndyaW5rbGUudjEuTWVtYmVyTGVmdEgAEjEKDXRvcGljX2NoYW5nZWQYBSABKAsyGC53cmlua2xlLnYxLlRvcGljQ2hhbmdlZEgAEjEKDWFkbWluX2NoYW5nZWQYBiABKAsyGC53cmlua2xlLnYxLkFkbWluQ2hhbmdlZEgAQgYKBGtpbmQiQAoMR3JvdXBDcmVhdGVkEg0KBXRvcGljGAEgASgJEiEKB21lbWJlcnMYAiADKAsyEC53cmlua2xlLnYxLlVzZXIiLwoMTWVtYmVyc0FkZGVkEh8KBXVzZXJzGAEgAygLMhAud3JpbmtsZS52MS5Vc2VyIi8KDU1lbWJlclJlbW92ZWQSHgoEdXNlchgBIAEoCzIQLndyaW5rbGUudjEuVXNlciIwCgpNZW1iZXJMZWZ0EiIKCHByb21vdGVkGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIh0KDFRvcGljQ2hhbmdlZBINCgV0b3BpYxgBIAEoCSI9CgxBZG1pbkNoYW5nZWQSHgoEdXNlchgBIAEoCzIQLndyaW5rbGUudjEuVXNlchINCgVhZG1pbhgCIAEoCCKdAgoMQ29udmVyc2F0aW9uEhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIqCgRraW5kGAcgASgOMhwud3JpbmtsZS52MS5Db252ZXJzYXRpb25LaW5kEh4KBHBlZXIYAiABKAsyEC53cmlua2xlLnYxLlVzZXISEAoIbGFzdF9zZXEYAyABKAQSKQoMbGFzdF9tZXNzYWdlGAQgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlEhAKCHJlYWRfc2VxGAUgASgEEhUKDXBlZXJfcmVhZF9zZXEYBiABKAQSDQoFdG9waWMYCCABKAkSFAoMbWVtYmVyX2NvdW50GAkgASgNEg4KBm1lbWJlchgKIAEoCBINCgVhZG1pbhgLIAEoCCJdCgZNZW1iZXISHgoEdXNlchgBIAEoCzIQLndyaW5rbGUudjEuVXNlchINCgVhZG1pbhgCIAEoCBIQCghyZWFkX3NlcRgDIAEoBBISCgpqb2luZWRfc2VxGAQgASgEKnAKEENvbnZlcnNhdGlvbktpbmQSIQodQ09OVkVSU0FUSU9OX0tJTkRfVU5TUEVDSUZJRUQQABIcChhDT05WRVJTQVRJT05fS0lORF9ESVJFQ1QQARIbChdDT05WRVJTQVRJT05fS0lORF9HUk9VUBACQp0BCg5jb20ud3JpbmtsZS52MUIKTW9kZWxQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message wrinkle.v1.User
@@ -133,20 +133,35 @@ export type Message = Message$1<"wrinkle.v1.Message"> & {
   /**
    * Chosen by the sending device, unique per sender and conversation. Resending
    * with the same id returns the message already stored instead of a duplicate.
+   * The server chooses it for notices.
    *
    * @generated from field: string client_message_id = 4;
    */
   clientMessageId: string;
 
   /**
-   * @generated from field: string text = 5;
-   */
-  text: string;
-
-  /**
    * @generated from field: google.protobuf.Timestamp sent_at = 6;
    */
   sentAt?: Timestamp | undefined;
+
+  /**
+   * @generated from oneof wrinkle.v1.Message.content
+   */
+  content: {
+    /**
+     * @generated from field: string text = 5;
+     */
+    value: string;
+    case: "text";
+  } | {
+    /**
+     * A change to a group, made by the sender.
+     *
+     * @generated from field: wrinkle.v1.Notice notice = 7;
+     */
+    value: Notice;
+    case: "notice";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
@@ -155,6 +170,184 @@ export type Message = Message$1<"wrinkle.v1.Message"> & {
  */
 export const MessageSchema: GenMessage<Message> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_model, 2);
+
+/**
+ * A change to a group, as a message in its sequence, so every member sees
+ * changes and messages in the same order.
+ *
+ * @generated from message wrinkle.v1.Notice
+ */
+export type Notice = Message$1<"wrinkle.v1.Notice"> & {
+  /**
+   * @generated from oneof wrinkle.v1.Notice.kind
+   */
+  kind: {
+    /**
+     * @generated from field: wrinkle.v1.GroupCreated group_created = 1;
+     */
+    value: GroupCreated;
+    case: "groupCreated";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.MembersAdded members_added = 2;
+     */
+    value: MembersAdded;
+    case: "membersAdded";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.MemberRemoved member_removed = 3;
+     */
+    value: MemberRemoved;
+    case: "memberRemoved";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.MemberLeft member_left = 4;
+     */
+    value: MemberLeft;
+    case: "memberLeft";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.TopicChanged topic_changed = 5;
+     */
+    value: TopicChanged;
+    case: "topicChanged";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.AdminChanged admin_changed = 6;
+     */
+    value: AdminChanged;
+    case: "adminChanged";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message wrinkle.v1.Notice.
+ * Use `create(NoticeSchema)` to create a new message.
+ */
+export const NoticeSchema: GenMessage<Notice> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 3);
+
+/**
+ * The sender created the group, as its admin.
+ *
+ * @generated from message wrinkle.v1.GroupCreated
+ */
+export type GroupCreated = Message$1<"wrinkle.v1.GroupCreated"> & {
+  /**
+   * @generated from field: string topic = 1;
+   */
+  topic: string;
+
+  /**
+   * The members invited at creation, besides the sender.
+   *
+   * @generated from field: repeated wrinkle.v1.User members = 2;
+   */
+  members: User[];
+};
+
+/**
+ * Describes the message wrinkle.v1.GroupCreated.
+ * Use `create(GroupCreatedSchema)` to create a new message.
+ */
+export const GroupCreatedSchema: GenMessage<GroupCreated> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 4);
+
+/**
+ * @generated from message wrinkle.v1.MembersAdded
+ */
+export type MembersAdded = Message$1<"wrinkle.v1.MembersAdded"> & {
+  /**
+   * @generated from field: repeated wrinkle.v1.User users = 1;
+   */
+  users: User[];
+};
+
+/**
+ * Describes the message wrinkle.v1.MembersAdded.
+ * Use `create(MembersAddedSchema)` to create a new message.
+ */
+export const MembersAddedSchema: GenMessage<MembersAdded> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 5);
+
+/**
+ * An admin removed the user.
+ *
+ * @generated from message wrinkle.v1.MemberRemoved
+ */
+export type MemberRemoved = Message$1<"wrinkle.v1.MemberRemoved"> & {
+  /**
+   * @generated from field: wrinkle.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.MemberRemoved.
+ * Use `create(MemberRemovedSchema)` to create a new message.
+ */
+export const MemberRemovedSchema: GenMessage<MemberRemoved> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 6);
+
+/**
+ * The sender left.
+ *
+ * @generated from message wrinkle.v1.MemberLeft
+ */
+export type MemberLeft = Message$1<"wrinkle.v1.MemberLeft"> & {
+  /**
+   * Made admin because the sender was the last one; unset otherwise.
+   *
+   * @generated from field: wrinkle.v1.User promoted = 1;
+   */
+  promoted?: User | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.MemberLeft.
+ * Use `create(MemberLeftSchema)` to create a new message.
+ */
+export const MemberLeftSchema: GenMessage<MemberLeft> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 7);
+
+/**
+ * @generated from message wrinkle.v1.TopicChanged
+ */
+export type TopicChanged = Message$1<"wrinkle.v1.TopicChanged"> & {
+  /**
+   * @generated from field: string topic = 1;
+   */
+  topic: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.TopicChanged.
+ * Use `create(TopicChangedSchema)` to create a new message.
+ */
+export const TopicChangedSchema: GenMessage<TopicChanged> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 8);
+
+/**
+ * @generated from message wrinkle.v1.AdminChanged
+ */
+export type AdminChanged = Message$1<"wrinkle.v1.AdminChanged"> & {
+  /**
+   * @generated from field: wrinkle.v1.User user = 1;
+   */
+  user?: User | undefined;
+
+  /**
+   * @generated from field: bool admin = 2;
+   */
+  admin: boolean;
+};
+
+/**
+ * Describes the message wrinkle.v1.AdminChanged.
+ * Use `create(AdminChangedSchema)` to create a new message.
+ */
+export const AdminChangedSchema: GenMessage<AdminChanged> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 9);
 
 /**
  * A conversation as seen by the requesting user.
@@ -168,6 +361,13 @@ export type Conversation = Message$1<"wrinkle.v1.Conversation"> & {
   conversationId: Uint8Array;
 
   /**
+   * @generated from field: wrinkle.v1.ConversationKind kind = 7;
+   */
+  kind: ConversationKind;
+
+  /**
+   * Direct conversations: the other participant.
+   *
    * @generated from field: wrinkle.v1.User peer = 2;
    */
   peer?: User | undefined;
@@ -195,11 +395,35 @@ export type Conversation = Message$1<"wrinkle.v1.Conversation"> & {
   readSeq: bigint;
 
   /**
-   * The peer's read position.
+   * Direct conversations: the peer's read position.
    *
    * @generated from field: uint64 peer_read_seq = 6;
    */
   peerReadSeq: bigint;
+
+  /**
+   * Groups: the topic, the number of members, whether the requesting user
+   * is still a member (false once they left or were removed; the
+   * conversation stays, with the history they had) and an admin.
+   *
+   * @generated from field: string topic = 8;
+   */
+  topic: string;
+
+  /**
+   * @generated from field: uint32 member_count = 9;
+   */
+  memberCount: number;
+
+  /**
+   * @generated from field: bool member = 10;
+   */
+  member: boolean;
+
+  /**
+   * @generated from field: bool admin = 11;
+   */
+  admin: boolean;
 };
 
 /**
@@ -207,5 +431,74 @@ export type Conversation = Message$1<"wrinkle.v1.Conversation"> & {
  * Use `create(ConversationSchema)` to create a new message.
  */
 export const ConversationSchema: GenMessage<Conversation> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_model, 3);
+  messageDesc(file_wrinkle_v1_model, 10);
+
+/**
+ * A current member of a group.
+ *
+ * @generated from message wrinkle.v1.Member
+ */
+export type Member = Message$1<"wrinkle.v1.Member"> & {
+  /**
+   * @generated from field: wrinkle.v1.User user = 1;
+   */
+  user?: User | undefined;
+
+  /**
+   * @generated from field: bool admin = 2;
+   */
+  admin: boolean;
+
+  /**
+   * The member's read position.
+   *
+   * @generated from field: uint64 read_seq = 3;
+   */
+  readSeq: bigint;
+
+  /**
+   * The seq of the notice that added the member; they see messages from
+   * there on.
+   *
+   * @generated from field: uint64 joined_seq = 4;
+   */
+  joinedSeq: bigint;
+};
+
+/**
+ * Describes the message wrinkle.v1.Member.
+ * Use `create(MemberSchema)` to create a new message.
+ */
+export const MemberSchema: GenMessage<Member> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 11);
+
+/**
+ * A direct conversation has exactly two participants, for good; a group
+ * has a topic, an admin or more, and members who join and leave. The kind
+ * is fixed when the conversation is created.
+ *
+ * @generated from enum wrinkle.v1.ConversationKind
+ */
+export enum ConversationKind {
+  /**
+   * @generated from enum value: CONVERSATION_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CONVERSATION_KIND_DIRECT = 1;
+   */
+  DIRECT = 1,
+
+  /**
+   * @generated from enum value: CONVERSATION_KIND_GROUP = 2;
+   */
+  GROUP = 2,
+}
+
+/**
+ * Describes the enum wrinkle.v1.ConversationKind.
+ */
+export const ConversationKindSchema: GenEnum<ConversationKind> = /*@__PURE__*/
+  enumDesc(file_wrinkle_v1_model, 0);
 

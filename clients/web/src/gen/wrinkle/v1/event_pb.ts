@@ -100,7 +100,9 @@ export const MessageEventSchema: GenMessage<MessageEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 1);
 
 /**
- * A participant moved their read position. Received by both participants, so
+ * A participant moved their read position. In a direct conversation both
+ * participants receive it; in a group, the reader and the senders of the
+ * messages it covers, so each sender sees who has read their messages and
  * a user's other devices learn what they read elsewhere.
  *
  * @generated from message wrinkle.v1.ReadEvent

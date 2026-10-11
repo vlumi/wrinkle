@@ -168,8 +168,8 @@ enum BlobPurpose {
   BLOB_PURPOSE_ATTACHMENT = 3;
 }
 
-// Finds or creates the conversation between the requesting user and the peer.
-// The peer is found by name, ignoring case.
+// Finds or creates the direct conversation between the requesting user and
+// the peer. The peer is found by name, ignoring case.
 message OpenConversationRequest {
   string peer_name = 1;
 }
@@ -178,6 +178,86 @@ message OpenConversationResponse {
   Conversation conversation = 1;
 }
 
+// Creates a group with the requesting user as its admin. The topic is 1 to
+// 200 bytes of UTF-8, without control characters or white space at either
+// end. Members are invited by name, ignoring case; an unknown name fails
+// with ERROR_CODE_NOT_FOUND, and the requesting user and repeated names
+// are ignored. A group has at most 256 members. Sending again with the same
+// client_group_id returns the group created the first time. The group's
+// first message is a GroupCreated notice.
+message CreateGroupRequest {
+  string topic = 1;
+  repeated string member_names = 2;
+  // Chosen by the device, 1 to 64 bytes, unique per user.
+  string client_group_id = 3;
+}
+
+message CreateGroupResponse {
+  Conversation conversation = 1;
+}
+
+// Requests about a group fail with ERROR_CODE_FAILED_PRECONDITION on a
+// direct conversation, and with ERROR_CODE_PERMISSION_DENIED from anyone
+// not a member.
+
+// Adds users to a group; any member may. Names as in CreateGroup; users
+// already members are ignored, and when none is left nothing happens. More
+// than 256 members fails with ERROR_CODE_FAILED_PRECONDITION.
+message AddMembersRequest {
+  bytes conversation_id = 1;
+  repeated string member_names = 2;
+}
+
+message AddMembersResponse {}
+
+// Removes a member from a group; only admins may. Removing oneself fails
+// with ERROR_CODE_INVALID_ARGUMENT (use LeaveGroup), a user who is not a
+// member with ERROR_CODE_NOT_FOUND.
+message RemoveMemberRequest {
+  bytes conversation_id = 1;
+  bytes user_id = 2;
+}
+
+message RemoveMemberResponse {}
+
+// Leaves a group. When the last admin leaves, the member who joined first
+// becomes admin.
+message LeaveGroupRequest {
+  bytes conversation_id = 1;
+}
+
+message LeaveGroupResponse {}
+
+// Changes a group's topic; any member may. The topic as in CreateGroup.
+message SetTopicRequest {
+  bytes conversation_id = 1;
+  string topic = 2;
+}
+
+message SetTopicResponse {}
+
+// Makes a member an admin or no longer one; only admins may. Taking it
+// from the last admin fails with ERROR_CODE_FAILED_PRECONDITION; a user who
+// is not a member, ERROR_CODE_NOT_FOUND.
+message SetAdminRequest {
+  bytes conversation_id = 1;
+  bytes user_id = 2;
+  bool admin = 3;
+}
+
+message SetAdminResponse {}
+
+// Returns a group's current members, those who joined first first.
+message GetMembersRequest {
+  bytes conversation_id = 1;
+}
+
+message GetMembersResponse {
+  repeated Member members = 1;
+}
+
+// Sends a text message. Only members may; in a group, someone who left or
+// was removed gets ERROR_CODE_PERMISSION_DENIED.
 message SendMessageRequest {
   bytes conversation_id = 1;
   string client_message_id = 2;
@@ -221,7 +301,9 @@ message ListConversationsResponse {
   repeated Conversation conversations = 1;
 }
 
-// Returns messages of a conversation, newest first.
+// Returns messages of a conversation, newest first. Group members get the
+// messages from the notice that added them on; a former member those up to
+// the notice that removed them.
 message GetMessagesRequest {
   bytes conversation_id = 1;
   // Return messages with seq below this; 0 starts from the newest.
