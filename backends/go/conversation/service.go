@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/go-sql-driver/mysql"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -37,20 +38,63 @@ func New(db *sql.DB) *Service {
 	return &Service{db: db, now: func() time.Time { return time.Now().UTC() }}
 }
 
-// Ensure creates the conversation between two users if it does not exist.
-func (s *Service) Ensure(ctx context.Context, conversationID, userA, userB uint64) error {
-	_, err := s.db.ExecContext(ctx, `
+// Open finds or creates the conversation between two users, user_a <
+// user_b. The pair row, on user_a's shard, decides between two opening at
+// once; a pair whose conversation row is missing gets it here.
+func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, error) {
+	conversationID, found, err := s.pair(ctx, userA, userB)
+	if err != nil {
+		return conversationID, err
+	}
+	if !found {
+		conversationID = ids.New()
+		_, err := s.db.ExecContext(ctx, `
+			INSERT INTO conversation_pair (user_a, user_b, conversation_id, created_at) VALUES (?, ?, ?, ?)`,
+			userA, userB, conversationID, s.now())
+		if err != nil {
+			if !isDuplicate(err) {
+				return conversationID, err
+			}
+			if conversationID, found, err = s.pair(ctx, userA, userB); err != nil {
+				return conversationID, err
+			}
+			if !found {
+				return conversationID, fmt.Errorf("conversation pair missing after a duplicate key")
+			}
+		}
+	}
+	_, err = s.db.ExecContext(ctx, `
 		INSERT IGNORE INTO conversation (conversation_id, user_a, user_b, last_seq, created_at)
 		VALUES (?, ?, ?, 0, ?)`,
 		conversationID, userA, userB, s.now())
-	return err
+	return conversationID, err
+}
+
+func (s *Service) pair(ctx context.Context, userA, userB ids.UUID) (ids.UUID, bool, error) {
+	var conversationID ids.UUID
+	err := s.db.QueryRowContext(ctx, `
+		SELECT conversation_id FROM conversation_pair WHERE user_a = ? AND user_b = ?`,
+		userA, userB).Scan(&conversationID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return conversationID, false, nil
+	}
+	return conversationID, err == nil, err
+}
+
+// MySQL error for a unique key violation.
+const duplicateKey = 1062
+
+func isDuplicate(err error) bool {
+	var mysqlErr *mysql.MySQLError
+	return errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey
 }
 
 type header struct {
-	userA, userB, lastSeq uint64
+	userA, userB ids.UUID
+	lastSeq      uint64
 }
 
-func (h header) has(userID uint64) bool {
+func (h header) has(userID ids.UUID) bool {
 	return userID == h.userA || userID == h.userB
 }
 
@@ -65,24 +109,24 @@ type rowQuerier interface {
 
 // member reads the conversation's header with the given query and checks
 // that the user is a participant.
-func member(ctx context.Context, q rowQuerier, query string, conversationID, userID uint64) (header, error) {
+func member(ctx context.Context, q rowQuerier, query string, conversationID, userID ids.UUID) (header, error) {
 	var h header
 	err := q.QueryRowContext(ctx, query, conversationID).Scan(&h.userA, &h.userB, &h.lastSeq)
 	if errors.Is(err, sql.ErrNoRows) {
-		return h, apierror.NotFound("conversation %d does not exist", conversationID)
+		return h, apierror.NotFound("conversation %s does not exist", conversationID)
 	}
 	if err != nil {
 		return h, err
 	}
 	if !h.has(userID) {
-		return h, apierror.PermissionDenied("user %d is not in conversation %d", userID, conversationID)
+		return h, apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
 	}
 	return h, nil
 }
 
 // Send stores a message, assigning the next sequence number. Resending with
 // the same client message id returns the message stored the first time.
-func (s *Service) Send(ctx context.Context, userID, conversationID uint64, clientMessageID, text string) (*pb.Message, error) {
+func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID, text string) (*pb.Message, error) {
 	if clientMessageID == "" || len(clientMessageID) > maxClientMessageID {
 		return nil, apierror.InvalidArgument("client_message_id must be 1 to %d bytes", maxClientMessageID)
 	}
@@ -100,8 +144,8 @@ func (s *Service) Send(ctx context.Context, userID, conversationID uint64, clien
 		return nil, err
 	}
 	msg := &pb.Message{
-		ConversationId:  conversationID,
-		SenderUserId:    userID,
+		ConversationId:  conversationID.Bytes(),
+		SenderUserId:    userID.Bytes(),
 		ClientMessageId: clientMessageID,
 		Text:            text,
 	}
@@ -147,7 +191,7 @@ func (s *Service) Send(ctx context.Context, userID, conversationID uint64, clien
 
 // MarkRead moves the user's read position forward. Moving it backwards or
 // to where it is does nothing.
-func (s *Service) MarkRead(ctx context.Context, userID, conversationID, seq uint64) error {
+func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID, seq uint64) error {
 	if seq == 0 {
 		return apierror.InvalidArgument("seq must be positive")
 	}
@@ -184,7 +228,7 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID, seq uint
 	event := &pb.Event{
 		OccurredAt: timestamppb.New(now),
 		Body: &pb.Event_Read{Read: &pb.ReadEvent{
-			ConversationId: conversationID, UserId: userID, Seq: seq,
+			ConversationId: conversationID.Bytes(), UserId: userID.Bytes(), Seq: seq,
 		}},
 	}
 	if err := insertOutbox(ctx, tx, h, conversationID, "read", event, now); err != nil {
@@ -194,7 +238,7 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID, seq uint
 }
 
 // Messages returns messages with seq below beforeSeq, newest first.
-func (s *Service) Messages(ctx context.Context, userID, conversationID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
+func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
 	if _, err := member(ctx, s.db, selectHeader, conversationID, userID); err != nil {
 		return nil, err
 	}
@@ -215,7 +259,7 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID, beforeSe
 	defer rows.Close()
 	var messages []*pb.Message
 	for rows.Next() {
-		msg := &pb.Message{ConversationId: conversationID}
+		msg := &pb.Message{ConversationId: conversationID.Bytes()}
 		var sentAt time.Time
 		if err := rows.Scan(&msg.Seq, &msg.SenderUserId, &msg.ClientMessageId, &msg.Text, &sentAt); err != nil {
 			return nil, err
@@ -226,7 +270,7 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID, beforeSe
 	return messages, rows.Err()
 }
 
-func insertOutbox(ctx context.Context, tx *sql.Tx, h header, conversationID uint64, kind string, event *pb.Event, at time.Time) error {
+func insertOutbox(ctx context.Context, tx *sql.Tx, h header, conversationID ids.UUID, kind string, event *pb.Event, at time.Time) error {
 	payload, err := proto.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal outbox event: %w", err)

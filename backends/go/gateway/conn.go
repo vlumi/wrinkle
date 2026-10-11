@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -54,7 +55,7 @@ type conn struct {
 	connected    bool
 	closing      bool
 	writing      bool
-	userID       uint64
+	userID       ids.UUID
 	deviceID     uint64
 	connectTimer *time.Timer
 }
@@ -76,7 +77,7 @@ func newConn(s *Server, remoteAddr string) *conn {
 	return c
 }
 
-func (c *conn) identity() (userID, deviceID uint64, ok bool) {
+func (c *conn) identity() (userID ids.UUID, deviceID uint64, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.userID, c.deviceID, c.connected
@@ -290,7 +291,7 @@ func (c *conn) pushEvent(payload []byte) {
 }
 
 // writeAcks writes the pending ack cursor until no newer one has arrived.
-func (c *conn) writeAcks(userID, deviceID uint64) {
+func (c *conn) writeAcks(userID ids.UUID, deviceID uint64) {
 	for {
 		cursor, ok := c.acks.next()
 		if !ok {
@@ -321,11 +322,15 @@ func (c *conn) handleRequest(req *pb.Request) {
 // the backend.
 func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 	userID, deviceID, connected := c.identity()
-	switch {
-	case req.GetConnect() != nil && connected:
-		return apierror.Response(req.GetId(), apierror.FailedPrecondition("already connected"))
-	case req.GetConnect() == nil && !connected:
-		return apierror.Response(req.GetId(), apierror.Unauthenticated("connect first"))
+	switch req.GetBody().(type) {
+	case *pb.Request_Register, *pb.Request_SignIn, *pb.Request_Connect:
+		if connected {
+			return apierror.Response(req.GetId(), apierror.FailedPrecondition("already connected"))
+		}
+	default:
+		if !connected {
+			return apierror.Response(req.GetId(), apierror.Unauthenticated("connect first"))
+		}
 	}
 	resp, err := c.server.backend.Call(ctx, userID, deviceID, req)
 	if err == nil && resp.GetError() != nil && ctx.Err() != nil {
@@ -341,6 +346,11 @@ func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 			return apierror.Response(req.GetId(), err)
 		}
 	}
+	if req.GetRegister() != nil || req.GetSignIn() != nil {
+		// Hashing the password may have taken a while; Connect gets a fresh deadline.
+		c.stopConnectTimer()
+		c.startConnectTimer()
+	}
 	return resp
 }
 
@@ -352,15 +362,20 @@ func (c *conn) identify(ctx context.Context, resp *pb.ConnectResponse) error {
 		c.mu.Unlock()
 		return apierror.FailedPrecondition("already connected")
 	}
+	userID, ok := ids.Parse(resp.GetUser().GetUserId())
+	if !ok {
+		c.mu.Unlock()
+		return apierror.New(pb.ErrorCode_ERROR_CODE_INTERNAL, "connect returned no user id")
+	}
 	c.connected = true
-	c.userID = resp.GetUser().GetUserId()
+	c.userID = userID
 	c.deviceID = resp.GetDeviceId()
 	c.mu.Unlock()
 	c.stopConnectTimer()
 	if err := c.server.attach(ctx, c); err != nil {
 		// Not connected after all: Connect may be retried, within a fresh deadline.
 		c.mu.Lock()
-		c.connected, c.userID, c.deviceID = false, 0, 0
+		c.connected, c.userID, c.deviceID = false, ids.UUID{}, 0
 		c.mu.Unlock()
 		c.startConnectTimer()
 		return err

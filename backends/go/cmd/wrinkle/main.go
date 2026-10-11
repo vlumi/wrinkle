@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/vlumi/wrinkle/backends/go/accounts"
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/fanout"
@@ -87,8 +88,9 @@ func run() error {
 		}
 		defer userDB.Close()
 		conversations := conversation.New(conversationDB)
-		users := devicesync.New(userDB, conversations)
-		local = services.NewLocal(conversations, users, log.With("role", "services"))
+		accts := accounts.New(userDB)
+		users := devicesync.New(userDB, accts, conversations)
+		local = services.NewLocal(accts, conversations, users, log.With("role", "services"))
 	}
 	// Valkey carries presence and pushes, from fan-out to gateways.
 	var pres *presence.Client
@@ -149,7 +151,7 @@ func run() error {
 			return err
 		}
 		defer worker.Close()
-		log.Info("fanout consuming", "topic", fanout.Topic)
+		log.Info("fanout consuming", "topics", fanout.Topics)
 		add("fanout", func() error { return worker.Run(ctx) })
 	}
 

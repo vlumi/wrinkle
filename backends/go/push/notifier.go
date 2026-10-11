@@ -1,21 +1,23 @@
 package push
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 // Presence tells which of a user's devices are connected to some gateway.
 type Presence interface {
-	ConnectedDevices(ctx context.Context, userID uint64) (map[uint64]bool, error)
+	ConnectedDevices(ctx context.Context, userID ids.UUID) (map[uint64]bool, error)
 }
 
 // Notifier pushes a message to a user's devices that are not connected and
@@ -41,8 +43,8 @@ func NewNotifier(apns *APNs, userDB *sql.DB, presence Presence, log *slog.Logger
 
 // MessageDelivered is called after a message was appended to the user's
 // log. The sender's own devices are not notified.
-func (n *Notifier) MessageDelivered(userID uint64, peerName string, msg *pb.Message) {
-	if n == nil || msg.GetSenderUserId() == userID {
+func (n *Notifier) MessageDelivered(userID ids.UUID, msg *pb.Message) {
+	if n == nil || bytes.Equal(msg.GetSenderUserId(), userID[:]) {
 		return
 	}
 	select {
@@ -56,7 +58,7 @@ func (n *Notifier) MessageDelivered(userID uint64, peerName string, msg *pb.Mess
 		defer func() { <-n.slots }()
 		ctx, cancel := context.WithTimeout(context.Background(), sendTimeout)
 		defer cancel()
-		if err := n.notify(ctx, userID, peerName, msg); err != nil {
+		if err := n.notify(ctx, userID, msg); err != nil {
 			n.log.Warn("push failed", "user", userID, "err", err)
 		}
 	}()
@@ -68,10 +70,21 @@ type registration struct {
 	token    string
 }
 
-func (n *Notifier) notify(ctx context.Context, userID uint64, peerName string, msg *pb.Message) error {
+func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message) error {
 	regs, err := n.registrations(ctx, userID)
 	if err != nil || len(regs) == 0 {
 		return err
+	}
+	conversationID, ok := ids.Parse(msg.GetConversationId())
+	if !ok {
+		return fmt.Errorf("message without a conversation id")
+	}
+	// The conversation list has the peer's current name.
+	var peerName string
+	if err := n.db.QueryRowContext(ctx, `
+		SELECT peer_name FROM user_conversation WHERE user_id = ? AND conversation_id = ?`,
+		userID, conversationID).Scan(&peerName); err != nil {
+		return fmt.Errorf("peer name: %w", err)
 	}
 	connected, err := n.presence.ConnectedDevices(ctx, userID)
 	if err != nil {
@@ -81,13 +94,13 @@ func (n *Notifier) notify(ctx context.Context, userID uint64, peerName string, m
 	if err != nil {
 		return err
 	}
-	conversationID := strconv.FormatUint(msg.GetConversationId(), 10)
+	// Clients find the conversation by the lowercase hex of its id.
 	alert := Alert{
 		Title:    peerName,
 		Body:     truncate(msg.GetText(), maxBodyRunes),
 		Badge:    badge,
-		ThreadID: conversationID,
-		Data:     map[string]string{"conversation_id": conversationID},
+		ThreadID: conversationID.String(),
+		Data:     map[string]string{"conversation_id": conversationID.String()},
 	}
 	for _, r := range regs {
 		if !connected[r.deviceID] {
@@ -97,7 +110,7 @@ func (n *Notifier) notify(ctx context.Context, userID uint64, peerName string, m
 	return nil
 }
 
-func (n *Notifier) send(ctx context.Context, userID uint64, r registration, alert Alert) {
+func (n *Notifier) send(ctx context.Context, userID ids.UUID, r registration, alert Alert) {
 	sandbox := r.service == pb.PushService_PUSH_SERVICE_APNS_SANDBOX.String()
 	err := n.apns.Send(ctx, sandbox, r.token, alert)
 	switch {
@@ -114,7 +127,7 @@ func (n *Notifier) send(ctx context.Context, userID uint64, r registration, aler
 	}
 }
 
-func (n *Notifier) registrations(ctx context.Context, userID uint64) ([]registration, error) {
+func (n *Notifier) registrations(ctx context.Context, userID ids.UUID) ([]registration, error) {
 	rows, err := n.db.QueryContext(ctx, `
 		SELECT device_id, push_service, push_token FROM device
 		WHERE user_id = ? AND push_token IS NOT NULL`, userID)
@@ -135,7 +148,7 @@ func (n *Notifier) registrations(ctx context.Context, userID uint64) ([]registra
 
 // unread counts the user's unread messages across conversations, for the
 // badge.
-func (n *Notifier) unread(ctx context.Context, userID uint64) (int, error) {
+func (n *Notifier) unread(ctx context.Context, userID ids.UUID) (int, error) {
 	var count int
 	err := n.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(last_seq - read_seq), 0) FROM user_conversation WHERE user_id = ?`,
@@ -145,7 +158,7 @@ func (n *Notifier) unread(ctx context.Context, userID uint64) (int, error) {
 
 // unregister removes a token APNs rejected, unless the device has
 // registered a new one meanwhile.
-func (n *Notifier) unregister(ctx context.Context, userID uint64, r registration) error {
+func (n *Notifier) unregister(ctx context.Context, userID ids.UUID, r registration) error {
 	_, err := n.db.ExecContext(ctx, `
 		UPDATE device SET push_service = NULL, push_token = NULL
 		WHERE user_id = ? AND device_id = ? AND push_token = ?`,

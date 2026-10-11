@@ -1,5 +1,7 @@
 // Package fanout turns committed outbox rows, read from Kafka, into entries
-// in each participant's event log, and pushes them to connected devices.
+// in the event logs of everyone concerned, and pushes them to connected
+// devices: a conversation's events to both participants, a user's profile
+// changes to the user and every conversation partner.
 package fanout
 
 import (
@@ -14,20 +16,29 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-const Topic = "wrinkle.conversation.outbox"
+// The outbox topics: conversations' rows keyed by conversation id, users'
+// by user id.
+const (
+	ConversationTopic = "wrinkle.conversation.outbox"
+	UserTopic         = "wrinkle.user.user_outbox"
+)
+
+// Topics are the topics the worker consumes.
+var Topics = []string{ConversationTopic, UserTopic}
 
 type Publisher interface {
-	Publish(ctx context.Context, userID uint64, payload []byte) error
+	Publish(ctx context.Context, userID ids.UUID, payload []byte) error
 }
 
 // Notifier is told about messages appended to a user's log, to push them to
 // devices that are not connected. Nil disables it.
 type Notifier interface {
-	MessageDelivered(userID uint64, peerName string, msg *pb.Message)
+	MessageDelivered(userID ids.UUID, msg *pb.Message)
 }
 
 type Worker struct {
@@ -37,15 +48,16 @@ type Worker struct {
 	notifier    Notifier
 	log         *slog.Logger
 	concurrency int
-	names       nameCache
+	listed      listedCache
 }
 
-// New makes a worker that delivers up to concurrency conversations at a time.
+// New makes a worker that delivers up to concurrency conversations or users
+// at a time.
 func New(ctx context.Context, brokers []string, group string, concurrency int, db *sql.DB, pub Publisher, notifier Notifier, log *slog.Logger) (*Worker, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
-		kgo.ConsumeTopics(Topic),
+		kgo.ConsumeTopics(Topics...),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.DisableAutoCommit(),
 		kgo.BlockRebalanceOnPoll(),
@@ -97,7 +109,7 @@ func (w *Worker) Run(ctx context.Context) error {
 	}
 }
 
-// handleFetches handles conversations in parallel and a conversation's
+// handleFetches handles keys (conversations, users) in parallel and a key's
 // records in order: that is the ordering the contract promises, and a
 // user's log is serialized by its row lock whatever the interleaving. It
 // reports whether every record was handled.
@@ -106,7 +118,7 @@ func (w *Worker) handleFetches(ctx context.Context, fetches kgo.Fetches) bool {
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, w.concurrency)
 	fetches.EachPartition(func(p kgo.FetchTopicPartition) {
-		for _, records := range byConversation(p.Records) {
+		for _, records := range byKey(p.Records) {
 			wg.Add(1)
 			sem <- struct{}{}
 			go func() {
@@ -146,9 +158,9 @@ func batchStarts(fetches kgo.Fetches) map[string]map[int32]kgo.EpochOffset {
 	return starts
 }
 
-// byConversation groups records by key, the conversation id, keeping each
+// byKey groups records by key, the conversation or user id, keeping each
 // group in offset order.
-func byConversation(records []*kgo.Record) [][]*kgo.Record {
+func byKey(records []*kgo.Record) [][]*kgo.Record {
 	index := map[string]int{}
 	var groups [][]*kgo.Record
 	for _, rec := range records {
@@ -185,6 +197,9 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		return nil
 	}
 	metrics.FanoutRecords.Inc()
+	if rec.Topic == UserTopic {
+		return w.handleUserRecord(ctx, rec)
+	}
 	o, err := parseOutboxRow(rec.Value)
 	if err != nil {
 		// A malformed row never gets better; log it and move on.
@@ -196,10 +211,10 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		return nil
 	}
 	errs := make(chan error, 2)
-	for _, userID := range []uint64{o.userA, o.userB} {
+	for _, userID := range []ids.UUID{o.userA, o.userB} {
 		go func() {
 			if err := w.deliver(ctx, userID, o); err != nil {
-				errs <- fmt.Errorf("deliver to user %d: %w", userID, err)
+				errs <- fmt.Errorf("deliver to user %s: %w", userID, err)
 				return
 			}
 			errs <- nil
@@ -210,4 +225,17 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		joined = errors.Join(joined, <-errs)
 	}
 	return joined
+}
+
+func (w *Worker) handleUserRecord(ctx context.Context, rec *kgo.Record) error {
+	o, err := parseUserOutboxRow(rec.Value)
+	if err != nil {
+		w.log.Error("skipping user outbox record", "offset", rec.Offset, "err", err)
+		return nil
+	}
+	if o.event.GetProfile() == nil {
+		w.log.Error("skipping user outbox record without a profile", "kind", o.kind, "offset", rec.Offset)
+		return nil
+	}
+	return w.deliverProfile(ctx, o)
 }

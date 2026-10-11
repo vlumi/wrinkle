@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 )
 
@@ -37,8 +38,8 @@ type registry struct {
 	wake chan struct{}
 
 	mu     sync.Mutex
-	users  map[uint64]*userState
-	queue  []uint64
+	users  map[ids.UUID]*userState
+	queue  []ids.UUID
 	sub    *presence.Subscription // nil while there is none
 	closed bool
 }
@@ -58,7 +59,7 @@ type userState struct {
 func (st *userState) confirmed() bool { return st.subscribed && st.pending == 0 }
 
 func newRegistry(pres *presence.Client, log *slog.Logger) *registry {
-	return &registry{pres: pres, log: log, wake: make(chan struct{}, 1), users: map[uint64]*userState{}}
+	return &registry{pres: pres, log: log, wake: make(chan struct{}, 1), users: map[ids.UUID]*userState{}}
 }
 
 // add registers the connection and returns once its user's channel is
@@ -126,7 +127,7 @@ func (r *registry) remove(c *conn) {
 	}
 }
 
-func (r *registry) conns(userID uint64) []*conn {
+func (r *registry) conns(userID ids.UUID) []*conn {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := r.users[userID]
@@ -141,7 +142,7 @@ func (r *registry) conns(userID uint64) []*conn {
 }
 
 // enqueue queues the user for the worker; the caller holds the lock.
-func (r *registry) enqueue(userID uint64, st *userState) {
+func (r *registry) enqueue(userID ids.UUID, st *userState) {
 	if st.queued {
 		return
 	}
@@ -155,7 +156,7 @@ func (r *registry) enqueue(userID uint64, st *userState) {
 
 // forget drops a user with no connections once nothing is in flight for
 // it; the caller holds the lock.
-func (r *registry) forget(userID uint64, st *userState) {
+func (r *registry) forget(userID ids.UUID, st *userState) {
 	if len(st.conns) == 0 && !st.subscribed && st.pending == 0 && !st.queued {
 		delete(r.users, userID)
 	}
@@ -190,7 +191,7 @@ func (r *registry) reconcile(ctx context.Context) {
 
 // next takes a batch from the queue and records the requests about to be
 // made for it.
-func (r *registry) next() (sub *presence.Subscription, add, remove []uint64) {
+func (r *registry) next() (sub *presence.Subscription, add, remove []ids.UUID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.sub == nil {
@@ -223,7 +224,7 @@ func (r *registry) next() (sub *presence.Subscription, add, remove []uint64) {
 	return r.sub, add, remove
 }
 
-func (r *registry) apply(ctx context.Context, sub *presence.Subscription, add, remove []uint64) error {
+func (r *registry) apply(ctx context.Context, sub *presence.Subscription, add, remove []ids.UUID) error {
 	if len(add) > 0 {
 		if err := sub.Add(ctx, add); err != nil {
 			return err
@@ -237,7 +238,7 @@ func (r *registry) apply(ctx context.Context, sub *presence.Subscription, add, r
 
 // confirm counts a confirmation for the user's channel; confirmations come
 // in the order of the requests.
-func (r *registry) confirm(userID uint64) {
+func (r *registry) confirm(userID ids.UUID) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	st := r.users[userID]
@@ -314,7 +315,7 @@ func (r *registry) isClosed() bool {
 // run receives on a subscription, handing pushes to deliver, and replaces
 // the subscription when it fails, until the context ends or the registry
 // is closed.
-func (r *registry) run(ctx context.Context, deliver func(userID uint64, payload []byte)) {
+func (r *registry) run(ctx context.Context, deliver func(userID ids.UUID, payload []byte)) {
 	pause := minResubscribe
 	for {
 		sub := r.pres.Subscribe()
@@ -342,7 +343,7 @@ func (r *registry) run(ctx context.Context, deliver func(userID uint64, payload 
 
 // receive handles what arrives on the subscription until it fails, and
 // reports whether anything arrived.
-func (r *registry) receive(ctx context.Context, sub *presence.Subscription, deliver func(uint64, []byte)) (heard bool, err error) {
+func (r *registry) receive(ctx context.Context, sub *presence.Subscription, deliver func(ids.UUID, []byte)) (heard bool, err error) {
 	pinged := false
 	for {
 		notice, err := sub.Receive(ctx, pingAfter)

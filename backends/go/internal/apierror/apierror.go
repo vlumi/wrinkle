@@ -47,6 +47,10 @@ func ResourceExhausted(format string, args ...any) *Error {
 	return New(pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED, format, args...)
 }
 
+func AlreadyExists(format string, args ...any) *Error {
+	return New(pb.ErrorCode_ERROR_CODE_ALREADY_EXISTS, format, args...)
+}
+
 // Code returns the error's code; errors without one are internal.
 func Code(err error) pb.ErrorCode {
 	var e *Error

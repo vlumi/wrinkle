@@ -6,6 +6,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -15,7 +16,7 @@ const (
 )
 
 // Sync returns events after the cursor, oldest first.
-func (s *Service) Sync(ctx context.Context, userID, cursor uint64, limit uint32) (*pb.SyncResponse, error) {
+func (s *Service) Sync(ctx context.Context, userID ids.UUID, cursor uint64, limit uint32) (*pb.SyncResponse, error) {
 	if limit == 0 {
 		limit = defaultSyncLimit
 	}
@@ -40,7 +41,7 @@ func (s *Service) Sync(ctx context.Context, userID, cursor uint64, limit uint32)
 		}
 		event := &pb.Event{}
 		if err := proto.Unmarshal(payload, event); err != nil {
-			return nil, fmt.Errorf("unmarshal event for user %d: %w", userID, err)
+			return nil, fmt.Errorf("unmarshal event for user %s: %w", userID, err)
 		}
 		resp.Events = append(resp.Events, event)
 		resp.Cursor = event.GetCursor()

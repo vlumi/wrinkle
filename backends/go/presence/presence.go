@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 )
 
 const (
@@ -55,19 +57,23 @@ func (c *Client) Instance() string { return c.instance }
 
 func (c *Client) Close() error { return c.rdb.Close() }
 
-func channel(userID uint64) string {
-	return channelPrefix + strconv.FormatUint(userID, 10)
+// Keys and channels name a user by the lowercase hex of the id.
+func channel(userID ids.UUID) string {
+	return channelPrefix + userID.String()
 }
 
 // userOf returns the user a push channel belongs to.
-func userOf(channel string) (uint64, bool) {
-	id, err := strconv.ParseUint(strings.TrimPrefix(channel, channelPrefix), 10, 64)
-	return id, err == nil
+func userOf(channel string) (ids.UUID, bool) {
+	suffix, ok := strings.CutPrefix(channel, channelPrefix)
+	if !ok {
+		return ids.UUID{}, false
+	}
+	return ids.FromHex(suffix)
 }
 
 // Publish pushes a serialized event to every gateway holding one of the
 // user's devices.
-func (c *Client) Publish(ctx context.Context, userID uint64, payload []byte) error {
+func (c *Client) Publish(ctx context.Context, userID ids.UUID, payload []byte) error {
 	return c.rdb.Publish(ctx, channel(userID), payload).Err()
 }
 
@@ -88,17 +94,17 @@ func (c *Client) Withdraw(ctx context.Context) error {
 	return c.rdb.Del(ctx, instanceKey(c.instance)).Err()
 }
 
-func (c *Client) DeviceConnected(ctx context.Context, userID, deviceID uint64) error {
+func (c *Client) DeviceConnected(ctx context.Context, userID ids.UUID, deviceID uint64) error {
 	return c.rdb.HSet(ctx, presenceKey(userID), strconv.FormatUint(deviceID, 10), c.instance).Err()
 }
 
-func (c *Client) DeviceDisconnected(ctx context.Context, userID, deviceID uint64) error {
+func (c *Client) DeviceDisconnected(ctx context.Context, userID ids.UUID, deviceID uint64) error {
 	return release.Run(ctx, c.rdb, []string{presenceKey(userID)}, strconv.FormatUint(deviceID, 10), c.instance).Err()
 }
 
 // ConnectedDevices returns the user's devices held by a live gateway
 // instance. Entries of instances that are gone are removed on the way.
-func (c *Client) ConnectedDevices(ctx context.Context, userID uint64) (map[uint64]bool, error) {
+func (c *Client) ConnectedDevices(ctx context.Context, userID ids.UUID) (map[uint64]bool, error) {
 	key := presenceKey(userID)
 	entries, err := c.rdb.HGetAll(ctx, key).Result()
 	if err != nil {
@@ -143,8 +149,8 @@ func (c *Client) alive(ctx context.Context, entries map[string]string) (map[stri
 	return alive, nil
 }
 
-func presenceKey(userID uint64) string {
-	return "presence:" + strconv.FormatUint(userID, 10)
+func presenceKey(userID ids.UUID) string {
+	return "presence:" + userID.String()
 }
 
 func instanceKey(instance string) string {
@@ -173,18 +179,18 @@ const (
 
 type Notice struct {
 	Kind    NoticeKind
-	UserID  uint64
+	UserID  ids.UUID
 	Payload string
 }
 
 // Add subscribes the users' channels. It returns once the request is
 // written; Receive confirms each channel.
-func (s *Subscription) Add(ctx context.Context, userIDs []uint64) error {
+func (s *Subscription) Add(ctx context.Context, userIDs []ids.UUID) error {
 	return s.ps.Subscribe(ctx, channels(userIDs)...)
 }
 
 // Remove unsubscribes the users' channels; Receive confirms each.
-func (s *Subscription) Remove(ctx context.Context, userIDs []uint64) error {
+func (s *Subscription) Remove(ctx context.Context, userIDs []ids.UUID) error {
 	return s.ps.Unsubscribe(ctx, channels(userIDs)...)
 }
 
@@ -217,7 +223,7 @@ func (s *Subscription) Receive(ctx context.Context, timeout time.Duration) (Noti
 
 func (s *Subscription) Close() error { return s.ps.Close() }
 
-func channels(userIDs []uint64) []string {
+func channels(userIDs []ids.UUID) []string {
 	list := make([]string, len(userIDs))
 	for i, id := range userIDs {
 		list[i] = channel(id)

@@ -1,39 +1,43 @@
 // Package services handles a device's requests: in-process over the
-// conversation and sync services, or forwarded to a services process over
-// the internal RPC. The gateway owns the connection state and uses one of
-// the two.
+// account, conversation and sync services, or forwarded to a services
+// process over the internal RPC. The gateway owns the connection state and
+// uses one of the two.
 package services
 
 import (
 	"context"
 	"log/slog"
 
+	"github.com/vlumi/wrinkle/backends/go/accounts"
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-// Backend handles requests for a device. Call returns an error only when
-// the request could not be handled at all; a request's own failure is the
+// Backend handles requests for a device; the user id is zero until the
+// connection has completed Connect. Call returns an error only when the
+// request could not be handled at all; a request's own failure is the
 // response's error body.
 type Backend interface {
-	Call(ctx context.Context, userID, deviceID uint64, req *pb.Request) (*pb.Response, error)
-	Ack(ctx context.Context, userID, deviceID, cursor uint64) error
+	Call(ctx context.Context, userID ids.UUID, deviceID uint64, req *pb.Request) (*pb.Response, error)
+	Ack(ctx context.Context, userID ids.UUID, deviceID, cursor uint64) error
 }
 
 // Local runs the services in-process.
 type Local struct {
+	accounts      *accounts.Service
 	conversations *conversation.Service
 	users         *devicesync.Service
 	log           *slog.Logger
 }
 
-func NewLocal(conversations *conversation.Service, users *devicesync.Service, log *slog.Logger) *Local {
-	return &Local{conversations: conversations, users: users, log: log}
+func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, log *slog.Logger) *Local {
+	return &Local{accounts: accounts, conversations: conversations, users: users, log: log}
 }
 
-func (l *Local) Call(ctx context.Context, userID, deviceID uint64, req *pb.Request) (*pb.Response, error) {
+func (l *Local) Call(ctx context.Context, userID ids.UUID, deviceID uint64, req *pb.Request) (*pb.Response, error) {
 	resp := &pb.Response{RequestId: req.GetId()}
 	if err := l.dispatch(ctx, userID, deviceID, req, resp); err != nil {
 		if apierror.Code(err) == pb.ErrorCode_ERROR_CODE_INTERNAL {
@@ -44,39 +48,64 @@ func (l *Local) Call(ctx context.Context, userID, deviceID uint64, req *pb.Reque
 	return resp, nil
 }
 
-func (l *Local) Ack(ctx context.Context, userID, deviceID, cursor uint64) error {
+func (l *Local) Ack(ctx context.Context, userID ids.UUID, deviceID, cursor uint64) error {
 	return l.users.Ack(ctx, userID, deviceID, cursor)
 }
 
 // dispatch handles one request, setting the response body on success.
-func (l *Local) dispatch(ctx context.Context, userID, deviceID uint64, req *pb.Request, resp *pb.Response) error {
-	if connect := req.GetConnect(); connect != nil {
-		connected, err := l.users.Connect(ctx, connect)
-		if err != nil {
-			return err
+func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, req *pb.Request, resp *pb.Response) error {
+	switch req.GetBody().(type) {
+	case *pb.Request_Register, *pb.Request_SignIn, *pb.Request_Connect:
+		if !userID.IsZero() {
+			return apierror.FailedPrecondition("already connected")
 		}
-		resp.Body = &pb.Response_Connect{Connect: connected}
-		return nil
+		return l.signIn(ctx, req, resp)
+	case nil:
+		return apierror.InvalidArgument("request has no body")
 	}
-	if userID == 0 {
+	if userID.IsZero() {
 		return apierror.Unauthenticated("connect first")
 	}
 	switch r := req.GetBody().(type) {
+	case *pb.Request_ChangePassword:
+		if err := l.accounts.ChangePassword(ctx, userID, deviceID, r.ChangePassword); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_ChangePassword{ChangePassword: &pb.ChangePasswordResponse{}}
+	case *pb.Request_UpdateProfile:
+		user, err := l.accounts.UpdateProfile(ctx, userID, r.UpdateProfile)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_UpdateProfile{UpdateProfile: &pb.UpdateProfileResponse{User: user}}
+	case *pb.Request_SignOut:
+		if err := l.accounts.SignOut(ctx, userID, deviceID); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SignOut{SignOut: &pb.SignOutResponse{}}
 	case *pb.Request_OpenConversation:
-		conv, err := l.users.Open(ctx, userID, r.OpenConversation.GetPeerUserName())
+		conv, err := l.users.Open(ctx, userID, r.OpenConversation.GetPeerName())
 		if err != nil {
 			return err
 		}
 		resp.Body = &pb.Response_OpenConversation{OpenConversation: &pb.OpenConversationResponse{Conversation: conv}}
 	case *pb.Request_SendMessage:
-		msg, err := l.conversations.Send(ctx, userID, r.SendMessage.GetConversationId(),
+		conversationID, err := parseConversationID(r.SendMessage.GetConversationId())
+		if err != nil {
+			return err
+		}
+		msg, err := l.conversations.Send(ctx, userID, conversationID,
 			r.SendMessage.GetClientMessageId(), r.SendMessage.GetText())
 		if err != nil {
 			return err
 		}
 		resp.Body = &pb.Response_SendMessage{SendMessage: &pb.SendMessageResponse{Message: msg}}
 	case *pb.Request_MarkRead:
-		if err := l.conversations.MarkRead(ctx, userID, r.MarkRead.GetConversationId(), r.MarkRead.GetSeq()); err != nil {
+		conversationID, err := parseConversationID(r.MarkRead.GetConversationId())
+		if err != nil {
+			return err
+		}
+		if err := l.conversations.MarkRead(ctx, userID, conversationID, r.MarkRead.GetSeq()); err != nil {
 			return err
 		}
 		resp.Body = &pb.Response_MarkRead{MarkRead: &pb.MarkReadResponse{}}
@@ -93,7 +122,11 @@ func (l *Local) dispatch(ctx context.Context, userID, deviceID uint64, req *pb.R
 		}
 		resp.Body = &pb.Response_ListConversations{ListConversations: &pb.ListConversationsResponse{Conversations: list}}
 	case *pb.Request_GetMessages:
-		msgs, err := l.conversations.Messages(ctx, userID, r.GetMessages.GetConversationId(),
+		conversationID, err := parseConversationID(r.GetMessages.GetConversationId())
+		if err != nil {
+			return err
+		}
+		msgs, err := l.conversations.Messages(ctx, userID, conversationID,
 			r.GetMessages.GetBeforeSeq(), r.GetMessages.GetLimit())
 		if err != nil {
 			return err
@@ -106,7 +139,40 @@ func (l *Local) dispatch(ctx context.Context, userID, deviceID uint64, req *pb.R
 		}
 		resp.Body = &pb.Response_RegisterPushToken{RegisterPushToken: &pb.RegisterPushTokenResponse{}}
 	default:
-		return apierror.InvalidArgument("request has no body")
+		return apierror.InvalidArgument("unknown request")
 	}
 	return nil
+}
+
+// signIn handles the requests allowed before Connect.
+func (l *Local) signIn(ctx context.Context, req *pb.Request, resp *pb.Response) error {
+	switch r := req.GetBody().(type) {
+	case *pb.Request_Register:
+		creds, err := l.accounts.Register(ctx, r.Register)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_Register{Register: &pb.RegisterResponse{Credentials: creds}}
+	case *pb.Request_SignIn:
+		creds, err := l.accounts.SignIn(ctx, r.SignIn)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_SignIn{SignIn: &pb.SignInResponse{Credentials: creds}}
+	case *pb.Request_Connect:
+		connected, err := l.accounts.Connect(ctx, r.Connect)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_Connect{Connect: connected}
+	}
+	return nil
+}
+
+func parseConversationID(b []byte) (ids.UUID, error) {
+	id, ok := ids.Parse(b)
+	if !ok {
+		return id, apierror.InvalidArgument("conversation_id must be 16 bytes")
+	}
+	return id, nil
 }
