@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,14 @@ func TestSendValidation(t *testing.T) {
 	_, err := a.SendMessage(ctx(t), conv, "", "no id")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 	_, err = a.SendMessage(ctx(t), conv, "empty", "")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	_, err = a.SendMessage(ctx(t), conv, strings.Repeat("i", 65), "id too long")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	// Text is limited to 4000 characters (code points), not bytes or UTF-16 units.
+	if _, err := a.SendMessage(ctx(t), conv, "longest", strings.Repeat("😀", 4000)); err != nil {
+		t.Fatalf("4000 characters: %v", err)
+	}
+	_, err = a.SendMessage(ctx(t), conv, "too long", strings.Repeat("é", 4001))
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 	_, err = a.SendMessage(ctx(t), conv+1, "x", "no such conversation")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_NOT_FOUND)

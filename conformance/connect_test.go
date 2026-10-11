@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -33,6 +34,14 @@ func TestConnectValidation(t *testing.T) {
 	c := dial(t)
 	_, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: ""})
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	_, err = c.Connect(ctx(t), &pb.ConnectRequest{UserName: strings.Repeat("n", 65)})
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	_, err = c.Connect(ctx(t), &pb.ConnectRequest{UserName: uniqueName(t, "dev"), DeviceName: strings.Repeat("d", 65)})
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	// Names are limited in characters: 64 of them fit even when each takes four bytes.
+	if _, err := c.Connect(ctx(t), &pb.ConnectRequest{UserName: strings.Repeat("😀", 51) + uniqueName(t, "")}); err != nil {
+		t.Fatalf("64 characters: %v", err)
+	}
 }
 
 func TestRequestsBeforeConnect(t *testing.T) {
