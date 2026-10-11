@@ -40,7 +40,7 @@ infra-up:  ## Start the stack and register the outbox connector
 	infra/debezium/register.sh
 
 infra-down:  ## Stop the stack and discard all data
-	$(COMPOSE) down -v --remove-orphans
+	$(COMPOSE) --profile lb down -v --remove-orphans
 
 infra-reset: infra-down infra-up  ## Recreate the stack empty
 
@@ -95,6 +95,14 @@ run-elixir-gateway: build-elixir  ## Elixir gateway on :8181
 
 run-rust-gateway: build-rust  ## Rust gateway on :8182
 	backends/gateway.sh rust $(PORT)
+
+.PHONY: lb-up lb-down
+lb-up:  ## Load balancer on :8080 across the gateways above; statistics on localhost:8404
+	backends/ports-free.sh 8080
+	$(COMPOSE) --profile lb up -d --wait haproxy
+
+lb-down:  ## Stop the load balancer
+	$(COMPOSE) --profile lb stop haproxy
 
 ##@ Clients
 

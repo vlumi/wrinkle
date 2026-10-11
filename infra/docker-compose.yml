@@ -1,7 +1,8 @@
 # Shared infrastructure for every backend. Memory is capped so the whole
 # stack fits in about 4 GB; backends run beside it. Every port is published
 # on loopback only: the backends run on the host and reach it there.
-# GRAFANA_BIND=0.0.0.0 opens Grafana to the network.
+# GRAFANA_BIND=0.0.0.0 opens Grafana to the network. The load balancer, in
+# the lb profile, faces the network on 8080 like a gateway.
 
 name: wrinkle
 
@@ -104,6 +105,23 @@ services:
       resources:
         limits:
           memory: 256M
+
+  # Only with the lb profile (make lb-up): one address in front of the
+  # side-by-side gateways, facing the network like a gateway does.
+  haproxy:
+    image: haproxy:3.4.6
+    profiles: [lb]
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "${LB_BIND:-0.0.0.0}:8080:8080"
+      - "127.0.0.1:8404:8404" # statistics
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    deploy:
+      resources:
+        limits:
+          memory: 64M
 
   grafana:
     image: grafana/grafana:13.2.3
