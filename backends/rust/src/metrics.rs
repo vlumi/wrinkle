@@ -1,5 +1,5 @@
 //! The metrics every backend exposes (docs/metrics.md), in the Prometheus
-//! text format. Rust has no collector, so there is no live figure; resident
+//! text format. There is no collector, so no live memory figure; resident
 //! memory comes from the OS.
 
 use std::collections::BTreeMap;
@@ -15,9 +15,21 @@ const BUCKETS: [f64; 16] = [
 
 #[derive(Default)]
 struct Histogram {
-    buckets: [u64; 16],
+    buckets: [u64; BUCKETS.len()],
     count: u64,
     sum: f64,
+}
+
+impl Histogram {
+    fn observe(&mut self, seconds: f64) {
+        self.count += 1;
+        self.sum += seconds;
+        for (bucket, le) in self.buckets.iter_mut().zip(BUCKETS) {
+            if seconds <= le {
+                *bucket += 1;
+            }
+        }
+    }
 }
 
 #[derive(Default)]
@@ -44,75 +56,65 @@ impl Metrics {
             .unwrap()
             .entry((kind.to_string(), code.to_string()))
             .or_default() += 1;
-        let seconds = duration.as_secs_f64();
-        let mut durations = self.durations.lock().unwrap();
-        let h = durations.entry(kind.to_string()).or_default();
-        h.count += 1;
-        h.sum += seconds;
-        for (i, le) in BUCKETS.iter().enumerate() {
-            if seconds <= *le {
-                h.buckets[i] += 1;
-            }
-        }
+        self.durations
+            .lock()
+            .unwrap()
+            .entry(kind.to_string())
+            .or_default()
+            .observe(duration.as_secs_f64());
     }
 
     pub fn render(&self) -> String {
+        // Writing to a String cannot fail.
         let mut out = String::new();
-        let _ = writeln!(
+        let _ = self.write(&mut out);
+        out
+    }
+
+    fn write(&self, out: &mut String) -> std::fmt::Result {
+        writeln!(out, "# TYPE wrinkle_connections gauge")?;
+        writeln!(
             out,
-            "# TYPE wrinkle_connections gauge\nwrinkle_connections {}",
+            "wrinkle_connections {}",
             self.connections.load(Ordering::Relaxed)
-        );
-        let _ = writeln!(
+        )?;
+        writeln!(out, "# TYPE wrinkle_events_pushed_total counter")?;
+        writeln!(
             out,
-            "# TYPE wrinkle_events_pushed_total counter\nwrinkle_events_pushed_total {}",
+            "wrinkle_events_pushed_total {}",
             self.pushed.load(Ordering::Relaxed)
-        );
-        let _ = writeln!(out, "# TYPE wrinkle_requests_total counter");
+        )?;
+
+        writeln!(out, "# TYPE wrinkle_requests_total counter")?;
         for ((kind, code), n) in self.requests.lock().unwrap().iter() {
-            let _ = writeln!(
+            writeln!(
                 out,
                 "wrinkle_requests_total{{type=\"{kind}\",code=\"{code}\"}} {n}"
-            );
+            )?;
         }
-        let _ = writeln!(out, "# TYPE wrinkle_request_duration_seconds histogram");
+
+        writeln!(out, "# TYPE wrinkle_request_duration_seconds histogram")?;
         for (kind, h) in self.durations.lock().unwrap().iter() {
-            for (i, le) in BUCKETS.iter().enumerate() {
-                let _ = writeln!(
-                    out,
-                    "wrinkle_request_duration_seconds_bucket{{type=\"{kind}\",le=\"{le}\"}} {}",
-                    h.buckets[i]
-                );
+            let name = "wrinkle_request_duration_seconds";
+            for (n, le) in h.buckets.iter().zip(BUCKETS) {
+                writeln!(out, "{name}_bucket{{type=\"{kind}\",le=\"{le}\"}} {n}")?;
             }
-            let _ = writeln!(
+            writeln!(
                 out,
-                "wrinkle_request_duration_seconds_bucket{{type=\"{kind}\",le=\"+Inf\"}} {}",
+                "{name}_bucket{{type=\"{kind}\",le=\"+Inf\"}} {}",
                 h.count
-            );
-            let _ = writeln!(
-                out,
-                "wrinkle_request_duration_seconds_count{{type=\"{kind}\"}} {}",
-                h.count
-            );
-            let _ = writeln!(
-                out,
-                "wrinkle_request_duration_seconds_sum{{type=\"{kind}\"}} {}",
-                h.sum
-            );
+            )?;
+            writeln!(out, "{name}_count{{type=\"{kind}\"}} {}", h.count)?;
+            writeln!(out, "{name}_sum{{type=\"{kind}\"}} {}", h.sum)?;
         }
-        let _ = writeln!(
-            out,
-            "# TYPE process_cpu_seconds_total counter\nprocess_cpu_seconds_total {}",
-            cpu_seconds()
-        );
+
+        writeln!(out, "# TYPE process_cpu_seconds_total counter")?;
+        writeln!(out, "process_cpu_seconds_total {}", cpu_seconds())?;
         if let Some(usage) = memory_stats::memory_stats() {
-            let _ = writeln!(
-                out,
-                "# TYPE process_resident_memory_bytes gauge\nprocess_resident_memory_bytes {}",
-                usage.physical_mem
-            );
+            writeln!(out, "# TYPE process_resident_memory_bytes gauge")?;
+            writeln!(out, "process_resident_memory_bytes {}", usage.physical_mem)?;
         }
-        out
+        Ok(())
     }
 }
 
@@ -125,6 +127,6 @@ fn cpu_seconds() -> f64 {
         }
         usage.assume_init()
     };
-    let tv = |t: libc::timeval| t.tv_sec as f64 + t.tv_usec as f64 / 1e6;
-    tv(usage.ru_utime) + tv(usage.ru_stime)
+    let seconds = |t: libc::timeval| t.tv_sec as f64 + t.tv_usec as f64 / 1e6;
+    seconds(usage.ru_utime) + seconds(usage.ru_stime)
 }
