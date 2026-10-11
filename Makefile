@@ -101,21 +101,14 @@ lb-down:  ## Stop the balancers
 	$(COMPOSE) --profile lb stop haproxy
 
 ##@ Cluster (the side-by-side setup in containers, any number of each)
-##~ Counts: GO_SERVICES=2 JAVA_SERVICES=1 GO_GW=1 ELIXIR_GW=1 RUST_GW=1 JAVA_GW=1 (0 to 8 each).
-##~ cluster-up again with other counts rescales. Devices on :8080; statistics on localhost:8404.
-
-GO_SERVICES ?= 2
-JAVA_SERVICES ?= 1
-GO_GW ?= 1
-ELIXIR_GW ?= 1
-RUST_GW ?= 1
-JAVA_GW ?= 1
+##~ Counts: GO_SERVICES JAVA_SERVICES GO_GW ELIXIR_GW RUST_GW JAVA_GW, 0 to 8 each; a count not given keeps
+##~ what is running (defaults 2 1 1 1 1 1 on a fresh start). Devices on :8080; statistics on localhost:8404.
 
 .PHONY: cluster-up cluster-down cluster-status cluster-logs
-cluster-up: infra-up  ## Build the images and start or rescale the cluster
+cluster-up: infra-up  ## Rebuild the images and start, update or rescale the cluster
 	GO_SERVICES=$(GO_SERVICES) JAVA_SERVICES=$(JAVA_SERVICES) GO_GW=$(GO_GW) ELIXIR_GW=$(ELIXIR_GW) RUST_GW=$(RUST_GW) JAVA_GW=$(JAVA_GW) infra/cluster.sh up
 
-cluster-down:  ## Stop and remove the cluster, leaving the infrastructure running
+cluster-down:  ## Remove the cluster, leaving the infrastructure running; the next start uses the defaults
 	infra/cluster.sh down
 
 cluster-status:  ## Every container of the cluster
