@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -19,6 +20,7 @@ import (
 const (
 	requestTimeout = 10 * time.Second
 	writeTimeout   = 10 * time.Second
+	connectTimeout = 5 * time.Second
 	maxFrameBytes  = 64 * 1024
 	outboundQueue  = 32
 )
@@ -39,25 +41,37 @@ type conn struct {
 	cancel context.CancelFunc
 	out    chan []byte
 
-	mu        sync.Mutex
-	connected bool
-	userID    uint64
-	deviceID  uint64
-	writing   bool
+	// lastSeen is when anything, a pong included, last arrived, in Unix
+	// nanoseconds; the keepalive sweep closes connections idle too long.
+	lastSeen atomic.Int64
+	inFlight atomic.Int32
+	bucket   tokenBucket
+	acks     ackCursor
+
+	mu           sync.Mutex
+	connected    bool
+	closing      bool
+	writing      bool
+	userID       uint64
+	deviceID     uint64
+	connectTimer *time.Timer
 }
 
-func newConn(s *Server, ws *websocket.Conn, remoteAddr string) *conn {
+func newConn(s *Server, remoteAddr string) *conn {
 	// Own context rather than the request's, so the request and its headers
 	// are not kept alive for the life of the connection.
 	ctx, cancel := context.WithCancel(s.ctx)
-	return &conn{
+	now := time.Now()
+	c := &conn{
 		server: s,
-		ws:     ws,
 		log:    s.log.With("remote", remoteAddr),
 		ctx:    ctx,
 		cancel: cancel,
 		out:    make(chan []byte, outboundQueue),
+		bucket: newTokenBucket(now),
 	}
+	c.lastSeen.Store(now.UnixNano())
+	return c
 }
 
 func (c *conn) identity() (userID, deviceID uint64, ok bool) {
@@ -66,11 +80,40 @@ func (c *conn) identity() (userID, deviceID uint64, ok bool) {
 	return c.userID, c.deviceID, c.connected
 }
 
+func (c *conn) touch() { c.lastSeen.Store(time.Now().UnixNano()) }
+
+func (c *conn) idleSince() time.Time { return time.Unix(0, c.lastSeen.Load()) }
+
+// close starts the closing handshake with the code, once, without waiting
+// for it.
+func (c *conn) close(code websocket.StatusCode, reason string) {
+	c.mu.Lock()
+	closing := c.closing
+	c.closing = true
+	c.mu.Unlock()
+	if !closing {
+		if code == websocket.StatusTryAgainLater {
+			c.log.Warn("outbound queue full, closing")
+		}
+		go func() { _ = c.ws.Close(code, reason) }()
+	}
+}
+
 // serve runs the read loop until the connection ends.
 func (c *conn) serve() {
 	ctx := c.ctx
-	defer c.cancel()
+	c.mu.Lock()
+	c.connectTimer = time.AfterFunc(connectTimeout, func() {
+		if _, _, ok := c.identity(); !ok {
+			c.close(websocket.StatusPolicyViolation, "connect first")
+		}
+	})
+	c.mu.Unlock()
 	defer func() {
+		// Cancel before detaching: a Connect finishing concurrently sees the
+		// cancellation and detaches itself (see identify).
+		c.cancel()
+		c.stopConnectTimer()
 		if _, _, ok := c.identity(); ok {
 			c.server.detach(c)
 		}
@@ -84,6 +127,8 @@ func (c *conn) serve() {
 			}
 			return
 		}
+		now := time.Now()
+		c.lastSeen.Store(now.UnixNano())
 		if typ != websocket.MessageBinary {
 			c.ws.Close(websocket.StatusUnsupportedData, "frames are binary protobuf")
 			return
@@ -93,21 +138,51 @@ func (c *conn) serve() {
 			c.ws.Close(websocket.StatusPolicyViolation, "malformed frame")
 			return
 		}
+		allowed := c.bucket.take(now)
 		switch kind := frame.GetKind().(type) {
 		case *pb.Frame_Request:
-			go c.handleRequest(ctx, kind.Request)
+			c.startRequest(kind.Request, allowed)
 		case *pb.Frame_Ack:
-			if userID, deviceID, ok := c.identity(); ok {
-				go c.ack(ctx, userID, deviceID, kind.Ack.GetCursor())
+			if userID, deviceID, ok := c.identity(); ok && allowed && c.acks.offer(kind.Ack.GetCursor()) {
+				go c.writeAcks(userID, deviceID)
 			}
 		case *pb.Frame_Ping:
-			c.sendFrame(&pb.Frame{Kind: &pb.Frame_Pong{Pong: &pb.Pong{}}})
+			if allowed {
+				c.reply(&pb.Frame{Kind: &pb.Frame_Pong{Pong: &pb.Pong{}}})
+			}
 		case *pb.Frame_Pong:
 		default:
 			c.ws.Close(websocket.StatusPolicyViolation, "unexpected frame")
 			return
 		}
 	}
+}
+
+func (c *conn) stopConnectTimer() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.connectTimer != nil {
+		c.connectTimer.Stop()
+		c.connectTimer = nil
+	}
+}
+
+// startRequest handles a request in the background, unless the connection
+// is over its limits.
+func (c *conn) startRequest(req *pb.Request, allowed bool) {
+	if !allowed || c.inFlight.Load() >= maxInFlight {
+		resp := apierror.Response(req.GetId(), apierror.ResourceExhausted("too many requests"))
+		c.reply(&pb.Frame{Kind: &pb.Frame_Response{Response: resp}})
+		observeRequest(req, resp, time.Now())
+		return
+	}
+	c.inFlight.Add(1)
+	c.server.requests.Add(1)
+	go func() {
+		defer c.server.requests.Done()
+		defer c.inFlight.Add(-1)
+		c.handleRequest(req)
+	}()
 }
 
 // writeLoop drains the queue and exits when it is empty; send starts it
@@ -117,7 +192,7 @@ func (c *conn) writeLoop() {
 		select {
 		case data := <-c.out:
 			if err := c.write(data); err != nil {
-				c.ws.Close(websocket.StatusInternalError, "write failed")
+				c.close(websocket.StatusInternalError, "write failed")
 				c.mu.Lock()
 				c.writing = false
 				c.mu.Unlock()
@@ -151,15 +226,18 @@ func (c *conn) write(data []byte) error {
 
 // send queues bytes for the writer, starting one if none is running. A
 // device that does not keep up is disconnected; it syncs on reconnect.
-func (c *conn) send(data []byte) {
+// Pushed events never wait for room in the queue; replies to the device's
+// own frames wait up to writeTimeout, which holds back its read loop.
+func (c *conn) send(data []byte, reply bool) {
 	select {
 	case c.out <- data:
 	case <-c.ctx.Done():
 		return
 	default:
-		c.log.Warn("outbound queue full, closing")
-		c.ws.Close(websocket.StatusTryAgainLater, "too slow")
-		return
+		if !reply || !c.sendWaiting(data) {
+			c.close(websocket.StatusTryAgainLater, "too slow")
+			return
+		}
 	}
 	c.mu.Lock()
 	start := !c.writing
@@ -170,37 +248,61 @@ func (c *conn) send(data []byte) {
 	}
 }
 
-func (c *conn) sendFrame(frame *pb.Frame) {
+func (c *conn) sendWaiting(data []byte) bool {
+	timer := time.NewTimer(writeTimeout)
+	defer timer.Stop()
+	select {
+	case c.out <- data:
+		return true
+	case <-c.ctx.Done():
+	case <-timer.C:
+	}
+	return false
+}
+
+// reply sends a frame answering one of the device's own.
+func (c *conn) reply(frame *pb.Frame) {
 	data, err := proto.Marshal(frame)
 	if err != nil {
 		c.log.Error("marshal frame", "err", err)
 		return
 	}
-	c.send(data)
+	c.send(data, true)
 }
 
 func (c *conn) pushEvent(payload []byte) {
 	data := make([]byte, 0, len(payload)+8)
 	data = protowire.AppendTag(data, frameEvent, protowire.BytesType)
 	data = protowire.AppendBytes(data, payload)
-	c.send(data)
+	c.send(data, false)
 	metrics.EventsPushed.Inc()
 }
 
-func (c *conn) ack(ctx context.Context, userID, deviceID, cursor uint64) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
-	defer cancel()
-	if err := c.server.backend.Ack(ctx, userID, deviceID, cursor); err != nil {
-		c.log.Warn("ack failed", "err", err)
+// writeAcks writes the pending ack cursor until no newer one has arrived.
+func (c *conn) writeAcks(userID, deviceID uint64) {
+	for {
+		cursor, ok := c.acks.next()
+		if !ok {
+			return
+		}
+		ctx, cancel := context.WithTimeout(c.server.requestCtx, requestTimeout)
+		err := c.server.backend.Ack(ctx, userID, deviceID, cursor)
+		cancel()
+		if err != nil {
+			c.log.Warn("ack failed", "err", err)
+		}
 	}
 }
 
-func (c *conn) handleRequest(ctx context.Context, req *pb.Request) {
-	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
+// handleRequest runs a request under the server's request context rather
+// than the connection's, so a drain lets it finish after the connection
+// closes.
+func (c *conn) handleRequest(req *pb.Request) {
+	ctx, cancel := context.WithTimeout(c.server.requestCtx, requestTimeout)
 	defer cancel()
 	start := time.Now()
 	resp := c.dispatch(ctx, req)
-	c.sendFrame(&pb.Frame{Kind: &pb.Frame_Response{Response: resp}})
+	c.reply(&pb.Frame{Kind: &pb.Frame_Response{Response: resp}})
 	observeRequest(req, resp, start)
 }
 
@@ -215,6 +317,10 @@ func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 		return apierror.Response(req.GetId(), apierror.Unauthenticated("connect first"))
 	}
 	resp, err := c.server.backend.Call(ctx, userID, deviceID, req)
+	if err == nil && resp.GetError() != nil && ctx.Err() != nil {
+		// The in-process services report a deadline as an internal error.
+		err = ctx.Err()
+	}
 	if err != nil {
 		c.log.Error("backend call failed", "request", req.GetId(), "err", err)
 		return apierror.Response(req.GetId(), apierror.Unavailable("services unavailable"))
@@ -239,8 +345,15 @@ func (c *conn) identify(ctx context.Context, resp *pb.ConnectResponse) error {
 	c.userID = resp.GetUser().GetUserId()
 	c.deviceID = resp.GetDeviceId()
 	c.mu.Unlock()
+	c.stopConnectTimer()
 	if err := c.server.attach(ctx, c); err != nil {
 		return err
+	}
+	if c.ctx.Err() != nil {
+		// The connection ended while connecting; serve may have missed the
+		// attachment.
+		c.server.detach(c)
+		return apierror.Unavailable("connection closed")
 	}
 	c.log = c.log.With("user", c.userID, "device", c.deviceID)
 	return nil

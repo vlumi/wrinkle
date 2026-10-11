@@ -1,21 +1,37 @@
-// Package presence tracks which device is connected to which gateway node,
-// and carries pushes from fan-out workers to gateways, through Valkey.
+// Package presence tracks which device is connected to which gateway
+// instance, and carries pushes from fan-out workers to gateways, through
+// Valkey.
 package presence
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-const channelPrefix = "push:"
+const (
+	channelPrefix = "push:"
+	// A gateway refreshes its liveness key every HeartbeatInterval; the key
+	// expires after instanceTTL without one.
+	HeartbeatInterval = 30 * time.Second
+	instanceTTL       = 90 * time.Second
+)
+
+// release deletes a device's presence field only if it still names the
+// given instance, so a device that reconnected elsewhere keeps its entry.
+var release = redis.NewScript(`if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0`)
 
 type Client struct {
-	rdb  *redis.Client
-	node string
+	rdb *redis.Client
+	// instance identifies this process in presence: the node name and a
+	// random suffix, so a restarted gateway's stale entries are told apart.
+	instance string
 }
 
 func New(ctx context.Context, addr, node string) (*Client, error) {
@@ -30,8 +46,12 @@ func New(ctx context.Context, addr, node string) (*Client, error) {
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("valkey at %s: %w", addr, err)
 	}
-	return &Client{rdb: rdb, node: node}, nil
+	suffix := make([]byte, 8)
+	_, _ = rand.Read(suffix)
+	return &Client{rdb: rdb, instance: node + "/" + hex.EncodeToString(suffix)}, nil
 }
+
+func (c *Client) Instance() string { return c.instance }
 
 func (c *Client) Close() error { return c.rdb.Close() }
 
@@ -57,31 +77,78 @@ func (c *Client) Subscribe(ctx context.Context) *Subscription {
 	return &Subscription{ps: c.rdb.Subscribe(ctx)}
 }
 
+// Announce marks this instance alive; a gateway calls it at startup and
+// every HeartbeatInterval.
+func (c *Client) Announce(ctx context.Context) error {
+	return c.rdb.Set(ctx, instanceKey(c.instance), 1, instanceTTL).Err()
+}
+
+// Withdraw marks this instance gone, when its gateway drains.
+func (c *Client) Withdraw(ctx context.Context) error {
+	return c.rdb.Del(ctx, instanceKey(c.instance)).Err()
+}
+
 func (c *Client) DeviceConnected(ctx context.Context, userID, deviceID uint64) error {
-	return c.rdb.HSet(ctx, presenceKey(userID), strconv.FormatUint(deviceID, 10), c.node).Err()
+	return c.rdb.HSet(ctx, presenceKey(userID), strconv.FormatUint(deviceID, 10), c.instance).Err()
 }
 
 func (c *Client) DeviceDisconnected(ctx context.Context, userID, deviceID uint64) error {
-	return c.rdb.HDel(ctx, presenceKey(userID), strconv.FormatUint(deviceID, 10)).Err()
+	return release.Run(ctx, c.rdb, []string{presenceKey(userID)}, strconv.FormatUint(deviceID, 10), c.instance).Err()
 }
 
-// ConnectedDevices returns the user's devices that some gateway holds.
+// ConnectedDevices returns the user's devices held by a live gateway
+// instance. Entries of instances that are gone are removed on the way.
 func (c *Client) ConnectedDevices(ctx context.Context, userID uint64) (map[uint64]bool, error) {
-	ids, err := c.rdb.HKeys(ctx, presenceKey(userID)).Result()
+	key := presenceKey(userID)
+	entries, err := c.rdb.HGetAll(ctx, key).Result()
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[uint64]bool, len(ids))
-	for _, id := range ids {
-		if v, err := strconv.ParseUint(id, 10, 64); err == nil {
-			out[v] = true
+	alive, err := c.alive(ctx, entries)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint64]bool, len(entries))
+	for field, instance := range entries {
+		if !alive[instance] {
+			_ = release.Run(ctx, c.rdb, []string{key}, field, instance).Err()
+			continue
+		}
+		if id, err := strconv.ParseUint(field, 10, 64); err == nil {
+			out[id] = true
 		}
 	}
 	return out, nil
 }
 
+// alive tells which of the entries' instances have a liveness key.
+func (c *Client) alive(ctx context.Context, entries map[string]string) (map[string]bool, error) {
+	checks := map[string]*redis.IntCmd{}
+	pipe := c.rdb.Pipeline()
+	for _, instance := range entries {
+		if _, ok := checks[instance]; !ok {
+			checks[instance] = pipe.Exists(ctx, instanceKey(instance))
+		}
+	}
+	if len(checks) == 0 {
+		return nil, nil
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return nil, err
+	}
+	alive := make(map[string]bool, len(checks))
+	for instance, cmd := range checks {
+		alive[instance] = cmd.Val() > 0
+	}
+	return alive, nil
+}
+
 func presenceKey(userID uint64) string {
 	return "presence:" + strconv.FormatUint(userID, 10)
+}
+
+func instanceKey(instance string) string {
+	return "gateway:" + instance
 }
 
 type Subscription struct {

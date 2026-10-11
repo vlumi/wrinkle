@@ -15,7 +15,9 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
@@ -94,24 +96,20 @@ func run() error {
 	}
 	defer pres.Close()
 
-	var wg sync.WaitGroup
-	errc := make(chan error, 2)
-	start := func(name string, f func(context.Context) error) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			if err := f(ctx); err != nil && ctx.Err() == nil {
-				errc <- fmt.Errorf("%s: %w", name, err)
-			}
-		}()
-	}
-
-	mux := newMux()
+	// Roles run until the signal context ends, except the HTTP server, which
+	// keeps answering (health with 503) until the gateway has drained.
+	var started []role
+	add := func(name string, run func() error) { started = append(started, role{name, run}) }
+	httpCtx, stopHTTP := context.WithCancel(context.Background())
+	defer stopHTTP()
+	var draining atomic.Bool
+	mux := newMux(&draining)
 	if want.services {
 		srv := services.NewServer(local)
 		log.Info("services listening", "addr", *svcLsn)
-		start("services", func(ctx context.Context) error { return srv.Serve(ctx, *svcLsn) })
+		add("services", func() error { return srv.Serve(ctx, *svcLsn) })
 	}
+	var gw *gateway.Server
 	if want.gateway {
 		var backend services.Backend = local
 		if *svcAddr != "" {
@@ -123,11 +121,14 @@ func run() error {
 			backend = client
 			log.Info("gateway forwarding to services", "addr", *svcAddr)
 		}
-		gw := gateway.New(ctx, backend, pres, log.With("role", "gateway"))
+		gw, err = gateway.New(ctx, backend, pres, log.With("role", "gateway"))
+		if err != nil {
+			return err
+		}
 		gw.Register(mux)
-		start("gateway push", gw.Run)
+		add("gateway push", func() error { return gw.Run(ctx) })
 	}
-	start("http", func(ctx context.Context) error { return serveHTTP(ctx, *listen, mux, log) })
+	add("http", func() error { return serveHTTP(httpCtx, *listen, mux, log) })
 	if want.fanout {
 		var notifier fanout.Notifier
 		if *apnsKey != "" {
@@ -145,19 +146,54 @@ func run() error {
 		}
 		defer worker.Close()
 		log.Info("fanout consuming", "topic", fanout.Topic)
-		start("fanout", worker.Run)
+		add("fanout", func() error { return worker.Run(ctx) })
 	}
 
-	select {
-	case err := <-errc:
-		stop()
-		wg.Wait()
-		return err
-	case <-ctx.Done():
-		log.Info("shutting down")
-		wg.Wait()
-		return nil
+	// One slot per role, so every failing role can report without blocking.
+	errc := make(chan error, len(started))
+	var wg sync.WaitGroup
+	for _, r := range started {
+		wg.Go(func() {
+			if err := r.run(); err != nil && ctx.Err() == nil {
+				errc <- fmt.Errorf("%s: %w", r.name, err)
+			}
+		})
 	}
+
+	var runErr error
+	select {
+	case runErr = <-errc:
+		stop()
+	case <-ctx.Done():
+	}
+	log.Info("shutting down")
+	draining.Store(true)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+	if gw != nil {
+		gw.Drain(shutdownCtx)
+	}
+	stopHTTP()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-shutdownCtx.Done():
+		log.Warn("roles still running at the shutdown deadline")
+	}
+	return runErr
+}
+
+// shutdownTimeout bounds the whole shutdown: the gateway's drain, then the
+// other roles.
+const shutdownTimeout = 9500 * time.Millisecond
+
+type role struct {
+	name string
+	run  func() error
 }
 
 func newLogger(debug bool) *slog.Logger {

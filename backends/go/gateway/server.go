@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -16,25 +18,59 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/services"
 )
 
+const (
+	// requestGrace is how long a drain waits for requests in flight.
+	requestGrace = 5 * time.Second
+	// closeGrace is how long a drain waits, after requestGrace, for closing
+	// handshakes before dropping the connections that remain.
+	closeGrace = 3 * time.Second
+	// detachGrace is how long dropped connections get to leave presence.
+	detachGrace = time.Second
+)
+
 type Server struct {
-	ctx      context.Context
+	// ctx is the connections' base context, ended once the gateway drained;
+	// requestCtx is the requests', ended once the drain stops waiting for
+	// them.
+	ctx            context.Context
+	cancel         context.CancelFunc
+	requestCtx     context.Context
+	cancelRequests context.CancelFunc
+
 	backend  services.Backend
 	presence *presence.Client
 	sub      *presence.Subscription
 	registry *registry
 	log      *slog.Logger
+
+	requests sync.WaitGroup
+	open     sync.WaitGroup
+	draining atomic.Bool
+	connsMu  sync.Mutex
+	conns    map[*conn]struct{}
 }
 
-func New(ctx context.Context, backend services.Backend, pres *presence.Client, log *slog.Logger) *Server {
-	sub := pres.Subscribe(ctx)
-	return &Server{
-		ctx:      ctx,
-		backend:  backend,
-		presence: pres,
-		sub:      sub,
-		registry: newRegistry(sub),
-		log:      log,
+// New announces the gateway instance in presence and returns its server.
+func New(ctx context.Context, backend services.Backend, pres *presence.Client, log *slog.Logger) (*Server, error) {
+	if err := pres.Announce(ctx); err != nil {
+		return nil, fmt.Errorf("announce gateway instance: %w", err)
 	}
+	base, cancel := context.WithCancel(context.Background())
+	requestCtx, cancelRequests := context.WithCancel(context.Background())
+	sub := pres.Subscribe(base)
+	log.Info("gateway instance", "instance", pres.Instance())
+	return &Server{
+		ctx:            base,
+		cancel:         cancel,
+		requestCtx:     requestCtx,
+		cancelRequests: cancelRequests,
+		backend:        backend,
+		presence:       pres,
+		sub:            sub,
+		registry:       newRegistry(sub),
+		log:            log,
+		conns:          map[*conn]struct{}{},
+	}, nil
 }
 
 // Register adds the WebSocket endpoint to a mux.
@@ -42,9 +78,10 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/ws", s.serveWS)
 }
 
-// Run delivers pushes to local connections until the context ends.
+// Run delivers pushes to local connections and keeps the instance and its
+// connections alive until the context ends.
 func (s *Server) Run(ctx context.Context) error {
-	defer s.sub.Close()
+	go s.keepalive(ctx)
 	messages := s.sub.Messages()
 	for {
 		select {
@@ -67,21 +104,58 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
+	if s.draining.Load() {
+		http.Error(w, "shutting down", http.StatusServiceUnavailable)
+		return
+	}
+	c := newConn(s, r.RemoteAddr)
 	ws, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		CompressionMode: websocket.CompressionDisabled,
 		// Any origin: the web client is served from elsewhere during development.
 		OriginPatterns: []string{"*"},
+		OnPongReceived: func(context.Context, []byte) { c.touch() },
 	})
 	if err != nil {
 		s.log.Debug("accept failed", "err", err)
 		return
 	}
+	c.ws = ws
 	ws.SetReadLimit(maxFrameBytes)
 	metrics.Connections.Inc()
 	defer metrics.Connections.Dec()
-	c := newConn(s, ws, r.RemoteAddr)
+	s.track(c)
+	defer s.untrack(c)
 	c.serve()
 	ws.Close(websocket.StatusNormalClosure, "")
+}
+
+// track records an open connection; one opened as the drain began is
+// closed at once.
+func (s *Server) track(c *conn) {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
+	s.open.Add(1)
+	s.conns[c] = struct{}{}
+	if s.draining.Load() {
+		c.close(websocket.StatusGoingAway, "shutting down")
+	}
+}
+
+func (s *Server) untrack(c *conn) {
+	s.connsMu.Lock()
+	delete(s.conns, c)
+	s.connsMu.Unlock()
+	s.open.Done()
+}
+
+func (s *Server) openConns() []*conn {
+	s.connsMu.Lock()
+	defer s.connsMu.Unlock()
+	list := make([]*conn, 0, len(s.conns))
+	for c := range s.conns {
+		list = append(list, c)
+	}
+	return list
 }
 
 func (s *Server) attach(ctx context.Context, c *conn) error {
@@ -103,4 +177,59 @@ func (s *Server) detach(c *conn) {
 	if err := s.presence.DeviceDisconnected(ctx, c.userID, c.deviceID); err != nil {
 		s.log.Warn("presence update failed", "err", err)
 	}
+}
+
+// Drain refuses new connections, closes the open ones, gives requests in
+// flight up to requestGrace and withdraws the instance from presence. It
+// returns within requestGrace+closeGrace+detachGrace, sooner if the
+// context ends.
+func (s *Server) Drain(ctx context.Context) {
+	s.connsMu.Lock()
+	s.draining.Store(true)
+	s.connsMu.Unlock()
+	conns := s.openConns()
+	s.log.Info("draining", "connections", len(conns))
+	for _, c := range conns {
+		c.close(websocket.StatusGoingAway, "shutting down")
+	}
+
+	if !waitFor(ctx, requestGrace, &s.requests) {
+		s.log.Warn("requests still in flight after the grace period")
+	}
+	s.cancelRequests()
+	if !waitFor(ctx, closeGrace, &s.open) {
+		// Canceling the read closes the socket; CloseNow would wait for the
+		// closing handshake already under way.
+		for _, c := range s.openConns() {
+			c.cancel()
+		}
+		waitFor(ctx, detachGrace, &s.open)
+	}
+	s.cancel()
+
+	withdrawCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), detachGrace)
+	defer cancel()
+	if err := s.presence.Withdraw(withdrawCtx); err != nil {
+		s.log.Warn("withdrawing the instance failed", "err", err)
+	}
+	_ = s.sub.Close()
+}
+
+// waitFor waits for the group up to the timeout or the context's end, and
+// reports whether it finished.
+func waitFor(ctx context.Context, timeout time.Duration, wg *sync.WaitGroup) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	return false
 }
