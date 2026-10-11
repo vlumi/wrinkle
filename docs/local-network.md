@@ -119,7 +119,34 @@ The simulator shares the host's network, so the default `ws://localhost:8080/v1/
 
 ### iOS client on an iPhone
 
-Not supported yet. The project builds unsigned for the simulator (`CODE_SIGNING_ALLOWED: NO` in `clients/ios/project.yml`), so a device build needs a development team and automatic signing. iOS also blocks connections to the local network unless the app's Info.plist has an `NSLocalNetworkUsageDescription`, which it does not yet. Plain `ws://` is already allowed. With both in place, install from Xcode and enter the host's address on the sign-in screen.
+Needs an Apple developer team. Copy `.env.example` to `.env` at the repository root and set `WRINKLE_TEAM_ID`; the project generator signs with it. Turn on Developer Mode on the phone (Settings, Privacy & Security), connect it by cable once and trust the Mac, then:
+
+```sh
+brew install xcodegen
+clients/ios/Scripts/run-device.sh
+```
+
+The script builds, installs and launches the app; with several phones paired, pass part of the phone's name. The first build registers the app id and a development profile through Xcode's automatic signing, so the Mac's Xcode must be signed in to the team's account (Xcode, Settings, Accounts). On the phone, the app asks to find devices on the local network and to send notifications; allow both, then enter the host's address on the sign-in screen.
+
+### Push notifications
+
+The app registers for push and sends its token to the backend after every connect. While the app is in the background its connection is closed, and the Go backend's fan-out pushes new messages to it through APNs instead, with the unread count as badge. Tapping a notification opens the conversation.
+
+Push needs an APNs key: in the developer account, Certificates, Identifiers & Profiles, Keys, create a key with "Apple Push Notifications service" enabled and download it (`AuthKey_<key id>.p8`). An App Store Connect API key is a different kind and does not work. Then in `.env`:
+
+```sh
+WRINKLE_TEAM_ID=ABCDE12345
+WRINKLE_APNS_KEY=~/path/to/AuthKey_XXXXXXXXXX.p8
+```
+
+and restart the backend; it logs "push notifications on". Without a key everything else works and the app catches up when it is opened. Pushes are sent by the Go fan-out, so they work with the Go backend and with the Elixir and Rust gateways, which run beside it; the Java backend stores tokens but does not push yet.
+
+To try the app's handling of a notification without APNs, the simulator takes a payload directly:
+
+```sh
+echo '{"aps":{"alert":{"title":"bob","body":"hello"}},"conversation_id":"1"}' > push.json
+xcrun simctl push booted fi.misaki.wrinkle push.json
+```
 
 ## Things to know
 

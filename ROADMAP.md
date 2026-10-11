@@ -90,6 +90,13 @@ Notes:
 - Two protocol flaws found: the stack degrades as it grows (1.4 s against 94 ms p50 at 500/s), so each backend now runs from a fresh stack; and grpc-go's default of 100 concurrent streams per connection broke the Elixir client under a connect storm.
 - Full Elixir and Rust backends were not worthwhile for the question asked: the services are SQL and a Kafka consumer, where the languages differ least.
 
+## Push notifications
+
+- [x] `RegisterPushToken` in the contract; every backend stores the token.
+- [x] APNs from the Go fan-out to devices that are not connected; the iOS app registers, closes its connection in the background and opens a tapped conversation.
+- [ ] Pending: the Java backend's fan-out sends no pushes yet.
+- Presence entries have no expiry, so a gateway that dies without cleaning up leaves its devices marked connected, and they get no pushes until they reconnect. The design's 90 s TTL with heartbeats would fix it.
+
 ## Later
 
 - [ ] A second Go gateway beside the current one, without a goroutine per connection (a poller-driven WebSocket library), to see how far the idle memory per connection falls when the model changes; see `docs/results/2026-10-10-idle-memory.md`.
