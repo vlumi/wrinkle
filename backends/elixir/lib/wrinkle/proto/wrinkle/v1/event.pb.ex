@@ -17,6 +17,8 @@ defmodule Wrinkle.V1.Event do
     type: Wrinkle.V1.MessageFailedEvent,
     json_name: "messageFailed",
     oneof: 0
+
+  field :profile, 13, type: Wrinkle.V1.ProfileEvent, oneof: 0
 end
 
 defmodule Wrinkle.V1.MessageEvent do
@@ -38,8 +40,8 @@ defmodule Wrinkle.V1.ReadEvent do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field :conversation_id, 1, type: :uint64, json_name: "conversationId"
-  field :user_id, 2, type: :uint64, json_name: "userId"
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :user_id, 2, type: :bytes, json_name: "userId"
   field :seq, 3, type: :uint64
 end
 
@@ -51,7 +53,18 @@ defmodule Wrinkle.V1.MessageFailedEvent do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field :conversation_id, 1, type: :uint64, json_name: "conversationId"
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
   field :client_message_id, 2, type: :string, json_name: "clientMessageId"
   field :reason, 3, type: :string
+end
+
+defmodule Wrinkle.V1.ProfileEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ProfileEvent",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user, 1, type: Wrinkle.V1.User
 end

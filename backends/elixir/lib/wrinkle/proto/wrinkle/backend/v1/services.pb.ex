@@ -6,7 +6,7 @@ defmodule Wrinkle.Backend.V1.CallRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field :user_id, 1, type: :uint64, json_name: "userId"
+  field :user_id, 1, type: :bytes, json_name: "userId"
   field :device_id, 2, type: :uint64, json_name: "deviceId"
   field :request, 3, type: Wrinkle.V1.Request
 end
@@ -30,7 +30,7 @@ defmodule Wrinkle.Backend.V1.AckRequest do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 
-  field :user_id, 1, type: :uint64, json_name: "userId"
+  field :user_id, 1, type: :bytes, json_name: "userId"
   field :device_id, 2, type: :uint64, json_name: "deviceId"
   field :cursor, 3, type: :uint64
 end

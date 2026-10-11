@@ -2,7 +2,8 @@
 // written in another language can forward a device's requests. The gateway
 // owns the connection state: it knows which user and device a connection
 // belongs to after Connect, and enforces "connect first" and "already
-// connected" itself. Pushes reach gateways through Valkey, not through this
+// connected" itself. Push channels and presence keys name a user by the
+// lowercase hex of the user id. Pushes reach gateways through Valkey, not through this
 // service.
 
 syntax = "proto3";
@@ -18,15 +19,15 @@ option java_package = "wrinkle.backend.v1";
 service BackendService {
   // Handles one request on behalf of a device. The response carries the
   // request's id and either its body or an error, as it will be sent to
-  // the device. A Connect request carries no identity yet.
+  // the device. Register, SignIn and Connect carry no identity yet.
   rpc Call(CallRequest) returns (CallResponse);
   // Records how far a device has processed its user's log.
   rpc Ack(AckRequest) returns (AckResponse);
 }
 
 message CallRequest {
-  // 0 until the connection has completed Connect.
-  uint64 user_id = 1;
+  // Empty until the connection has completed Connect.
+  bytes user_id = 1;
   uint64 device_id = 2;
   wrinkle.v1.Request request = 3;
 }
@@ -36,7 +37,7 @@ message CallResponse {
 }
 
 message AckRequest {
-  uint64 user_id = 1;
+  bytes user_id = 1;
   uint64 device_id = 2;
   uint64 cursor = 3;
 }

@@ -1,22 +1,28 @@
 // The wire protocol: one WebSocket connection per device, binary messages,
 // each message one serialized Frame.
 //
-// Endpoint: ws://<host>:<port>/v1/ws
+// Endpoint: wss://<host>:<port>/v1/ws, or ws:// on the loopback interface.
+// Passwords travel in Register, SignIn and ChangePassword, so anything else
+// needs TLS.
 //
 // The client sends requests, acks and pings; the server sends responses,
-// events and pongs. The first request on a connection must be Connect; any
-// other request before it fails with ERROR_CODE_UNAUTHENTICATED.
+// events and pongs. A connection starts unconnected: it may Register or
+// SignIn, which return a device token, and must then Connect with a token
+// before anything else; other requests before it fail with
+// ERROR_CODE_UNAUTHENTICATED. Register, SignIn and Connect after Connect
+// fail with ERROR_CODE_FAILED_PRECONDITION.
 //
 // Responses carry the id of the request they answer. Requests may be
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
 // Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
-// of the connection opening; a connection may have 32 requests in flight and
-// send 50 frames a second on average, in bursts of 100. Requests beyond the
-// limits fail with ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them
-// are dropped. The server sends WebSocket pings every 30 seconds and closes
-// a connection it has received nothing on for 90.
+// of the connection opening or of the response to its last Register or
+// SignIn; a connection may have 32 requests in flight and send 50 frames a
+// second on average, in bursts of 100. Requests beyond the limits fail with
+// ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them are dropped. The
+// server sends WebSocket pings every 30 seconds and closes a connection it
+// has received nothing on for 90.
 //
 // Connect waits up to 5 seconds for the user's pushes to be set up. If they
 // are not, it fails with ERROR_CODE_UNAVAILABLE and the connection stays
@@ -40,7 +46,7 @@ import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2"
 import { enumDesc, fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Event } from "./event_pb";
 import { file_wrinkle_v1_event } from "./event_pb";
-import type { ConnectRequest, ConnectResponse, GetMessagesRequest, GetMessagesResponse, ListConversationsRequest, ListConversationsResponse, MarkReadRequest, MarkReadResponse, OpenConversationRequest, OpenConversationResponse, RegisterPushTokenRequest, RegisterPushTokenResponse, SendMessageRequest, SendMessageResponse, SyncRequest, SyncResponse } from "./messaging_pb";
+import type { ChangePasswordRequest, ChangePasswordResponse, ConnectRequest, ConnectResponse, GetMessagesRequest, GetMessagesResponse, ListConversationsRequest, ListConversationsResponse, MarkReadRequest, MarkReadResponse, OpenConversationRequest, OpenConversationResponse, RegisterPushTokenRequest, RegisterPushTokenResponse, RegisterRequest, RegisterResponse, SendMessageRequest, SendMessageResponse, SignInRequest, SignInResponse, SignOutRequest, SignOutResponse, SyncRequest, SyncResponse, UpdateProfileRequest, UpdateProfileResponse } from "./messaging_pb";
 import { file_wrinkle_v1_messaging } from "./messaging_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -48,7 +54,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/frame.proto.
  */
 export const file_wrinkle_v1_frame: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2ZyYW1lLnByb3RvEgp3cmlua2xlLnYxIukBCgVGcmFtZRImCgdyZXF1ZXN0GAEgASgLMhMud3JpbmtsZS52MS5SZXF1ZXN0SAASKAoIcmVzcG9uc2UYAiABKAsyFC53cmlua2xlLnYxLlJlc3BvbnNlSAASIgoFZXZlbnQYAyABKAsyES53cmlua2xlLnYxLkV2ZW50SAASHgoDYWNrGAQgASgLMg8ud3JpbmtsZS52MS5BY2tIABIgCgRwaW5nGAUgASgLMhAud3JpbmtsZS52MS5QaW5nSAASIAoEcG9uZxgGIAEoCzIQLndyaW5rbGUudjEuUG9uZ0gAQgYKBGtpbmQi4gMKB1JlcXVlc3QSCgoCaWQYASABKAQSLQoHY29ubmVjdBgKIAEoCzIaLndyaW5rbGUudjEuQ29ubmVjdFJlcXVlc3RIABJAChFvcGVuX2NvbnZlcnNhdGlvbhgLIAEoCzIjLndyaW5rbGUudjEuT3BlbkNvbnZlcnNhdGlvblJlcXVlc3RIABI2CgxzZW5kX21lc3NhZ2UYDCABKAsyHi53cmlua2xlLnYxLlNlbmRNZXNzYWdlUmVxdWVzdEgAEjAKCW1hcmtfcmVhZBgNIAEoCzIbLndyaW5rbGUudjEuTWFya1JlYWRSZXF1ZXN0SAASJwoEc3luYxgOIAEoCzIXLndyaW5rbGUudjEuU3luY1JlcXVlc3RIABJCChJsaXN0X2NvbnZlcnNhdGlvbnMYDyABKAsyJC53cmlua2xlLnYxLkxpc3RDb252ZXJzYXRpb25zUmVxdWVzdEgAEjYKDGdldF9tZXNzYWdlcxgQIAEoCzIeLndyaW5rbGUudjEuR2V0TWVzc2FnZXNSZXF1ZXN0SAASQwoTcmVnaXN0ZXJfcHVzaF90b2tlbhgRIAEoCzIkLndyaW5rbGUudjEuUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0SABCBgoEYm9keSKXBAoIUmVzcG9uc2USEgoKcmVxdWVzdF9pZBgBIAEoBBIiCgVlcnJvchgCIAEoCzIRLndyaW5rbGUudjEuRXJyb3JIABIuCgdjb25uZWN0GAogASgLMhsud3JpbmtsZS52MS5Db25uZWN0UmVzcG9uc2VIABJBChFvcGVuX2NvbnZlcnNhdGlvbhgLIAEoCzIkLndyaW5rbGUudjEuT3BlbkNvbnZlcnNhdGlvblJlc3BvbnNlSAASNwoMc2VuZF9tZXNzYWdlGAwgASgLMh8ud3JpbmtsZS52MS5TZW5kTWVzc2FnZVJlc3BvbnNlSAASMQoJbWFya19yZWFkGA0gASgLMhwud3JpbmtsZS52MS5NYXJrUmVhZFJlc3BvbnNlSAASKAoEc3luYxgOIAEoCzIYLndyaW5rbGUudjEuU3luY1Jlc3BvbnNlSAASQwoSbGlzdF9jb252ZXJzYXRpb25zGA8gASgLMiUud3JpbmtsZS52MS5MaXN0Q29udmVyc2F0aW9uc1Jlc3BvbnNlSAASNwoMZ2V0X21lc3NhZ2VzGBAgASgLMh8ud3JpbmtsZS52MS5HZXRNZXNzYWdlc1Jlc3BvbnNlSAASRAoTcmVnaXN0ZXJfcHVzaF90b2tlbhgRIAEoCzIlLndyaW5rbGUudjEuUmVnaXN0ZXJQdXNoVG9rZW5SZXNwb25zZUgAQgYKBGJvZHkiPQoFRXJyb3ISIwoEY29kZRgBIAEoDjIVLndyaW5rbGUudjEuRXJyb3JDb2RlEg8KB21lc3NhZ2UYAiABKAkiFQoDQWNrEg4KBmN1cnNvchgBIAEoBCIGCgRQaW5nIgYKBFBvbmcqoAIKCUVycm9yQ29kZRIaChZFUlJPUl9DT0RFX1VOU1BFQ0lGSUVEEAASHwobRVJST1JfQ09ERV9JTlZBTElEX0FSR1VNRU5UEAESHgoaRVJST1JfQ09ERV9VTkFVVEhFTlRJQ0FURUQQAhIgChxFUlJPUl9DT0RFX1BFUk1JU1NJT05fREVOSUVEEAMSGAoURVJST1JfQ09ERV9OT1RfRk9VTkQQBBIiCh5FUlJPUl9DT0RFX0ZBSUxFRF9QUkVDT05ESVRJT04QBRIaChZFUlJPUl9DT0RFX1VOQVZBSUxBQkxFEAYSFwoTRVJST1JfQ09ERV9JTlRFUk5BTBAHEiEKHUVSUk9SX0NPREVfUkVTT1VSQ0VfRVhIQVVTVEVEEAhCnQEKDmNvbS53cmlua2xlLnYxQgpGcmFtZVByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_wrinkle_v1_event, file_wrinkle_v1_messaging]);
+  fileDesc("ChZ3cmlua2xlL3YxL2ZyYW1lLnByb3RvEgp3cmlua2xlLnYxIukBCgVGcmFtZRImCgdyZXF1ZXN0GAEgASgLMhMud3JpbmtsZS52MS5SZXF1ZXN0SAASKAoIcmVzcG9uc2UYAiABKAsyFC53cmlua2xlLnYxLlJlc3BvbnNlSAASIgoFZXZlbnQYAyABKAsyES53cmlua2xlLnYxLkV2ZW50SAASHgoDYWNrGAQgASgLMg8ud3JpbmtsZS52MS5BY2tIABIgCgRwaW5nGAUgASgLMhAud3JpbmtsZS52MS5QaW5nSAASIAoEcG9uZxgGIAEoCzIQLndyaW5rbGUudjEuUG9uZ0gAQgYKBGtpbmQi6wUKB1JlcXVlc3QSCgoCaWQYASABKAQSLQoHY29ubmVjdBgKIAEoCzIaLndyaW5rbGUudjEuQ29ubmVjdFJlcXVlc3RIABJAChFvcGVuX2NvbnZlcnNhdGlvbhgLIAEoCzIjLndyaW5rbGUudjEuT3BlbkNvbnZlcnNhdGlvblJlcXVlc3RIABI2CgxzZW5kX21lc3NhZ2UYDCABKAsyHi53cmlua2xlLnYxLlNlbmRNZXNzYWdlUmVxdWVzdEgAEjAKCW1hcmtfcmVhZBgNIAEoCzIbLndyaW5rbGUudjEuTWFya1JlYWRSZXF1ZXN0SAASJwoEc3luYxgOIAEoCzIXLndyaW5rbGUudjEuU3luY1JlcXVlc3RIABJCChJsaXN0X2NvbnZlcnNhdGlvbnMYDyABKAsyJC53cmlua2xlLnYxLkxpc3RDb252ZXJzYXRpb25zUmVxdWVzdEgAEjYKDGdldF9tZXNzYWdlcxgQIAEoCzIeLndyaW5rbGUudjEuR2V0TWVzc2FnZXNSZXF1ZXN0SAASQwoTcmVnaXN0ZXJfcHVzaF90b2tlbhgRIAEoCzIkLndyaW5rbGUudjEuUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0SAASLwoIcmVnaXN0ZXIYEiABKAsyGy53cmlua2xlLnYxLlJlZ2lzdGVyUmVxdWVzdEgAEiwKB3NpZ25faW4YEyABKAsyGS53cmlua2xlLnYxLlNpZ25JblJlcXVlc3RIABI8Cg9jaGFuZ2VfcGFzc3dvcmQYFCABKAsyIS53cmlua2xlLnYxLkNoYW5nZVBhc3N3b3JkUmVxdWVzdEgAEjoKDnVwZGF0ZV9wcm9maWxlGBUgASgLMiAud3JpbmtsZS52MS5VcGRhdGVQcm9maWxlUmVxdWVzdEgAEi4KCHNpZ25fb3V0GBYgASgLMhoud3JpbmtsZS52MS5TaWduT3V0UmVxdWVzdEgAQgYKBGJvZHkipQYKCFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAQSIgoFZXJyb3IYAiABKAsyES53cmlua2xlLnYxLkVycm9ySAASLgoHY29ubmVjdBgKIAEoCzIbLndyaW5rbGUudjEuQ29ubmVjdFJlc3BvbnNlSAASQQoRb3Blbl9jb252ZXJzYXRpb24YCyABKAsyJC53cmlua2xlLnYxLk9wZW5Db252ZXJzYXRpb25SZXNwb25zZUgAEjcKDHNlbmRfbWVzc2FnZRgMIAEoCzIfLndyaW5rbGUudjEuU2VuZE1lc3NhZ2VSZXNwb25zZUgAEjEKCW1hcmtfcmVhZBgNIAEoCzIcLndyaW5rbGUudjEuTWFya1JlYWRSZXNwb25zZUgAEigKBHN5bmMYDiABKAsyGC53cmlua2xlLnYxLlN5bmNSZXNwb25zZUgAEkMKEmxpc3RfY29udmVyc2F0aW9ucxgPIAEoCzIlLndyaW5rbGUudjEuTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZUgAEjcKDGdldF9tZXNzYWdlcxgQIAEoCzIfLndyaW5rbGUudjEuR2V0TWVzc2FnZXNSZXNwb25zZUgAEkQKE3JlZ2lzdGVyX3B1c2hfdG9rZW4YESABKAsyJS53cmlua2xlLnYxLlJlZ2lzdGVyUHVzaFRva2VuUmVzcG9uc2VIABIwCghyZWdpc3RlchgSIAEoCzIcLndyaW5rbGUudjEuUmVnaXN0ZXJSZXNwb25zZUgAEi0KB3NpZ25faW4YEyABKAsyGi53cmlua2xlLnYxLlNpZ25JblJlc3BvbnNlSAASPQoPY2hhbmdlX3Bhc3N3b3JkGBQgASgLMiIud3JpbmtsZS52MS5DaGFuZ2VQYXNzd29yZFJlc3BvbnNlSAASOwoOdXBkYXRlX3Byb2ZpbGUYFSABKAsyIS53cmlua2xlLnYxLlVwZGF0ZVByb2ZpbGVSZXNwb25zZUgAEi8KCHNpZ25fb3V0GBYgASgLMhsud3JpbmtsZS52MS5TaWduT3V0UmVzcG9uc2VIAEIGCgRib2R5Ij0KBUVycm9yEiMKBGNvZGUYASABKA4yFS53cmlua2xlLnYxLkVycm9yQ29kZRIPCgdtZXNzYWdlGAIgASgJIhUKA0FjaxIOCgZjdXJzb3IYASABKAQiBgoEUGluZyIGCgRQb25nKr8CCglFcnJvckNvZGUSGgoWRVJST1JfQ09ERV9VTlNQRUNJRklFRBAAEh8KG0VSUk9SX0NPREVfSU5WQUxJRF9BUkdVTUVOVBABEh4KGkVSUk9SX0NPREVfVU5BVVRIRU5USUNBVEVEEAISIAocRVJST1JfQ09ERV9QRVJNSVNTSU9OX0RFTklFRBADEhgKFEVSUk9SX0NPREVfTk9UX0ZPVU5EEAQSIgoeRVJST1JfQ09ERV9GQUlMRURfUFJFQ09ORElUSU9OEAUSGgoWRVJST1JfQ09ERV9VTkFWQUlMQUJMRRAGEhcKE0VSUk9SX0NPREVfSU5URVJOQUwQBxIhCh1FUlJPUl9DT0RFX1JFU09VUkNFX0VYSEFVU1RFRBAIEh0KGUVSUk9SX0NPREVfQUxSRUFEWV9FWElTVFMQCUKdAQoOY29tLndyaW5rbGUudjFCCkZyYW1lUHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw", [file_wrinkle_v1_event, file_wrinkle_v1_messaging]);
 
 /**
  * @generated from message wrinkle.v1.Frame
@@ -165,6 +171,36 @@ export type Request = Message<"wrinkle.v1.Request"> & {
      */
     value: RegisterPushTokenRequest;
     case: "registerPushToken";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.RegisterRequest register = 18;
+     */
+    value: RegisterRequest;
+    case: "register";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SignInRequest sign_in = 19;
+     */
+    value: SignInRequest;
+    case: "signIn";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.ChangePasswordRequest change_password = 20;
+     */
+    value: ChangePasswordRequest;
+    case: "changePassword";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.UpdateProfileRequest update_profile = 21;
+     */
+    value: UpdateProfileRequest;
+    case: "updateProfile";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SignOutRequest sign_out = 22;
+     */
+    value: SignOutRequest;
+    case: "signOut";
   } | { case: undefined; value?: undefined };
 };
 
@@ -241,6 +277,36 @@ export type Response = Message<"wrinkle.v1.Response"> & {
      */
     value: RegisterPushTokenResponse;
     case: "registerPushToken";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.RegisterResponse register = 18;
+     */
+    value: RegisterResponse;
+    case: "register";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SignInResponse sign_in = 19;
+     */
+    value: SignInResponse;
+    case: "signIn";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.ChangePasswordResponse change_password = 20;
+     */
+    value: ChangePasswordResponse;
+    case: "changePassword";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.UpdateProfileResponse update_profile = 21;
+     */
+    value: UpdateProfileResponse;
+    case: "updateProfile";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.SignOutResponse sign_out = 22;
+     */
+    value: SignOutResponse;
+    case: "signOut";
   } | { case: undefined; value?: undefined };
 };
 
@@ -341,7 +407,7 @@ export enum ErrorCode {
   INVALID_ARGUMENT = 1,
 
   /**
-   * The connection has not completed Connect.
+   * The connection has not completed Connect, or the credentials are wrong.
    *
    * @generated from enum value: ERROR_CODE_UNAUTHENTICATED = 2;
    */
@@ -387,6 +453,13 @@ export enum ErrorCode {
    * @generated from enum value: ERROR_CODE_RESOURCE_EXHAUSTED = 8;
    */
   RESOURCE_EXHAUSTED = 8,
+
+  /**
+   * The name is taken.
+   *
+   * @generated from enum value: ERROR_CODE_ALREADY_EXISTS = 9;
+   */
+  ALREADY_EXISTS = 9,
 }
 
 /**

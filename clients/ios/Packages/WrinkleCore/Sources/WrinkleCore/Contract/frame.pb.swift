@@ -11,22 +11,28 @@
 // The wire protocol: one WebSocket connection per device, binary messages,
 // each message one serialized Frame.
 //
-// Endpoint: ws://<host>:<port>/v1/ws
+// Endpoint: wss://<host>:<port>/v1/ws, or ws:// on the loopback interface.
+// Passwords travel in Register, SignIn and ChangePassword, so anything else
+// needs TLS.
 //
 // The client sends requests, acks and pings; the server sends responses,
-// events and pongs. The first request on a connection must be Connect; any
-// other request before it fails with ERROR_CODE_UNAUTHENTICATED.
+// events and pongs. A connection starts unconnected: it may Register or
+// SignIn, which return a device token, and must then Connect with a token
+// before anything else; other requests before it fail with
+// ERROR_CODE_UNAUTHENTICATED. Register, SignIn and Connect after Connect
+// fail with ERROR_CODE_FAILED_PRECONDITION.
 //
 // Responses carry the id of the request they answer. Requests may be
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
 // Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
-// of the connection opening; a connection may have 32 requests in flight and
-// send 50 frames a second on average, in bursts of 100. Requests beyond the
-// limits fail with ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them
-// are dropped. The server sends WebSocket pings every 30 seconds and closes
-// a connection it has received nothing on for 90.
+// of the connection opening or of the response to its last Register or
+// SignIn; a connection may have 32 requests in flight and send 50 frames a
+// second on average, in bursts of 100. Requests beyond the limits fail with
+// ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them are dropped. The
+// server sends WebSocket pings every 30 seconds and closes a connection it
+// has received nothing on for 90.
 //
 // Connect waits up to 5 seconds for the user's pushes to be set up. If they
 // are not, it fails with ERROR_CODE_UNAVAILABLE and the connection stays
@@ -61,7 +67,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
   /// A field is missing, malformed, or out of range.
   case invalidArgument // = 1
 
-  /// The connection has not completed Connect.
+  /// The connection has not completed Connect, or the credentials are wrong.
   case unauthenticated // = 2
 
   /// The user is not a participant of the conversation.
@@ -80,6 +86,9 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
 
   /// The connection is over its request limits; the client may retry later.
   case resourceExhausted // = 8
+
+  /// The name is taken.
+  case alreadyExists // = 9
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -97,6 +106,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     case 6: self = .unavailable
     case 7: self = .internal
     case 8: self = .resourceExhausted
+    case 9: self = .alreadyExists
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -112,6 +122,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     case .unavailable: return 6
     case .internal: return 7
     case .resourceExhausted: return 8
+    case .alreadyExists: return 9
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -127,6 +138,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     .unavailable,
     .internal,
     .resourceExhausted,
+    .alreadyExists,
   ]
 
 }
@@ -275,6 +287,46 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     set {body = .registerPushToken(newValue)}
   }
 
+  public var register: Wrinkle_V1_RegisterRequest {
+    get {
+      if case .register(let v)? = body {return v}
+      return Wrinkle_V1_RegisterRequest()
+    }
+    set {body = .register(newValue)}
+  }
+
+  public var signIn: Wrinkle_V1_SignInRequest {
+    get {
+      if case .signIn(let v)? = body {return v}
+      return Wrinkle_V1_SignInRequest()
+    }
+    set {body = .signIn(newValue)}
+  }
+
+  public var changePassword: Wrinkle_V1_ChangePasswordRequest {
+    get {
+      if case .changePassword(let v)? = body {return v}
+      return Wrinkle_V1_ChangePasswordRequest()
+    }
+    set {body = .changePassword(newValue)}
+  }
+
+  public var updateProfile: Wrinkle_V1_UpdateProfileRequest {
+    get {
+      if case .updateProfile(let v)? = body {return v}
+      return Wrinkle_V1_UpdateProfileRequest()
+    }
+    set {body = .updateProfile(newValue)}
+  }
+
+  public var signOut: Wrinkle_V1_SignOutRequest {
+    get {
+      if case .signOut(let v)? = body {return v}
+      return Wrinkle_V1_SignOutRequest()
+    }
+    set {body = .signOut(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -286,6 +338,11 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     case listConversations(Wrinkle_V1_ListConversationsRequest)
     case getMessages(Wrinkle_V1_GetMessagesRequest)
     case registerPushToken(Wrinkle_V1_RegisterPushTokenRequest)
+    case register(Wrinkle_V1_RegisterRequest)
+    case signIn(Wrinkle_V1_SignInRequest)
+    case changePassword(Wrinkle_V1_ChangePasswordRequest)
+    case updateProfile(Wrinkle_V1_UpdateProfileRequest)
+    case signOut(Wrinkle_V1_SignOutRequest)
 
   }
 
@@ -373,6 +430,46 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     set {body = .registerPushToken(newValue)}
   }
 
+  public var register: Wrinkle_V1_RegisterResponse {
+    get {
+      if case .register(let v)? = body {return v}
+      return Wrinkle_V1_RegisterResponse()
+    }
+    set {body = .register(newValue)}
+  }
+
+  public var signIn: Wrinkle_V1_SignInResponse {
+    get {
+      if case .signIn(let v)? = body {return v}
+      return Wrinkle_V1_SignInResponse()
+    }
+    set {body = .signIn(newValue)}
+  }
+
+  public var changePassword: Wrinkle_V1_ChangePasswordResponse {
+    get {
+      if case .changePassword(let v)? = body {return v}
+      return Wrinkle_V1_ChangePasswordResponse()
+    }
+    set {body = .changePassword(newValue)}
+  }
+
+  public var updateProfile: Wrinkle_V1_UpdateProfileResponse {
+    get {
+      if case .updateProfile(let v)? = body {return v}
+      return Wrinkle_V1_UpdateProfileResponse()
+    }
+    set {body = .updateProfile(newValue)}
+  }
+
+  public var signOut: Wrinkle_V1_SignOutResponse {
+    get {
+      if case .signOut(let v)? = body {return v}
+      return Wrinkle_V1_SignOutResponse()
+    }
+    set {body = .signOut(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -385,6 +482,11 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     case listConversations(Wrinkle_V1_ListConversationsResponse)
     case getMessages(Wrinkle_V1_GetMessagesResponse)
     case registerPushToken(Wrinkle_V1_RegisterPushTokenResponse)
+    case register(Wrinkle_V1_RegisterResponse)
+    case signIn(Wrinkle_V1_SignInResponse)
+    case changePassword(Wrinkle_V1_ChangePasswordResponse)
+    case updateProfile(Wrinkle_V1_UpdateProfileResponse)
+    case signOut(Wrinkle_V1_SignOutResponse)
 
   }
 
@@ -447,7 +549,7 @@ public nonisolated struct Wrinkle_V1_Pong: Sendable {
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_ErrorCode: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0\u{1}ERROR_CODE_RESOURCE_EXHAUSTED\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0\u{1}ERROR_CODE_RESOURCE_EXHAUSTED\0\u{1}ERROR_CODE_ALREADY_EXISTS\0")
 }
 
 nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
@@ -587,7 +689,7 @@ nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -700,6 +802,71 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .registerPushToken(v)
         }
       }()
+      case 18: try {
+        var v: Wrinkle_V1_RegisterRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .register(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .register(v)
+        }
+      }()
+      case 19: try {
+        var v: Wrinkle_V1_SignInRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .signIn(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .signIn(v)
+        }
+      }()
+      case 20: try {
+        var v: Wrinkle_V1_ChangePasswordRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .changePassword(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .changePassword(v)
+        }
+      }()
+      case 21: try {
+        var v: Wrinkle_V1_UpdateProfileRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .updateProfile(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .updateProfile(v)
+        }
+      }()
+      case 22: try {
+        var v: Wrinkle_V1_SignOutRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .signOut(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .signOut(v)
+        }
+      }()
       default: break
       }
     }
@@ -746,6 +913,26 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .registerPushToken(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
     }()
+    case .register?: try {
+      guard case .register(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
+    }()
+    case .signIn?: try {
+      guard case .signIn(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
+    }()
+    case .changePassword?: try {
+      guard case .changePassword(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
+    }()
+    case .updateProfile?: try {
+      guard case .updateProfile(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
+    }()
+    case .signOut?: try {
+      guard case .signOut(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 22)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -761,7 +948,7 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -887,6 +1074,71 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
           self.body = .registerPushToken(v)
         }
       }()
+      case 18: try {
+        var v: Wrinkle_V1_RegisterResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .register(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .register(v)
+        }
+      }()
+      case 19: try {
+        var v: Wrinkle_V1_SignInResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .signIn(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .signIn(v)
+        }
+      }()
+      case 20: try {
+        var v: Wrinkle_V1_ChangePasswordResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .changePassword(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .changePassword(v)
+        }
+      }()
+      case 21: try {
+        var v: Wrinkle_V1_UpdateProfileResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .updateProfile(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .updateProfile(v)
+        }
+      }()
+      case 22: try {
+        var v: Wrinkle_V1_SignOutResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .signOut(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .signOut(v)
+        }
+      }()
       default: break
       }
     }
@@ -936,6 +1188,26 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
     case .registerPushToken?: try {
       guard case .registerPushToken(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
+    }()
+    case .register?: try {
+      guard case .register(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
+    }()
+    case .signIn?: try {
+      guard case .signIn(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
+    }()
+    case .changePassword?: try {
+      guard case .changePassword(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
+    }()
+    case .updateProfile?: try {
+      guard case .updateProfile(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
+    }()
+    case .signOut?: try {
+      guard case .signOut(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 22)
     }()
     case nil: break
     }

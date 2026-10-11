@@ -11,6 +11,11 @@
 // Events in a user's log. Each of a user's conversations and devices
 // contributes to one log; devices read it with a cursor.
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -67,12 +72,21 @@ public nonisolated struct Wrinkle_V1_Event: Sendable {
     set {body = .messageFailed(newValue)}
   }
 
+  public var profile: Wrinkle_V1_ProfileEvent {
+    get {
+      if case .profile(let v)? = body {return v}
+      return Wrinkle_V1_ProfileEvent()
+    }
+    set {body = .profile(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
     case message(Wrinkle_V1_MessageEvent)
     case read(Wrinkle_V1_ReadEvent)
     case messageFailed(Wrinkle_V1_MessageFailedEvent)
+    case profile(Wrinkle_V1_ProfileEvent)
 
   }
 
@@ -111,9 +125,9 @@ public nonisolated struct Wrinkle_V1_ReadEvent: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
-  public var userID: UInt64 = 0
+  public var userID: Data = Data()
 
   public var seq: UInt64 = 0
 
@@ -129,7 +143,7 @@ public nonisolated struct Wrinkle_V1_MessageFailedEvent: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
   public var clientMessageID: String = String()
 
@@ -140,13 +154,36 @@ public nonisolated struct Wrinkle_V1_MessageFailedEvent: Sendable {
   public init() {}
 }
 
+/// A user's profile changed. Received by the user, so their other devices
+/// learn of it, and by everyone they have a conversation with.
+public nonisolated struct Wrinkle_V1_ProfileEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var user: Wrinkle_V1_User {
+    get {_user ?? Wrinkle_V1_User()}
+    set {_user = newValue}
+  }
+  /// Returns true if `user` has been explicitly set.
+  public var hasUser: Bool {self._user != nil}
+  /// Clears the value of `user`. Subsequent reads from it will return its default value.
+  public mutating func clearUser() {self._user = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _user: Wrinkle_V1_User? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -195,6 +232,19 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
           self.body = .messageFailed(v)
         }
       }()
+      case 13: try {
+        var v: Wrinkle_V1_ProfileEvent?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .profile(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .profile(v)
+        }
+      }()
       default: break
       }
     }
@@ -223,6 +273,10 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
     case .messageFailed?: try {
       guard case .messageFailed(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+    }()
+    case .profile?: try {
+      guard case .profile(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
     }()
     case nil: break
     }
@@ -282,8 +336,8 @@ nonisolated extension Wrinkle_V1_ReadEvent: SwiftProtobuf.Message, SwiftProtobuf
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
-      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.userID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.userID) }()
       case 3: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
       default: break
       }
@@ -291,11 +345,11 @@ nonisolated extension Wrinkle_V1_ReadEvent: SwiftProtobuf.Message, SwiftProtobuf
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
-    if self.userID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.userID, fieldNumber: 2)
+    if !self.userID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.userID, fieldNumber: 2)
     }
     if self.seq != 0 {
       try visitor.visitSingularUInt64Field(value: self.seq, fieldNumber: 3)
@@ -322,7 +376,7 @@ nonisolated extension Wrinkle_V1_MessageFailedEvent: SwiftProtobuf.Message, Swif
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.reason) }()
       default: break
@@ -331,8 +385,8 @@ nonisolated extension Wrinkle_V1_MessageFailedEvent: SwiftProtobuf.Message, Swif
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
     if !self.clientMessageID.isEmpty {
       try visitor.visitSingularStringField(value: self.clientMessageID, fieldNumber: 2)
@@ -347,6 +401,40 @@ nonisolated extension Wrinkle_V1_MessageFailedEvent: SwiftProtobuf.Message, Swif
     if lhs.conversationID != rhs.conversationID {return false}
     if lhs.clientMessageID != rhs.clientMessageID {return false}
     if lhs.reason != rhs.reason {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_ProfileEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ProfileEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._user) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._user {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_ProfileEvent, rhs: Wrinkle_V1_ProfileEvent) -> Bool {
+    if lhs._user != rhs._user {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

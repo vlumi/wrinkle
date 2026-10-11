@@ -21,6 +21,7 @@ message Event {
     MessageEvent message = 10;
     ReadEvent read = 11;
     MessageFailedEvent message_failed = 12;
+    ProfileEvent profile = 13;
   }
 }
 
@@ -33,15 +34,21 @@ message MessageEvent {
 // A participant moved their read position. Received by both participants, so
 // a user's other devices learn what they read elsewhere.
 message ReadEvent {
-  uint64 conversation_id = 1;
-  uint64 user_id = 2;
+  bytes conversation_id = 1;
+  bytes user_id = 2;
   uint64 seq = 3;
 }
 
 // A message accepted by SendMessage could not be delivered to the peer.
 // Received by the sender only.
 message MessageFailedEvent {
-  uint64 conversation_id = 1;
+  bytes conversation_id = 1;
   string client_message_id = 2;
   string reason = 3;
+}
+
+// A user's profile changed. Received by the user, so their other devices
+// learn of it, and by everyone they have a conversation with.
+message ProfileEvent {
+  User user = 1;
 }

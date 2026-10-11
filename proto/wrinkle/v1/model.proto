@@ -10,18 +10,25 @@ option go_package = "github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1";
 option java_multiple_files = true;
 option java_package = "wrinkle.v1";
 
+// Ids of users and conversations are random UUIDs (version 4), 16 bytes.
+
 message User {
-  uint64 user_id = 1;
+  bytes user_id = 1;
   string name = 2;
+  // A standard icon, or empty for none. The standard icons, by key, with the
+  // emoji clients draw them as: cat 🐱, dog 🐶, fox 🦊, owl 🦉, bear 🐻,
+  // frog 🐸, panda 🐼, rabbit 🐰, tiger 🐯, penguin 🐧, octopus 🐙,
+  // unicorn 🦄.
+  string icon = 3;
 }
 
 // A message in a conversation. (conversation_id, seq) identifies it; seq is
 // assigned by the conversation when the message is stored, is dense (1, 2,
 // 3, ...), and orders the conversation for everyone.
 message Message {
-  uint64 conversation_id = 1;
+  bytes conversation_id = 1;
   uint64 seq = 2;
-  uint64 sender_user_id = 3;
+  bytes sender_user_id = 3;
   // Chosen by the sending device, unique per sender and conversation. Resending
   // with the same id returns the message already stored instead of a duplicate.
   string client_message_id = 4;
@@ -31,7 +38,7 @@ message Message {
 
 // A conversation as seen by the requesting user.
 message Conversation {
-  uint64 conversation_id = 1;
+  bytes conversation_id = 1;
   User peer = 2;
   // Highest message seq in the conversation; 0 when empty.
   uint64 last_seq = 3;

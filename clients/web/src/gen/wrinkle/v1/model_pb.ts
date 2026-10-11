@@ -14,21 +14,31 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/model.proto.
  */
 export const file_wrinkle_v1_model: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL21vZGVsLnByb3RvEgp3cmlua2xlLnYxIiUKBFVzZXISDwoHdXNlcl9pZBgBIAEoBBIMCgRuYW1lGAIgASgJIp0BCgdNZXNzYWdlEhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoBBILCgNzZXEYAiABKAQSFgoOc2VuZGVyX3VzZXJfaWQYAyABKAQSGQoRY2xpZW50X21lc3NhZ2VfaWQYBCABKAkSDAoEdGV4dBgFIAEoCRIrCgdzZW50X2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKtAQoMQ29udmVyc2F0aW9uEhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoBBIeCgRwZWVyGAIgASgLMhAud3JpbmtsZS52MS5Vc2VyEhAKCGxhc3Rfc2VxGAMgASgEEikKDGxhc3RfbWVzc2FnZRgEIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZRIQCghyZWFkX3NlcRgFIAEoBBIVCg1wZWVyX3JlYWRfc2VxGAYgASgEQp0BCg5jb20ud3JpbmtsZS52MUIKTW9kZWxQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+  fileDesc("ChZ3cmlua2xlL3YxL21vZGVsLnByb3RvEgp3cmlua2xlLnYxIjMKBFVzZXISDwoHdXNlcl9pZBgBIAEoDBIMCgRuYW1lGAIgASgJEgwKBGljb24YAyABKAkinQEKB01lc3NhZ2USFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIWCg5zZW5kZXJfdXNlcl9pZBgDIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgEIAEoCRIMCgR0ZXh0GAUgASgJEisKB3NlbnRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIq0BCgxDb252ZXJzYXRpb24SFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEh4KBHBlZXIYAiABKAsyEC53cmlua2xlLnYxLlVzZXISEAoIbGFzdF9zZXEYAyABKAQSKQoMbGFzdF9tZXNzYWdlGAQgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlEhAKCHJlYWRfc2VxGAUgASgEEhUKDXBlZXJfcmVhZF9zZXEYBiABKARCnQEKDmNvbS53cmlua2xlLnYxQgpNb2RlbFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message wrinkle.v1.User
  */
 export type User = Message$1<"wrinkle.v1.User"> & {
   /**
-   * @generated from field: uint64 user_id = 1;
+   * @generated from field: bytes user_id = 1;
    */
-  userId: bigint;
+  userId: Uint8Array;
 
   /**
    * @generated from field: string name = 2;
    */
   name: string;
+
+  /**
+   * A standard icon, or empty for none. The standard icons, by key, with the
+   * emoji clients draw them as: cat 🐱, dog 🐶, fox 🦊, owl 🦉, bear 🐻,
+   * frog 🐸, panda 🐼, rabbit 🐰, tiger 🐯, penguin 🐧, octopus 🐙,
+   * unicorn 🦄.
+   *
+   * @generated from field: string icon = 3;
+   */
+  icon: string;
 };
 
 /**
@@ -47,9 +57,9 @@ export const UserSchema: GenMessage<User> = /*@__PURE__*/
  */
 export type Message = Message$1<"wrinkle.v1.Message"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
    * @generated from field: uint64 seq = 2;
@@ -57,9 +67,9 @@ export type Message = Message$1<"wrinkle.v1.Message"> & {
   seq: bigint;
 
   /**
-   * @generated from field: uint64 sender_user_id = 3;
+   * @generated from field: bytes sender_user_id = 3;
    */
-  senderUserId: bigint;
+  senderUserId: Uint8Array;
 
   /**
    * Chosen by the sending device, unique per sender and conversation. Resending
@@ -94,9 +104,9 @@ export const MessageSchema: GenMessage<Message> = /*@__PURE__*/
  */
 export type Conversation = Message$1<"wrinkle.v1.Conversation"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
    * @generated from field: wrinkle.v1.User peer = 2;

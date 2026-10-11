@@ -1,22 +1,28 @@
 // The wire protocol: one WebSocket connection per device, binary messages,
 // each message one serialized Frame.
 //
-// Endpoint: ws://<host>:<port>/v1/ws
+// Endpoint: wss://<host>:<port>/v1/ws, or ws:// on the loopback interface.
+// Passwords travel in Register, SignIn and ChangePassword, so anything else
+// needs TLS.
 //
 // The client sends requests, acks and pings; the server sends responses,
-// events and pongs. The first request on a connection must be Connect; any
-// other request before it fails with ERROR_CODE_UNAUTHENTICATED.
+// events and pongs. A connection starts unconnected: it may Register or
+// SignIn, which return a device token, and must then Connect with a token
+// before anything else; other requests before it fail with
+// ERROR_CODE_UNAUTHENTICATED. Register, SignIn and Connect after Connect
+// fail with ERROR_CODE_FAILED_PRECONDITION.
 //
 // Responses carry the id of the request they answer. Requests may be
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
 // Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
-// of the connection opening; a connection may have 32 requests in flight and
-// send 50 frames a second on average, in bursts of 100. Requests beyond the
-// limits fail with ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them
-// are dropped. The server sends WebSocket pings every 30 seconds and closes
-// a connection it has received nothing on for 90.
+// of the connection opening or of the response to its last Register or
+// SignIn; a connection may have 32 requests in flight and send 50 frames a
+// second on average, in bursts of 100. Requests beyond the limits fail with
+// ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them are dropped. The
+// server sends WebSocket pings every 30 seconds and closes a connection it
+// has received nothing on for 90.
 //
 // Connect waits up to 5 seconds for the user's pushes to be set up. If they
 // are not, it fails with ERROR_CODE_UNAVAILABLE and the connection stays
@@ -66,6 +72,11 @@ message Request {
     ListConversationsRequest list_conversations = 15;
     GetMessagesRequest get_messages = 16;
     RegisterPushTokenRequest register_push_token = 17;
+    RegisterRequest register = 18;
+    SignInRequest sign_in = 19;
+    ChangePasswordRequest change_password = 20;
+    UpdateProfileRequest update_profile = 21;
+    SignOutRequest sign_out = 22;
   }
 }
 
@@ -81,6 +92,11 @@ message Response {
     ListConversationsResponse list_conversations = 15;
     GetMessagesResponse get_messages = 16;
     RegisterPushTokenResponse register_push_token = 17;
+    RegisterResponse register = 18;
+    SignInResponse sign_in = 19;
+    ChangePasswordResponse change_password = 20;
+    UpdateProfileResponse update_profile = 21;
+    SignOutResponse sign_out = 22;
   }
 }
 
@@ -94,7 +110,7 @@ enum ErrorCode {
   ERROR_CODE_UNSPECIFIED = 0;
   // A field is missing, malformed, or out of range.
   ERROR_CODE_INVALID_ARGUMENT = 1;
-  // The connection has not completed Connect.
+  // The connection has not completed Connect, or the credentials are wrong.
   ERROR_CODE_UNAUTHENTICATED = 2;
   // The user is not a participant of the conversation.
   ERROR_CODE_PERMISSION_DENIED = 3;
@@ -108,6 +124,8 @@ enum ErrorCode {
   ERROR_CODE_INTERNAL = 7;
   // The connection is over its request limits; the client may retry later.
   ERROR_CODE_RESOURCE_EXHAUSTED = 8;
+  // The name is taken.
+  ERROR_CODE_ALREADY_EXISTS = 9;
 }
 
 // The device has processed its user's log up to this cursor. The server

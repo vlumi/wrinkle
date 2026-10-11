@@ -16,6 +16,7 @@ defmodule Wrinkle.V1.ErrorCode do
   field :ERROR_CODE_UNAVAILABLE, 6
   field :ERROR_CODE_INTERNAL, 7
   field :ERROR_CODE_RESOURCE_EXHAUSTED, 8
+  field :ERROR_CODE_ALREADY_EXISTS, 9
 end
 
 defmodule Wrinkle.V1.Frame do
@@ -69,6 +70,21 @@ defmodule Wrinkle.V1.Request do
     type: Wrinkle.V1.RegisterPushTokenRequest,
     json_name: "registerPushToken",
     oneof: 0
+
+  field :register, 18, type: Wrinkle.V1.RegisterRequest, oneof: 0
+  field :sign_in, 19, type: Wrinkle.V1.SignInRequest, json_name: "signIn", oneof: 0
+
+  field :change_password, 20,
+    type: Wrinkle.V1.ChangePasswordRequest,
+    json_name: "changePassword",
+    oneof: 0
+
+  field :update_profile, 21,
+    type: Wrinkle.V1.UpdateProfileRequest,
+    json_name: "updateProfile",
+    oneof: 0
+
+  field :sign_out, 22, type: Wrinkle.V1.SignOutRequest, json_name: "signOut", oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -112,6 +128,21 @@ defmodule Wrinkle.V1.Response do
     type: Wrinkle.V1.RegisterPushTokenResponse,
     json_name: "registerPushToken",
     oneof: 0
+
+  field :register, 18, type: Wrinkle.V1.RegisterResponse, oneof: 0
+  field :sign_in, 19, type: Wrinkle.V1.SignInResponse, json_name: "signIn", oneof: 0
+
+  field :change_password, 20,
+    type: Wrinkle.V1.ChangePasswordResponse,
+    json_name: "changePassword",
+    oneof: 0
+
+  field :update_profile, 21,
+    type: Wrinkle.V1.UpdateProfileResponse,
+    json_name: "updateProfile",
+    oneof: 0
+
+  field :sign_out, 22, type: Wrinkle.V1.SignOutResponse, json_name: "signOut", oneof: 0
 end
 
 defmodule Wrinkle.V1.Error do

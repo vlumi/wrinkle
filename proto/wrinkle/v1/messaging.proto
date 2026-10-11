@@ -11,13 +11,48 @@ option go_package = "github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1";
 option java_multiple_files = true;
 option java_package = "wrinkle.v1";
 
-// Signs in by name and registers the device. Users and devices are created on
-// first use; there are no passwords. Must be the first request on a connection.
-message ConnectRequest {
-  string user_name = 1;
-  // 0 registers a new device; otherwise the id this device was given before.
-  uint64 device_id = 2;
+// Creates an account and signs this device in. Names are unique ignoring
+// case and keep the case given: 1 to 64 bytes of UTF-8, without control
+// characters or leading or trailing white space. Passwords are 8 to 256
+// bytes. A taken name fails with ERROR_CODE_ALREADY_EXISTS. Allowed only
+// before Connect; the connection then still has to Connect.
+message RegisterRequest {
+  string name = 1;
+  string password = 2;
   string device_name = 3;
+}
+
+message RegisterResponse {
+  DeviceCredentials credentials = 1;
+}
+
+// Signs a new device in to an existing account; the name is matched ignoring
+// case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
+// without saying which. Allowed only before Connect.
+message SignInRequest {
+  string name = 1;
+  string password = 2;
+  string device_name = 3;
+}
+
+message SignInResponse {
+  DeviceCredentials credentials = 1;
+}
+
+// What a device keeps to connect again without the password.
+message DeviceCredentials {
+  bytes user_id = 1;
+  uint64 device_id = 2;
+  // Opaque; presented in ConnectRequest. Valid until the device signs out or
+  // the account's password changes on another device.
+  string device_token = 3;
+}
+
+// Binds the connection to a signed-in device. Must complete before any
+// request other than Register and SignIn. A token that is not valid fails
+// with ERROR_CODE_UNAUTHENTICATED and leaves the connection unconnected.
+message ConnectRequest {
+  string device_token = 1;
 }
 
 message ConnectResponse {
@@ -29,9 +64,40 @@ message ConnectResponse {
   uint64 log_head = 4;
 }
 
+// Changes the account's password. Every other device of the account is
+// signed out: its token stops working. A wrong current password fails with
+// ERROR_CODE_UNAUTHENTICATED.
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
+
+// Changes the requesting user's profile; fields not set are kept. The user's
+// own devices and conversation partners receive a ProfileEvent. A name taken
+// by another user fails with ERROR_CODE_ALREADY_EXISTS; the user id never
+// changes.
+message UpdateProfileRequest {
+  optional string name = 1;
+  // One of the standard icons listed at User.icon, or empty for none.
+  optional string icon = 2;
+}
+
+message UpdateProfileResponse {
+  User user = 1;
+}
+
+// Signs this device out: its token stops working and its push registration
+// is removed. The client closes the connection after the response.
+message SignOutRequest {}
+
+message SignOutResponse {}
+
 // Finds or creates the conversation between the requesting user and the peer.
+// The peer is found by name, ignoring case.
 message OpenConversationRequest {
-  string peer_user_name = 1;
+  string peer_name = 1;
 }
 
 message OpenConversationResponse {
@@ -39,7 +105,7 @@ message OpenConversationResponse {
 }
 
 message SendMessageRequest {
-  uint64 conversation_id = 1;
+  bytes conversation_id = 1;
   string client_message_id = 2;
   string text = 3;
 }
@@ -51,7 +117,7 @@ message SendMessageResponse {
 // Marks the conversation read up to seq for the requesting user. Lower than
 // the current read position is a no-op.
 message MarkReadRequest {
-  uint64 conversation_id = 1;
+  bytes conversation_id = 1;
   uint64 seq = 2;
 }
 
@@ -83,7 +149,7 @@ message ListConversationsResponse {
 
 // Returns messages of a conversation, newest first.
 message GetMessagesRequest {
-  uint64 conversation_id = 1;
+  bytes conversation_id = 1;
   // Return messages with seq below this; 0 starts from the newest.
   uint64 before_seq = 2;
   // 0 means the server's default.

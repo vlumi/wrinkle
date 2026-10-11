@@ -36,6 +36,7 @@ type Event struct {
 	//	*Event_Message
 	//	*Event_Read
 	//	*Event_MessageFailed
+	//	*Event_Profile
 	Body          isEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -119,6 +120,15 @@ func (x *Event) GetMessageFailed() *MessageFailedEvent {
 	return nil
 }
 
+func (x *Event) GetProfile() *ProfileEvent {
+	if x != nil {
+		if x, ok := x.Body.(*Event_Profile); ok {
+			return x.Profile
+		}
+	}
+	return nil
+}
+
 type isEvent_Body interface {
 	isEvent_Body()
 }
@@ -135,11 +145,17 @@ type Event_MessageFailed struct {
 	MessageFailed *MessageFailedEvent `protobuf:"bytes,12,opt,name=message_failed,json=messageFailed,proto3,oneof"`
 }
 
+type Event_Profile struct {
+	Profile *ProfileEvent `protobuf:"bytes,13,opt,name=profile,proto3,oneof"`
+}
+
 func (*Event_Message) isEvent_Body() {}
 
 func (*Event_Read) isEvent_Body() {}
 
 func (*Event_MessageFailed) isEvent_Body() {}
+
+func (*Event_Profile) isEvent_Body() {}
 
 // A message was stored in one of the user's conversations. The sender's own
 // devices receive it too.
@@ -191,8 +207,8 @@ func (x *MessageEvent) GetMessage() *Message {
 // a user's other devices learn what they read elsewhere.
 type ReadEvent struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	ConversationId uint64                 `protobuf:"varint,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
-	UserId         uint64                 `protobuf:"varint,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	UserId         []byte                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	Seq            uint64                 `protobuf:"varint,3,opt,name=seq,proto3" json:"seq,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
@@ -228,18 +244,18 @@ func (*ReadEvent) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_event_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ReadEvent) GetConversationId() uint64 {
+func (x *ReadEvent) GetConversationId() []byte {
 	if x != nil {
 		return x.ConversationId
 	}
-	return 0
+	return nil
 }
 
-func (x *ReadEvent) GetUserId() uint64 {
+func (x *ReadEvent) GetUserId() []byte {
 	if x != nil {
 		return x.UserId
 	}
-	return 0
+	return nil
 }
 
 func (x *ReadEvent) GetSeq() uint64 {
@@ -253,7 +269,7 @@ func (x *ReadEvent) GetSeq() uint64 {
 // Received by the sender only.
 type MessageFailedEvent struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
-	ConversationId  uint64                 `protobuf:"varint,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	ConversationId  []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	ClientMessageId string                 `protobuf:"bytes,2,opt,name=client_message_id,json=clientMessageId,proto3" json:"client_message_id,omitempty"`
 	Reason          string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -290,11 +306,11 @@ func (*MessageFailedEvent) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_event_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *MessageFailedEvent) GetConversationId() uint64 {
+func (x *MessageFailedEvent) GetConversationId() []byte {
 	if x != nil {
 		return x.ConversationId
 	}
-	return 0
+	return nil
 }
 
 func (x *MessageFailedEvent) GetClientMessageId() string {
@@ -311,12 +327,58 @@ func (x *MessageFailedEvent) GetReason() string {
 	return ""
 }
 
+// A user's profile changed. Received by the user, so their other devices
+// learn of it, and by everyone they have a conversation with.
+type ProfileEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProfileEvent) Reset() {
+	*x = ProfileEvent{}
+	mi := &file_wrinkle_v1_event_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProfileEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProfileEvent) ProtoMessage() {}
+
+func (x *ProfileEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_event_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProfileEvent.ProtoReflect.Descriptor instead.
+func (*ProfileEvent) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_event_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ProfileEvent) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
 var File_wrinkle_v1_event_proto protoreflect.FileDescriptor
 
 const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\n" +
 	"\x16wrinkle/v1/event.proto\x12\n" +
-	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16wrinkle/v1/model.proto\"\x90\x02\n" +
+	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16wrinkle/v1/model.proto\"\xc6\x02\n" +
 	"\x05Event\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x04R\x06cursor\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -324,18 +386,21 @@ const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\amessage\x18\n" +
 	" \x01(\v2\x18.wrinkle.v1.MessageEventH\x00R\amessage\x12+\n" +
 	"\x04read\x18\v \x01(\v2\x15.wrinkle.v1.ReadEventH\x00R\x04read\x12G\n" +
-	"\x0emessage_failed\x18\f \x01(\v2\x1e.wrinkle.v1.MessageFailedEventH\x00R\rmessageFailedB\x06\n" +
+	"\x0emessage_failed\x18\f \x01(\v2\x1e.wrinkle.v1.MessageFailedEventH\x00R\rmessageFailed\x124\n" +
+	"\aprofile\x18\r \x01(\v2\x18.wrinkle.v1.ProfileEventH\x00R\aprofileB\x06\n" +
 	"\x04body\"=\n" +
 	"\fMessageEvent\x12-\n" +
 	"\amessage\x18\x01 \x01(\v2\x13.wrinkle.v1.MessageR\amessage\"_\n" +
 	"\tReadEvent\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\x04R\x0econversationId\x12\x17\n" +
-	"\auser_id\x18\x02 \x01(\x04R\x06userId\x12\x10\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x17\n" +
+	"\auser_id\x18\x02 \x01(\fR\x06userId\x12\x10\n" +
 	"\x03seq\x18\x03 \x01(\x04R\x03seq\"\x81\x01\n" +
 	"\x12MessageFailedEvent\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\x04R\x0econversationId\x12*\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12*\n" +
 	"\x11client_message_id\x18\x02 \x01(\tR\x0fclientMessageId\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reasonB\x9d\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"4\n" +
+	"\fProfileEvent\x12$\n" +
+	"\x04user\x18\x01 \x01(\v2\x10.wrinkle.v1.UserR\x04userB\x9d\x01\n" +
 	"\x0ecom.wrinkle.v1B\n" +
 	"EventProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +
@@ -353,26 +418,30 @@ func file_wrinkle_v1_event_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_event_proto_rawDescData
 }
 
-var file_wrinkle_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_wrinkle_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_wrinkle_v1_event_proto_goTypes = []any{
 	(*Event)(nil),                 // 0: wrinkle.v1.Event
 	(*MessageEvent)(nil),          // 1: wrinkle.v1.MessageEvent
 	(*ReadEvent)(nil),             // 2: wrinkle.v1.ReadEvent
 	(*MessageFailedEvent)(nil),    // 3: wrinkle.v1.MessageFailedEvent
-	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
-	(*Message)(nil),               // 5: wrinkle.v1.Message
+	(*ProfileEvent)(nil),          // 4: wrinkle.v1.ProfileEvent
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
+	(*Message)(nil),               // 6: wrinkle.v1.Message
+	(*User)(nil),                  // 7: wrinkle.v1.User
 }
 var file_wrinkle_v1_event_proto_depIdxs = []int32{
-	4, // 0: wrinkle.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
+	5, // 0: wrinkle.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
 	1, // 1: wrinkle.v1.Event.message:type_name -> wrinkle.v1.MessageEvent
 	2, // 2: wrinkle.v1.Event.read:type_name -> wrinkle.v1.ReadEvent
 	3, // 3: wrinkle.v1.Event.message_failed:type_name -> wrinkle.v1.MessageFailedEvent
-	5, // 4: wrinkle.v1.MessageEvent.message:type_name -> wrinkle.v1.Message
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	4, // 4: wrinkle.v1.Event.profile:type_name -> wrinkle.v1.ProfileEvent
+	6, // 5: wrinkle.v1.MessageEvent.message:type_name -> wrinkle.v1.Message
+	7, // 6: wrinkle.v1.ProfileEvent.user:type_name -> wrinkle.v1.User
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_event_proto_init() }
@@ -385,6 +454,7 @@ func file_wrinkle_v1_event_proto_init() {
 		(*Event_Message)(nil),
 		(*Event_Read)(nil),
 		(*Event_MessageFailed)(nil),
+		(*Event_Profile)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -392,7 +462,7 @@ func file_wrinkle_v1_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_event_proto_rawDesc), len(file_wrinkle_v1_event_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -10,6 +10,11 @@
 
 // Requests, responses and the types they share.
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -64,19 +69,116 @@ public nonisolated enum Wrinkle_V1_PushService: SwiftProtobuf.Enum, Swift.CaseIt
 
 }
 
-/// Signs in by name and registers the device. Users and devices are created on
-/// first use; there are no passwords. Must be the first request on a connection.
+/// Creates an account and signs this device in. Names are unique ignoring
+/// case and keep the case given: 1 to 64 bytes of UTF-8, without control
+/// characters or leading or trailing white space. Passwords are 8 to 256
+/// bytes. A taken name fails with ERROR_CODE_ALREADY_EXISTS. Allowed only
+/// before Connect; the connection then still has to Connect.
+public nonisolated struct Wrinkle_V1_RegisterRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var password: String = String()
+
+  public var deviceName: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_RegisterResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var credentials: Wrinkle_V1_DeviceCredentials {
+    get {_credentials ?? Wrinkle_V1_DeviceCredentials()}
+    set {_credentials = newValue}
+  }
+  /// Returns true if `credentials` has been explicitly set.
+  public var hasCredentials: Bool {self._credentials != nil}
+  /// Clears the value of `credentials`. Subsequent reads from it will return its default value.
+  public mutating func clearCredentials() {self._credentials = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _credentials: Wrinkle_V1_DeviceCredentials? = nil
+}
+
+/// Signs a new device in to an existing account; the name is matched ignoring
+/// case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
+/// without saying which. Allowed only before Connect.
+public nonisolated struct Wrinkle_V1_SignInRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String = String()
+
+  public var password: String = String()
+
+  public var deviceName: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_SignInResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var credentials: Wrinkle_V1_DeviceCredentials {
+    get {_credentials ?? Wrinkle_V1_DeviceCredentials()}
+    set {_credentials = newValue}
+  }
+  /// Returns true if `credentials` has been explicitly set.
+  public var hasCredentials: Bool {self._credentials != nil}
+  /// Clears the value of `credentials`. Subsequent reads from it will return its default value.
+  public mutating func clearCredentials() {self._credentials = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _credentials: Wrinkle_V1_DeviceCredentials? = nil
+}
+
+/// What a device keeps to connect again without the password.
+public nonisolated struct Wrinkle_V1_DeviceCredentials: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var userID: Data = Data()
+
+  public var deviceID: UInt64 = 0
+
+  /// Opaque; presented in ConnectRequest. Valid until the device signs out or
+  /// the account's password changes on another device.
+  public var deviceToken: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Binds the connection to a signed-in device. Must complete before any
+/// request other than Register and SignIn. A token that is not valid fails
+/// with ERROR_CODE_UNAUTHENTICATED and leaves the connection unconnected.
 public nonisolated struct Wrinkle_V1_ConnectRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var userName: String = String()
-
-  /// 0 registers a new device; otherwise the id this device was given before.
-  public var deviceID: UInt64 = 0
-
-  public var deviceName: String = String()
+  public var deviceToken: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -112,13 +214,120 @@ public nonisolated struct Wrinkle_V1_ConnectResponse: Sendable {
   fileprivate var _user: Wrinkle_V1_User? = nil
 }
 
+/// Changes the account's password. Every other device of the account is
+/// signed out: its token stops working. A wrong current password fails with
+/// ERROR_CODE_UNAUTHENTICATED.
+public nonisolated struct Wrinkle_V1_ChangePasswordRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var currentPassword: String = String()
+
+  public var newPassword: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_ChangePasswordResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+/// Changes the requesting user's profile; fields not set are kept. The user's
+/// own devices and conversation partners receive a ProfileEvent. A name taken
+/// by another user fails with ERROR_CODE_ALREADY_EXISTS; the user id never
+/// changes.
+public nonisolated struct Wrinkle_V1_UpdateProfileRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var name: String {
+    get {_name ?? String()}
+    set {_name = newValue}
+  }
+  /// Returns true if `name` has been explicitly set.
+  public var hasName: Bool {self._name != nil}
+  /// Clears the value of `name`. Subsequent reads from it will return its default value.
+  public mutating func clearName() {self._name = nil}
+
+  /// One of the standard icons listed at User.icon, or empty for none.
+  public var icon: String {
+    get {_icon ?? String()}
+    set {_icon = newValue}
+  }
+  /// Returns true if `icon` has been explicitly set.
+  public var hasIcon: Bool {self._icon != nil}
+  /// Clears the value of `icon`. Subsequent reads from it will return its default value.
+  public mutating func clearIcon() {self._icon = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _name: String? = nil
+  fileprivate var _icon: String? = nil
+}
+
+public nonisolated struct Wrinkle_V1_UpdateProfileResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var user: Wrinkle_V1_User {
+    get {_user ?? Wrinkle_V1_User()}
+    set {_user = newValue}
+  }
+  /// Returns true if `user` has been explicitly set.
+  public var hasUser: Bool {self._user != nil}
+  /// Clears the value of `user`. Subsequent reads from it will return its default value.
+  public mutating func clearUser() {self._user = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _user: Wrinkle_V1_User? = nil
+}
+
+/// Signs this device out: its token stops working and its push registration
+/// is removed. The client closes the connection after the response.
+public nonisolated struct Wrinkle_V1_SignOutRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_SignOutResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 /// Finds or creates the conversation between the requesting user and the peer.
+/// The peer is found by name, ignoring case.
 public nonisolated struct Wrinkle_V1_OpenConversationRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var peerUserName: String = String()
+  public var peerName: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -151,7 +360,7 @@ public nonisolated struct Wrinkle_V1_SendMessageRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
   public var clientMessageID: String = String()
 
@@ -190,7 +399,7 @@ public nonisolated struct Wrinkle_V1_MarkReadRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
   public var seq: UInt64 = 0
 
@@ -274,7 +483,7 @@ public nonisolated struct Wrinkle_V1_GetMessagesRequest: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
   /// Return messages with seq below this; 0 starts from the newest.
   public var beforeSeq: UInt64 = 0
@@ -336,9 +545,9 @@ nonisolated extension Wrinkle_V1_PushService: SwiftProtobuf._ProtoNameProviding 
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0PUSH_SERVICE_UNSPECIFIED\0\u{1}PUSH_SERVICE_APNS_SANDBOX\0\u{1}PUSH_SERVICE_APNS\0")
 }
 
-nonisolated extension Wrinkle_V1_ConnectRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".ConnectRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_name\0\u{3}device_id\0\u{3}device_name\0")
+nonisolated extension Wrinkle_V1_RegisterRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RegisterRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}password\0\u{3}device_name\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -346,8 +555,8 @@ nonisolated extension Wrinkle_V1_ConnectRequest: SwiftProtobuf.Message, SwiftPro
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.userName) }()
-      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.deviceID) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.password) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.deviceName) }()
       default: break
       }
@@ -355,11 +564,11 @@ nonisolated extension Wrinkle_V1_ConnectRequest: SwiftProtobuf.Message, SwiftPro
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.userName.isEmpty {
-      try visitor.visitSingularStringField(value: self.userName, fieldNumber: 1)
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
-    if self.deviceID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.deviceID, fieldNumber: 2)
+    if !self.password.isEmpty {
+      try visitor.visitSingularStringField(value: self.password, fieldNumber: 2)
     }
     if !self.deviceName.isEmpty {
       try visitor.visitSingularStringField(value: self.deviceName, fieldNumber: 3)
@@ -367,10 +576,188 @@ nonisolated extension Wrinkle_V1_ConnectRequest: SwiftProtobuf.Message, SwiftPro
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Wrinkle_V1_ConnectRequest, rhs: Wrinkle_V1_ConnectRequest) -> Bool {
-    if lhs.userName != rhs.userName {return false}
-    if lhs.deviceID != rhs.deviceID {return false}
+  public static func ==(lhs: Wrinkle_V1_RegisterRequest, rhs: Wrinkle_V1_RegisterRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.password != rhs.password {return false}
     if lhs.deviceName != rhs.deviceName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_RegisterResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RegisterResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}credentials\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._credentials) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._credentials {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_RegisterResponse, rhs: Wrinkle_V1_RegisterResponse) -> Bool {
+    if lhs._credentials != rhs._credentials {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_SignInRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SignInRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}password\0\u{3}device_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.password) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.deviceName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
+    }
+    if !self.password.isEmpty {
+      try visitor.visitSingularStringField(value: self.password, fieldNumber: 2)
+    }
+    if !self.deviceName.isEmpty {
+      try visitor.visitSingularStringField(value: self.deviceName, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_SignInRequest, rhs: Wrinkle_V1_SignInRequest) -> Bool {
+    if lhs.name != rhs.name {return false}
+    if lhs.password != rhs.password {return false}
+    if lhs.deviceName != rhs.deviceName {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_SignInResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SignInResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}credentials\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._credentials) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._credentials {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_SignInResponse, rhs: Wrinkle_V1_SignInResponse) -> Bool {
+    if lhs._credentials != rhs._credentials {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_DeviceCredentials: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeviceCredentials"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{3}device_id\0\u{3}device_token\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.userID) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.deviceID) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.deviceToken) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.userID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.userID, fieldNumber: 1)
+    }
+    if self.deviceID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.deviceID, fieldNumber: 2)
+    }
+    if !self.deviceToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.deviceToken, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_DeviceCredentials, rhs: Wrinkle_V1_DeviceCredentials) -> Bool {
+    if lhs.userID != rhs.userID {return false}
+    if lhs.deviceID != rhs.deviceID {return false}
+    if lhs.deviceToken != rhs.deviceToken {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_ConnectRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ConnectRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}device_token\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.deviceToken) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.deviceToken.isEmpty {
+      try visitor.visitSingularStringField(value: self.deviceToken, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_ConnectRequest, rhs: Wrinkle_V1_ConnectRequest) -> Bool {
+    if lhs.deviceToken != rhs.deviceToken {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -425,9 +812,9 @@ nonisolated extension Wrinkle_V1_ConnectResponse: SwiftProtobuf.Message, SwiftPr
   }
 }
 
-nonisolated extension Wrinkle_V1_OpenConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".OpenConversationRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}peer_user_name\0")
+nonisolated extension Wrinkle_V1_ChangePasswordRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ChangePasswordRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}current_password\0\u{3}new_password\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -435,21 +822,186 @@ nonisolated extension Wrinkle_V1_OpenConversationRequest: SwiftProtobuf.Message,
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularStringField(value: &self.peerUserName) }()
+      case 1: try { try decoder.decodeSingularStringField(value: &self.currentPassword) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.newPassword) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.peerUserName.isEmpty {
-      try visitor.visitSingularStringField(value: self.peerUserName, fieldNumber: 1)
+    if !self.currentPassword.isEmpty {
+      try visitor.visitSingularStringField(value: self.currentPassword, fieldNumber: 1)
+    }
+    if !self.newPassword.isEmpty {
+      try visitor.visitSingularStringField(value: self.newPassword, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_ChangePasswordRequest, rhs: Wrinkle_V1_ChangePasswordRequest) -> Bool {
+    if lhs.currentPassword != rhs.currentPassword {return false}
+    if lhs.newPassword != rhs.newPassword {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_ChangePasswordResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".ChangePasswordResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_ChangePasswordResponse, rhs: Wrinkle_V1_ChangePasswordResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_UpdateProfileRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateProfileRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}name\0\u{1}icon\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self._name) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self._icon) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._name {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 1)
+    } }()
+    try { if let v = self._icon {
+      try visitor.visitSingularStringField(value: v, fieldNumber: 2)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_UpdateProfileRequest, rhs: Wrinkle_V1_UpdateProfileRequest) -> Bool {
+    if lhs._name != rhs._name {return false}
+    if lhs._icon != rhs._icon {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_UpdateProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".UpdateProfileResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._user) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._user {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_UpdateProfileResponse, rhs: Wrinkle_V1_UpdateProfileResponse) -> Bool {
+    if lhs._user != rhs._user {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_SignOutRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SignOutRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_SignOutRequest, rhs: Wrinkle_V1_SignOutRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_SignOutResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".SignOutResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_SignOutResponse, rhs: Wrinkle_V1_SignOutResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_OpenConversationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OpenConversationRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}peer_name\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularStringField(value: &self.peerName) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.peerName.isEmpty {
+      try visitor.visitSingularStringField(value: self.peerName, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_OpenConversationRequest, rhs: Wrinkle_V1_OpenConversationRequest) -> Bool {
-    if lhs.peerUserName != rhs.peerUserName {return false}
+    if lhs.peerName != rhs.peerName {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -499,7 +1051,7 @@ nonisolated extension Wrinkle_V1_SendMessageRequest: SwiftProtobuf.Message, Swif
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.text) }()
       default: break
@@ -508,8 +1060,8 @@ nonisolated extension Wrinkle_V1_SendMessageRequest: SwiftProtobuf.Message, Swif
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
     if !self.clientMessageID.isEmpty {
       try visitor.visitSingularStringField(value: self.clientMessageID, fieldNumber: 2)
@@ -573,7 +1125,7 @@ nonisolated extension Wrinkle_V1_MarkReadRequest: SwiftProtobuf.Message, SwiftPr
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
       default: break
       }
@@ -581,8 +1133,8 @@ nonisolated extension Wrinkle_V1_MarkReadRequest: SwiftProtobuf.Message, SwiftPr
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
     if self.seq != 0 {
       try visitor.visitSingularUInt64Field(value: self.seq, fieldNumber: 2)
@@ -751,7 +1303,7 @@ nonisolated extension Wrinkle_V1_GetMessagesRequest: SwiftProtobuf.Message, Swif
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.beforeSeq) }()
       case 3: try { try decoder.decodeSingularUInt32Field(value: &self.limit) }()
       default: break
@@ -760,8 +1312,8 @@ nonisolated extension Wrinkle_V1_GetMessagesRequest: SwiftProtobuf.Message, Swif
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
     if self.beforeSeq != 0 {
       try visitor.visitSingularUInt64Field(value: self.beforeSeq, fieldNumber: 2)

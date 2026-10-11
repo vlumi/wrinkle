@@ -9,7 +9,7 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Message as Message$1 } from "./model_pb";
+import type { Message as Message$1, User } from "./model_pb";
 import { file_wrinkle_v1_model } from "./model_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIt4BCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAQSDwoHdXNlcl9pZBgCIAEoBBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoBBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAlCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIosCCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXJCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -57,6 +57,12 @@ export type Event = Message<"wrinkle.v1.Event"> & {
      */
     value: MessageFailedEvent;
     case: "messageFailed";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.ProfileEvent profile = 13;
+     */
+    value: ProfileEvent;
+    case: "profile";
   } | { case: undefined; value?: undefined };
 };
 
@@ -95,14 +101,14 @@ export const MessageEventSchema: GenMessage<MessageEvent> = /*@__PURE__*/
  */
 export type ReadEvent = Message<"wrinkle.v1.ReadEvent"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
-   * @generated from field: uint64 user_id = 2;
+   * @generated from field: bytes user_id = 2;
    */
-  userId: bigint;
+  userId: Uint8Array;
 
   /**
    * @generated from field: uint64 seq = 3;
@@ -125,9 +131,9 @@ export const ReadEventSchema: GenMessage<ReadEvent> = /*@__PURE__*/
  */
 export type MessageFailedEvent = Message<"wrinkle.v1.MessageFailedEvent"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
    * @generated from field: string client_message_id = 2;
@@ -146,4 +152,24 @@ export type MessageFailedEvent = Message<"wrinkle.v1.MessageFailedEvent"> & {
  */
 export const MessageFailedEventSchema: GenMessage<MessageFailedEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 3);
+
+/**
+ * A user's profile changed. Received by the user, so their other devices
+ * learn of it, and by everyone they have a conversation with.
+ *
+ * @generated from message wrinkle.v1.ProfileEvent
+ */
+export type ProfileEvent = Message<"wrinkle.v1.ProfileEvent"> & {
+  /**
+   * @generated from field: wrinkle.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.ProfileEvent.
+ * Use `create(ProfileEventSchema)` to create a new message.
+ */
+export const ProfileEventSchema: GenMessage<ProfileEvent> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_event, 4);
 

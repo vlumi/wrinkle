@@ -16,26 +16,27 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/messaging.proto.
  */
 export const file_wrinkle_v1_messaging: GenFile = /*@__PURE__*/
-  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJLCg5Db25uZWN0UmVxdWVzdBIRCgl1c2VyX25hbWUYASABKAkSEQoJZGV2aWNlX2lkGAIgASgEEhMKC2RldmljZV9uYW1lGAMgASgJIm0KD0Nvbm5lY3RSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyEhEKCWRldmljZV9pZBgCIAEoBBIVCg1kZXZpY2VfY3Vyc29yGAMgASgEEhAKCGxvZ19oZWFkGAQgASgEIjEKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhYKDnBlZXJfdXNlcl9uYW1lGAEgASgJIkoKGE9wZW5Db252ZXJzYXRpb25SZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJWChJTZW5kTWVzc2FnZVJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgEEhkKEWNsaWVudF9tZXNzYWdlX2lkGAIgASgJEgwKBHRleHQYAyABKAkiOwoTU2VuZE1lc3NhZ2VSZXNwb25zZRIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIjcKD01hcmtSZWFkUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAQSCwoDc2VxGAIgASgEIhIKEE1hcmtSZWFkUmVzcG9uc2UiLAoLU3luY1JlcXVlc3QSDgoGY3Vyc29yGAEgASgEEg0KBWxpbWl0GAIgASgNIlMKDFN5bmNSZXNwb25zZRIhCgZldmVudHMYASADKAsyES53cmlua2xlLnYxLkV2ZW50Eg4KBmN1cnNvchgCIAEoBBIQCghoYXNfbW9yZRgDIAEoCCIaChhMaXN0Q29udmVyc2F0aW9uc1JlcXVlc3QiTAoZTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZRIvCg1jb252ZXJzYXRpb25zGAEgAygLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUAoSR2V0TWVzc2FnZXNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoBBISCgpiZWZvcmVfc2VxGAIgASgEEg0KBWxpbWl0GAMgASgNIjwKE0dldE1lc3NhZ2VzUmVzcG9uc2USJQoIbWVzc2FnZXMYASADKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiUwoYUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0EigKB3NlcnZpY2UYASABKA4yFy53cmlua2xlLnYxLlB1c2hTZXJ2aWNlEg0KBXRva2VuGAIgASgJIhsKGVJlZ2lzdGVyUHVzaFRva2VuUmVzcG9uc2UqYQoLUHVzaFNlcnZpY2USHAoYUFVTSF9TRVJWSUNFX1VOU1BFQ0lGSUVEEAASHQoZUFVTSF9TRVJWSUNFX0FQTlNfU0FOREJPWBABEhUKEVBVU0hfU0VSVklDRV9BUE5TEAJCoQEKDmNvbS53cmlua2xlLnYxQg5NZXNzYWdpbmdQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_wrinkle_v1_event, file_wrinkle_v1_model]);
+  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UiTgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBAUIHCgVfbmFtZUIHCgVfaWNvbiI3ChVVcGRhdGVQcm9maWxlUmVzcG9uc2USHgoEdXNlchgBIAEoCzIQLndyaW5rbGUudjEuVXNlciIQCg5TaWduT3V0UmVxdWVzdCIRCg9TaWduT3V0UmVzcG9uc2UiLAoXT3BlbkNvbnZlcnNhdGlvblJlcXVlc3QSEQoJcGVlcl9uYW1lGAEgASgJIkoKGE9wZW5Db252ZXJzYXRpb25SZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJWChJTZW5kTWVzc2FnZVJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEhkKEWNsaWVudF9tZXNzYWdlX2lkGAIgASgJEgwKBHRleHQYAyABKAkiOwoTU2VuZE1lc3NhZ2VSZXNwb25zZRIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIjcKD01hcmtSZWFkUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEIhIKEE1hcmtSZWFkUmVzcG9uc2UiLAoLU3luY1JlcXVlc3QSDgoGY3Vyc29yGAEgASgEEg0KBWxpbWl0GAIgASgNIlMKDFN5bmNSZXNwb25zZRIhCgZldmVudHMYASADKAsyES53cmlua2xlLnYxLkV2ZW50Eg4KBmN1cnNvchgCIAEoBBIQCghoYXNfbW9yZRgDIAEoCCIaChhMaXN0Q29udmVyc2F0aW9uc1JlcXVlc3QiTAoZTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZRIvCg1jb252ZXJzYXRpb25zGAEgAygLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUAoSR2V0TWVzc2FnZXNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBISCgpiZWZvcmVfc2VxGAIgASgEEg0KBWxpbWl0GAMgASgNIjwKE0dldE1lc3NhZ2VzUmVzcG9uc2USJQoIbWVzc2FnZXMYASADKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiUwoYUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0EigKB3NlcnZpY2UYASABKA4yFy53cmlua2xlLnYxLlB1c2hTZXJ2aWNlEg0KBXRva2VuGAIgASgJIhsKGVJlZ2lzdGVyUHVzaFRva2VuUmVzcG9uc2UqYQoLUHVzaFNlcnZpY2USHAoYUFVTSF9TRVJWSUNFX1VOU1BFQ0lGSUVEEAASHQoZUFVTSF9TRVJWSUNFX0FQTlNfU0FOREJPWBABEhUKEVBVU0hfU0VSVklDRV9BUE5TEAJCoQEKDmNvbS53cmlua2xlLnYxQg5NZXNzYWdpbmdQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_wrinkle_v1_event, file_wrinkle_v1_model]);
 
 /**
- * Signs in by name and registers the device. Users and devices are created on
- * first use; there are no passwords. Must be the first request on a connection.
+ * Creates an account and signs this device in. Names are unique ignoring
+ * case and keep the case given: 1 to 64 bytes of UTF-8, without control
+ * characters or leading or trailing white space. Passwords are 8 to 256
+ * bytes. A taken name fails with ERROR_CODE_ALREADY_EXISTS. Allowed only
+ * before Connect; the connection then still has to Connect.
  *
- * @generated from message wrinkle.v1.ConnectRequest
+ * @generated from message wrinkle.v1.RegisterRequest
  */
-export type ConnectRequest = Message<"wrinkle.v1.ConnectRequest"> & {
+export type RegisterRequest = Message<"wrinkle.v1.RegisterRequest"> & {
   /**
-   * @generated from field: string user_name = 1;
+   * @generated from field: string name = 1;
    */
-  userName: string;
+  name: string;
 
   /**
-   * 0 registers a new device; otherwise the id this device was given before.
-   *
-   * @generated from field: uint64 device_id = 2;
+   * @generated from field: string password = 2;
    */
-  deviceId: bigint;
+  password: string;
 
   /**
    * @generated from field: string device_name = 3;
@@ -44,11 +45,129 @@ export type ConnectRequest = Message<"wrinkle.v1.ConnectRequest"> & {
 };
 
 /**
+ * Describes the message wrinkle.v1.RegisterRequest.
+ * Use `create(RegisterRequestSchema)` to create a new message.
+ */
+export const RegisterRequestSchema: GenMessage<RegisterRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 0);
+
+/**
+ * @generated from message wrinkle.v1.RegisterResponse
+ */
+export type RegisterResponse = Message<"wrinkle.v1.RegisterResponse"> & {
+  /**
+   * @generated from field: wrinkle.v1.DeviceCredentials credentials = 1;
+   */
+  credentials?: DeviceCredentials | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.RegisterResponse.
+ * Use `create(RegisterResponseSchema)` to create a new message.
+ */
+export const RegisterResponseSchema: GenMessage<RegisterResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 1);
+
+/**
+ * Signs a new device in to an existing account; the name is matched ignoring
+ * case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
+ * without saying which. Allowed only before Connect.
+ *
+ * @generated from message wrinkle.v1.SignInRequest
+ */
+export type SignInRequest = Message<"wrinkle.v1.SignInRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string password = 2;
+   */
+  password: string;
+
+  /**
+   * @generated from field: string device_name = 3;
+   */
+  deviceName: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.SignInRequest.
+ * Use `create(SignInRequestSchema)` to create a new message.
+ */
+export const SignInRequestSchema: GenMessage<SignInRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 2);
+
+/**
+ * @generated from message wrinkle.v1.SignInResponse
+ */
+export type SignInResponse = Message<"wrinkle.v1.SignInResponse"> & {
+  /**
+   * @generated from field: wrinkle.v1.DeviceCredentials credentials = 1;
+   */
+  credentials?: DeviceCredentials | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.SignInResponse.
+ * Use `create(SignInResponseSchema)` to create a new message.
+ */
+export const SignInResponseSchema: GenMessage<SignInResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 3);
+
+/**
+ * What a device keeps to connect again without the password.
+ *
+ * @generated from message wrinkle.v1.DeviceCredentials
+ */
+export type DeviceCredentials = Message<"wrinkle.v1.DeviceCredentials"> & {
+  /**
+   * @generated from field: bytes user_id = 1;
+   */
+  userId: Uint8Array;
+
+  /**
+   * @generated from field: uint64 device_id = 2;
+   */
+  deviceId: bigint;
+
+  /**
+   * Opaque; presented in ConnectRequest. Valid until the device signs out or
+   * the account's password changes on another device.
+   *
+   * @generated from field: string device_token = 3;
+   */
+  deviceToken: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.DeviceCredentials.
+ * Use `create(DeviceCredentialsSchema)` to create a new message.
+ */
+export const DeviceCredentialsSchema: GenMessage<DeviceCredentials> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 4);
+
+/**
+ * Binds the connection to a signed-in device. Must complete before any
+ * request other than Register and SignIn. A token that is not valid fails
+ * with ERROR_CODE_UNAUTHENTICATED and leaves the connection unconnected.
+ *
+ * @generated from message wrinkle.v1.ConnectRequest
+ */
+export type ConnectRequest = Message<"wrinkle.v1.ConnectRequest"> & {
+  /**
+   * @generated from field: string device_token = 1;
+   */
+  deviceToken: string;
+};
+
+/**
  * Describes the message wrinkle.v1.ConnectRequest.
  * Use `create(ConnectRequestSchema)` to create a new message.
  */
 export const ConnectRequestSchema: GenMessage<ConnectRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 0);
+  messageDesc(file_wrinkle_v1_messaging, 5);
 
 /**
  * @generated from message wrinkle.v1.ConnectResponse
@@ -84,18 +203,133 @@ export type ConnectResponse = Message<"wrinkle.v1.ConnectResponse"> & {
  * Use `create(ConnectResponseSchema)` to create a new message.
  */
 export const ConnectResponseSchema: GenMessage<ConnectResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 1);
+  messageDesc(file_wrinkle_v1_messaging, 6);
+
+/**
+ * Changes the account's password. Every other device of the account is
+ * signed out: its token stops working. A wrong current password fails with
+ * ERROR_CODE_UNAUTHENTICATED.
+ *
+ * @generated from message wrinkle.v1.ChangePasswordRequest
+ */
+export type ChangePasswordRequest = Message<"wrinkle.v1.ChangePasswordRequest"> & {
+  /**
+   * @generated from field: string current_password = 1;
+   */
+  currentPassword: string;
+
+  /**
+   * @generated from field: string new_password = 2;
+   */
+  newPassword: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.ChangePasswordRequest.
+ * Use `create(ChangePasswordRequestSchema)` to create a new message.
+ */
+export const ChangePasswordRequestSchema: GenMessage<ChangePasswordRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 7);
+
+/**
+ * @generated from message wrinkle.v1.ChangePasswordResponse
+ */
+export type ChangePasswordResponse = Message<"wrinkle.v1.ChangePasswordResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.ChangePasswordResponse.
+ * Use `create(ChangePasswordResponseSchema)` to create a new message.
+ */
+export const ChangePasswordResponseSchema: GenMessage<ChangePasswordResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 8);
+
+/**
+ * Changes the requesting user's profile; fields not set are kept. The user's
+ * own devices and conversation partners receive a ProfileEvent. A name taken
+ * by another user fails with ERROR_CODE_ALREADY_EXISTS; the user id never
+ * changes.
+ *
+ * @generated from message wrinkle.v1.UpdateProfileRequest
+ */
+export type UpdateProfileRequest = Message<"wrinkle.v1.UpdateProfileRequest"> & {
+  /**
+   * @generated from field: optional string name = 1;
+   */
+  name?: string | undefined;
+
+  /**
+   * One of the standard icons listed at User.icon, or empty for none.
+   *
+   * @generated from field: optional string icon = 2;
+   */
+  icon?: string | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.UpdateProfileRequest.
+ * Use `create(UpdateProfileRequestSchema)` to create a new message.
+ */
+export const UpdateProfileRequestSchema: GenMessage<UpdateProfileRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 9);
+
+/**
+ * @generated from message wrinkle.v1.UpdateProfileResponse
+ */
+export type UpdateProfileResponse = Message<"wrinkle.v1.UpdateProfileResponse"> & {
+  /**
+   * @generated from field: wrinkle.v1.User user = 1;
+   */
+  user?: User | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.UpdateProfileResponse.
+ * Use `create(UpdateProfileResponseSchema)` to create a new message.
+ */
+export const UpdateProfileResponseSchema: GenMessage<UpdateProfileResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 10);
+
+/**
+ * Signs this device out: its token stops working and its push registration
+ * is removed. The client closes the connection after the response.
+ *
+ * @generated from message wrinkle.v1.SignOutRequest
+ */
+export type SignOutRequest = Message<"wrinkle.v1.SignOutRequest"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.SignOutRequest.
+ * Use `create(SignOutRequestSchema)` to create a new message.
+ */
+export const SignOutRequestSchema: GenMessage<SignOutRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 11);
+
+/**
+ * @generated from message wrinkle.v1.SignOutResponse
+ */
+export type SignOutResponse = Message<"wrinkle.v1.SignOutResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.SignOutResponse.
+ * Use `create(SignOutResponseSchema)` to create a new message.
+ */
+export const SignOutResponseSchema: GenMessage<SignOutResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 12);
 
 /**
  * Finds or creates the conversation between the requesting user and the peer.
+ * The peer is found by name, ignoring case.
  *
  * @generated from message wrinkle.v1.OpenConversationRequest
  */
 export type OpenConversationRequest = Message<"wrinkle.v1.OpenConversationRequest"> & {
   /**
-   * @generated from field: string peer_user_name = 1;
+   * @generated from field: string peer_name = 1;
    */
-  peerUserName: string;
+  peerName: string;
 };
 
 /**
@@ -103,7 +337,7 @@ export type OpenConversationRequest = Message<"wrinkle.v1.OpenConversationReques
  * Use `create(OpenConversationRequestSchema)` to create a new message.
  */
 export const OpenConversationRequestSchema: GenMessage<OpenConversationRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 2);
+  messageDesc(file_wrinkle_v1_messaging, 13);
 
 /**
  * @generated from message wrinkle.v1.OpenConversationResponse
@@ -120,16 +354,16 @@ export type OpenConversationResponse = Message<"wrinkle.v1.OpenConversationRespo
  * Use `create(OpenConversationResponseSchema)` to create a new message.
  */
 export const OpenConversationResponseSchema: GenMessage<OpenConversationResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 3);
+  messageDesc(file_wrinkle_v1_messaging, 14);
 
 /**
  * @generated from message wrinkle.v1.SendMessageRequest
  */
 export type SendMessageRequest = Message<"wrinkle.v1.SendMessageRequest"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
    * @generated from field: string client_message_id = 2;
@@ -147,7 +381,7 @@ export type SendMessageRequest = Message<"wrinkle.v1.SendMessageRequest"> & {
  * Use `create(SendMessageRequestSchema)` to create a new message.
  */
 export const SendMessageRequestSchema: GenMessage<SendMessageRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 4);
+  messageDesc(file_wrinkle_v1_messaging, 15);
 
 /**
  * @generated from message wrinkle.v1.SendMessageResponse
@@ -164,7 +398,7 @@ export type SendMessageResponse = Message<"wrinkle.v1.SendMessageResponse"> & {
  * Use `create(SendMessageResponseSchema)` to create a new message.
  */
 export const SendMessageResponseSchema: GenMessage<SendMessageResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 5);
+  messageDesc(file_wrinkle_v1_messaging, 16);
 
 /**
  * Marks the conversation read up to seq for the requesting user. Lower than
@@ -174,9 +408,9 @@ export const SendMessageResponseSchema: GenMessage<SendMessageResponse> = /*@__P
  */
 export type MarkReadRequest = Message<"wrinkle.v1.MarkReadRequest"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
    * @generated from field: uint64 seq = 2;
@@ -189,7 +423,7 @@ export type MarkReadRequest = Message<"wrinkle.v1.MarkReadRequest"> & {
  * Use `create(MarkReadRequestSchema)` to create a new message.
  */
 export const MarkReadRequestSchema: GenMessage<MarkReadRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 6);
+  messageDesc(file_wrinkle_v1_messaging, 17);
 
 /**
  * @generated from message wrinkle.v1.MarkReadResponse
@@ -202,7 +436,7 @@ export type MarkReadResponse = Message<"wrinkle.v1.MarkReadResponse"> & {
  * Use `create(MarkReadResponseSchema)` to create a new message.
  */
 export const MarkReadResponseSchema: GenMessage<MarkReadResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 7);
+  messageDesc(file_wrinkle_v1_messaging, 18);
 
 /**
  * Returns events from the user's log after the cursor, oldest first.
@@ -229,7 +463,7 @@ export type SyncRequest = Message<"wrinkle.v1.SyncRequest"> & {
  * Use `create(SyncRequestSchema)` to create a new message.
  */
 export const SyncRequestSchema: GenMessage<SyncRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 8);
+  messageDesc(file_wrinkle_v1_messaging, 19);
 
 /**
  * @generated from message wrinkle.v1.SyncResponse
@@ -261,7 +495,7 @@ export type SyncResponse = Message<"wrinkle.v1.SyncResponse"> & {
  * Use `create(SyncResponseSchema)` to create a new message.
  */
 export const SyncResponseSchema: GenMessage<SyncResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 9);
+  messageDesc(file_wrinkle_v1_messaging, 20);
 
 /**
  * @generated from message wrinkle.v1.ListConversationsRequest
@@ -274,7 +508,7 @@ export type ListConversationsRequest = Message<"wrinkle.v1.ListConversationsRequ
  * Use `create(ListConversationsRequestSchema)` to create a new message.
  */
 export const ListConversationsRequestSchema: GenMessage<ListConversationsRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 10);
+  messageDesc(file_wrinkle_v1_messaging, 21);
 
 /**
  * Conversations with the most recently active first.
@@ -293,7 +527,7 @@ export type ListConversationsResponse = Message<"wrinkle.v1.ListConversationsRes
  * Use `create(ListConversationsResponseSchema)` to create a new message.
  */
 export const ListConversationsResponseSchema: GenMessage<ListConversationsResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 11);
+  messageDesc(file_wrinkle_v1_messaging, 22);
 
 /**
  * Returns messages of a conversation, newest first.
@@ -302,9 +536,9 @@ export const ListConversationsResponseSchema: GenMessage<ListConversationsRespon
  */
 export type GetMessagesRequest = Message<"wrinkle.v1.GetMessagesRequest"> & {
   /**
-   * @generated from field: uint64 conversation_id = 1;
+   * @generated from field: bytes conversation_id = 1;
    */
-  conversationId: bigint;
+  conversationId: Uint8Array;
 
   /**
    * Return messages with seq below this; 0 starts from the newest.
@@ -326,7 +560,7 @@ export type GetMessagesRequest = Message<"wrinkle.v1.GetMessagesRequest"> & {
  * Use `create(GetMessagesRequestSchema)` to create a new message.
  */
 export const GetMessagesRequestSchema: GenMessage<GetMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 12);
+  messageDesc(file_wrinkle_v1_messaging, 23);
 
 /**
  * @generated from message wrinkle.v1.GetMessagesResponse
@@ -343,7 +577,7 @@ export type GetMessagesResponse = Message<"wrinkle.v1.GetMessagesResponse"> & {
  * Use `create(GetMessagesResponseSchema)` to create a new message.
  */
 export const GetMessagesResponseSchema: GenMessage<GetMessagesResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 13);
+  messageDesc(file_wrinkle_v1_messaging, 24);
 
 /**
  * Registers where to push notifications for the requesting device while it
@@ -372,7 +606,7 @@ export type RegisterPushTokenRequest = Message<"wrinkle.v1.RegisterPushTokenRequ
  * Use `create(RegisterPushTokenRequestSchema)` to create a new message.
  */
 export const RegisterPushTokenRequestSchema: GenMessage<RegisterPushTokenRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 14);
+  messageDesc(file_wrinkle_v1_messaging, 25);
 
 /**
  * @generated from message wrinkle.v1.RegisterPushTokenResponse
@@ -385,7 +619,7 @@ export type RegisterPushTokenResponse = Message<"wrinkle.v1.RegisterPushTokenRes
  * Use `create(RegisterPushTokenResponseSchema)` to create a new message.
  */
 export const RegisterPushTokenResponseSchema: GenMessage<RegisterPushTokenResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 15);
+  messageDesc(file_wrinkle_v1_messaging, 26);
 
 /**
  * @generated from enum wrinkle.v1.PushService

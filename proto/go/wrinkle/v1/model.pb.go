@@ -25,9 +25,14 @@ const (
 )
 
 type User struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserId        uint64                 `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	UserId []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Name   string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// A standard icon, or empty for none. The standard icons, by key, with the
+	// emoji clients draw them as: cat 🐱, dog 🐶, fox 🦊, owl 🦉, bear 🐻,
+	// frog 🐸, panda 🐼, rabbit 🐰, tiger 🐯, penguin 🐧, octopus 🐙,
+	// unicorn 🦄.
+	Icon          string `protobuf:"bytes,3,opt,name=icon,proto3" json:"icon,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -62,11 +67,11 @@ func (*User) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *User) GetUserId() uint64 {
+func (x *User) GetUserId() []byte {
 	if x != nil {
 		return x.UserId
 	}
-	return 0
+	return nil
 }
 
 func (x *User) GetName() string {
@@ -76,14 +81,21 @@ func (x *User) GetName() string {
 	return ""
 }
 
+func (x *User) GetIcon() string {
+	if x != nil {
+		return x.Icon
+	}
+	return ""
+}
+
 // A message in a conversation. (conversation_id, seq) identifies it; seq is
 // assigned by the conversation when the message is stored, is dense (1, 2,
 // 3, ...), and orders the conversation for everyone.
 type Message struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	ConversationId uint64                 `protobuf:"varint,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	Seq            uint64                 `protobuf:"varint,2,opt,name=seq,proto3" json:"seq,omitempty"`
-	SenderUserId   uint64                 `protobuf:"varint,3,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
+	SenderUserId   []byte                 `protobuf:"bytes,3,opt,name=sender_user_id,json=senderUserId,proto3" json:"sender_user_id,omitempty"`
 	// Chosen by the sending device, unique per sender and conversation. Resending
 	// with the same id returns the message already stored instead of a duplicate.
 	ClientMessageId string                 `protobuf:"bytes,4,opt,name=client_message_id,json=clientMessageId,proto3" json:"client_message_id,omitempty"`
@@ -123,11 +135,11 @@ func (*Message) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *Message) GetConversationId() uint64 {
+func (x *Message) GetConversationId() []byte {
 	if x != nil {
 		return x.ConversationId
 	}
-	return 0
+	return nil
 }
 
 func (x *Message) GetSeq() uint64 {
@@ -137,11 +149,11 @@ func (x *Message) GetSeq() uint64 {
 	return 0
 }
 
-func (x *Message) GetSenderUserId() uint64 {
+func (x *Message) GetSenderUserId() []byte {
 	if x != nil {
 		return x.SenderUserId
 	}
-	return 0
+	return nil
 }
 
 func (x *Message) GetClientMessageId() string {
@@ -168,7 +180,7 @@ func (x *Message) GetSentAt() *timestamppb.Timestamp {
 // A conversation as seen by the requesting user.
 type Conversation struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	ConversationId uint64                 `protobuf:"varint,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	Peer           *User                  `protobuf:"bytes,2,opt,name=peer,proto3" json:"peer,omitempty"`
 	// Highest message seq in the conversation; 0 when empty.
 	LastSeq uint64 `protobuf:"varint,3,opt,name=last_seq,json=lastSeq,proto3" json:"last_seq,omitempty"`
@@ -213,11 +225,11 @@ func (*Conversation) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Conversation) GetConversationId() uint64 {
+func (x *Conversation) GetConversationId() []byte {
 	if x != nil {
 		return x.ConversationId
 	}
-	return 0
+	return nil
 }
 
 func (x *Conversation) GetPeer() *User {
@@ -260,19 +272,20 @@ var File_wrinkle_v1_model_proto protoreflect.FileDescriptor
 const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\n" +
 	"\x16wrinkle/v1/model.proto\x12\n" +
-	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"3\n" +
+	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"G\n" +
 	"\x04User\x12\x17\n" +
-	"\auser_id\x18\x01 \x01(\x04R\x06userId\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"\xdf\x01\n" +
+	"\auser_id\x18\x01 \x01(\fR\x06userId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
+	"\x04icon\x18\x03 \x01(\tR\x04icon\"\xdf\x01\n" +
 	"\aMessage\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\x04R\x0econversationId\x12\x10\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12$\n" +
-	"\x0esender_user_id\x18\x03 \x01(\x04R\fsenderUserId\x12*\n" +
+	"\x0esender_user_id\x18\x03 \x01(\fR\fsenderUserId\x12*\n" +
 	"\x11client_message_id\x18\x04 \x01(\tR\x0fclientMessageId\x12\x12\n" +
 	"\x04text\x18\x05 \x01(\tR\x04text\x123\n" +
 	"\asent_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\"\xef\x01\n" +
 	"\fConversation\x12'\n" +
-	"\x0fconversation_id\x18\x01 \x01(\x04R\x0econversationId\x12$\n" +
+	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12$\n" +
 	"\x04peer\x18\x02 \x01(\v2\x10.wrinkle.v1.UserR\x04peer\x12\x19\n" +
 	"\blast_seq\x18\x03 \x01(\x04R\alastSeq\x126\n" +
 	"\flast_message\x18\x04 \x01(\v2\x13.wrinkle.v1.MessageR\vlastMessage\x12\x19\n" +

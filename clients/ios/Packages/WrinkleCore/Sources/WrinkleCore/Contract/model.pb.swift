@@ -10,6 +10,11 @@
 
 // Types shared by requests, responses and events.
 
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
+import Foundation
+#endif
 import SwiftProtobuf
 
 // If the compiler emits an error on this type, it is because this file
@@ -27,9 +32,15 @@ public nonisolated struct Wrinkle_V1_User: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var userID: UInt64 = 0
+  public var userID: Data = Data()
 
   public var name: String = String()
+
+  /// A standard icon, or empty for none. The standard icons, by key, with the
+  /// emoji clients draw them as: cat 🐱, dog 🐶, fox 🦊, owl 🦉, bear 🐻,
+  /// frog 🐸, panda 🐼, rabbit 🐰, tiger 🐯, penguin 🐧, octopus 🐙,
+  /// unicorn 🦄.
+  public var icon: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -44,11 +55,11 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
   public var seq: UInt64 = 0
 
-  public var senderUserID: UInt64 = 0
+  public var senderUserID: Data = Data()
 
   /// Chosen by the sending device, unique per sender and conversation. Resending
   /// with the same id returns the message already stored instead of a duplicate.
@@ -78,7 +89,7 @@ public nonisolated struct Wrinkle_V1_Conversation: Sendable {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var conversationID: UInt64 = 0
+  public var conversationID: Data = Data()
 
   public var peer: Wrinkle_V1_User {
     get {_peer ?? Wrinkle_V1_User()}
@@ -123,7 +134,7 @@ fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".User"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{1}name\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{1}name\0\u{1}icon\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -131,19 +142,23 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.userID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.userID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularStringField(value: &self.icon) }()
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.userID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.userID, fieldNumber: 1)
+    if !self.userID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.userID, fieldNumber: 1)
     }
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    if !self.icon.isEmpty {
+      try visitor.visitSingularStringField(value: self.icon, fieldNumber: 3)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -151,6 +166,7 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
   public static func ==(lhs: Wrinkle_V1_User, rhs: Wrinkle_V1_User) -> Bool {
     if lhs.userID != rhs.userID {return false}
     if lhs.name != rhs.name {return false}
+    if lhs.icon != rhs.icon {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -166,9 +182,9 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
-      case 3: try { try decoder.decodeSingularUInt64Field(value: &self.senderUserID) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.senderUserID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
       case 5: try { try decoder.decodeSingularStringField(value: &self.text) }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._sentAt) }()
@@ -182,14 +198,14 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
     if self.seq != 0 {
       try visitor.visitSingularUInt64Field(value: self.seq, fieldNumber: 2)
     }
-    if self.senderUserID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.senderUserID, fieldNumber: 3)
+    if !self.senderUserID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.senderUserID, fieldNumber: 3)
     }
     if !self.clientMessageID.isEmpty {
       try visitor.visitSingularStringField(value: self.clientMessageID, fieldNumber: 4)
@@ -225,7 +241,7 @@ nonisolated extension Wrinkle_V1_Conversation: SwiftProtobuf.Message, SwiftProto
       // allocates stack space for every case branch when no optimizations are
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.conversationID) }()
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularMessageField(value: &self._peer) }()
       case 3: try { try decoder.decodeSingularUInt64Field(value: &self.lastSeq) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._lastMessage) }()
@@ -241,8 +257,8 @@ nonisolated extension Wrinkle_V1_Conversation: SwiftProtobuf.Message, SwiftProto
     // allocates stack space for every if/case branch local when no optimizations
     // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
     // https://github.com/apple/swift-protobuf/issues/1182
-    if self.conversationID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.conversationID, fieldNumber: 1)
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
     }
     try { if let v = self._peer {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)

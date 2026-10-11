@@ -1,22 +1,28 @@
 // The wire protocol: one WebSocket connection per device, binary messages,
 // each message one serialized Frame.
 //
-// Endpoint: ws://<host>:<port>/v1/ws
+// Endpoint: wss://<host>:<port>/v1/ws, or ws:// on the loopback interface.
+// Passwords travel in Register, SignIn and ChangePassword, so anything else
+// needs TLS.
 //
 // The client sends requests, acks and pings; the server sends responses,
-// events and pongs. The first request on a connection must be Connect; any
-// other request before it fails with ERROR_CODE_UNAUTHENTICATED.
+// events and pongs. A connection starts unconnected: it may Register or
+// SignIn, which return a device token, and must then Connect with a token
+// before anything else; other requests before it fail with
+// ERROR_CODE_UNAUTHENTICATED. Register, SignIn and Connect after Connect
+// fail with ERROR_CODE_FAILED_PRECONDITION.
 //
 // Responses carry the id of the request they answer. Requests may be
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
 // Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
-// of the connection opening; a connection may have 32 requests in flight and
-// send 50 frames a second on average, in bursts of 100. Requests beyond the
-// limits fail with ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them
-// are dropped. The server sends WebSocket pings every 30 seconds and closes
-// a connection it has received nothing on for 90.
+// of the connection opening or of the response to its last Register or
+// SignIn; a connection may have 32 requests in flight and send 50 frames a
+// second on average, in bursts of 100. Requests beyond the limits fail with
+// ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them are dropped. The
+// server sends WebSocket pings every 30 seconds and closes a connection it
+// has received nothing on for 90.
 //
 // Connect waits up to 5 seconds for the user's pushes to be set up. If they
 // are not, it fails with ERROR_CODE_UNAVAILABLE and the connection stays
@@ -61,7 +67,7 @@ const (
 	ErrorCode_ERROR_CODE_UNSPECIFIED ErrorCode = 0
 	// A field is missing, malformed, or out of range.
 	ErrorCode_ERROR_CODE_INVALID_ARGUMENT ErrorCode = 1
-	// The connection has not completed Connect.
+	// The connection has not completed Connect, or the credentials are wrong.
 	ErrorCode_ERROR_CODE_UNAUTHENTICATED ErrorCode = 2
 	// The user is not a participant of the conversation.
 	ErrorCode_ERROR_CODE_PERMISSION_DENIED ErrorCode = 3
@@ -75,6 +81,8 @@ const (
 	ErrorCode_ERROR_CODE_INTERNAL    ErrorCode = 7
 	// The connection is over its request limits; the client may retry later.
 	ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED ErrorCode = 8
+	// The name is taken.
+	ErrorCode_ERROR_CODE_ALREADY_EXISTS ErrorCode = 9
 )
 
 // Enum value maps for ErrorCode.
@@ -89,6 +97,7 @@ var (
 		6: "ERROR_CODE_UNAVAILABLE",
 		7: "ERROR_CODE_INTERNAL",
 		8: "ERROR_CODE_RESOURCE_EXHAUSTED",
+		9: "ERROR_CODE_ALREADY_EXISTS",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_UNSPECIFIED":         0,
@@ -100,6 +109,7 @@ var (
 		"ERROR_CODE_UNAVAILABLE":         6,
 		"ERROR_CODE_INTERNAL":            7,
 		"ERROR_CODE_RESOURCE_EXHAUSTED":  8,
+		"ERROR_CODE_ALREADY_EXISTS":      9,
 	}
 )
 
@@ -290,6 +300,11 @@ type Request struct {
 	//	*Request_ListConversations
 	//	*Request_GetMessages
 	//	*Request_RegisterPushToken
+	//	*Request_Register
+	//	*Request_SignIn
+	//	*Request_ChangePassword
+	//	*Request_UpdateProfile
+	//	*Request_SignOut
 	Body          isRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -411,6 +426,51 @@ func (x *Request) GetRegisterPushToken() *RegisterPushTokenRequest {
 	return nil
 }
 
+func (x *Request) GetRegister() *RegisterRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_Register); ok {
+			return x.Register
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetSignIn() *SignInRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_SignIn); ok {
+			return x.SignIn
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetChangePassword() *ChangePasswordRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_ChangePassword); ok {
+			return x.ChangePassword
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetUpdateProfile() *UpdateProfileRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_UpdateProfile); ok {
+			return x.UpdateProfile
+		}
+	}
+	return nil
+}
+
+func (x *Request) GetSignOut() *SignOutRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_SignOut); ok {
+			return x.SignOut
+		}
+	}
+	return nil
+}
+
 type isRequest_Body interface {
 	isRequest_Body()
 }
@@ -447,6 +507,26 @@ type Request_RegisterPushToken struct {
 	RegisterPushToken *RegisterPushTokenRequest `protobuf:"bytes,17,opt,name=register_push_token,json=registerPushToken,proto3,oneof"`
 }
 
+type Request_Register struct {
+	Register *RegisterRequest `protobuf:"bytes,18,opt,name=register,proto3,oneof"`
+}
+
+type Request_SignIn struct {
+	SignIn *SignInRequest `protobuf:"bytes,19,opt,name=sign_in,json=signIn,proto3,oneof"`
+}
+
+type Request_ChangePassword struct {
+	ChangePassword *ChangePasswordRequest `protobuf:"bytes,20,opt,name=change_password,json=changePassword,proto3,oneof"`
+}
+
+type Request_UpdateProfile struct {
+	UpdateProfile *UpdateProfileRequest `protobuf:"bytes,21,opt,name=update_profile,json=updateProfile,proto3,oneof"`
+}
+
+type Request_SignOut struct {
+	SignOut *SignOutRequest `protobuf:"bytes,22,opt,name=sign_out,json=signOut,proto3,oneof"`
+}
+
 func (*Request_Connect) isRequest_Body() {}
 
 func (*Request_OpenConversation) isRequest_Body() {}
@@ -463,6 +543,16 @@ func (*Request_GetMessages) isRequest_Body() {}
 
 func (*Request_RegisterPushToken) isRequest_Body() {}
 
+func (*Request_Register) isRequest_Body() {}
+
+func (*Request_SignIn) isRequest_Body() {}
+
+func (*Request_ChangePassword) isRequest_Body() {}
+
+func (*Request_UpdateProfile) isRequest_Body() {}
+
+func (*Request_SignOut) isRequest_Body() {}
+
 type Response struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -477,6 +567,11 @@ type Response struct {
 	//	*Response_ListConversations
 	//	*Response_GetMessages
 	//	*Response_RegisterPushToken
+	//	*Response_Register
+	//	*Response_SignIn
+	//	*Response_ChangePassword
+	//	*Response_UpdateProfile
+	//	*Response_SignOut
 	Body          isResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -607,6 +702,51 @@ func (x *Response) GetRegisterPushToken() *RegisterPushTokenResponse {
 	return nil
 }
 
+func (x *Response) GetRegister() *RegisterResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_Register); ok {
+			return x.Register
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSignIn() *SignInResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_SignIn); ok {
+			return x.SignIn
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetChangePassword() *ChangePasswordResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_ChangePassword); ok {
+			return x.ChangePassword
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetUpdateProfile() *UpdateProfileResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_UpdateProfile); ok {
+			return x.UpdateProfile
+		}
+	}
+	return nil
+}
+
+func (x *Response) GetSignOut() *SignOutResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_SignOut); ok {
+			return x.SignOut
+		}
+	}
+	return nil
+}
+
 type isResponse_Body interface {
 	isResponse_Body()
 }
@@ -647,6 +787,26 @@ type Response_RegisterPushToken struct {
 	RegisterPushToken *RegisterPushTokenResponse `protobuf:"bytes,17,opt,name=register_push_token,json=registerPushToken,proto3,oneof"`
 }
 
+type Response_Register struct {
+	Register *RegisterResponse `protobuf:"bytes,18,opt,name=register,proto3,oneof"`
+}
+
+type Response_SignIn struct {
+	SignIn *SignInResponse `protobuf:"bytes,19,opt,name=sign_in,json=signIn,proto3,oneof"`
+}
+
+type Response_ChangePassword struct {
+	ChangePassword *ChangePasswordResponse `protobuf:"bytes,20,opt,name=change_password,json=changePassword,proto3,oneof"`
+}
+
+type Response_UpdateProfile struct {
+	UpdateProfile *UpdateProfileResponse `protobuf:"bytes,21,opt,name=update_profile,json=updateProfile,proto3,oneof"`
+}
+
+type Response_SignOut struct {
+	SignOut *SignOutResponse `protobuf:"bytes,22,opt,name=sign_out,json=signOut,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Body() {}
 
 func (*Response_Connect) isResponse_Body() {}
@@ -664,6 +824,16 @@ func (*Response_ListConversations) isResponse_Body() {}
 func (*Response_GetMessages) isResponse_Body() {}
 
 func (*Response_RegisterPushToken) isResponse_Body() {}
+
+func (*Response_Register) isResponse_Body() {}
+
+func (*Response_SignIn) isResponse_Body() {}
+
+func (*Response_ChangePassword) isResponse_Body() {}
+
+func (*Response_UpdateProfile) isResponse_Body() {}
+
+func (*Response_SignOut) isResponse_Body() {}
 
 type Error struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -851,7 +1021,7 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x03ack\x18\x04 \x01(\v2\x0f.wrinkle.v1.AckH\x00R\x03ack\x12&\n" +
 	"\x04ping\x18\x05 \x01(\v2\x10.wrinkle.v1.PingH\x00R\x04ping\x12&\n" +
 	"\x04pong\x18\x06 \x01(\v2\x10.wrinkle.v1.PongH\x00R\x04pongB\x06\n" +
-	"\x04kind\"\xd1\x04\n" +
+	"\x04kind\"\x94\a\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x126\n" +
 	"\aconnect\x18\n" +
@@ -862,8 +1032,13 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x04sync\x18\x0e \x01(\v2\x17.wrinkle.v1.SyncRequestH\x00R\x04sync\x12U\n" +
 	"\x12list_conversations\x18\x0f \x01(\v2$.wrinkle.v1.ListConversationsRequestH\x00R\x11listConversations\x12C\n" +
 	"\fget_messages\x18\x10 \x01(\v2\x1e.wrinkle.v1.GetMessagesRequestH\x00R\vgetMessages\x12V\n" +
-	"\x13register_push_token\x18\x11 \x01(\v2$.wrinkle.v1.RegisterPushTokenRequestH\x00R\x11registerPushTokenB\x06\n" +
-	"\x04body\"\x94\x05\n" +
+	"\x13register_push_token\x18\x11 \x01(\v2$.wrinkle.v1.RegisterPushTokenRequestH\x00R\x11registerPushToken\x129\n" +
+	"\bregister\x18\x12 \x01(\v2\x1b.wrinkle.v1.RegisterRequestH\x00R\bregister\x124\n" +
+	"\asign_in\x18\x13 \x01(\v2\x19.wrinkle.v1.SignInRequestH\x00R\x06signIn\x12L\n" +
+	"\x0fchange_password\x18\x14 \x01(\v2!.wrinkle.v1.ChangePasswordRequestH\x00R\x0echangePassword\x12I\n" +
+	"\x0eupdate_profile\x18\x15 \x01(\v2 .wrinkle.v1.UpdateProfileRequestH\x00R\rupdateProfile\x127\n" +
+	"\bsign_out\x18\x16 \x01(\v2\x1a.wrinkle.v1.SignOutRequestH\x00R\asignOutB\x06\n" +
+	"\x04body\"\xdc\a\n" +
 	"\bResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12)\n" +
@@ -876,7 +1051,12 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x04sync\x18\x0e \x01(\v2\x18.wrinkle.v1.SyncResponseH\x00R\x04sync\x12V\n" +
 	"\x12list_conversations\x18\x0f \x01(\v2%.wrinkle.v1.ListConversationsResponseH\x00R\x11listConversations\x12D\n" +
 	"\fget_messages\x18\x10 \x01(\v2\x1f.wrinkle.v1.GetMessagesResponseH\x00R\vgetMessages\x12W\n" +
-	"\x13register_push_token\x18\x11 \x01(\v2%.wrinkle.v1.RegisterPushTokenResponseH\x00R\x11registerPushTokenB\x06\n" +
+	"\x13register_push_token\x18\x11 \x01(\v2%.wrinkle.v1.RegisterPushTokenResponseH\x00R\x11registerPushToken\x12:\n" +
+	"\bregister\x18\x12 \x01(\v2\x1c.wrinkle.v1.RegisterResponseH\x00R\bregister\x125\n" +
+	"\asign_in\x18\x13 \x01(\v2\x1a.wrinkle.v1.SignInResponseH\x00R\x06signIn\x12M\n" +
+	"\x0fchange_password\x18\x14 \x01(\v2\".wrinkle.v1.ChangePasswordResponseH\x00R\x0echangePassword\x12J\n" +
+	"\x0eupdate_profile\x18\x15 \x01(\v2!.wrinkle.v1.UpdateProfileResponseH\x00R\rupdateProfile\x128\n" +
+	"\bsign_out\x18\x16 \x01(\v2\x1b.wrinkle.v1.SignOutResponseH\x00R\asignOutB\x06\n" +
 	"\x04body\"L\n" +
 	"\x05Error\x12)\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x15.wrinkle.v1.ErrorCodeR\x04code\x12\x18\n" +
@@ -884,7 +1064,7 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x03Ack\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x04R\x06cursor\"\x06\n" +
 	"\x04Ping\"\x06\n" +
-	"\x04Pong*\xa0\x02\n" +
+	"\x04Pong*\xbf\x02\n" +
 	"\tErrorCode\x12\x1a\n" +
 	"\x16ERROR_CODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bERROR_CODE_INVALID_ARGUMENT\x10\x01\x12\x1e\n" +
@@ -894,7 +1074,8 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x1eERROR_CODE_FAILED_PRECONDITION\x10\x05\x12\x1a\n" +
 	"\x16ERROR_CODE_UNAVAILABLE\x10\x06\x12\x17\n" +
 	"\x13ERROR_CODE_INTERNAL\x10\a\x12!\n" +
-	"\x1dERROR_CODE_RESOURCE_EXHAUSTED\x10\bB\x9d\x01\n" +
+	"\x1dERROR_CODE_RESOURCE_EXHAUSTED\x10\b\x12\x1d\n" +
+	"\x19ERROR_CODE_ALREADY_EXISTS\x10\tB\x9d\x01\n" +
 	"\x0ecom.wrinkle.v1B\n" +
 	"FrameProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +
@@ -932,14 +1113,24 @@ var file_wrinkle_v1_frame_proto_goTypes = []any{
 	(*ListConversationsRequest)(nil),  // 14: wrinkle.v1.ListConversationsRequest
 	(*GetMessagesRequest)(nil),        // 15: wrinkle.v1.GetMessagesRequest
 	(*RegisterPushTokenRequest)(nil),  // 16: wrinkle.v1.RegisterPushTokenRequest
-	(*ConnectResponse)(nil),           // 17: wrinkle.v1.ConnectResponse
-	(*OpenConversationResponse)(nil),  // 18: wrinkle.v1.OpenConversationResponse
-	(*SendMessageResponse)(nil),       // 19: wrinkle.v1.SendMessageResponse
-	(*MarkReadResponse)(nil),          // 20: wrinkle.v1.MarkReadResponse
-	(*SyncResponse)(nil),              // 21: wrinkle.v1.SyncResponse
-	(*ListConversationsResponse)(nil), // 22: wrinkle.v1.ListConversationsResponse
-	(*GetMessagesResponse)(nil),       // 23: wrinkle.v1.GetMessagesResponse
-	(*RegisterPushTokenResponse)(nil), // 24: wrinkle.v1.RegisterPushTokenResponse
+	(*RegisterRequest)(nil),           // 17: wrinkle.v1.RegisterRequest
+	(*SignInRequest)(nil),             // 18: wrinkle.v1.SignInRequest
+	(*ChangePasswordRequest)(nil),     // 19: wrinkle.v1.ChangePasswordRequest
+	(*UpdateProfileRequest)(nil),      // 20: wrinkle.v1.UpdateProfileRequest
+	(*SignOutRequest)(nil),            // 21: wrinkle.v1.SignOutRequest
+	(*ConnectResponse)(nil),           // 22: wrinkle.v1.ConnectResponse
+	(*OpenConversationResponse)(nil),  // 23: wrinkle.v1.OpenConversationResponse
+	(*SendMessageResponse)(nil),       // 24: wrinkle.v1.SendMessageResponse
+	(*MarkReadResponse)(nil),          // 25: wrinkle.v1.MarkReadResponse
+	(*SyncResponse)(nil),              // 26: wrinkle.v1.SyncResponse
+	(*ListConversationsResponse)(nil), // 27: wrinkle.v1.ListConversationsResponse
+	(*GetMessagesResponse)(nil),       // 28: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenResponse)(nil), // 29: wrinkle.v1.RegisterPushTokenResponse
+	(*RegisterResponse)(nil),          // 30: wrinkle.v1.RegisterResponse
+	(*SignInResponse)(nil),            // 31: wrinkle.v1.SignInResponse
+	(*ChangePasswordResponse)(nil),    // 32: wrinkle.v1.ChangePasswordResponse
+	(*UpdateProfileResponse)(nil),     // 33: wrinkle.v1.UpdateProfileResponse
+	(*SignOutResponse)(nil),           // 34: wrinkle.v1.SignOutResponse
 }
 var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	2,  // 0: wrinkle.v1.Frame.request:type_name -> wrinkle.v1.Request
@@ -956,21 +1147,31 @@ var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	14, // 11: wrinkle.v1.Request.list_conversations:type_name -> wrinkle.v1.ListConversationsRequest
 	15, // 12: wrinkle.v1.Request.get_messages:type_name -> wrinkle.v1.GetMessagesRequest
 	16, // 13: wrinkle.v1.Request.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenRequest
-	4,  // 14: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
-	17, // 15: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
-	18, // 16: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
-	19, // 17: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
-	20, // 18: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
-	21, // 19: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
-	22, // 20: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
-	23, // 21: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
-	24, // 22: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
-	0,  // 23: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
-	24, // [24:24] is the sub-list for method output_type
-	24, // [24:24] is the sub-list for method input_type
-	24, // [24:24] is the sub-list for extension type_name
-	24, // [24:24] is the sub-list for extension extendee
-	0,  // [0:24] is the sub-list for field type_name
+	17, // 14: wrinkle.v1.Request.register:type_name -> wrinkle.v1.RegisterRequest
+	18, // 15: wrinkle.v1.Request.sign_in:type_name -> wrinkle.v1.SignInRequest
+	19, // 16: wrinkle.v1.Request.change_password:type_name -> wrinkle.v1.ChangePasswordRequest
+	20, // 17: wrinkle.v1.Request.update_profile:type_name -> wrinkle.v1.UpdateProfileRequest
+	21, // 18: wrinkle.v1.Request.sign_out:type_name -> wrinkle.v1.SignOutRequest
+	4,  // 19: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
+	22, // 20: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
+	23, // 21: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
+	24, // 22: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
+	25, // 23: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
+	26, // 24: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
+	27, // 25: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
+	28, // 26: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
+	29, // 27: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
+	30, // 28: wrinkle.v1.Response.register:type_name -> wrinkle.v1.RegisterResponse
+	31, // 29: wrinkle.v1.Response.sign_in:type_name -> wrinkle.v1.SignInResponse
+	32, // 30: wrinkle.v1.Response.change_password:type_name -> wrinkle.v1.ChangePasswordResponse
+	33, // 31: wrinkle.v1.Response.update_profile:type_name -> wrinkle.v1.UpdateProfileResponse
+	34, // 32: wrinkle.v1.Response.sign_out:type_name -> wrinkle.v1.SignOutResponse
+	0,  // 33: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
+	34, // [34:34] is the sub-list for method output_type
+	34, // [34:34] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_frame_proto_init() }
@@ -997,6 +1198,11 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Request_ListConversations)(nil),
 		(*Request_GetMessages)(nil),
 		(*Request_RegisterPushToken)(nil),
+		(*Request_Register)(nil),
+		(*Request_SignIn)(nil),
+		(*Request_ChangePassword)(nil),
+		(*Request_UpdateProfile)(nil),
+		(*Request_SignOut)(nil),
 	}
 	file_wrinkle_v1_frame_proto_msgTypes[2].OneofWrappers = []any{
 		(*Response_Error)(nil),
@@ -1008,6 +1214,11 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Response_ListConversations)(nil),
 		(*Response_GetMessages)(nil),
 		(*Response_RegisterPushToken)(nil),
+		(*Response_Register)(nil),
+		(*Response_SignIn)(nil),
+		(*Response_ChangePassword)(nil),
+		(*Response_UpdateProfile)(nil),
+		(*Response_SignOut)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
