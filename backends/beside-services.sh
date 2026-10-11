@@ -16,6 +16,9 @@ case ${1:-} in
 esac
 shift
 
+# A services process left over from an aborted run would answer instead, and
+# its fan-out would take records from the shared consumer group.
+"$repo/backends/ports-free.sh" 8090 9000
 "$services" --roles services,fanout --listen 127.0.0.1:8090 --services-listen 127.0.0.1:9000 &
 services_pid=$!
 gateway_pid=""
