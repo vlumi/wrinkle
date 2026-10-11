@@ -705,6 +705,12 @@ impl request::Body {
             Self::PublishKeys(_) => "publish_keys",
             Self::GetConversationKeys(_) => "get_conversation_keys",
             Self::SetReaction(_) => "set_reaction",
+            Self::CreateSticker(_) => "create_sticker",
+            Self::GetStickers(_) => "get_stickers",
+            Self::GetPalette(_) => "get_palette",
+            Self::SaveSticker(_) => "save_sticker",
+            Self::RemoveSticker(_) => "remove_sticker",
+            Self::MoveSticker(_) => "move_sticker",
         }
     }
 }
