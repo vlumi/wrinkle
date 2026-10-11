@@ -21,8 +21,10 @@ const (
 	requestTimeout = 10 * time.Second
 	writeTimeout   = 10 * time.Second
 	connectTimeout = 5 * time.Second
-	maxFrameBytes  = 64 * 1024
-	outboundQueue  = 32
+	// How long Connect waits for the user's push channel to be subscribed.
+	subscribeTimeout = 5 * time.Second
+	maxFrameBytes    = 64 * 1024
+	outboundQueue    = 32
 )
 
 // frameEvent is the number of Frame's event field, for wrapping an already

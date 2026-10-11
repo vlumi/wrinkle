@@ -145,7 +145,9 @@ func (s *Server) openConns() []*conn {
 }
 
 func (s *Server) attach(ctx context.Context, c *conn) error {
-	if err := s.registry.add(ctx, c); err != nil {
+	subCtx, cancel := context.WithTimeout(ctx, subscribeTimeout)
+	defer cancel()
+	if err := s.registry.add(subCtx, c); err != nil {
 		s.registry.remove(c)
 		s.log.Warn("subscribing failed", "user", c.userID, "err", err)
 		return apierror.Unavailable("push subscription unavailable")
