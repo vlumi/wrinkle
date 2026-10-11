@@ -48,8 +48,9 @@ help:
 ##@ Infrastructure (Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana)
 
 .PHONY: infra-up infra-down infra-reset infra-status infra-logs reset-fanout
-infra-up:  ## Start the stack and register the outbox connector
+infra-up:  ## Start the stack and register the outbox connectors
 	$(COMPOSE) up -d --build --wait
+	infra/kafka-topics.sh
 	infra/debezium/register.sh
 
 infra-down:  ## Stop the stack and discard all data

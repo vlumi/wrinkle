@@ -36,8 +36,9 @@ for attempt in 1 2 3; do
   compose exec -T vitess mysql -h 127.0.0.1 -P 15003 conversation -e "
     BEGIN;
     INSERT INTO outbox (conversation_id, outbox_id, user_a, user_b, kind, payload, created_at)
-    VALUES (42, $id, 1, 2, 'smoke', X'00', NOW(6));
-    DELETE FROM outbox WHERE conversation_id = 42 AND outbox_id = $id;
+    VALUES (X'0000000000000000000000000000002a', $id, X'00000000000000000000000000000001',
+      X'00000000000000000000000000000002', 'smoke', X'00', NOW(6));
+    DELETE FROM outbox WHERE conversation_id = X'0000000000000000000000000000002a' AND outbox_id = $id;
     COMMIT"
   for _ in $(seq 1 20); do
     if grep -q "\"outbox_id\":\"$id\"" "$captured"; then
