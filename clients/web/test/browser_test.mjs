@@ -15,6 +15,14 @@ const PORT = 9333;
 // fail here too.
 const PAGE = process.env.WEB_URL || "http://wrinkle.test:8081/";
 
+// A hard deadline: a hang anywhere (a dialog, a paused page, the backend)
+// fails the run instead of stalling the gate.
+const DEADLINE_MS = 120_000;
+setTimeout(() => {
+  console.error(`browser test: no result within ${DEADLINE_MS / 1000} s`);
+  process.exit(1);
+}, DEADLINE_MS).unref();
+
 const profile = mkdtempSync(join(tmpdir(), "wrinkle-web-test-"));
 const chrome = spawn(CHROME, [
   "--headless=new", `--remote-debugging-port=${PORT}`, "--no-first-run", "--no-default-browser-check",
@@ -102,7 +110,22 @@ const q = (testid) => `document.querySelector('[data-testid="${testid}"]')`;
 const qa = (testid) => `[...document.querySelectorAll('[data-testid="${testid}"]')]`;
 // React tracks input values; set them through the native setter so it sees the change.
 const type = (testid, value) => `(() => { const el = ${q(testid)}; Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(el, ${JSON.stringify(value)}); el.dispatchEvent(new Event("input", { bubbles: true })); return true; })()`;
-const submit = (testid) => `(${q(testid)}.form.requestSubmit(), true)`;
+// Submits once React has rendered the typed value: the form's handler reads
+// component state, which a submit right after the input event may not have yet.
+// A timeout rather than an animation frame: frames pause in a page the
+// browser considers hidden, which can be either of the two.
+const submit = (testid) => `new Promise((resolve) => setTimeout(() => {
+  const el = ${q(testid)};
+  const button = el.form.querySelector('button[type="submit"]');
+  if (button && button.disabled) { resolve(false); return; }
+  el.form.requestSubmit();
+  resolve(true);
+}, 50))`;
+async function fill(p, testid, value) {
+  await p.eval(type(testid, value));
+  await p.waitFor(`${q(testid)}.value === ${JSON.stringify(value)} && !${q(testid)}.form.querySelector('button[type="submit"]')?.disabled`);
+  if (!(await p.eval(submit(testid)))) throw new Error(`${p.name}: ${testid} could not be submitted`);
+}
 const visible = (sel) => `(() => { const el = document.querySelector(${JSON.stringify(sel)}); return !!el && el.getClientRects().length > 0; })()`;
 
 check((await alice.eval("isSecureContext")) === false, "the page runs as on a LAN, not as a secure context");
@@ -110,19 +133,16 @@ await alice.waitFor(`!!${q("url")}`);
 check((await alice.eval(`${q("url")}.value`)) === "ws://wrinkle.test:8080/v1/ws", "the gateway defaults to the page's host");
 
 for (const [p, name] of [[alice, "web-alice-" + suffix], [bob, "web-bob-" + suffix]]) {
-  await p.eval(type("name", name));
-  await p.eval(submit("name"));
+  await fill(p, "name", name);
   await p.waitFor(`${q("status")}?.textContent === "online" && ${q("me")}?.textContent === ${JSON.stringify(name)}`);
   check(true, `${p.name} signed in as ${name}`);
 }
 
 // Alice opens a conversation with Bob and sends.
-await alice.eval(type("peer", "web-bob-" + suffix));
-await alice.eval(submit("peer"));
+await fill(alice, "peer", "web-bob-" + suffix);
 await alice.waitFor(`${q("peer-name")}?.textContent === ${JSON.stringify("web-bob-" + suffix)}`);
 check(await alice.eval(`!${visible(".list")}`), "on a phone, the conversation replaces the list");
-await alice.eval(type("text", "hello bob"));
-await alice.eval(submit("text"));
+await fill(alice, "text", "hello bob");
 await alice.waitFor(`${qa("message")}.some(li => li.textContent.startsWith("hello bob"))`);
 check(true, "alice sees her sent message confirmed");
 
@@ -138,8 +158,7 @@ await alice.waitFor(`${qa("message")}.some(li => li.classList.contains("mine") &
 check(true, "alice sees the read receipt");
 
 // Bob replies; Alice gets it pushed and marks it read while viewing.
-await bob.eval(type("text", "hi alice"));
-await bob.eval(submit("text"));
+await fill(bob, "text", "hi alice");
 await alice.waitFor(`${qa("message")}.some(li => !li.classList.contains("mine") && li.textContent.startsWith("hi alice"))`);
 check(true, "alice received bob's reply");
 await bob.waitFor(`${qa("message")}.some(li => li.classList.contains("mine") && li.textContent.startsWith("hi alice") && li.querySelector(".meta").textContent.endsWith("read"))`);
