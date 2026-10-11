@@ -239,3 +239,9 @@ func (c *Client) Ack(ctx context.Context, cursor uint64) error {
 func (c *Client) Ping(ctx context.Context) error {
 	return c.Send(ctx, &pb.Frame{Kind: &pb.Frame_Ping{Ping: &pb.Ping{}}})
 }
+
+func (c *Client) RegisterPushToken(ctx context.Context, service pb.PushService, token string) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_RegisterPushToken{
+		RegisterPushToken: &pb.RegisterPushTokenRequest{Service: service, Token: token}}})
+	return err
+}
