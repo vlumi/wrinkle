@@ -89,6 +89,8 @@ go run ./loadgen -h                # the load generator
 
 Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090.
 
+To run it on one Mac and connect from phones and other computers on the same network, see [docs/local-network.md](docs/local-network.md).
+
 From the host: MySQL protocol through vtgate at `127.0.0.1:15003` (keyspaces `conversation` and `user`, no password), Kafka at `localhost:19092`, Kafka Connect at `localhost:8083`, Valkey at `localhost:6379`.
 
 ## Layout
