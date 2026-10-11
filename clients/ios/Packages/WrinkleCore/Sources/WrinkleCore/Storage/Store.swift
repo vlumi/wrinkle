@@ -132,6 +132,9 @@ public struct Store {
             insert(m)
             guard let c = conversation(Int64(m.conversationID)) else { return nil }
             c.noteLatest(m)
+            if Int64(m.senderUserID) == me {
+                c.readSeq = max(c.readSeq, Int64(m.seq))
+            }
             return c
         case .read(let r):
             guard let c = conversation(Int64(r.conversationID)) else { return nil }

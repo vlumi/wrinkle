@@ -38,6 +38,26 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try store.context.fetchCount(FetchDescriptor<StoredMessage>()), 1)
     }
 
+    func testOwnMessageIsRead() throws {
+        let store = try makeStore()
+        var conv = Wrinkle_V1_Conversation()
+        conv.conversationID = 7
+        conv.peer.userID = 2
+        let stored = store.upsert(conv)
+
+        var event = Wrinkle_V1_Event()
+        event.message.message = .with {
+            $0.conversationID = 7
+            $0.seq = 1
+            $0.senderUserID = 1
+            $0.clientMessageID = "m1"
+            $0.text = "sent from another device"
+        }
+        _ = store.apply(event, me: 1)
+        XCTAssertEqual(stored.readSeq, 1)
+        XCTAssertEqual(stored.unread, 0)
+    }
+
     func testReadEventsTellReaderFromPeer() throws {
         let store = try makeStore()
         var conv = Wrinkle_V1_Conversation()
