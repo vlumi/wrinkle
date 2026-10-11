@@ -1,6 +1,8 @@
 package wrinkle.services;
 
+import com.google.protobuf.ByteString;
 import com.linecorp.armeria.client.grpc.GrpcClients;
+import wrinkle.Uuid;
 import wrinkle.backend.v1.AckRequest;
 import wrinkle.backend.v1.BackendServiceGrpc;
 import wrinkle.backend.v1.CallRequest;
@@ -22,10 +24,10 @@ public final class RpcClient implements Backend {
   }
 
   @Override
-  public Response call(long userId, long deviceId, Request req) {
+  public Response call(Uuid userId, long deviceId, Request req) {
     return rpc.call(
             CallRequest.newBuilder()
-                .setUserId(userId)
+                .setUserId(userId == null ? ByteString.EMPTY : userId.toByteString())
                 .setDeviceId(deviceId)
                 .setRequest(req)
                 .build())
@@ -33,8 +35,12 @@ public final class RpcClient implements Backend {
   }
 
   @Override
-  public void ack(long userId, long deviceId, long cursor) {
+  public void ack(Uuid userId, long deviceId, long cursor) {
     rpc.ack(
-        AckRequest.newBuilder().setUserId(userId).setDeviceId(deviceId).setCursor(cursor).build());
+        AckRequest.newBuilder()
+            .setUserId(userId.toByteString())
+            .setDeviceId(deviceId)
+            .setCursor(cursor)
+            .build());
   }
 }

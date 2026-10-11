@@ -1,5 +1,6 @@
 package wrinkle.conversation;
 
+import com.google.protobuf.ByteString;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -13,6 +14,7 @@ import wrinkle.ApiError;
 import wrinkle.Ids;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
+import wrinkle.Uuid;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageEvent;
@@ -35,9 +37,35 @@ public final class ConversationService {
     this.db = db;
   }
 
-  /** Creates the conversation between two users if it does not exist. */
-  public void ensure(long conversationId, long userA, long userB) throws SQLException {
+  /**
+   * Finds or creates the conversation between two users, userA bytewise before userB. The pair row,
+   * on userA's shard, decides between two opening at once; a pair whose conversation row is missing
+   * gets it here.
+   */
+  public Uuid open(Uuid userA, Uuid userB) throws SQLException {
     try (Connection c = db.getConnection()) {
+      Uuid conversationId = pair(c, userA, userB);
+      if (conversationId == null) {
+        conversationId = Uuid.random();
+        try {
+          Sql.update(
+              c,
+              "INSERT INTO conversation_pair (user_a, user_b, conversation_id, created_at) VALUES"
+                  + " (?, ?, ?, ?)",
+              userA,
+              userB,
+              conversationId,
+              Timestamps.now());
+        } catch (SQLException e) {
+          if (!Sql.isDuplicate(e)) {
+            throw e;
+          }
+          conversationId = pair(c, userA, userB);
+          if (conversationId == null) {
+            throw new SQLException("conversation pair missing after a duplicate key", e);
+          }
+        }
+      }
       Sql.update(
           c,
           "INSERT IGNORE INTO conversation (conversation_id, user_a, user_b, last_seq, created_at)"
@@ -46,28 +74,41 @@ public final class ConversationService {
           userA,
           userB,
           Timestamps.now());
+      return conversationId;
     }
   }
 
-  private record Header(long userA, long userB, long lastSeq) {
-    boolean includes(long userId) {
-      return userId == userA || userId == userB;
+  private static Uuid pair(Connection c, Uuid userA, Uuid userB) throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT conversation_id FROM conversation_pair WHERE user_a = ? AND user_b = ?",
+                userA,
+                userB);
+        ResultSet rs = ps.executeQuery()) {
+      return rs.next() ? Uuid.of(rs.getBytes(1)) : null;
+    }
+  }
+
+  private record Header(Uuid userA, Uuid userB, long lastSeq) {
+    boolean includes(Uuid userId) {
+      return userId.equals(userA) || userId.equals(userB);
     }
   }
 
   /** The conversation's header, locked for the transaction, if the user is in it. */
-  private static Header lockHeader(Connection c, long conversationId, long userId)
+  private static Header lockHeader(Connection c, Uuid conversationId, Uuid userId)
       throws SQLException {
     return header(c, conversationId, userId, " FOR UPDATE");
   }
 
   /** The conversation's header, if the user is in it. */
-  private static Header readHeader(Connection c, long conversationId, long userId)
+  private static Header readHeader(Connection c, Uuid conversationId, Uuid userId)
       throws SQLException {
     return header(c, conversationId, userId, "");
   }
 
-  private static Header header(Connection c, long conversationId, long userId, String locking)
+  private static Header header(Connection c, Uuid conversationId, Uuid userId, String locking)
       throws SQLException {
     try (PreparedStatement ps =
             Sql.prepare(
@@ -79,7 +120,7 @@ public final class ConversationService {
       if (!rs.next()) {
         throw ApiError.notFound("conversation " + conversationId + " does not exist");
       }
-      Header h = new Header(rs.getLong(1), rs.getLong(2), rs.getLong(3));
+      Header h = new Header(Uuid.of(rs.getBytes(1)), Uuid.of(rs.getBytes(2)), rs.getLong(3));
       if (!h.includes(userId)) {
         throw ApiError.permissionDenied(
             "user " + userId + " is not in conversation " + conversationId);
@@ -92,7 +133,7 @@ public final class ConversationService {
    * Stores a message, assigning the next sequence number. Resending with the same client message id
    * returns the message stored the first time.
    */
-  public Message send(long userId, long conversationId, String clientMessageId, String text)
+  public Message send(Uuid userId, Uuid conversationId, String clientMessageId, String text)
       throws SQLException {
     if (clientMessageId.isEmpty()
         || clientMessageId.getBytes(StandardCharsets.UTF_8).length > MAX_CLIENT_MESSAGE_ID) {
@@ -115,9 +156,9 @@ public final class ConversationService {
         long seq = h.lastSeq() + 1;
         Message msg =
             Message.newBuilder()
-                .setConversationId(conversationId)
+                .setConversationId(conversationId.toByteString())
                 .setSeq(seq)
-                .setSenderUserId(userId)
+                .setSenderUserId(userId.toByteString())
                 .setClientMessageId(clientMessageId)
                 .setText(text)
                 .setSentAt(Timestamps.toProto(sentAt))
@@ -154,7 +195,7 @@ public final class ConversationService {
 
   /** The message the user already sent with this client message id, or null. */
   private static Message findSent(
-      Connection c, long userId, long conversationId, String clientMessageId) throws SQLException {
+      Connection c, Uuid userId, Uuid conversationId, String clientMessageId) throws SQLException {
     try (PreparedStatement ps =
             Sql.prepare(
                 c,
@@ -168,9 +209,9 @@ public final class ConversationService {
         return null;
       }
       return Message.newBuilder()
-          .setConversationId(conversationId)
+          .setConversationId(conversationId.toByteString())
           .setSeq(rs.getLong(1))
-          .setSenderUserId(userId)
+          .setSenderUserId(userId.toByteString())
           .setClientMessageId(clientMessageId)
           .setText(rs.getString(2))
           .setSentAt(Timestamps.toProto(rs.getObject(3, LocalDateTime.class)))
@@ -179,7 +220,7 @@ public final class ConversationService {
   }
 
   /** Moves the user's read position forward; backwards or in place does nothing. */
-  public void markRead(long userId, long conversationId, long seq) throws SQLException {
+  public void markRead(Uuid userId, Uuid conversationId, long seq) throws SQLException {
     if (seq <= 0) {
       throw ApiError.invalidArgument("seq must be positive");
     }
@@ -211,8 +252,8 @@ public final class ConversationService {
                 .setOccurredAt(Timestamps.toProto(at))
                 .setRead(
                     ReadEvent.newBuilder()
-                        .setConversationId(conversationId)
-                        .setUserId(userId)
+                        .setConversationId(conversationId.toByteString())
+                        .setUserId(userId.toByteString())
                         .setSeq(seq))
                 .build();
         insertOutbox(c, h, conversationId, "read", event, at);
@@ -225,7 +266,7 @@ public final class ConversationService {
   }
 
   /** The user's read position, locked for the transaction; 0 before the first read mark. */
-  private static long lockReadMark(Connection c, long userId, long conversationId)
+  private static long lockReadMark(Connection c, Uuid userId, Uuid conversationId)
       throws SQLException {
     try (PreparedStatement ps =
             Sql.prepare(
@@ -239,7 +280,7 @@ public final class ConversationService {
   }
 
   /** Messages with seq below beforeSeq, newest first. */
-  public List<Message> messages(long userId, long conversationId, long beforeSeq, int limit)
+  public List<Message> messages(Uuid userId, Uuid conversationId, long beforeSeq, int limit)
       throws SQLException {
     long before = beforeSeq == 0 ? Long.MAX_VALUE : beforeSeq;
     int pageSize = limit == 0 ? DEFAULT_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE);
@@ -258,9 +299,9 @@ public final class ConversationService {
         while (rs.next()) {
           out.add(
               Message.newBuilder()
-                  .setConversationId(conversationId)
+                  .setConversationId(conversationId.toByteString())
                   .setSeq(rs.getLong(1))
-                  .setSenderUserId(rs.getLong(2))
+                  .setSenderUserId(ByteString.copyFrom(rs.getBytes(2)))
                   .setClientMessageId(rs.getString(3))
                   .setText(rs.getString(4))
                   .setSentAt(Timestamps.toProto(rs.getObject(5, LocalDateTime.class)))
@@ -272,7 +313,7 @@ public final class ConversationService {
   }
 
   private static void insertOutbox(
-      Connection c, Header h, long conversationId, String kind, Event event, LocalDateTime at)
+      Connection c, Header h, Uuid conversationId, String kind, Event event, LocalDateTime at)
       throws SQLException {
     long outboxId = Ids.random();
     Sql.update(

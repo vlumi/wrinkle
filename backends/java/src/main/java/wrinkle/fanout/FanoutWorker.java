@@ -26,15 +26,20 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
+import wrinkle.Uuid;
 import wrinkle.presence.Presence;
 import wrinkle.v1.Event;
 
 /**
- * Turns committed outbox rows, read from Kafka, into entries in each participant's event log, and
- * pushes them to connected devices.
+ * Turns committed outbox rows, read from Kafka, into entries in the event logs of everyone
+ * concerned, and pushes them to connected devices: a conversation's events to both participants, a
+ * user's profile changes to the user and every conversation partner.
  */
 public final class FanoutWorker {
-  public static final String TOPIC = "wrinkle.conversation.outbox";
+  // The outbox topics: conversations' rows keyed by conversation id, users' by user id.
+  public static final String CONVERSATION_TOPIC = "wrinkle.conversation.outbox";
+  public static final String USER_TOPIC = "wrinkle.user.user_outbox";
+  public static final List<String> TOPICS = List.of(CONVERSATION_TOPIC, USER_TOPIC);
   private static final Logger log = LoggerFactory.getLogger(FanoutWorker.class);
   private static final int ATTEMPTS = 5;
   private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(3);
@@ -42,6 +47,7 @@ public final class FanoutWorker {
   private final KafkaConsumer<byte[], byte[]> consumer;
   private final UserLog userLog;
   private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
+  private final ProfileFanout profiles;
   private final AtomicBoolean stopped = new AtomicBoolean();
   private volatile Thread thread;
 
@@ -57,6 +63,7 @@ public final class FanoutWorker {
     p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     this.consumer = new KafkaConsumer<>(p);
     this.userLog = new UserLog(userDb, presence);
+    this.profiles = new ProfileFanout(userLog, tasks);
   }
 
   /** Consumes on a platform thread of its own until stopped. */
@@ -77,7 +84,7 @@ public final class FanoutWorker {
 
   /** Consumes until stopped. A batch is committed only after every record in it is delivered. */
   private void run() {
-    consumer.subscribe(List.of(TOPIC));
+    consumer.subscribe(TOPICS);
     try {
       while (!stopped.get()) {
         ConsumerRecords<byte[], byte[]> records = consumer.poll(Duration.ofSeconds(1));
@@ -104,20 +111,19 @@ public final class FanoutWorker {
   }
 
   /**
-   * Delivers conversations in parallel and each conversation's records in order: the ordering the
-   * contract promises, while a user's log is serialized by its row lock whatever the interleaving.
-   * False if any record could not be delivered.
+   * Delivers keys (conversations, users) in parallel and each key's records in order: the ordering
+   * the contract promises, while a user's log is serialized by its row lock whatever the
+   * interleaving. False if any record could not be delivered.
    */
   private boolean deliverBatch(ConsumerRecords<byte[], byte[]> records)
       throws InterruptedException {
     List<Future<?>> running = new ArrayList<>();
     for (TopicPartition tp : records.partitions()) {
-      for (List<ConsumerRecord<byte[], byte[]>> conversation :
-          byConversation(records.records(tp))) {
+      for (List<ConsumerRecord<byte[], byte[]>> group : byKey(records.records(tp))) {
         running.add(
             tasks.submit(
                 () -> {
-                  for (ConsumerRecord<byte[], byte[]> rec : conversation) {
+                  for (ConsumerRecord<byte[], byte[]> rec : group) {
                     handleWithRetry(rec);
                   }
                   return null;
@@ -136,8 +142,8 @@ public final class FanoutWorker {
     return delivered;
   }
 
-  /** Groups records by key, the conversation id, keeping each group in offset order. */
-  private static List<List<ConsumerRecord<byte[], byte[]>>> byConversation(
+  /** Groups records by key, the conversation or user id, keeping each group in offset order. */
+  private static List<List<ConsumerRecord<byte[], byte[]>>> byKey(
       List<ConsumerRecord<byte[], byte[]>> records) {
     Map<String, List<ConsumerRecord<byte[], byte[]>>> groups = new LinkedHashMap<>();
     for (ConsumerRecord<byte[], byte[]> rec : records) {
@@ -167,6 +173,10 @@ public final class FanoutWorker {
       return;
     }
     Metrics.FANOUT_RECORDS.inc();
+    if (rec.topic().equals(USER_TOPIC)) {
+      handleUserRecord(rec);
+      return;
+    }
     OutboxRecord o;
     try {
       o = OutboxRecord.parse(rec.value());
@@ -179,8 +189,8 @@ public final class FanoutWorker {
       log.error("skipping outbox record without a body, kind {}", o.kind());
       return;
     }
-    Future<?> a = tasks.submit(() -> appendFor(o.userA(), o));
-    Future<?> b = tasks.submit(() -> appendFor(o.userB(), o));
+    Future<?> a = tasks.submit(() -> deliver(o.userA(), o));
+    Future<?> b = tasks.submit(() -> deliver(o.userB(), o));
     Exception failure = null;
     for (Future<?> f : List.of(a, b)) {
       try {
@@ -194,8 +204,26 @@ public final class FanoutWorker {
     }
   }
 
-  private Void appendFor(long userId, OutboxRecord o) throws SQLException {
-    userLog.append(userId, o);
+  private Void deliver(Uuid userId, OutboxRecord o) throws SQLException {
+    userLog.deliver(userId, o);
     return null;
+  }
+
+  private void handleUserRecord(ConsumerRecord<byte[], byte[]> rec) throws Exception {
+    UserOutboxRecord o;
+    try {
+      o = UserOutboxRecord.parse(rec.value());
+    } catch (IOException | RuntimeException e) {
+      log.error("skipping user outbox record at offset {}: {}", rec.offset(), e.toString());
+      return;
+    }
+    if (!o.event().hasProfile()) {
+      log.error(
+          "skipping user outbox record without a profile, kind {}, offset {}",
+          o.kind(),
+          rec.offset());
+      return;
+    }
+    profiles.deliver(o);
   }
 }

@@ -37,6 +37,7 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-databind:2.22.3")
     implementation("io.prometheus:prometheus-metrics-core:$prometheusVersion")
     implementation("io.prometheus:prometheus-metrics-instrumentation-jvm:$prometheusVersion")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
     implementation("org.slf4j:slf4j-api:2.0.20")
     runtimeOnly("org.slf4j:slf4j-simple:2.0.20")
 

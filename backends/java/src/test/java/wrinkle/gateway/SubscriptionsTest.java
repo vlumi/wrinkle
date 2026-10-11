@@ -17,8 +17,8 @@ class SubscriptionsTest {
 
   @Test
   void subscribesOnceForSeveralConnections() {
-    Subscriptions subs =
-        new Subscriptions(u -> calls.add("sub " + u), u -> calls.add("unsub " + u), workers::add);
+    Subscriptions<Integer> subs =
+        new Subscriptions<>(u -> calls.add("sub " + u), u -> calls.add("unsub " + u), workers::add);
     CompletableFuture<Void> first = subs.add(1);
     assertFalse(first.isDone());
     workers.poll().run();
@@ -35,9 +35,10 @@ class SubscriptionsTest {
   void anAttachDuringTheLastDetachEndsSubscribed() {
     List<Runnable> during = new ArrayList<>();
     List<CompletableFuture<Void>> attached = new ArrayList<>();
-    Subscriptions[] subs = new Subscriptions[1];
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    Subscriptions<Integer>[] subs = new Subscriptions[1];
     subs[0] =
-        new Subscriptions(
+        new Subscriptions<>(
             u -> calls.add("sub " + u),
             u -> {
               calls.add("unsub " + u);
@@ -59,8 +60,8 @@ class SubscriptionsTest {
   @Test
   void retriesAFailedSubscribe() {
     int[] failures = {1};
-    Subscriptions subs =
-        new Subscriptions(
+    Subscriptions<Integer> subs =
+        new Subscriptions<>(
             u -> {
               if (failures[0]-- > 0) {
                 throw new IllegalStateException("down");
@@ -78,9 +79,10 @@ class SubscriptionsTest {
   @Test
   void aDetachBeforeTheSubscribeLandsUnsubscribes() {
     List<Runnable> during = new ArrayList<>();
-    Subscriptions[] subs = new Subscriptions[1];
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    Subscriptions<Integer>[] subs = new Subscriptions[1];
     subs[0] =
-        new Subscriptions(
+        new Subscriptions<>(
             u -> {
               calls.add("sub " + u);
               during.forEach(Runnable::run);

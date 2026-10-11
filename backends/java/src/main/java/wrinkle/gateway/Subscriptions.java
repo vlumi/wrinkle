@@ -13,14 +13,14 @@ import org.slf4j.LoggerFactory;
  * changes a count; a worker per user, one at a time, issues SUBSCRIBE or UNSUBSCRIBE until what is
  * applied matches whether the user has connections, retrying with backoff.
  */
-final class Subscriptions {
+final class Subscriptions<K> {
   private static final Logger log = LoggerFactory.getLogger(Subscriptions.class);
   private static final long MIN_BACKOFF_MILLIS = 100;
   private static final long MAX_BACKOFF_MILLIS = 5000;
 
   /** A SUBSCRIBE or UNSUBSCRIBE, which blocks until Valkey confirms it. */
-  interface Op {
-    void apply(long userId) throws Exception;
+  interface Op<K> {
+    void apply(K userId) throws Exception;
   }
 
   private static final class State {
@@ -30,21 +30,21 @@ final class Subscriptions {
     CompletableFuture<Void> ready = new CompletableFuture<>();
   }
 
-  private final Op subscribe;
-  private final Op unsubscribe;
+  private final Op<K> subscribe;
+  private final Op<K> unsubscribe;
   private final Executor workers;
   // Guarded by this.
-  private final Map<Long, State> states = new HashMap<>();
+  private final Map<K, State> states = new HashMap<>();
   private boolean stopped;
 
-  Subscriptions(Op subscribe, Op unsubscribe, Executor workers) {
+  Subscriptions(Op<K> subscribe, Op<K> unsubscribe, Executor workers) {
     this.subscribe = subscribe;
     this.unsubscribe = unsubscribe;
     this.workers = workers;
   }
 
   /** Counts a connection of the user's; completes once the user's channel is subscribed. */
-  CompletableFuture<Void> add(long userId) {
+  CompletableFuture<Void> add(K userId) {
     State s;
     synchronized (this) {
       s = states.computeIfAbsent(userId, k -> new State());
@@ -65,7 +65,7 @@ final class Subscriptions {
   }
 
   /** Uncounts a connection of the user's; the last one leaving unsubscribes. */
-  void remove(long userId) {
+  void remove(K userId) {
     State s;
     synchronized (this) {
       s = states.get(userId);
@@ -90,7 +90,7 @@ final class Subscriptions {
     return true;
   }
 
-  private void reconcile(long userId, State s) {
+  private void reconcile(K userId, State s) {
     long backoff = MIN_BACKOFF_MILLIS;
     while (true) {
       boolean want;

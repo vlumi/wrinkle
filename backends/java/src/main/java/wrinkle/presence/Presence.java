@@ -13,6 +13,7 @@ import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.HexFormat;
 import java.util.function.BiConsumer;
+import wrinkle.Uuid;
 
 /**
  * Which device is connected to which gateway instance, and the push channel from fan-out workers to
@@ -62,35 +63,32 @@ public final class Presence implements AutoCloseable {
     commands.sync().del(instanceKey);
   }
 
-  private static byte[] channel(long userId) {
-    return (CHANNEL_PREFIX + userId).getBytes(StandardCharsets.US_ASCII);
+  // Keys and channels name a user by the lowercase hex of the id.
+  private static byte[] channel(Uuid userId) {
+    return (CHANNEL_PREFIX + userId.hex()).getBytes(StandardCharsets.US_ASCII);
   }
 
-  /** The user a push channel belongs to, or -1. */
-  private static long userOf(byte[] channel) {
+  /** The user a push channel belongs to, or null. */
+  static Uuid userOf(byte[] channel) {
     String s = new String(channel, StandardCharsets.US_ASCII);
     if (!s.startsWith(CHANNEL_PREFIX)) {
-      return -1;
+      return null;
     }
-    try {
-      return Long.parseLong(s.substring(CHANNEL_PREFIX.length()));
-    } catch (NumberFormatException e) {
-      return -1;
-    }
+    return Uuid.fromHex(s.substring(CHANNEL_PREFIX.length()));
   }
 
-  public void publish(long userId, byte[] payload) {
+  public void publish(Uuid userId, byte[] payload) {
     commands.async().publish(channel(userId), payload);
   }
 
   /** Delivers pushes for subscribed users to the listener. */
-  public void listen(BiConsumer<Long, byte[]> listener) {
+  public void listen(BiConsumer<Uuid, byte[]> listener) {
     pubsub.addListener(
         new RedisPubSubAdapter<>() {
           @Override
           public void message(byte[] channel, byte[] message) {
-            long userId = userOf(channel);
-            if (userId >= 0) {
+            Uuid userId = userOf(channel);
+            if (userId != null) {
               listener.accept(userId, message);
             }
           }
@@ -98,21 +96,21 @@ public final class Presence implements AutoCloseable {
   }
 
   /** Blocks until Valkey confirms; not for an event-loop thread. */
-  public void subscribe(long userId) {
+  public void subscribe(Uuid userId) {
     pubsub.sync().subscribe(channel(userId));
   }
 
   /** Blocks until Valkey confirms; not for an event-loop thread. */
-  public void unsubscribe(long userId) {
+  public void unsubscribe(Uuid userId) {
     pubsub.sync().unsubscribe(channel(userId));
   }
 
-  public void deviceConnected(long userId, long deviceId) {
+  public void deviceConnected(Uuid userId, long deviceId) {
     commands.async().hset(presenceKey(userId), bytes(Long.toString(deviceId)), instance);
   }
 
   /** Removes the device's entry unless it has since connected to another instance. */
-  public void deviceDisconnected(long userId, long deviceId) {
+  public void deviceDisconnected(Uuid userId, long deviceId) {
     commands
         .async()
         .eval(
@@ -123,8 +121,8 @@ public final class Presence implements AutoCloseable {
             instance);
   }
 
-  private static byte[] presenceKey(long userId) {
-    return bytes("presence:" + userId);
+  private static byte[] presenceKey(Uuid userId) {
+    return bytes("presence:" + userId.hex());
   }
 
   private static byte[] bytes(String s) {

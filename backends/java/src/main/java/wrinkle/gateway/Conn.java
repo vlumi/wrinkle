@@ -17,8 +17,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.ApiError;
 import wrinkle.Metrics;
+import wrinkle.Uuid;
 import wrinkle.services.Backend;
-import wrinkle.v1.ConnectResponse;
 import wrinkle.v1.Frame;
 import wrinkle.v1.Pong;
 import wrinkle.v1.Request;
@@ -61,7 +61,7 @@ final class Conn {
   // Guarded by this.
   private boolean left;
   private boolean releasing;
-  private volatile long userId;
+  private volatile Uuid userId;
   private volatile long deviceId;
 
   Conn(Backend backend, Connections connections, WebSocketWriter out, String remote) {
@@ -81,7 +81,7 @@ final class Conn {
     return connected;
   }
 
-  long userId() {
+  Uuid userId() {
     return userId;
   }
 
@@ -287,21 +287,38 @@ final class Conn {
 
   /** Applies the connection's state rules, then hands the request to the backend. */
   private Response dispatch(Request req) {
-    if (req.hasConnect() && connected) {
+    boolean beforeConnect =
+        switch (req.getBodyCase()) {
+          case REGISTER, SIGN_IN, CONNECT -> true;
+          default -> false;
+        };
+    // Read together, so a Connect completing meanwhile is seen whole.
+    Uuid user;
+    long device;
+    synchronized (this) {
+      user = connected ? userId : null;
+      device = deviceId;
+    }
+    if (beforeConnect && user != null) {
       return ApiError.response(req, ApiError.failedPrecondition("already connected"));
     }
-    if (!req.hasConnect() && !connected) {
+    if (!beforeConnect && user == null) {
       return ApiError.response(req, ApiError.unauthenticated("connect first"));
     }
     Response resp;
     try {
-      resp = backend.call(userId, deviceId, req);
+      resp = backend.call(user, device, req);
     } catch (Exception e) {
       log.error("backend call for request {} failed", req.getId(), e);
       return ApiError.response(req, ApiError.unavailable("services unavailable"));
     }
     if (resp.hasConnect()) {
-      CompletableFuture<Void> subscribed = attached(resp.getConnect());
+      Uuid connectedAs = Uuid.parse(resp.getConnect().getUser().getUserId());
+      if (connectedAs == null) {
+        log.error("connect returned no user id");
+        return ApiError.response(req, new IllegalStateException("connect returned no user id"));
+      }
+      CompletableFuture<Void> subscribed = attached(connectedAs, resp.getConnect().getDeviceId());
       if (subscribed == null) {
         return ApiError.response(req, ApiError.failedPrecondition("already connected"));
       }
@@ -318,6 +335,10 @@ final class Conn {
         return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
       }
     }
+    if (req.hasRegister() || req.hasSignIn()) {
+      // Hashing the password may have taken a while; Connect gets a fresh deadline.
+      connectBy = System.nanoTime() + CONNECT_DEADLINE_NANOS;
+    }
     return resp;
   }
 
@@ -325,12 +346,12 @@ final class Conn {
    * Records the identity Connect established; null if another Connect got there first or the
    * connection has left, otherwise completes once the user's push channel is subscribed.
    */
-  private synchronized CompletableFuture<Void> attached(ConnectResponse resp) {
+  private synchronized CompletableFuture<Void> attached(Uuid user, long device) {
     if (connected || left) {
       return null;
     }
-    userId = resp.getUser().getUserId();
-    deviceId = resp.getDeviceId();
+    userId = user;
+    deviceId = device;
     connected = true;
     return connections.attach(this);
   }

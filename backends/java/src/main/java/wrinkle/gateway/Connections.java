@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
+import wrinkle.Uuid;
 import wrinkle.presence.Presence;
 import wrinkle.v1.Frame;
 
@@ -24,15 +25,15 @@ final class Connections {
   private static final long DRAIN_POLL_MILLIS = 20;
 
   private final Presence presence;
-  private final Subscriptions subscriptions;
+  private final Subscriptions<Uuid> subscriptions;
   private final Set<Conn> all = ConcurrentHashMap.newKeySet();
-  private final Map<Long, Set<Conn>> byUser = new ConcurrentHashMap<>();
+  private final Map<Uuid, Set<Conn>> byUser = new ConcurrentHashMap<>();
   private final AtomicInteger inFlight = new AtomicInteger();
 
   Connections(Presence presence) {
     this.presence = presence;
     this.subscriptions =
-        new Subscriptions(presence::subscribe, presence::unsubscribe, Thread::startVirtualThread);
+        new Subscriptions<>(presence::subscribe, presence::unsubscribe, Thread::startVirtualThread);
     presence.listen(this::push);
   }
 
@@ -121,7 +122,7 @@ final class Connections {
     subscriptions.stop();
   }
 
-  private void push(long userId, byte[] event) {
+  private void push(Uuid userId, byte[] event) {
     Set<Conn> conns = byUser.get(userId);
     if (conns == null) {
       return;

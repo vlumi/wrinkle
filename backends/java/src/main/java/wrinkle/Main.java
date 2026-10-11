@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import wrinkle.accounts.AccountService;
 import wrinkle.conversation.ConversationService;
 import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.fanout.FanoutWorker;
@@ -26,9 +27,9 @@ import wrinkle.services.RpcServer;
 
 /**
  * The Java backend: one binary whose roles are chosen by configuration. The gateway role serves
- * WebSocket connections, with the conversation and sync services in the same process or forwarding
- * to a services process; the services role serves the internal RPC; the fanout role consumes the
- * outbox from Kafka.
+ * WebSocket connections, with the account, conversation and sync services in the same process or
+ * forwarding to a services process; the services role serves the internal RPC; the fanout role
+ * consumes the outbox from Kafka.
  */
 public final class Main {
   private static final Logger log = LoggerFactory.getLogger(Main.class);
@@ -53,7 +54,10 @@ public final class Main {
       DataSource conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
       userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
       ConversationService conversations = new ConversationService(conversationDb);
-      local = new LocalBackend(conversations, new DeviceSyncService(userDb, conversations));
+      AccountService accounts = new AccountService(userDb);
+      local =
+          new LocalBackend(
+              accounts, conversations, new DeviceSyncService(userDb, accounts, conversations));
     }
     Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;
 
@@ -82,7 +86,7 @@ public final class Main {
     if (cfg.runsFanout()) {
       fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, presence);
       fanout.start();
-      log.info("fanout consuming {}", FanoutWorker.TOPIC);
+      log.info("fanout consuming {}", FanoutWorker.TOPICS);
     }
 
     Server server = sb.build();

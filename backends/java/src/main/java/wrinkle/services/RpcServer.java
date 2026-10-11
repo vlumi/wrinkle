@@ -4,6 +4,7 @@ import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import wrinkle.Uuid;
 import wrinkle.backend.v1.AckRequest;
 import wrinkle.backend.v1.AckResponse;
 import wrinkle.backend.v1.BackendServiceGrpc;
@@ -25,11 +26,19 @@ public final class RpcServer extends BackendServiceGrpc.BackendServiceImplBase {
 
   @Override
   public void call(CallRequest req, StreamObserver<CallResponse> out) {
+    Uuid userId = Uuid.parse(req.getUserId());
+    if (userId == null && !req.getUserId().isEmpty()) {
+      out.onError(
+          Status.INVALID_ARGUMENT
+              .withDescription("user_id must be empty or 16 bytes")
+              .asRuntimeException());
+      return;
+    }
     Thread.startVirtualThread(
         () -> {
           out.onNext(
               CallResponse.newBuilder()
-                  .setResponse(local.call(req.getUserId(), req.getDeviceId(), req.getRequest()))
+                  .setResponse(local.call(userId, req.getDeviceId(), req.getRequest()))
                   .build());
           out.onCompleted();
         });
@@ -37,10 +46,16 @@ public final class RpcServer extends BackendServiceGrpc.BackendServiceImplBase {
 
   @Override
   public void ack(AckRequest req, StreamObserver<AckResponse> out) {
+    Uuid userId = Uuid.parse(req.getUserId());
+    if (userId == null) {
+      out.onError(
+          Status.INVALID_ARGUMENT.withDescription("user_id must be 16 bytes").asRuntimeException());
+      return;
+    }
     Thread.startVirtualThread(
         () -> {
           try {
-            local.ack(req.getUserId(), req.getDeviceId(), req.getCursor());
+            local.ack(userId, req.getDeviceId(), req.getCursor());
             out.onNext(AckResponse.getDefaultInstance());
             out.onCompleted();
           } catch (Exception e) {

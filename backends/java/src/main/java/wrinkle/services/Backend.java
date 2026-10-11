@@ -1,5 +1,6 @@
 package wrinkle.services;
 
+import wrinkle.Uuid;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
 
@@ -9,11 +10,12 @@ import wrinkle.v1.Response;
  */
 public interface Backend {
   /**
-   * Handles one request; a request's own failure is the response's error body. Throws only when the
-   * request could not be handled at all.
+   * Handles one request; the user id is null until the connection has completed Connect. A
+   * request's own failure is the response's error body. Throws only when the request could not be
+   * handled at all.
    */
-  Response call(long userId, long deviceId, Request req) throws Exception;
+  Response call(Uuid userId, long deviceId, Request req) throws Exception;
 
   /** Records how far a device has processed its user's log. */
-  void ack(long userId, long deviceId, long cursor) throws Exception;
+  void ack(Uuid userId, long deviceId, long cursor) throws Exception;
 }
