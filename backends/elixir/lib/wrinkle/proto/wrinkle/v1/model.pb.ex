@@ -37,6 +37,7 @@ defmodule Wrinkle.V1.Device do
   field :created_at, 3, type: Google.Protobuf.Timestamp, json_name: "createdAt"
   field :last_seen_at, 4, type: Google.Protobuf.Timestamp, json_name: "lastSeenAt"
   field :push, 5, type: :bool
+  field :public_key, 6, type: :bytes, json_name: "publicKey"
 end
 
 defmodule Wrinkle.V1.Message do
@@ -54,9 +55,22 @@ defmodule Wrinkle.V1.Message do
   field :sender_user_id, 3, type: :bytes, json_name: "senderUserId"
   field :client_message_id, 4, type: :string, json_name: "clientMessageId"
   field :sent_at, 6, type: Google.Protobuf.Timestamp, json_name: "sentAt"
-  field :text, 5, type: :string, oneof: 0
+  field :sealed, 9, type: Wrinkle.V1.Sealed, oneof: 0
   field :notice, 7, type: Wrinkle.V1.Notice, oneof: 0
   field :deleted_at, 8, type: Google.Protobuf.Timestamp, json_name: "deletedAt"
+end
+
+defmodule Wrinkle.V1.Sealed do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.Sealed",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :epoch, 1, type: :uint32
+  field :nonce, 2, type: :bytes
+  field :ciphertext, 3, type: :bytes
 end
 
 defmodule Wrinkle.V1.Notice do

@@ -256,12 +256,17 @@ message GetMembersResponse {
   repeated Member members = 1;
 }
 
-// Sends a text message. Only members may; in a group, someone who left or
-// was removed gets ERROR_CODE_PERMISSION_DENIED.
+// Sends a message. Only members may; in a group, someone who left or was
+// removed gets ERROR_CODE_PERMISSION_DENIED. The content is sealed with the
+// conversation's current key epoch: an older one, or none published yet,
+// fails with ERROR_CODE_FAILED_PRECONDITION, as does any epoch while the
+// conversation needs a new one (see PublishKeys).
 message SendMessageRequest {
   bytes conversation_id = 1;
   string client_message_id = 2;
-  string text = 3;
+  reserved 3;
+  reserved "text";
+  Sealed sealed = 4;
 }
 
 message SendMessageResponse {
@@ -281,6 +286,96 @@ message DeleteMessageRequest {
 }
 
 message DeleteMessageResponse {}
+
+// End-to-end encryption. Each device has an X25519 key pair and publishes
+// the public key; each conversation has key epochs, an epoch key made by a
+// member device and wrapped for every member device. A conversation needs a
+// new epoch after its membership changes (the server then refuses sends
+// until one is published) and when the members' devices differ from the
+// current epoch's recipients (devices notice that and publish one before
+// sending). A user's new device gets the keys of earlier epochs from the
+// user's other devices.
+
+// Publishes this device's public key, once. The same key again does
+// nothing; a different one fails with ERROR_CODE_FAILED_PRECONDITION (a
+// device with a new key signs in as a new device).
+message SetDeviceKeyRequest {
+  // X25519, 32 bytes.
+  bytes public_key = 1;
+}
+
+message SetDeviceKeyResponse {}
+
+// Returns the signed-in devices with keys of up to 256 users, each with
+// only its id and key. Unknown and deleted users are left out.
+message GetDeviceKeysRequest {
+  repeated bytes user_ids = 1;
+}
+
+message GetDeviceKeysResponse {
+  repeated UserDevices users = 1;
+}
+
+message UserDevices {
+  bytes user_id = 1;
+  repeated Device devices = 2;
+}
+
+// Publishes wrapped keys of a conversation, from this device, which must
+// have a key; only current members may. Epoch key_epoch + 1 starts a new
+// epoch, every recipient a current member; the current epoch takes more
+// recipients, current members; an older epoch only this user's own devices
+// (sharing history with a new device). Any other epoch fails with
+// ERROR_CODE_FAILED_PRECONDITION: another device published first. Wraps a
+// recipient already has are kept. At most 1000 keys.
+message PublishKeysRequest {
+  bytes conversation_id = 1;
+  uint32 epoch = 2;
+  repeated WrappedKey keys = 3;
+}
+
+message PublishKeysResponse {}
+
+message WrappedKey {
+  bytes recipient_user_id = 1;
+  uint64 recipient_device_id = 2;
+  // The epoch key wrapped for the recipient device: 60 bytes.
+  bytes wrapped = 3;
+}
+
+// Returns the conversation's key state and the keys wrapped for this
+// device in epochs after after_epoch, oldest first. Former members get the
+// keys they had.
+message GetConversationKeysRequest {
+  bytes conversation_id = 1;
+  uint32 after_epoch = 2;
+}
+
+message GetConversationKeysResponse {
+  // 0 while no epoch has been published.
+  uint32 current_epoch = 1;
+  // The membership changed since the current epoch; sends fail until the
+  // next is published.
+  bool rotate = 2;
+  // Every device the current epoch's key is wrapped for.
+  repeated KeyRecipient current_recipients = 3;
+  repeated ReceivedKey keys = 4;
+}
+
+message KeyRecipient {
+  bytes user_id = 1;
+  uint64 device_id = 2;
+}
+
+message ReceivedKey {
+  uint32 epoch = 1;
+  bytes sender_user_id = 2;
+  uint64 sender_device_id = 3;
+  // As the server has it for the sending device; devices check it against
+  // the key they know for that device.
+  bytes sender_public_key = 4;
+  bytes wrapped = 5;
+}
 
 // Marks the conversation read up to seq for the requesting user. Lower than
 // the current read position is a no-op.

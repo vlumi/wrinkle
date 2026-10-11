@@ -85,6 +85,7 @@ defmodule Wrinkle.V1.DeviceEvent do
 
   field :device, 1, type: Wrinkle.V1.Device
   field :signed_out, 2, type: :bool, json_name: "signedOut"
+  field :user_id, 3, type: :bytes, json_name: "userId"
 end
 
 defmodule Wrinkle.V1.MessageDeletedEvent do

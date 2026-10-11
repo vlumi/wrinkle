@@ -440,6 +440,38 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     set {body = .deleteMessage(newValue)}
   }
 
+  public var setDeviceKey: Wrinkle_V1_SetDeviceKeyRequest {
+    get {
+      if case .setDeviceKey(let v)? = body {return v}
+      return Wrinkle_V1_SetDeviceKeyRequest()
+    }
+    set {body = .setDeviceKey(newValue)}
+  }
+
+  public var getDeviceKeys: Wrinkle_V1_GetDeviceKeysRequest {
+    get {
+      if case .getDeviceKeys(let v)? = body {return v}
+      return Wrinkle_V1_GetDeviceKeysRequest()
+    }
+    set {body = .getDeviceKeys(newValue)}
+  }
+
+  public var publishKeys: Wrinkle_V1_PublishKeysRequest {
+    get {
+      if case .publishKeys(let v)? = body {return v}
+      return Wrinkle_V1_PublishKeysRequest()
+    }
+    set {body = .publishKeys(newValue)}
+  }
+
+  public var getConversationKeys: Wrinkle_V1_GetConversationKeysRequest {
+    get {
+      if case .getConversationKeys(let v)? = body {return v}
+      return Wrinkle_V1_GetConversationKeysRequest()
+    }
+    set {body = .getConversationKeys(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -469,6 +501,10 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     case setAdmin(Wrinkle_V1_SetAdminRequest)
     case getMembers(Wrinkle_V1_GetMembersRequest)
     case deleteMessage(Wrinkle_V1_DeleteMessageRequest)
+    case setDeviceKey(Wrinkle_V1_SetDeviceKeyRequest)
+    case getDeviceKeys(Wrinkle_V1_GetDeviceKeysRequest)
+    case publishKeys(Wrinkle_V1_PublishKeysRequest)
+    case getConversationKeys(Wrinkle_V1_GetConversationKeysRequest)
 
   }
 
@@ -700,6 +736,38 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     set {body = .deleteMessage(newValue)}
   }
 
+  public var setDeviceKey: Wrinkle_V1_SetDeviceKeyResponse {
+    get {
+      if case .setDeviceKey(let v)? = body {return v}
+      return Wrinkle_V1_SetDeviceKeyResponse()
+    }
+    set {body = .setDeviceKey(newValue)}
+  }
+
+  public var getDeviceKeys: Wrinkle_V1_GetDeviceKeysResponse {
+    get {
+      if case .getDeviceKeys(let v)? = body {return v}
+      return Wrinkle_V1_GetDeviceKeysResponse()
+    }
+    set {body = .getDeviceKeys(newValue)}
+  }
+
+  public var publishKeys: Wrinkle_V1_PublishKeysResponse {
+    get {
+      if case .publishKeys(let v)? = body {return v}
+      return Wrinkle_V1_PublishKeysResponse()
+    }
+    set {body = .publishKeys(newValue)}
+  }
+
+  public var getConversationKeys: Wrinkle_V1_GetConversationKeysResponse {
+    get {
+      if case .getConversationKeys(let v)? = body {return v}
+      return Wrinkle_V1_GetConversationKeysResponse()
+    }
+    set {body = .getConversationKeys(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -730,6 +798,10 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     case setAdmin(Wrinkle_V1_SetAdminResponse)
     case getMembers(Wrinkle_V1_GetMembersResponse)
     case deleteMessage(Wrinkle_V1_DeleteMessageResponse)
+    case setDeviceKey(Wrinkle_V1_SetDeviceKeyResponse)
+    case getDeviceKeys(Wrinkle_V1_GetDeviceKeysResponse)
+    case publishKeys(Wrinkle_V1_PublishKeysResponse)
+    case getConversationKeys(Wrinkle_V1_GetConversationKeysResponse)
 
   }
 
@@ -932,7 +1004,7 @@ nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1279,6 +1351,58 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .deleteMessage(v)
         }
       }()
+      case 36: try {
+        var v: Wrinkle_V1_SetDeviceKeyRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .setDeviceKey(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .setDeviceKey(v)
+        }
+      }()
+      case 37: try {
+        var v: Wrinkle_V1_GetDeviceKeysRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getDeviceKeys(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getDeviceKeys(v)
+        }
+      }()
+      case 38: try {
+        var v: Wrinkle_V1_PublishKeysRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .publishKeys(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .publishKeys(v)
+        }
+      }()
+      case 39: try {
+        var v: Wrinkle_V1_GetConversationKeysRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getConversationKeys(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getConversationKeys(v)
+        }
+      }()
       default: break
       }
     }
@@ -1397,6 +1521,22 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .deleteMessage(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
     }()
+    case .setDeviceKey?: try {
+      guard case .setDeviceKey(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 36)
+    }()
+    case .getDeviceKeys?: try {
+      guard case .getDeviceKeys(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 37)
+    }()
+    case .publishKeys?: try {
+      guard case .publishKeys(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 38)
+    }()
+    case .getConversationKeys?: try {
+      guard case .getConversationKeys(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 39)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1412,7 +1552,7 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1772,6 +1912,58 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
           self.body = .deleteMessage(v)
         }
       }()
+      case 36: try {
+        var v: Wrinkle_V1_SetDeviceKeyResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .setDeviceKey(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .setDeviceKey(v)
+        }
+      }()
+      case 37: try {
+        var v: Wrinkle_V1_GetDeviceKeysResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getDeviceKeys(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getDeviceKeys(v)
+        }
+      }()
+      case 38: try {
+        var v: Wrinkle_V1_PublishKeysResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .publishKeys(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .publishKeys(v)
+        }
+      }()
+      case 39: try {
+        var v: Wrinkle_V1_GetConversationKeysResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .getConversationKeys(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .getConversationKeys(v)
+        }
+      }()
       default: break
       }
     }
@@ -1893,6 +2085,22 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
     case .deleteMessage?: try {
       guard case .deleteMessage(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
+    }()
+    case .setDeviceKey?: try {
+      guard case .setDeviceKey(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 36)
+    }()
+    case .getDeviceKeys?: try {
+      guard case .getDeviceKeys(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 37)
+    }()
+    case .publishKeys?: try {
+      guard case .publishKeys(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 38)
+    }()
+    case .getConversationKeys?: try {
+      guard case .getConversationKeys(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 39)
     }()
     case nil: break
     }

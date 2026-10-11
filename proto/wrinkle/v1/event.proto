@@ -57,11 +57,16 @@ message ProfileEvent {
   User user = 1;
 }
 
-// A device of the user signed in, was renamed or signed out. Received by
-// the user only.
+// A device signed in, was renamed, set its key or signed out. The user's
+// own devices receive every change, with the whole Device. A change to a
+// device's key (set, or the device signed out) also reaches the user's
+// direct partners and the members of the user's groups, with only the
+// device id and key, so they can encrypt for it and check its user's
+// safety number.
 message DeviceEvent {
   Device device = 1;
   bool signed_out = 2;
+  bytes user_id = 3;
 }
 
 // The sender deleted a message. Received by the conversation's members and

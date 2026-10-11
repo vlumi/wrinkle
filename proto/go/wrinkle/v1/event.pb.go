@@ -407,12 +407,17 @@ func (x *ProfileEvent) GetUser() *User {
 	return nil
 }
 
-// A device of the user signed in, was renamed or signed out. Received by
-// the user only.
+// A device signed in, was renamed, set its key or signed out. The user's
+// own devices receive every change, with the whole Device. A change to a
+// device's key (set, or the device signed out) also reaches the user's
+// direct partners and the members of the user's groups, with only the
+// device id and key, so they can encrypt for it and check its user's
+// safety number.
 type DeviceEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Device        *Device                `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`
 	SignedOut     bool                   `protobuf:"varint,2,opt,name=signed_out,json=signedOut,proto3" json:"signed_out,omitempty"`
+	UserId        []byte                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -459,6 +464,13 @@ func (x *DeviceEvent) GetSignedOut() bool {
 		return x.SignedOut
 	}
 	return false
+}
+
+func (x *DeviceEvent) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
 }
 
 // The sender deleted a message. Received by the conversation's members and
@@ -553,11 +565,12 @@ const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\x11client_message_id\x18\x02 \x01(\tR\x0fclientMessageId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\"4\n" +
 	"\fProfileEvent\x12$\n" +
-	"\x04user\x18\x01 \x01(\v2\x10.wrinkle.v1.UserR\x04user\"X\n" +
+	"\x04user\x18\x01 \x01(\v2\x10.wrinkle.v1.UserR\x04user\"q\n" +
 	"\vDeviceEvent\x12*\n" +
 	"\x06device\x18\x01 \x01(\v2\x12.wrinkle.v1.DeviceR\x06device\x12\x1d\n" +
 	"\n" +
-	"signed_out\x18\x02 \x01(\bR\tsignedOut\"\x8b\x01\n" +
+	"signed_out\x18\x02 \x01(\bR\tsignedOut\x12\x17\n" +
+	"\auser_id\x18\x03 \x01(\fR\x06userId\"\x8b\x01\n" +
 	"\x13MessageDeletedEvent\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x129\n" +

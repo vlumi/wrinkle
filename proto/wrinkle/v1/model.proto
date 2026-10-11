@@ -37,6 +37,8 @@ message Device {
   google.protobuf.Timestamp last_seen_at = 4;
   // The device has registered for push notifications.
   bool push = 5;
+  // The device's X25519 public key, 32 bytes, once it has set one.
+  bytes public_key = 6;
 }
 
 // A message in a conversation. (conversation_id, seq) identifies it; seq is
@@ -51,13 +53,28 @@ message Message {
   // The server chooses it for notices.
   string client_message_id = 4;
   google.protobuf.Timestamp sent_at = 6;
+  reserved 5;
+  reserved "text";
   oneof content {
-    string text = 5;
+    // What the sender wrote, encrypted on the sending device.
+    Sealed sealed = 9;
     // A change to a group, made by the sender.
     Notice notice = 7;
   }
   // Set once the sender deleted the message; its content is then unset.
   google.protobuf.Timestamp deleted_at = 8;
+}
+
+// Content encrypted end to end: a serialized wrinkle.v1.Content sealed with
+// AES-256-GCM under the conversation's key of the given epoch. The servers
+// store and relay it without reading it; content.proto describes how
+// devices make and open it.
+message Sealed {
+  uint32 epoch = 1;
+  // 12 bytes.
+  bytes nonce = 2;
+  // The ciphertext with its 16-byte tag; at most 48 KiB.
+  bytes ciphertext = 3;
 }
 
 // A change to a group, as a message in its sequence, so every member sees

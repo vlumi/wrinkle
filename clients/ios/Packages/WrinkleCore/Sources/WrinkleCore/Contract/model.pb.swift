@@ -128,6 +128,9 @@ public nonisolated struct Wrinkle_V1_Device: Sendable {
   /// The device has registered for push notifications.
   public var push: Bool = false
 
+  /// The device's X25519 public key, 32 bytes, once it has set one.
+  public var publicKey: Data = Data()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -166,12 +169,13 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
 
   public var content: Wrinkle_V1_Message.OneOf_Content? = nil
 
-  public var text: String {
+  /// What the sender wrote, encrypted on the sending device.
+  public var sealed: Wrinkle_V1_Sealed {
     get {
-      if case .text(let v)? = content {return v}
-      return String()
+      if case .sealed(let v)? = content {return v}
+      return Wrinkle_V1_Sealed()
     }
-    set {content = .text(newValue)}
+    set {content = .sealed(newValue)}
   }
 
   /// A change to a group, made by the sender.
@@ -196,7 +200,8 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Content: Equatable, Sendable {
-    case text(String)
+    /// What the sender wrote, encrypted on the sending device.
+    case sealed(Wrinkle_V1_Sealed)
     /// A change to a group, made by the sender.
     case notice(Wrinkle_V1_Notice)
 
@@ -206,6 +211,28 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
 
   fileprivate var _sentAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
   fileprivate var _deletedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+/// Content encrypted end to end: a serialized wrinkle.v1.Content sealed with
+/// AES-256-GCM under the conversation's key of the given epoch. The servers
+/// store and relay it without reading it; content.proto describes how
+/// devices make and open it.
+public nonisolated struct Wrinkle_V1_Sealed: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var epoch: UInt32 = 0
+
+  /// 12 bytes.
+  public var nonce: Data = Data()
+
+  /// The ciphertext with its 16-byte tag; at most 48 KiB.
+  public var ciphertext: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
 }
 
 /// A change to a group, as a message in its sequence, so every member sees
@@ -564,7 +591,7 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
 
 nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Device"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}device_id\0\u{1}name\0\u{3}created_at\0\u{3}last_seen_at\0\u{1}push\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}device_id\0\u{1}name\0\u{3}created_at\0\u{3}last_seen_at\0\u{1}push\0\u{3}public_key\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -577,6 +604,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
       case 3: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._lastSeenAt) }()
       case 5: try { try decoder.decodeSingularBoolField(value: &self.push) }()
+      case 6: try { try decoder.decodeSingularBytesField(value: &self.publicKey) }()
       default: break
       }
     }
@@ -602,6 +630,9 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
     if self.push != false {
       try visitor.visitSingularBoolField(value: self.push, fieldNumber: 5)
     }
+    if !self.publicKey.isEmpty {
+      try visitor.visitSingularBytesField(value: self.publicKey, fieldNumber: 6)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -611,6 +642,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
     if lhs._createdAt != rhs._createdAt {return false}
     if lhs._lastSeenAt != rhs._lastSeenAt {return false}
     if lhs.push != rhs.push {return false}
+    if lhs.publicKey != rhs.publicKey {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -618,7 +650,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{1}text\0\u{3}sent_at\0\u{1}notice\0\u{3}deleted_at\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{4}\u{2}sent_at\0\u{1}notice\0\u{3}deleted_at\0\u{1}sealed\0\u{b}text\0\u{c}\u{5}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -630,14 +662,6 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
       case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
       case 3: try { try decoder.decodeSingularBytesField(value: &self.senderUserID) }()
       case 4: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
-      case 5: try {
-        var v: String?
-        try decoder.decodeSingularStringField(value: &v)
-        if let v = v {
-          if self.content != nil {try decoder.handleConflictingOneOf()}
-          self.content = .text(v)
-        }
-      }()
       case 6: try { try decoder.decodeSingularMessageField(value: &self._sentAt) }()
       case 7: try {
         var v: Wrinkle_V1_Notice?
@@ -653,6 +677,19 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
         }
       }()
       case 8: try { try decoder.decodeSingularMessageField(value: &self._deletedAt) }()
+      case 9: try {
+        var v: Wrinkle_V1_Sealed?
+        var hadOneofValue = false
+        if let current = self.content {
+          hadOneofValue = true
+          if case .sealed(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.content = .sealed(v)
+        }
+      }()
       default: break
       }
     }
@@ -675,9 +712,6 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.clientMessageID.isEmpty {
       try visitor.visitSingularStringField(value: self.clientMessageID, fieldNumber: 4)
     }
-    try { if case .text(let v)? = self.content {
-      try visitor.visitSingularStringField(value: v, fieldNumber: 5)
-    } }()
     try { if let v = self._sentAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 6)
     } }()
@@ -686,6 +720,9 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     } }()
     try { if let v = self._deletedAt {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
+    try { if case .sealed(let v)? = self.content {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
     } }()
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -698,6 +735,46 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs._sentAt != rhs._sentAt {return false}
     if lhs.content != rhs.content {return false}
     if lhs._deletedAt != rhs._deletedAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Sealed: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Sealed"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}epoch\0\u{1}nonce\0\u{1}ciphertext\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt32Field(value: &self.epoch) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.nonce) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.ciphertext) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.epoch != 0 {
+      try visitor.visitSingularUInt32Field(value: self.epoch, fieldNumber: 1)
+    }
+    if !self.nonce.isEmpty {
+      try visitor.visitSingularBytesField(value: self.nonce, fieldNumber: 2)
+    }
+    if !self.ciphertext.isEmpty {
+      try visitor.visitSingularBytesField(value: self.ciphertext, fieldNumber: 3)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Sealed, rhs: Wrinkle_V1_Sealed) -> Bool {
+    if lhs.epoch != rhs.epoch {return false}
+    if lhs.nonce != rhs.nonce {return false}
+    if lhs.ciphertext != rhs.ciphertext {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

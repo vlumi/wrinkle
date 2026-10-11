@@ -1,0 +1,39 @@
+// What devices encrypt. The servers never see these messages: a device
+// seals a serialized Content into Message.sealed and the recipients' devices
+// open it.
+//
+// Cryptography (X25519, HKDF-SHA256 with a salt of 32 zero bytes and 32
+// bytes out, AES-256-GCM with a 12-byte nonce and the 16-byte tag appended;
+// integers big-endian, ids as raw bytes, device ids as 8 bytes):
+//
+// - Wrapping an epoch key K for recipient device R, by sender device S:
+//   wk = HKDF(X25519(S, R), info = "wrinkle wrap v1" || conversation_id ||
+//   epoch (4 bytes) || S's user id || S's device id || R's user id || R's
+//   device id); wrapped = nonce || AES-GCM(wk, nonce, K, no associated
+//   data), 60 bytes. R unwraps with X25519(R, S).
+// - Sealing: AES-GCM(K, nonce, serialized Content, associated data =
+//   "wrinkle content v1" || conversation_id || epoch (4 bytes) ||
+//   sender_user_id || client_message_id as UTF-8). A recipient builds the
+//   associated data from the message as the server delivers it, so content
+//   cannot be moved to another conversation, sender or message.
+// - A user's fingerprint: SHA-256("wrinkle fingerprint v1" || user_id ||
+//   for each of their devices with a key, by ascending device id: device id
+//   || public key). The safety number of two users: h = SHA-256(the smaller
+//   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
+//   5-byte big-endian numbers, each modulo 100000, written as five digits
+//   and separated by spaces. Both users see the same number.
+
+syntax = "proto3";
+
+package wrinkle.v1;
+
+option go_package = "github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1";
+option java_multiple_files = true;
+option java_package = "wrinkle.v1";
+
+message Content {
+  oneof body {
+    // 1 to 4000 characters.
+    string text = 1;
+  }
+}

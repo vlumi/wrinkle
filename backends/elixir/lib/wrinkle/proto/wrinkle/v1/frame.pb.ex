@@ -124,6 +124,23 @@ defmodule Wrinkle.V1.Request do
     type: Wrinkle.V1.DeleteMessageRequest,
     json_name: "deleteMessage",
     oneof: 0
+
+  field :set_device_key, 36,
+    type: Wrinkle.V1.SetDeviceKeyRequest,
+    json_name: "setDeviceKey",
+    oneof: 0
+
+  field :get_device_keys, 37,
+    type: Wrinkle.V1.GetDeviceKeysRequest,
+    json_name: "getDeviceKeys",
+    oneof: 0
+
+  field :publish_keys, 38, type: Wrinkle.V1.PublishKeysRequest, json_name: "publishKeys", oneof: 0
+
+  field :get_conversation_keys, 39,
+    type: Wrinkle.V1.GetConversationKeysRequest,
+    json_name: "getConversationKeys",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -228,6 +245,26 @@ defmodule Wrinkle.V1.Response do
   field :delete_message, 35,
     type: Wrinkle.V1.DeleteMessageResponse,
     json_name: "deleteMessage",
+    oneof: 0
+
+  field :set_device_key, 36,
+    type: Wrinkle.V1.SetDeviceKeyResponse,
+    json_name: "setDeviceKey",
+    oneof: 0
+
+  field :get_device_keys, 37,
+    type: Wrinkle.V1.GetDeviceKeysResponse,
+    json_name: "getDeviceKeys",
+    oneof: 0
+
+  field :publish_keys, 38,
+    type: Wrinkle.V1.PublishKeysResponse,
+    json_name: "publishKeys",
+    oneof: 0
+
+  field :get_conversation_keys, 39,
+    type: Wrinkle.V1.GetConversationKeysResponse,
+    json_name: "getConversationKeys",
     oneof: 0
 end
 

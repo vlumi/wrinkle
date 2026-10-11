@@ -468,7 +468,7 @@ defmodule Wrinkle.V1.SendMessageRequest do
 
   field :conversation_id, 1, type: :bytes, json_name: "conversationId"
   field :client_message_id, 2, type: :string, json_name: "clientMessageId"
-  field :text, 3, type: :string
+  field :sealed, 4, type: Wrinkle.V1.Sealed
 end
 
 defmodule Wrinkle.V1.SendMessageResponse do
@@ -501,6 +501,153 @@ defmodule Wrinkle.V1.DeleteMessageResponse do
     full_name: "wrinkle.v1.DeleteMessageResponse",
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
+end
+
+defmodule Wrinkle.V1.SetDeviceKeyRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetDeviceKeyRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :public_key, 1, type: :bytes, json_name: "publicKey"
+end
+
+defmodule Wrinkle.V1.SetDeviceKeyResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SetDeviceKeyResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.GetDeviceKeysRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetDeviceKeysRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_ids, 1, repeated: true, type: :bytes, json_name: "userIds"
+end
+
+defmodule Wrinkle.V1.GetDeviceKeysResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetDeviceKeysResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :users, 1, repeated: true, type: Wrinkle.V1.UserDevices
+end
+
+defmodule Wrinkle.V1.UserDevices do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.UserDevices",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_id, 1, type: :bytes, json_name: "userId"
+  field :devices, 2, repeated: true, type: Wrinkle.V1.Device
+end
+
+defmodule Wrinkle.V1.PublishKeysRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.PublishKeysRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :epoch, 2, type: :uint32
+  field :keys, 3, repeated: true, type: Wrinkle.V1.WrappedKey
+end
+
+defmodule Wrinkle.V1.PublishKeysResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.PublishKeysResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.WrappedKey do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.WrappedKey",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :recipient_user_id, 1, type: :bytes, json_name: "recipientUserId"
+  field :recipient_device_id, 2, type: :uint64, json_name: "recipientDeviceId"
+  field :wrapped, 3, type: :bytes
+end
+
+defmodule Wrinkle.V1.GetConversationKeysRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetConversationKeysRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :after_epoch, 2, type: :uint32, json_name: "afterEpoch"
+end
+
+defmodule Wrinkle.V1.GetConversationKeysResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.GetConversationKeysResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :current_epoch, 1, type: :uint32, json_name: "currentEpoch"
+  field :rotate, 2, type: :bool
+
+  field :current_recipients, 3,
+    repeated: true,
+    type: Wrinkle.V1.KeyRecipient,
+    json_name: "currentRecipients"
+
+  field :keys, 4, repeated: true, type: Wrinkle.V1.ReceivedKey
+end
+
+defmodule Wrinkle.V1.KeyRecipient do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.KeyRecipient",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_id, 1, type: :bytes, json_name: "userId"
+  field :device_id, 2, type: :uint64, json_name: "deviceId"
+end
+
+defmodule Wrinkle.V1.ReceivedKey do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ReceivedKey",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :epoch, 1, type: :uint32
+  field :sender_user_id, 2, type: :bytes, json_name: "senderUserId"
+  field :sender_device_id, 3, type: :uint64, json_name: "senderDeviceId"
+  field :sender_public_key, 4, type: :bytes, json_name: "senderPublicKey"
+  field :wrapped, 5, type: :bytes
 end
 
 defmodule Wrinkle.V1.MarkReadRequest do

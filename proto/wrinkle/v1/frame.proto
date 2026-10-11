@@ -98,6 +98,10 @@ message Request {
     SetAdminRequest set_admin = 33;
     GetMembersRequest get_members = 34;
     DeleteMessageRequest delete_message = 35;
+    SetDeviceKeyRequest set_device_key = 36;
+    GetDeviceKeysRequest get_device_keys = 37;
+    PublishKeysRequest publish_keys = 38;
+    GetConversationKeysRequest get_conversation_keys = 39;
   }
 }
 
@@ -131,6 +135,10 @@ message Response {
     SetAdminResponse set_admin = 33;
     GetMembersResponse get_members = 34;
     DeleteMessageResponse delete_message = 35;
+    SetDeviceKeyResponse set_device_key = 36;
+    GetDeviceKeysResponse get_device_keys = 37;
+    PublishKeysResponse publish_keys = 38;
+    GetConversationKeysResponse get_conversation_keys = 39;
   }
 }
 

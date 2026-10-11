@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIvICCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SABCBgoEYm9keSI0CgxNZXNzYWdlRXZlbnQSJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSJCCglSZWFkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg8KB3VzZXJfaWQYAiABKAwSCwoDc2VxGAMgASgEIlgKEk1lc3NhZ2VGYWlsZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIi4KDFByb2ZpbGVFdmVudBIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIkUKC0RldmljZUV2ZW50EiIKBmRldmljZRgBIAEoCzISLndyaW5rbGUudjEuRGV2aWNlEhIKCnNpZ25lZF9vdXQYAiABKAgiawoTTWVzc2FnZURlbGV0ZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEi4KCmRlbGV0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIvICCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SABCBgoEYm9keSI0CgxNZXNzYWdlRXZlbnQSJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSJCCglSZWFkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg8KB3VzZXJfaWQYAiABKAwSCwoDc2VxGAMgASgEIlgKEk1lc3NhZ2VGYWlsZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIi4KDFByb2ZpbGVFdmVudBIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIlYKC0RldmljZUV2ZW50EiIKBmRldmljZRgBIAEoCzISLndyaW5rbGUudjEuRGV2aWNlEhIKCnNpZ25lZF9vdXQYAiABKAgSDwoHdXNlcl9pZBgDIAEoDCJrChNNZXNzYWdlRGVsZXRlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBILCgNzZXEYAiABKAQSLgoKZGVsZXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -188,8 +188,12 @@ export const ProfileEventSchema: GenMessage<ProfileEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 4);
 
 /**
- * A device of the user signed in, was renamed or signed out. Received by
- * the user only.
+ * A device signed in, was renamed, set its key or signed out. The user's
+ * own devices receive every change, with the whole Device. A change to a
+ * device's key (set, or the device signed out) also reaches the user's
+ * direct partners and the members of the user's groups, with only the
+ * device id and key, so they can encrypt for it and check its user's
+ * safety number.
  *
  * @generated from message wrinkle.v1.DeviceEvent
  */
@@ -203,6 +207,11 @@ export type DeviceEvent = Message<"wrinkle.v1.DeviceEvent"> & {
    * @generated from field: bool signed_out = 2;
    */
   signedOut: boolean;
+
+  /**
+   * @generated from field: bytes user_id = 3;
+   */
+  userId: Uint8Array;
 };
 
 /**

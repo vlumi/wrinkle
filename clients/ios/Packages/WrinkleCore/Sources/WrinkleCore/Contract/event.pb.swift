@@ -203,8 +203,12 @@ public nonisolated struct Wrinkle_V1_ProfileEvent: Sendable {
   fileprivate var _user: Wrinkle_V1_User? = nil
 }
 
-/// A device of the user signed in, was renamed or signed out. Received by
-/// the user only.
+/// A device signed in, was renamed, set its key or signed out. The user's
+/// own devices receive every change, with the whole Device. A change to a
+/// device's key (set, or the device signed out) also reaches the user's
+/// direct partners and the members of the user's groups, with only the
+/// device id and key, so they can encrypt for it and check its user's
+/// safety number.
 public nonisolated struct Wrinkle_V1_DeviceEvent: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -220,6 +224,8 @@ public nonisolated struct Wrinkle_V1_DeviceEvent: Sendable {
   public mutating func clearDevice() {self._device = nil}
 
   public var signedOut: Bool = false
+
+  public var userID: Data = Data()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -595,7 +601,7 @@ nonisolated extension Wrinkle_V1_ProfileEvent: SwiftProtobuf.Message, SwiftProto
 
 nonisolated extension Wrinkle_V1_DeviceEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".DeviceEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}device\0\u{3}signed_out\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}device\0\u{3}signed_out\0\u{3}user_id\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -605,6 +611,7 @@ nonisolated extension Wrinkle_V1_DeviceEvent: SwiftProtobuf.Message, SwiftProtob
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularMessageField(value: &self._device) }()
       case 2: try { try decoder.decodeSingularBoolField(value: &self.signedOut) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.userID) }()
       default: break
       }
     }
@@ -621,12 +628,16 @@ nonisolated extension Wrinkle_V1_DeviceEvent: SwiftProtobuf.Message, SwiftProtob
     if self.signedOut != false {
       try visitor.visitSingularBoolField(value: self.signedOut, fieldNumber: 2)
     }
+    if !self.userID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.userID, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_DeviceEvent, rhs: Wrinkle_V1_DeviceEvent) -> Bool {
     if lhs._device != rhs._device {return false}
     if lhs.signedOut != rhs.signedOut {return false}
+    if lhs.userID != rhs.userID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
