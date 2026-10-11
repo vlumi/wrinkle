@@ -28,64 +28,78 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
-public nonisolated struct Wrinkle_V1_Event: Sendable {
+public nonisolated struct Wrinkle_V1_Event: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   /// Position in the user's log, strictly increasing. A device that has
   /// processed this event continues from this cursor.
-  public var cursor: UInt64 = 0
+  public var cursor: UInt64 {
+    get {_storage._cursor}
+    set {_uniqueStorage()._cursor = newValue}
+  }
 
   public var occurredAt: SwiftProtobuf.Google_Protobuf_Timestamp {
-    get {_occurredAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
-    set {_occurredAt = newValue}
+    get {_storage._occurredAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_uniqueStorage()._occurredAt = newValue}
   }
   /// Returns true if `occurredAt` has been explicitly set.
-  public var hasOccurredAt: Bool {self._occurredAt != nil}
+  public var hasOccurredAt: Bool {_storage._occurredAt != nil}
   /// Clears the value of `occurredAt`. Subsequent reads from it will return its default value.
-  public mutating func clearOccurredAt() {self._occurredAt = nil}
+  public mutating func clearOccurredAt() {_uniqueStorage()._occurredAt = nil}
 
-  public var body: Wrinkle_V1_Event.OneOf_Body? = nil
+  public var body: OneOf_Body? {
+    get {return _storage._body}
+    set {_uniqueStorage()._body = newValue}
+  }
 
   public var message: Wrinkle_V1_MessageEvent {
     get {
-      if case .message(let v)? = body {return v}
+      if case .message(let v)? = _storage._body {return v}
       return Wrinkle_V1_MessageEvent()
     }
-    set {body = .message(newValue)}
+    set {_uniqueStorage()._body = .message(newValue)}
   }
 
   public var read: Wrinkle_V1_ReadEvent {
     get {
-      if case .read(let v)? = body {return v}
+      if case .read(let v)? = _storage._body {return v}
       return Wrinkle_V1_ReadEvent()
     }
-    set {body = .read(newValue)}
+    set {_uniqueStorage()._body = .read(newValue)}
   }
 
   public var messageFailed: Wrinkle_V1_MessageFailedEvent {
     get {
-      if case .messageFailed(let v)? = body {return v}
+      if case .messageFailed(let v)? = _storage._body {return v}
       return Wrinkle_V1_MessageFailedEvent()
     }
-    set {body = .messageFailed(newValue)}
+    set {_uniqueStorage()._body = .messageFailed(newValue)}
   }
 
   public var profile: Wrinkle_V1_ProfileEvent {
     get {
-      if case .profile(let v)? = body {return v}
+      if case .profile(let v)? = _storage._body {return v}
       return Wrinkle_V1_ProfileEvent()
     }
-    set {body = .profile(newValue)}
+    set {_uniqueStorage()._body = .profile(newValue)}
   }
 
   public var device: Wrinkle_V1_DeviceEvent {
     get {
-      if case .device(let v)? = body {return v}
+      if case .device(let v)? = _storage._body {return v}
       return Wrinkle_V1_DeviceEvent()
     }
-    set {body = .device(newValue)}
+    set {_uniqueStorage()._body = .device(newValue)}
+  }
+
+  public var messageDeleted: Wrinkle_V1_MessageDeletedEvent {
+    get {
+      if case .messageDeleted(let v)? = _storage._body {return v}
+      return Wrinkle_V1_MessageDeletedEvent()
+    }
+    set {_uniqueStorage()._body = .messageDeleted(newValue)}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -96,12 +110,13 @@ public nonisolated struct Wrinkle_V1_Event: Sendable {
     case messageFailed(Wrinkle_V1_MessageFailedEvent)
     case profile(Wrinkle_V1_ProfileEvent)
     case device(Wrinkle_V1_DeviceEvent)
+    case messageDeleted(Wrinkle_V1_MessageDeletedEvent)
 
   }
 
   public init() {}
 
-  fileprivate var _occurredAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 /// A message was stored in one of the user's conversations. The sender's own
@@ -213,133 +228,218 @@ public nonisolated struct Wrinkle_V1_DeviceEvent: Sendable {
   fileprivate var _device: Wrinkle_V1_Device? = nil
 }
 
+/// The sender deleted a message. Received by the conversation's members and
+/// the sender. The copy of the message in the recipient's log, and the
+/// conversation list, no longer have its content.
+public nonisolated struct Wrinkle_V1_MessageDeletedEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversationID: Data = Data()
+
+  public var seq: UInt64 = 0
+
+  public var deletedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_deletedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_deletedAt = newValue}
+  }
+  /// Returns true if `deletedAt` has been explicitly set.
+  public var hasDeletedAt: Bool {self._deletedAt != nil}
+  /// Clears the value of `deletedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearDeletedAt() {self._deletedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _deletedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0\u{1}device\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0\u{1}device\0\u{3}message_deleted\0")
+
+  fileprivate class _StorageClass {
+    var _cursor: UInt64 = 0
+    var _occurredAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+    var _body: Wrinkle_V1_Event.OneOf_Body?
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _cursor = source._cursor
+      _occurredAt = source._occurredAt
+      _body = source._body
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.cursor) }()
-      case 2: try { try decoder.decodeSingularMessageField(value: &self._occurredAt) }()
-      case 10: try {
-        var v: Wrinkle_V1_MessageEvent?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .message(let m) = current {v = m}
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularUInt64Field(value: &_storage._cursor) }()
+        case 2: try { try decoder.decodeSingularMessageField(value: &_storage._occurredAt) }()
+        case 10: try {
+          var v: Wrinkle_V1_MessageEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .message(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .message(v)
+          }
+        }()
+        case 11: try {
+          var v: Wrinkle_V1_ReadEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .read(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .read(v)
+          }
+        }()
+        case 12: try {
+          var v: Wrinkle_V1_MessageFailedEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .messageFailed(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .messageFailed(v)
+          }
+        }()
+        case 13: try {
+          var v: Wrinkle_V1_ProfileEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .profile(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .profile(v)
+          }
+        }()
+        case 14: try {
+          var v: Wrinkle_V1_DeviceEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .device(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .device(v)
+          }
+        }()
+        case 15: try {
+          var v: Wrinkle_V1_MessageDeletedEvent?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .messageDeleted(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .messageDeleted(v)
+          }
+        }()
+        default: break
         }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .message(v)
-        }
-      }()
-      case 11: try {
-        var v: Wrinkle_V1_ReadEvent?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .read(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .read(v)
-        }
-      }()
-      case 12: try {
-        var v: Wrinkle_V1_MessageFailedEvent?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .messageFailed(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .messageFailed(v)
-        }
-      }()
-      case 13: try {
-        var v: Wrinkle_V1_ProfileEvent?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .profile(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .profile(v)
-        }
-      }()
-      case 14: try {
-        var v: Wrinkle_V1_DeviceEvent?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .device(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .device(v)
-        }
-      }()
-      default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.cursor != 0 {
-      try visitor.visitSingularUInt64Field(value: self.cursor, fieldNumber: 1)
-    }
-    try { if let v = self._occurredAt {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    } }()
-    switch self.body {
-    case .message?: try {
-      guard case .message(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
-    }()
-    case .read?: try {
-      guard case .read(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
-    }()
-    case .messageFailed?: try {
-      guard case .messageFailed(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
-    }()
-    case .profile?: try {
-      guard case .profile(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
-    }()
-    case .device?: try {
-      guard case .device(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
-    }()
-    case nil: break
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._cursor != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._cursor, fieldNumber: 1)
+      }
+      try { if let v = _storage._occurredAt {
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      } }()
+      switch _storage._body {
+      case .message?: try {
+        guard case .message(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      }()
+      case .read?: try {
+        guard case .read(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      }()
+      case .messageFailed?: try {
+        guard case .messageFailed(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      }()
+      case .profile?: try {
+        guard case .profile(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+      }()
+      case .device?: try {
+        guard case .device(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
+      }()
+      case .messageDeleted?: try {
+        guard case .messageDeleted(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
+      }()
+      case nil: break
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_Event, rhs: Wrinkle_V1_Event) -> Bool {
-    if lhs.cursor != rhs.cursor {return false}
-    if lhs._occurredAt != rhs._occurredAt {return false}
-    if lhs.body != rhs.body {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._cursor != rhs_storage._cursor {return false}
+        if _storage._occurredAt != rhs_storage._occurredAt {return false}
+        if _storage._body != rhs_storage._body {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -527,6 +627,50 @@ nonisolated extension Wrinkle_V1_DeviceEvent: SwiftProtobuf.Message, SwiftProtob
   public static func ==(lhs: Wrinkle_V1_DeviceEvent, rhs: Wrinkle_V1_DeviceEvent) -> Bool {
     if lhs._device != rhs._device {return false}
     if lhs.signedOut != rhs.signedOut {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_MessageDeletedEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".MessageDeletedEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}deleted_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._deletedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
+    }
+    if self.seq != 0 {
+      try visitor.visitSingularUInt64Field(value: self.seq, fieldNumber: 2)
+    }
+    try { if let v = self._deletedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_MessageDeletedEvent, rhs: Wrinkle_V1_MessageDeletedEvent) -> Bool {
+    if lhs.conversationID != rhs.conversationID {return false}
+    if lhs.seq != rhs.seq {return false}
+    if lhs._deletedAt != rhs._deletedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

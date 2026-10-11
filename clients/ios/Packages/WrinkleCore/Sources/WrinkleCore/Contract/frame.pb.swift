@@ -432,6 +432,14 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     set {body = .getMembers(newValue)}
   }
 
+  public var deleteMessage: Wrinkle_V1_DeleteMessageRequest {
+    get {
+      if case .deleteMessage(let v)? = body {return v}
+      return Wrinkle_V1_DeleteMessageRequest()
+    }
+    set {body = .deleteMessage(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -460,6 +468,7 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     case setTopic(Wrinkle_V1_SetTopicRequest)
     case setAdmin(Wrinkle_V1_SetAdminRequest)
     case getMembers(Wrinkle_V1_GetMembersRequest)
+    case deleteMessage(Wrinkle_V1_DeleteMessageRequest)
 
   }
 
@@ -683,6 +692,14 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     set {body = .getMembers(newValue)}
   }
 
+  public var deleteMessage: Wrinkle_V1_DeleteMessageResponse {
+    get {
+      if case .deleteMessage(let v)? = body {return v}
+      return Wrinkle_V1_DeleteMessageResponse()
+    }
+    set {body = .deleteMessage(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -712,6 +729,7 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     case setTopic(Wrinkle_V1_SetTopicResponse)
     case setAdmin(Wrinkle_V1_SetAdminResponse)
     case getMembers(Wrinkle_V1_GetMembersResponse)
+    case deleteMessage(Wrinkle_V1_DeleteMessageResponse)
 
   }
 
@@ -914,7 +932,7 @@ nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1248,6 +1266,19 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .getMembers(v)
         }
       }()
+      case 35: try {
+        var v: Wrinkle_V1_DeleteMessageRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .deleteMessage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .deleteMessage(v)
+        }
+      }()
       default: break
       }
     }
@@ -1362,6 +1393,10 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .getMembers(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 34)
     }()
+    case .deleteMessage?: try {
+      guard case .deleteMessage(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1377,7 +1412,7 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1724,6 +1759,19 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
           self.body = .getMembers(v)
         }
       }()
+      case 35: try {
+        var v: Wrinkle_V1_DeleteMessageResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .deleteMessage(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .deleteMessage(v)
+        }
+      }()
       default: break
       }
     }
@@ -1841,6 +1889,10 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
     case .getMembers?: try {
       guard case .getMembers(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 34)
+    }()
+    case .deleteMessage?: try {
+      guard case .deleteMessage(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
     }()
     case nil: break
     }

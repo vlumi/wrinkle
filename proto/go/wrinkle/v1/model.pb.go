@@ -256,7 +256,9 @@ type Message struct {
 	//
 	//	*Message_Text
 	//	*Message_Notice
-	Content       isMessage_Content `protobuf_oneof:"content"`
+	Content isMessage_Content `protobuf_oneof:"content"`
+	// Set once the sender deleted the message; its content is then unset.
+	DeletedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -347,6 +349,13 @@ func (x *Message) GetNotice() *Notice {
 		if x, ok := x.Content.(*Message_Notice); ok {
 			return x.Notice
 		}
+	}
+	return nil
+}
+
+func (x *Message) GetDeletedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.DeletedAt
 	}
 	return nil
 }
@@ -1026,7 +1035,7 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12<\n" +
 	"\flast_seen_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastSeenAt\x12\x12\n" +
-	"\x04push\x18\x05 \x01(\bR\x04push\"\x9a\x02\n" +
+	"\x04push\x18\x05 \x01(\bR\x04push\"\xd5\x02\n" +
 	"\aMessage\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12$\n" +
@@ -1034,7 +1043,9 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\x11client_message_id\x18\x04 \x01(\tR\x0fclientMessageId\x123\n" +
 	"\asent_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x06sentAt\x12\x14\n" +
 	"\x04text\x18\x05 \x01(\tH\x00R\x04text\x12,\n" +
-	"\x06notice\x18\a \x01(\v2\x12.wrinkle.v1.NoticeH\x00R\x06noticeB\t\n" +
+	"\x06notice\x18\a \x01(\v2\x12.wrinkle.v1.NoticeH\x00R\x06notice\x129\n" +
+	"\n" +
+	"deleted_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAtB\t\n" +
 	"\acontent\"\x93\x03\n" +
 	"\x06Notice\x12?\n" +
 	"\rgroup_created\x18\x01 \x01(\v2\x18.wrinkle.v1.GroupCreatedH\x00R\fgroupCreated\x12?\n" +
@@ -1123,26 +1134,27 @@ var file_wrinkle_v1_model_proto_depIdxs = []int32{
 	13, // 1: wrinkle.v1.Device.last_seen_at:type_name -> google.protobuf.Timestamp
 	13, // 2: wrinkle.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
 	4,  // 3: wrinkle.v1.Message.notice:type_name -> wrinkle.v1.Notice
-	5,  // 4: wrinkle.v1.Notice.group_created:type_name -> wrinkle.v1.GroupCreated
-	6,  // 5: wrinkle.v1.Notice.members_added:type_name -> wrinkle.v1.MembersAdded
-	7,  // 6: wrinkle.v1.Notice.member_removed:type_name -> wrinkle.v1.MemberRemoved
-	8,  // 7: wrinkle.v1.Notice.member_left:type_name -> wrinkle.v1.MemberLeft
-	9,  // 8: wrinkle.v1.Notice.topic_changed:type_name -> wrinkle.v1.TopicChanged
-	10, // 9: wrinkle.v1.Notice.admin_changed:type_name -> wrinkle.v1.AdminChanged
-	1,  // 10: wrinkle.v1.GroupCreated.members:type_name -> wrinkle.v1.User
-	1,  // 11: wrinkle.v1.MembersAdded.users:type_name -> wrinkle.v1.User
-	1,  // 12: wrinkle.v1.MemberRemoved.user:type_name -> wrinkle.v1.User
-	1,  // 13: wrinkle.v1.MemberLeft.promoted:type_name -> wrinkle.v1.User
-	1,  // 14: wrinkle.v1.AdminChanged.user:type_name -> wrinkle.v1.User
-	0,  // 15: wrinkle.v1.Conversation.kind:type_name -> wrinkle.v1.ConversationKind
-	1,  // 16: wrinkle.v1.Conversation.peer:type_name -> wrinkle.v1.User
-	3,  // 17: wrinkle.v1.Conversation.last_message:type_name -> wrinkle.v1.Message
-	1,  // 18: wrinkle.v1.Member.user:type_name -> wrinkle.v1.User
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	13, // 4: wrinkle.v1.Message.deleted_at:type_name -> google.protobuf.Timestamp
+	5,  // 5: wrinkle.v1.Notice.group_created:type_name -> wrinkle.v1.GroupCreated
+	6,  // 6: wrinkle.v1.Notice.members_added:type_name -> wrinkle.v1.MembersAdded
+	7,  // 7: wrinkle.v1.Notice.member_removed:type_name -> wrinkle.v1.MemberRemoved
+	8,  // 8: wrinkle.v1.Notice.member_left:type_name -> wrinkle.v1.MemberLeft
+	9,  // 9: wrinkle.v1.Notice.topic_changed:type_name -> wrinkle.v1.TopicChanged
+	10, // 10: wrinkle.v1.Notice.admin_changed:type_name -> wrinkle.v1.AdminChanged
+	1,  // 11: wrinkle.v1.GroupCreated.members:type_name -> wrinkle.v1.User
+	1,  // 12: wrinkle.v1.MembersAdded.users:type_name -> wrinkle.v1.User
+	1,  // 13: wrinkle.v1.MemberRemoved.user:type_name -> wrinkle.v1.User
+	1,  // 14: wrinkle.v1.MemberLeft.promoted:type_name -> wrinkle.v1.User
+	1,  // 15: wrinkle.v1.AdminChanged.user:type_name -> wrinkle.v1.User
+	0,  // 16: wrinkle.v1.Conversation.kind:type_name -> wrinkle.v1.ConversationKind
+	1,  // 17: wrinkle.v1.Conversation.peer:type_name -> wrinkle.v1.User
+	3,  // 18: wrinkle.v1.Conversation.last_message:type_name -> wrinkle.v1.Message
+	1,  // 19: wrinkle.v1.Member.user:type_name -> wrinkle.v1.User
+	20, // [20:20] is the sub-list for method output_type
+	20, // [20:20] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_model_proto_init() }

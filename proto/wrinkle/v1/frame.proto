@@ -97,6 +97,7 @@ message Request {
     SetTopicRequest set_topic = 32;
     SetAdminRequest set_admin = 33;
     GetMembersRequest get_members = 34;
+    DeleteMessageRequest delete_message = 35;
   }
 }
 
@@ -129,6 +130,7 @@ message Response {
     SetTopicResponse set_topic = 32;
     SetAdminResponse set_admin = 33;
     GetMembersResponse get_members = 34;
+    DeleteMessageResponse delete_message = 35;
   }
 }
 

@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/messaging.proto.
  */
 export const file_wrinkle_v1_messaging: GenFile = /*@__PURE__*/
-  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UibgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBARITCgZhdmF0YXIYAyABKAxIAogBAUIHCgVfbmFtZUIHCgVfaWNvbkIJCgdfYXZhdGFyIjcKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIhAKDlNpZ25PdXRSZXF1ZXN0IhEKD1NpZ25PdXRSZXNwb25zZSIUChJMaXN0RGV2aWNlc1JlcXVlc3QiOgoTTGlzdERldmljZXNSZXNwb25zZRIjCgdkZXZpY2VzGAEgAygLMhIud3JpbmtsZS52MS5EZXZpY2UiNgoTUmVuYW1lRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCSI6ChRSZW5hbWVEZXZpY2VSZXNwb25zZRIiCgZkZXZpY2UYASABKAsyEi53cmlua2xlLnYxLkRldmljZSIpChRTaWduT3V0RGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQiFwoVU2lnbk91dERldmljZVJlc3BvbnNlIigKFERlbGV0ZUFjY291bnRSZXF1ZXN0EhAKCHBhc3N3b3JkGAEgASgJIhcKFURlbGV0ZUFjY291bnRSZXNwb25zZSJhChNDcmVhdGVVcGxvYWRSZXF1ZXN0EigKB3B1cnBvc2UYASABKA4yFy53cmlua2xlLnYxLkJsb2JQdXJwb3NlEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoBCJsChRDcmVhdGVVcGxvYWRSZXNwb25zZRIPCgdibG9iX2lkGAEgASgMEhMKC3VwbG9hZF9wYXRoGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiwKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhEKCXBlZXJfbmFtZRgBIAEoCSJKChhPcGVuQ29udmVyc2F0aW9uUmVzcG9uc2USLgoMY29udmVyc2F0aW9uGAEgASgLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUgoSQ3JlYXRlR3JvdXBSZXF1ZXN0Eg0KBXRvcGljGAEgASgJEhQKDG1lbWJlcl9uYW1lcxgCIAMoCRIXCg9jbGllbnRfZ3JvdXBfaWQYAyABKAkiRQoTQ3JlYXRlR3JvdXBSZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJCChFBZGRNZW1iZXJzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSFAoMbWVtYmVyX25hbWVzGAIgAygJIhQKEkFkZE1lbWJlcnNSZXNwb25zZSI/ChNSZW1vdmVNZW1iZXJSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIPCgd1c2VyX2lkGAIgASgMIhYKFFJlbW92ZU1lbWJlclJlc3BvbnNlIiwKEUxlYXZlR3JvdXBSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCIUChJMZWF2ZUdyb3VwUmVzcG9uc2UiOQoPU2V0VG9waWNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBINCgV0b3BpYxgCIAEoCSISChBTZXRUb3BpY1Jlc3BvbnNlIkoKD1NldEFkbWluUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBINCgVhZG1pbhgDIAEoCCISChBTZXRBZG1pblJlc3BvbnNlIiwKEUdldE1lbWJlcnNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCI5ChJHZXRNZW1iZXJzUmVzcG9uc2USIwoHbWVtYmVycxgBIAMoCzISLndyaW5rbGUudjEuTWVtYmVyIlYKElNlbmRNZXNzYWdlUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDAoEdGV4dBgDIAEoCSI7ChNTZW5kTWVzc2FnZVJlc3BvbnNlEiQKB21lc3NhZ2UYASABKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiNwoPTWFya1JlYWRSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBILCgNzZXEYAiABKAQiEgoQTWFya1JlYWRSZXNwb25zZSIsCgtTeW5jUmVxdWVzdBIOCgZjdXJzb3IYASABKAQSDQoFbGltaXQYAiABKA0iUwoMU3luY1Jlc3BvbnNlEiEKBmV2ZW50cxgBIAMoCzIRLndyaW5rbGUudjEuRXZlbnQSDgoGY3Vyc29yGAIgASgEEhAKCGhhc19tb3JlGAMgASgIIhoKGExpc3RDb252ZXJzYXRpb25zUmVxdWVzdCJMChlMaXN0Q29udmVyc2F0aW9uc1Jlc3BvbnNlEi8KDWNvbnZlcnNhdGlvbnMYASADKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJQChJHZXRNZXNzYWdlc1JlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEhIKCmJlZm9yZV9zZXEYAiABKAQSDQoFbGltaXQYAyABKA0iPAoTR2V0TWVzc2FnZXNSZXNwb25zZRIlCghtZXNzYWdlcxgBIAMoCzITLndyaW5rbGUudjEuTWVzc2FnZSJTChhSZWdpc3RlclB1c2hUb2tlblJlcXVlc3QSKAoHc2VydmljZRgBIAEoDjIXLndyaW5rbGUudjEuUHVzaFNlcnZpY2USDQoFdG9rZW4YAiABKAkiGwoZUmVnaXN0ZXJQdXNoVG9rZW5SZXNwb25zZSp7CgtCbG9iUHVycG9zZRIcChhCTE9CX1BVUlBPU0VfVU5TUEVDSUZJRUQQABIXChNCTE9CX1BVUlBPU0VfQVZBVEFSEAESGAoUQkxPQl9QVVJQT1NFX1NUSUNLRVIQAhIbChdCTE9CX1BVUlBPU0VfQVRUQUNITUVOVBADKmEKC1B1c2hTZXJ2aWNlEhwKGFBVU0hfU0VSVklDRV9VTlNQRUNJRklFRBAAEh0KGVBVU0hfU0VSVklDRV9BUE5TX1NBTkRCT1gQARIVChFQVVNIX1NFUlZJQ0VfQVBOUxACQqEBCg5jb20ud3JpbmtsZS52MUIOTWVzc2FnaW5nUHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_wrinkle_v1_event, file_wrinkle_v1_model]);
+  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UibgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBARITCgZhdmF0YXIYAyABKAxIAogBAUIHCgVfbmFtZUIHCgVfaWNvbkIJCgdfYXZhdGFyIjcKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIhAKDlNpZ25PdXRSZXF1ZXN0IhEKD1NpZ25PdXRSZXNwb25zZSIUChJMaXN0RGV2aWNlc1JlcXVlc3QiOgoTTGlzdERldmljZXNSZXNwb25zZRIjCgdkZXZpY2VzGAEgAygLMhIud3JpbmtsZS52MS5EZXZpY2UiNgoTUmVuYW1lRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCSI6ChRSZW5hbWVEZXZpY2VSZXNwb25zZRIiCgZkZXZpY2UYASABKAsyEi53cmlua2xlLnYxLkRldmljZSIpChRTaWduT3V0RGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQiFwoVU2lnbk91dERldmljZVJlc3BvbnNlIigKFERlbGV0ZUFjY291bnRSZXF1ZXN0EhAKCHBhc3N3b3JkGAEgASgJIhcKFURlbGV0ZUFjY291bnRSZXNwb25zZSJhChNDcmVhdGVVcGxvYWRSZXF1ZXN0EigKB3B1cnBvc2UYASABKA4yFy53cmlua2xlLnYxLkJsb2JQdXJwb3NlEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoBCJsChRDcmVhdGVVcGxvYWRSZXNwb25zZRIPCgdibG9iX2lkGAEgASgMEhMKC3VwbG9hZF9wYXRoGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiwKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhEKCXBlZXJfbmFtZRgBIAEoCSJKChhPcGVuQ29udmVyc2F0aW9uUmVzcG9uc2USLgoMY29udmVyc2F0aW9uGAEgASgLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUgoSQ3JlYXRlR3JvdXBSZXF1ZXN0Eg0KBXRvcGljGAEgASgJEhQKDG1lbWJlcl9uYW1lcxgCIAMoCRIXCg9jbGllbnRfZ3JvdXBfaWQYAyABKAkiRQoTQ3JlYXRlR3JvdXBSZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJCChFBZGRNZW1iZXJzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSFAoMbWVtYmVyX25hbWVzGAIgAygJIhQKEkFkZE1lbWJlcnNSZXNwb25zZSI/ChNSZW1vdmVNZW1iZXJSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIPCgd1c2VyX2lkGAIgASgMIhYKFFJlbW92ZU1lbWJlclJlc3BvbnNlIiwKEUxlYXZlR3JvdXBSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCIUChJMZWF2ZUdyb3VwUmVzcG9uc2UiOQoPU2V0VG9waWNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBINCgV0b3BpYxgCIAEoCSISChBTZXRUb3BpY1Jlc3BvbnNlIkoKD1NldEFkbWluUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBINCgVhZG1pbhgDIAEoCCISChBTZXRBZG1pblJlc3BvbnNlIiwKEUdldE1lbWJlcnNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCI5ChJHZXRNZW1iZXJzUmVzcG9uc2USIwoHbWVtYmVycxgBIAMoCzISLndyaW5rbGUudjEuTWVtYmVyIlYKElNlbmRNZXNzYWdlUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDAoEdGV4dBgDIAEoCSI7ChNTZW5kTWVzc2FnZVJlc3BvbnNlEiQKB21lc3NhZ2UYASABKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiPAoURGVsZXRlTWVzc2FnZVJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBCIXChVEZWxldGVNZXNzYWdlUmVzcG9uc2UiNwoPTWFya1JlYWRSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBILCgNzZXEYAiABKAQiEgoQTWFya1JlYWRSZXNwb25zZSIsCgtTeW5jUmVxdWVzdBIOCgZjdXJzb3IYASABKAQSDQoFbGltaXQYAiABKA0iUwoMU3luY1Jlc3BvbnNlEiEKBmV2ZW50cxgBIAMoCzIRLndyaW5rbGUudjEuRXZlbnQSDgoGY3Vyc29yGAIgASgEEhAKCGhhc19tb3JlGAMgASgIIhoKGExpc3RDb252ZXJzYXRpb25zUmVxdWVzdCJMChlMaXN0Q29udmVyc2F0aW9uc1Jlc3BvbnNlEi8KDWNvbnZlcnNhdGlvbnMYASADKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJQChJHZXRNZXNzYWdlc1JlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEhIKCmJlZm9yZV9zZXEYAiABKAQSDQoFbGltaXQYAyABKA0iPAoTR2V0TWVzc2FnZXNSZXNwb25zZRIlCghtZXNzYWdlcxgBIAMoCzITLndyaW5rbGUudjEuTWVzc2FnZSJTChhSZWdpc3RlclB1c2hUb2tlblJlcXVlc3QSKAoHc2VydmljZRgBIAEoDjIXLndyaW5rbGUudjEuUHVzaFNlcnZpY2USDQoFdG9rZW4YAiABKAkiGwoZUmVnaXN0ZXJQdXNoVG9rZW5SZXNwb25zZSp7CgtCbG9iUHVycG9zZRIcChhCTE9CX1BVUlBPU0VfVU5TUEVDSUZJRUQQABIXChNCTE9CX1BVUlBPU0VfQVZBVEFSEAESGAoUQkxPQl9QVVJQT1NFX1NUSUNLRVIQAhIbChdCTE9CX1BVUlBPU0VfQVRUQUNITUVOVBADKmEKC1B1c2hTZXJ2aWNlEhwKGFBVU0hfU0VSVklDRV9VTlNQRUNJRklFRBAAEh0KGVBVU0hfU0VSVklDRV9BUE5TX1NBTkRCT1gQARIVChFQVVNIX1NFUlZJQ0VfQVBOUxACQqEBCg5jb20ud3JpbmtsZS52MUIOTWVzc2FnaW5nUHJvdG9QAVo2Z2l0aHViLmNvbS92bHVtaS93cmlua2xlL3Byb3RvL2dvL3dyaW5rbGUvdjE7d3JpbmtsZXYxogIDV1hYqgIKV3JpbmtsZS5WMcoCCldyaW5rbGVcVjHiAhZXcmlua2xlXFYxXEdQQk1ldGFkYXRh6gILV3JpbmtsZTo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_wrinkle_v1_event, file_wrinkle_v1_model]);
 
 /**
  * Creates an account and signs this device in. Names are unique ignoring
@@ -909,6 +909,49 @@ export const SendMessageResponseSchema: GenMessage<SendMessageResponse> = /*@__P
   messageDesc(file_wrinkle_v1_messaging, 40);
 
 /**
+ * Deletes one of the requesting user's own messages for everyone: the
+ * message keeps its seq, loses its content and gets deleted_at. Someone
+ * else's message fails with ERROR_CODE_PERMISSION_DENIED, a notice with
+ * ERROR_CODE_INVALID_ARGUMENT, a message the user may not read with
+ * ERROR_CODE_NOT_FOUND. Deleting a deleted message again does nothing.
+ * Former members of a group may delete their messages from before they
+ * left.
+ *
+ * @generated from message wrinkle.v1.DeleteMessageRequest
+ */
+export type DeleteMessageRequest = Message<"wrinkle.v1.DeleteMessageRequest"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: uint64 seq = 2;
+   */
+  seq: bigint;
+};
+
+/**
+ * Describes the message wrinkle.v1.DeleteMessageRequest.
+ * Use `create(DeleteMessageRequestSchema)` to create a new message.
+ */
+export const DeleteMessageRequestSchema: GenMessage<DeleteMessageRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 41);
+
+/**
+ * @generated from message wrinkle.v1.DeleteMessageResponse
+ */
+export type DeleteMessageResponse = Message<"wrinkle.v1.DeleteMessageResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.DeleteMessageResponse.
+ * Use `create(DeleteMessageResponseSchema)` to create a new message.
+ */
+export const DeleteMessageResponseSchema: GenMessage<DeleteMessageResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 42);
+
+/**
  * Marks the conversation read up to seq for the requesting user. Lower than
  * the current read position is a no-op.
  *
@@ -931,7 +974,7 @@ export type MarkReadRequest = Message<"wrinkle.v1.MarkReadRequest"> & {
  * Use `create(MarkReadRequestSchema)` to create a new message.
  */
 export const MarkReadRequestSchema: GenMessage<MarkReadRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 41);
+  messageDesc(file_wrinkle_v1_messaging, 43);
 
 /**
  * @generated from message wrinkle.v1.MarkReadResponse
@@ -944,7 +987,7 @@ export type MarkReadResponse = Message<"wrinkle.v1.MarkReadResponse"> & {
  * Use `create(MarkReadResponseSchema)` to create a new message.
  */
 export const MarkReadResponseSchema: GenMessage<MarkReadResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 42);
+  messageDesc(file_wrinkle_v1_messaging, 44);
 
 /**
  * Returns events from the user's log after the cursor, oldest first.
@@ -971,7 +1014,7 @@ export type SyncRequest = Message<"wrinkle.v1.SyncRequest"> & {
  * Use `create(SyncRequestSchema)` to create a new message.
  */
 export const SyncRequestSchema: GenMessage<SyncRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 43);
+  messageDesc(file_wrinkle_v1_messaging, 45);
 
 /**
  * @generated from message wrinkle.v1.SyncResponse
@@ -1003,7 +1046,7 @@ export type SyncResponse = Message<"wrinkle.v1.SyncResponse"> & {
  * Use `create(SyncResponseSchema)` to create a new message.
  */
 export const SyncResponseSchema: GenMessage<SyncResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 44);
+  messageDesc(file_wrinkle_v1_messaging, 46);
 
 /**
  * @generated from message wrinkle.v1.ListConversationsRequest
@@ -1016,7 +1059,7 @@ export type ListConversationsRequest = Message<"wrinkle.v1.ListConversationsRequ
  * Use `create(ListConversationsRequestSchema)` to create a new message.
  */
 export const ListConversationsRequestSchema: GenMessage<ListConversationsRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 45);
+  messageDesc(file_wrinkle_v1_messaging, 47);
 
 /**
  * Conversations with the most recently active first.
@@ -1035,7 +1078,7 @@ export type ListConversationsResponse = Message<"wrinkle.v1.ListConversationsRes
  * Use `create(ListConversationsResponseSchema)` to create a new message.
  */
 export const ListConversationsResponseSchema: GenMessage<ListConversationsResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 46);
+  messageDesc(file_wrinkle_v1_messaging, 48);
 
 /**
  * Returns messages of a conversation, newest first. Group members get the
@@ -1070,7 +1113,7 @@ export type GetMessagesRequest = Message<"wrinkle.v1.GetMessagesRequest"> & {
  * Use `create(GetMessagesRequestSchema)` to create a new message.
  */
 export const GetMessagesRequestSchema: GenMessage<GetMessagesRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 47);
+  messageDesc(file_wrinkle_v1_messaging, 49);
 
 /**
  * @generated from message wrinkle.v1.GetMessagesResponse
@@ -1087,7 +1130,7 @@ export type GetMessagesResponse = Message<"wrinkle.v1.GetMessagesResponse"> & {
  * Use `create(GetMessagesResponseSchema)` to create a new message.
  */
 export const GetMessagesResponseSchema: GenMessage<GetMessagesResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 48);
+  messageDesc(file_wrinkle_v1_messaging, 50);
 
 /**
  * Registers where to push notifications for the requesting device while it
@@ -1116,7 +1159,7 @@ export type RegisterPushTokenRequest = Message<"wrinkle.v1.RegisterPushTokenRequ
  * Use `create(RegisterPushTokenRequestSchema)` to create a new message.
  */
 export const RegisterPushTokenRequestSchema: GenMessage<RegisterPushTokenRequest> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 49);
+  messageDesc(file_wrinkle_v1_messaging, 51);
 
 /**
  * @generated from message wrinkle.v1.RegisterPushTokenResponse
@@ -1129,7 +1172,7 @@ export type RegisterPushTokenResponse = Message<"wrinkle.v1.RegisterPushTokenRes
  * Use `create(RegisterPushTokenResponseSchema)` to create a new message.
  */
 export const RegisterPushTokenResponseSchema: GenMessage<RegisterPushTokenResponse> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_messaging, 50);
+  messageDesc(file_wrinkle_v1_messaging, 52);
 
 /**
  * @generated from enum wrinkle.v1.BlobPurpose

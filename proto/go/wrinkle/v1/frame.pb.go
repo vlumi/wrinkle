@@ -326,6 +326,7 @@ type Request struct {
 	//	*Request_SetTopic
 	//	*Request_SetAdmin
 	//	*Request_GetMembers
+	//	*Request_DeleteMessage
 	Body          isRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -600,6 +601,15 @@ func (x *Request) GetGetMembers() *GetMembersRequest {
 	return nil
 }
 
+func (x *Request) GetDeleteMessage() *DeleteMessageRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_DeleteMessage); ok {
+			return x.DeleteMessage
+		}
+	}
+	return nil
+}
+
 type isRequest_Body interface {
 	isRequest_Body()
 }
@@ -704,6 +714,10 @@ type Request_GetMembers struct {
 	GetMembers *GetMembersRequest `protobuf:"bytes,34,opt,name=get_members,json=getMembers,proto3,oneof"`
 }
 
+type Request_DeleteMessage struct {
+	DeleteMessage *DeleteMessageRequest `protobuf:"bytes,35,opt,name=delete_message,json=deleteMessage,proto3,oneof"`
+}
+
 func (*Request_Connect) isRequest_Body() {}
 
 func (*Request_OpenConversation) isRequest_Body() {}
@@ -754,6 +768,8 @@ func (*Request_SetAdmin) isRequest_Body() {}
 
 func (*Request_GetMembers) isRequest_Body() {}
 
+func (*Request_DeleteMessage) isRequest_Body() {}
+
 type Response struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -785,6 +801,7 @@ type Response struct {
 	//	*Response_SetTopic
 	//	*Response_SetAdmin
 	//	*Response_GetMembers
+	//	*Response_DeleteMessage
 	Body          isResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1068,6 +1085,15 @@ func (x *Response) GetGetMembers() *GetMembersResponse {
 	return nil
 }
 
+func (x *Response) GetDeleteMessage() *DeleteMessageResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_DeleteMessage); ok {
+			return x.DeleteMessage
+		}
+	}
+	return nil
+}
+
 type isResponse_Body interface {
 	isResponse_Body()
 }
@@ -1176,6 +1202,10 @@ type Response_GetMembers struct {
 	GetMembers *GetMembersResponse `protobuf:"bytes,34,opt,name=get_members,json=getMembers,proto3,oneof"`
 }
 
+type Response_DeleteMessage struct {
+	DeleteMessage *DeleteMessageResponse `protobuf:"bytes,35,opt,name=delete_message,json=deleteMessage,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Body() {}
 
 func (*Response_Connect) isResponse_Body() {}
@@ -1227,6 +1257,8 @@ func (*Response_SetTopic) isResponse_Body() {}
 func (*Response_SetAdmin) isResponse_Body() {}
 
 func (*Response_GetMembers) isResponse_Body() {}
+
+func (*Response_DeleteMessage) isResponse_Body() {}
 
 type Error struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -1414,7 +1446,7 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x03ack\x18\x04 \x01(\v2\x0f.wrinkle.v1.AckH\x00R\x03ack\x12&\n" +
 	"\x04ping\x18\x05 \x01(\v2\x10.wrinkle.v1.PingH\x00R\x04ping\x12&\n" +
 	"\x04pong\x18\x06 \x01(\v2\x10.wrinkle.v1.PongH\x00R\x04pongB\x06\n" +
-	"\x04kind\"\xcb\r\n" +
+	"\x04kind\"\x96\x0e\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x126\n" +
 	"\aconnect\x18\n" +
@@ -1445,8 +1477,9 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\tset_topic\x18  \x01(\v2\x1b.wrinkle.v1.SetTopicRequestH\x00R\bsetTopic\x12:\n" +
 	"\tset_admin\x18! \x01(\v2\x1b.wrinkle.v1.SetAdminRequestH\x00R\bsetAdmin\x12@\n" +
 	"\vget_members\x18\" \x01(\v2\x1d.wrinkle.v1.GetMembersRequestH\x00R\n" +
-	"getMembersB\x06\n" +
-	"\x04body\"\x9f\x0e\n" +
+	"getMembers\x12I\n" +
+	"\x0edelete_message\x18# \x01(\v2 .wrinkle.v1.DeleteMessageRequestH\x00R\rdeleteMessageB\x06\n" +
+	"\x04body\"\xeb\x0e\n" +
 	"\bResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12)\n" +
@@ -1479,7 +1512,8 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\tset_topic\x18  \x01(\v2\x1c.wrinkle.v1.SetTopicResponseH\x00R\bsetTopic\x12;\n" +
 	"\tset_admin\x18! \x01(\v2\x1c.wrinkle.v1.SetAdminResponseH\x00R\bsetAdmin\x12A\n" +
 	"\vget_members\x18\" \x01(\v2\x1e.wrinkle.v1.GetMembersResponseH\x00R\n" +
-	"getMembersB\x06\n" +
+	"getMembers\x12J\n" +
+	"\x0edelete_message\x18# \x01(\v2!.wrinkle.v1.DeleteMessageResponseH\x00R\rdeleteMessageB\x06\n" +
 	"\x04body\"L\n" +
 	"\x05Error\x12)\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x15.wrinkle.v1.ErrorCodeR\x04code\x12\x18\n" +
@@ -1553,31 +1587,33 @@ var file_wrinkle_v1_frame_proto_goTypes = []any{
 	(*SetTopicRequest)(nil),           // 31: wrinkle.v1.SetTopicRequest
 	(*SetAdminRequest)(nil),           // 32: wrinkle.v1.SetAdminRequest
 	(*GetMembersRequest)(nil),         // 33: wrinkle.v1.GetMembersRequest
-	(*ConnectResponse)(nil),           // 34: wrinkle.v1.ConnectResponse
-	(*OpenConversationResponse)(nil),  // 35: wrinkle.v1.OpenConversationResponse
-	(*SendMessageResponse)(nil),       // 36: wrinkle.v1.SendMessageResponse
-	(*MarkReadResponse)(nil),          // 37: wrinkle.v1.MarkReadResponse
-	(*SyncResponse)(nil),              // 38: wrinkle.v1.SyncResponse
-	(*ListConversationsResponse)(nil), // 39: wrinkle.v1.ListConversationsResponse
-	(*GetMessagesResponse)(nil),       // 40: wrinkle.v1.GetMessagesResponse
-	(*RegisterPushTokenResponse)(nil), // 41: wrinkle.v1.RegisterPushTokenResponse
-	(*RegisterResponse)(nil),          // 42: wrinkle.v1.RegisterResponse
-	(*SignInResponse)(nil),            // 43: wrinkle.v1.SignInResponse
-	(*ChangePasswordResponse)(nil),    // 44: wrinkle.v1.ChangePasswordResponse
-	(*UpdateProfileResponse)(nil),     // 45: wrinkle.v1.UpdateProfileResponse
-	(*SignOutResponse)(nil),           // 46: wrinkle.v1.SignOutResponse
-	(*ListDevicesResponse)(nil),       // 47: wrinkle.v1.ListDevicesResponse
-	(*RenameDeviceResponse)(nil),      // 48: wrinkle.v1.RenameDeviceResponse
-	(*SignOutDeviceResponse)(nil),     // 49: wrinkle.v1.SignOutDeviceResponse
-	(*DeleteAccountResponse)(nil),     // 50: wrinkle.v1.DeleteAccountResponse
-	(*CreateUploadResponse)(nil),      // 51: wrinkle.v1.CreateUploadResponse
-	(*CreateGroupResponse)(nil),       // 52: wrinkle.v1.CreateGroupResponse
-	(*AddMembersResponse)(nil),        // 53: wrinkle.v1.AddMembersResponse
-	(*RemoveMemberResponse)(nil),      // 54: wrinkle.v1.RemoveMemberResponse
-	(*LeaveGroupResponse)(nil),        // 55: wrinkle.v1.LeaveGroupResponse
-	(*SetTopicResponse)(nil),          // 56: wrinkle.v1.SetTopicResponse
-	(*SetAdminResponse)(nil),          // 57: wrinkle.v1.SetAdminResponse
-	(*GetMembersResponse)(nil),        // 58: wrinkle.v1.GetMembersResponse
+	(*DeleteMessageRequest)(nil),      // 34: wrinkle.v1.DeleteMessageRequest
+	(*ConnectResponse)(nil),           // 35: wrinkle.v1.ConnectResponse
+	(*OpenConversationResponse)(nil),  // 36: wrinkle.v1.OpenConversationResponse
+	(*SendMessageResponse)(nil),       // 37: wrinkle.v1.SendMessageResponse
+	(*MarkReadResponse)(nil),          // 38: wrinkle.v1.MarkReadResponse
+	(*SyncResponse)(nil),              // 39: wrinkle.v1.SyncResponse
+	(*ListConversationsResponse)(nil), // 40: wrinkle.v1.ListConversationsResponse
+	(*GetMessagesResponse)(nil),       // 41: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenResponse)(nil), // 42: wrinkle.v1.RegisterPushTokenResponse
+	(*RegisterResponse)(nil),          // 43: wrinkle.v1.RegisterResponse
+	(*SignInResponse)(nil),            // 44: wrinkle.v1.SignInResponse
+	(*ChangePasswordResponse)(nil),    // 45: wrinkle.v1.ChangePasswordResponse
+	(*UpdateProfileResponse)(nil),     // 46: wrinkle.v1.UpdateProfileResponse
+	(*SignOutResponse)(nil),           // 47: wrinkle.v1.SignOutResponse
+	(*ListDevicesResponse)(nil),       // 48: wrinkle.v1.ListDevicesResponse
+	(*RenameDeviceResponse)(nil),      // 49: wrinkle.v1.RenameDeviceResponse
+	(*SignOutDeviceResponse)(nil),     // 50: wrinkle.v1.SignOutDeviceResponse
+	(*DeleteAccountResponse)(nil),     // 51: wrinkle.v1.DeleteAccountResponse
+	(*CreateUploadResponse)(nil),      // 52: wrinkle.v1.CreateUploadResponse
+	(*CreateGroupResponse)(nil),       // 53: wrinkle.v1.CreateGroupResponse
+	(*AddMembersResponse)(nil),        // 54: wrinkle.v1.AddMembersResponse
+	(*RemoveMemberResponse)(nil),      // 55: wrinkle.v1.RemoveMemberResponse
+	(*LeaveGroupResponse)(nil),        // 56: wrinkle.v1.LeaveGroupResponse
+	(*SetTopicResponse)(nil),          // 57: wrinkle.v1.SetTopicResponse
+	(*SetAdminResponse)(nil),          // 58: wrinkle.v1.SetAdminResponse
+	(*GetMembersResponse)(nil),        // 59: wrinkle.v1.GetMembersResponse
+	(*DeleteMessageResponse)(nil),     // 60: wrinkle.v1.DeleteMessageResponse
 }
 var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	2,  // 0: wrinkle.v1.Frame.request:type_name -> wrinkle.v1.Request
@@ -1611,38 +1647,40 @@ var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	31, // 28: wrinkle.v1.Request.set_topic:type_name -> wrinkle.v1.SetTopicRequest
 	32, // 29: wrinkle.v1.Request.set_admin:type_name -> wrinkle.v1.SetAdminRequest
 	33, // 30: wrinkle.v1.Request.get_members:type_name -> wrinkle.v1.GetMembersRequest
-	4,  // 31: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
-	34, // 32: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
-	35, // 33: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
-	36, // 34: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
-	37, // 35: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
-	38, // 36: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
-	39, // 37: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
-	40, // 38: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
-	41, // 39: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
-	42, // 40: wrinkle.v1.Response.register:type_name -> wrinkle.v1.RegisterResponse
-	43, // 41: wrinkle.v1.Response.sign_in:type_name -> wrinkle.v1.SignInResponse
-	44, // 42: wrinkle.v1.Response.change_password:type_name -> wrinkle.v1.ChangePasswordResponse
-	45, // 43: wrinkle.v1.Response.update_profile:type_name -> wrinkle.v1.UpdateProfileResponse
-	46, // 44: wrinkle.v1.Response.sign_out:type_name -> wrinkle.v1.SignOutResponse
-	47, // 45: wrinkle.v1.Response.list_devices:type_name -> wrinkle.v1.ListDevicesResponse
-	48, // 46: wrinkle.v1.Response.rename_device:type_name -> wrinkle.v1.RenameDeviceResponse
-	49, // 47: wrinkle.v1.Response.sign_out_device:type_name -> wrinkle.v1.SignOutDeviceResponse
-	50, // 48: wrinkle.v1.Response.delete_account:type_name -> wrinkle.v1.DeleteAccountResponse
-	51, // 49: wrinkle.v1.Response.create_upload:type_name -> wrinkle.v1.CreateUploadResponse
-	52, // 50: wrinkle.v1.Response.create_group:type_name -> wrinkle.v1.CreateGroupResponse
-	53, // 51: wrinkle.v1.Response.add_members:type_name -> wrinkle.v1.AddMembersResponse
-	54, // 52: wrinkle.v1.Response.remove_member:type_name -> wrinkle.v1.RemoveMemberResponse
-	55, // 53: wrinkle.v1.Response.leave_group:type_name -> wrinkle.v1.LeaveGroupResponse
-	56, // 54: wrinkle.v1.Response.set_topic:type_name -> wrinkle.v1.SetTopicResponse
-	57, // 55: wrinkle.v1.Response.set_admin:type_name -> wrinkle.v1.SetAdminResponse
-	58, // 56: wrinkle.v1.Response.get_members:type_name -> wrinkle.v1.GetMembersResponse
-	0,  // 57: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
-	58, // [58:58] is the sub-list for method output_type
-	58, // [58:58] is the sub-list for method input_type
-	58, // [58:58] is the sub-list for extension type_name
-	58, // [58:58] is the sub-list for extension extendee
-	0,  // [0:58] is the sub-list for field type_name
+	34, // 31: wrinkle.v1.Request.delete_message:type_name -> wrinkle.v1.DeleteMessageRequest
+	4,  // 32: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
+	35, // 33: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
+	36, // 34: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
+	37, // 35: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
+	38, // 36: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
+	39, // 37: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
+	40, // 38: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
+	41, // 39: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
+	42, // 40: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
+	43, // 41: wrinkle.v1.Response.register:type_name -> wrinkle.v1.RegisterResponse
+	44, // 42: wrinkle.v1.Response.sign_in:type_name -> wrinkle.v1.SignInResponse
+	45, // 43: wrinkle.v1.Response.change_password:type_name -> wrinkle.v1.ChangePasswordResponse
+	46, // 44: wrinkle.v1.Response.update_profile:type_name -> wrinkle.v1.UpdateProfileResponse
+	47, // 45: wrinkle.v1.Response.sign_out:type_name -> wrinkle.v1.SignOutResponse
+	48, // 46: wrinkle.v1.Response.list_devices:type_name -> wrinkle.v1.ListDevicesResponse
+	49, // 47: wrinkle.v1.Response.rename_device:type_name -> wrinkle.v1.RenameDeviceResponse
+	50, // 48: wrinkle.v1.Response.sign_out_device:type_name -> wrinkle.v1.SignOutDeviceResponse
+	51, // 49: wrinkle.v1.Response.delete_account:type_name -> wrinkle.v1.DeleteAccountResponse
+	52, // 50: wrinkle.v1.Response.create_upload:type_name -> wrinkle.v1.CreateUploadResponse
+	53, // 51: wrinkle.v1.Response.create_group:type_name -> wrinkle.v1.CreateGroupResponse
+	54, // 52: wrinkle.v1.Response.add_members:type_name -> wrinkle.v1.AddMembersResponse
+	55, // 53: wrinkle.v1.Response.remove_member:type_name -> wrinkle.v1.RemoveMemberResponse
+	56, // 54: wrinkle.v1.Response.leave_group:type_name -> wrinkle.v1.LeaveGroupResponse
+	57, // 55: wrinkle.v1.Response.set_topic:type_name -> wrinkle.v1.SetTopicResponse
+	58, // 56: wrinkle.v1.Response.set_admin:type_name -> wrinkle.v1.SetAdminResponse
+	59, // 57: wrinkle.v1.Response.get_members:type_name -> wrinkle.v1.GetMembersResponse
+	60, // 58: wrinkle.v1.Response.delete_message:type_name -> wrinkle.v1.DeleteMessageResponse
+	0,  // 59: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
+	60, // [60:60] is the sub-list for method output_type
+	60, // [60:60] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_frame_proto_init() }
@@ -1686,6 +1724,7 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Request_SetTopic)(nil),
 		(*Request_SetAdmin)(nil),
 		(*Request_GetMembers)(nil),
+		(*Request_DeleteMessage)(nil),
 	}
 	file_wrinkle_v1_frame_proto_msgTypes[2].OneofWrappers = []any{
 		(*Response_Error)(nil),
@@ -1714,6 +1753,7 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Response_SetTopic)(nil),
 		(*Response_SetAdmin)(nil),
 		(*Response_GetMembers)(nil),
+		(*Response_DeleteMessage)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

@@ -119,6 +119,11 @@ defmodule Wrinkle.V1.Request do
   field :set_topic, 32, type: Wrinkle.V1.SetTopicRequest, json_name: "setTopic", oneof: 0
   field :set_admin, 33, type: Wrinkle.V1.SetAdminRequest, json_name: "setAdmin", oneof: 0
   field :get_members, 34, type: Wrinkle.V1.GetMembersRequest, json_name: "getMembers", oneof: 0
+
+  field :delete_message, 35,
+    type: Wrinkle.V1.DeleteMessageRequest,
+    json_name: "deleteMessage",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -219,6 +224,11 @@ defmodule Wrinkle.V1.Response do
   field :set_topic, 32, type: Wrinkle.V1.SetTopicResponse, json_name: "setTopic", oneof: 0
   field :set_admin, 33, type: Wrinkle.V1.SetAdminResponse, json_name: "setAdmin", oneof: 0
   field :get_members, 34, type: Wrinkle.V1.GetMembersResponse, json_name: "getMembers", oneof: 0
+
+  field :delete_message, 35,
+    type: Wrinkle.V1.DeleteMessageResponse,
+    json_name: "deleteMessage",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.Error do

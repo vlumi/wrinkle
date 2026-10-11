@@ -268,6 +268,20 @@ message SendMessageResponse {
   Message message = 1;
 }
 
+// Deletes one of the requesting user's own messages for everyone: the
+// message keeps its seq, loses its content and gets deleted_at. Someone
+// else's message fails with ERROR_CODE_PERMISSION_DENIED, a notice with
+// ERROR_CODE_INVALID_ARGUMENT, a message the user may not read with
+// ERROR_CODE_NOT_FOUND. Deleting a deleted message again does nothing.
+// Former members of a group may delete their messages from before they
+// left.
+message DeleteMessageRequest {
+  bytes conversation_id = 1;
+  uint64 seq = 2;
+}
+
+message DeleteMessageResponse {}
+
 // Marks the conversation read up to seq for the requesting user. Lower than
 // the current read position is a no-op.
 message MarkReadRequest {

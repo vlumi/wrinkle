@@ -56,6 +56,7 @@ defmodule Wrinkle.V1.Message do
   field :sent_at, 6, type: Google.Protobuf.Timestamp, json_name: "sentAt"
   field :text, 5, type: :string, oneof: 0
   field :notice, 7, type: Wrinkle.V1.Notice, oneof: 0
+  field :deleted_at, 8, type: Google.Protobuf.Timestamp, json_name: "deletedAt"
 end
 
 defmodule Wrinkle.V1.Notice do

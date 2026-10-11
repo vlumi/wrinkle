@@ -183,6 +183,16 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
     set {content = .notice(newValue)}
   }
 
+  /// Set once the sender deleted the message; its content is then unset.
+  public var deletedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_deletedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_deletedAt = newValue}
+  }
+  /// Returns true if `deletedAt` has been explicitly set.
+  public var hasDeletedAt: Bool {self._deletedAt != nil}
+  /// Clears the value of `deletedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearDeletedAt() {self._deletedAt = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Content: Equatable, Sendable {
@@ -195,6 +205,7 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
   public init() {}
 
   fileprivate var _sentAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _deletedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 /// A change to a group, as a message in its sequence, so every member sees
@@ -607,7 +618,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{1}text\0\u{3}sent_at\0\u{1}notice\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{1}text\0\u{3}sent_at\0\u{1}notice\0\u{3}deleted_at\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -641,6 +652,7 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
           self.content = .notice(v)
         }
       }()
+      case 8: try { try decoder.decodeSingularMessageField(value: &self._deletedAt) }()
       default: break
       }
     }
@@ -672,6 +684,9 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     try { if case .notice(let v)? = self.content {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 7)
     } }()
+    try { if let v = self._deletedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
+    } }()
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -682,6 +697,7 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs.clientMessageID != rhs.clientMessageID {return false}
     if lhs._sentAt != rhs._sentAt {return false}
     if lhs.content != rhs.content {return false}
+    if lhs._deletedAt != rhs._deletedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -482,6 +482,27 @@ defmodule Wrinkle.V1.SendMessageResponse do
   field :message, 1, type: Wrinkle.V1.Message
 end
 
+defmodule Wrinkle.V1.DeleteMessageRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.DeleteMessageRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :seq, 2, type: :uint64
+end
+
+defmodule Wrinkle.V1.DeleteMessageResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.DeleteMessageResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
 defmodule Wrinkle.V1.MarkReadRequest do
   @moduledoc false
 

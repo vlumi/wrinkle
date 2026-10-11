@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIrYCCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SABCBgoEYm9keSI0CgxNZXNzYWdlRXZlbnQSJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSJCCglSZWFkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg8KB3VzZXJfaWQYAiABKAwSCwoDc2VxGAMgASgEIlgKEk1lc3NhZ2VGYWlsZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIi4KDFByb2ZpbGVFdmVudBIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIkUKC0RldmljZUV2ZW50EiIKBmRldmljZRgBIAEoCzISLndyaW5rbGUudjEuRGV2aWNlEhIKCnNpZ25lZF9vdXQYAiABKAhCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIvICCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SABCBgoEYm9keSI0CgxNZXNzYWdlRXZlbnQSJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSJCCglSZWFkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg8KB3VzZXJfaWQYAiABKAwSCwoDc2VxGAMgASgEIlgKEk1lc3NhZ2VGYWlsZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIi4KDFByb2ZpbGVFdmVudBIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIkUKC0RldmljZUV2ZW50EiIKBmRldmljZRgBIAEoCzISLndyaW5rbGUudjEuRGV2aWNlEhIKCnNpZ25lZF9vdXQYAiABKAgiawoTTWVzc2FnZURlbGV0ZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEi4KCmRlbGV0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -69,6 +69,12 @@ export type Event = Message<"wrinkle.v1.Event"> & {
      */
     value: DeviceEvent;
     case: "device";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.MessageDeletedEvent message_deleted = 15;
+     */
+    value: MessageDeletedEvent;
+    case: "messageDeleted";
   } | { case: undefined; value?: undefined };
 };
 
@@ -205,4 +211,35 @@ export type DeviceEvent = Message<"wrinkle.v1.DeviceEvent"> & {
  */
 export const DeviceEventSchema: GenMessage<DeviceEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 5);
+
+/**
+ * The sender deleted a message. Received by the conversation's members and
+ * the sender. The copy of the message in the recipient's log, and the
+ * conversation list, no longer have its content.
+ *
+ * @generated from message wrinkle.v1.MessageDeletedEvent
+ */
+export type MessageDeletedEvent = Message<"wrinkle.v1.MessageDeletedEvent"> & {
+  /**
+   * @generated from field: bytes conversation_id = 1;
+   */
+  conversationId: Uint8Array;
+
+  /**
+   * @generated from field: uint64 seq = 2;
+   */
+  seq: bigint;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp deleted_at = 3;
+   */
+  deletedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.MessageDeletedEvent.
+ * Use `create(MessageDeletedEventSchema)` to create a new message.
+ */
+export const MessageDeletedEventSchema: GenMessage<MessageDeletedEvent> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_event, 6);
 

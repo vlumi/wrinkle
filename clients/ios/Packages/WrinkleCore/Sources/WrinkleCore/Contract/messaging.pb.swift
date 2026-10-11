@@ -816,6 +816,37 @@ public nonisolated struct Wrinkle_V1_SendMessageResponse: Sendable {
   fileprivate var _message: Wrinkle_V1_Message? = nil
 }
 
+/// Deletes one of the requesting user's own messages for everyone: the
+/// message keeps its seq, loses its content and gets deleted_at. Someone
+/// else's message fails with ERROR_CODE_PERMISSION_DENIED, a notice with
+/// ERROR_CODE_INVALID_ARGUMENT, a message the user may not read with
+/// ERROR_CODE_NOT_FOUND. Deleting a deleted message again does nothing.
+/// Former members of a group may delete their messages from before they
+/// left.
+public nonisolated struct Wrinkle_V1_DeleteMessageRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversationID: Data = Data()
+
+  public var seq: UInt64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_DeleteMessageResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 /// Marks the conversation read up to seq for the requesting user. Lower than
 /// the current read position is a no-op.
 public nonisolated struct Wrinkle_V1_MarkReadRequest: Sendable {
@@ -2249,6 +2280,60 @@ nonisolated extension Wrinkle_V1_SendMessageResponse: SwiftProtobuf.Message, Swi
 
   public static func ==(lhs: Wrinkle_V1_SendMessageResponse, rhs: Wrinkle_V1_SendMessageResponse) -> Bool {
     if lhs._message != rhs._message {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_DeleteMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeleteMessageRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
+      case 2: try { try decoder.decodeSingularUInt64Field(value: &self.seq) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.conversationID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
+    }
+    if self.seq != 0 {
+      try visitor.visitSingularUInt64Field(value: self.seq, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_DeleteMessageRequest, rhs: Wrinkle_V1_DeleteMessageRequest) -> Bool {
+    if lhs.conversationID != rhs.conversationID {return false}
+    if lhs.seq != rhs.seq {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_DeleteMessageResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeleteMessageResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_DeleteMessageResponse, rhs: Wrinkle_V1_DeleteMessageResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

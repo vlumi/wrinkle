@@ -23,6 +23,7 @@ message Event {
     MessageFailedEvent message_failed = 12;
     ProfileEvent profile = 13;
     DeviceEvent device = 14;
+    MessageDeletedEvent message_deleted = 15;
   }
 }
 
@@ -61,4 +62,13 @@ message ProfileEvent {
 message DeviceEvent {
   Device device = 1;
   bool signed_out = 2;
+}
+
+// The sender deleted a message. Received by the conversation's members and
+// the sender. The copy of the message in the recipient's log, and the
+// conversation list, no longer have its content.
+message MessageDeletedEvent {
+  bytes conversation_id = 1;
+  uint64 seq = 2;
+  google.protobuf.Timestamp deleted_at = 3;
 }

@@ -20,6 +20,11 @@ defmodule Wrinkle.V1.Event do
 
   field :profile, 13, type: Wrinkle.V1.ProfileEvent, oneof: 0
   field :device, 14, type: Wrinkle.V1.DeviceEvent, oneof: 0
+
+  field :message_deleted, 15,
+    type: Wrinkle.V1.MessageDeletedEvent,
+    json_name: "messageDeleted",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.MessageEvent do
@@ -80,4 +85,17 @@ defmodule Wrinkle.V1.DeviceEvent do
 
   field :device, 1, type: Wrinkle.V1.Device
   field :signed_out, 2, type: :bool, json_name: "signedOut"
+end
+
+defmodule Wrinkle.V1.MessageDeletedEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.MessageDeletedEvent",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
+  field :seq, 2, type: :uint64
+  field :deleted_at, 3, type: Google.Protobuf.Timestamp, json_name: "deletedAt"
 end
