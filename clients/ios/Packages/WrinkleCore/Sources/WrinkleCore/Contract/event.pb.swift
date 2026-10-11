@@ -80,6 +80,14 @@ public nonisolated struct Wrinkle_V1_Event: Sendable {
     set {body = .profile(newValue)}
   }
 
+  public var device: Wrinkle_V1_DeviceEvent {
+    get {
+      if case .device(let v)? = body {return v}
+      return Wrinkle_V1_DeviceEvent()
+    }
+    set {body = .device(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -87,6 +95,7 @@ public nonisolated struct Wrinkle_V1_Event: Sendable {
     case read(Wrinkle_V1_ReadEvent)
     case messageFailed(Wrinkle_V1_MessageFailedEvent)
     case profile(Wrinkle_V1_ProfileEvent)
+    case device(Wrinkle_V1_DeviceEvent)
 
   }
 
@@ -177,13 +186,38 @@ public nonisolated struct Wrinkle_V1_ProfileEvent: Sendable {
   fileprivate var _user: Wrinkle_V1_User? = nil
 }
 
+/// A device of the user signed in, was renamed or signed out. Received by
+/// the user only.
+public nonisolated struct Wrinkle_V1_DeviceEvent: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var device: Wrinkle_V1_Device {
+    get {_device ?? Wrinkle_V1_Device()}
+    set {_device = newValue}
+  }
+  /// Returns true if `device` has been explicitly set.
+  public var hasDevice: Bool {self._device != nil}
+  /// Clears the value of `device`. Subsequent reads from it will return its default value.
+  public mutating func clearDevice() {self._device = nil}
+
+  public var signedOut: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _device: Wrinkle_V1_Device? = nil
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0\u{1}device\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -245,6 +279,19 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
           self.body = .profile(v)
         }
       }()
+      case 14: try {
+        var v: Wrinkle_V1_DeviceEvent?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .device(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .device(v)
+        }
+      }()
       default: break
       }
     }
@@ -277,6 +324,10 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
     case .profile?: try {
       guard case .profile(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+    }()
+    case .device?: try {
+      guard case .device(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
     }()
     case nil: break
     }
@@ -435,6 +486,45 @@ nonisolated extension Wrinkle_V1_ProfileEvent: SwiftProtobuf.Message, SwiftProto
 
   public static func ==(lhs: Wrinkle_V1_ProfileEvent, rhs: Wrinkle_V1_ProfileEvent) -> Bool {
     if lhs._user != rhs._user {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_DeviceEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".DeviceEvent"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}device\0\u{3}signed_out\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._device) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.signedOut) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._device {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.signedOut != false {
+      try visitor.visitSingularBoolField(value: self.signedOut, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_DeviceEvent, rhs: Wrinkle_V1_DeviceEvent) -> Bool {
+    if lhs._device != rhs._device {return false}
+    if lhs.signedOut != rhs.signedOut {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

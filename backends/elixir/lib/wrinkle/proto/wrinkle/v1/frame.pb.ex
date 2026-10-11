@@ -85,6 +85,27 @@ defmodule Wrinkle.V1.Request do
     oneof: 0
 
   field :sign_out, 22, type: Wrinkle.V1.SignOutRequest, json_name: "signOut", oneof: 0
+  field :list_devices, 23, type: Wrinkle.V1.ListDevicesRequest, json_name: "listDevices", oneof: 0
+
+  field :rename_device, 24,
+    type: Wrinkle.V1.RenameDeviceRequest,
+    json_name: "renameDevice",
+    oneof: 0
+
+  field :sign_out_device, 25,
+    type: Wrinkle.V1.SignOutDeviceRequest,
+    json_name: "signOutDevice",
+    oneof: 0
+
+  field :delete_account, 26,
+    type: Wrinkle.V1.DeleteAccountRequest,
+    json_name: "deleteAccount",
+    oneof: 0
+
+  field :create_upload, 27,
+    type: Wrinkle.V1.CreateUploadRequest,
+    json_name: "createUpload",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -143,6 +164,31 @@ defmodule Wrinkle.V1.Response do
     oneof: 0
 
   field :sign_out, 22, type: Wrinkle.V1.SignOutResponse, json_name: "signOut", oneof: 0
+
+  field :list_devices, 23,
+    type: Wrinkle.V1.ListDevicesResponse,
+    json_name: "listDevices",
+    oneof: 0
+
+  field :rename_device, 24,
+    type: Wrinkle.V1.RenameDeviceResponse,
+    json_name: "renameDevice",
+    oneof: 0
+
+  field :sign_out_device, 25,
+    type: Wrinkle.V1.SignOutDeviceResponse,
+    json_name: "signOutDevice",
+    oneof: 0
+
+  field :delete_account, 26,
+    type: Wrinkle.V1.DeleteAccountResponse,
+    json_name: "deleteAccount",
+    oneof: 0
+
+  field :create_upload, 27,
+    type: Wrinkle.V1.CreateUploadResponse,
+    json_name: "createUpload",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.Error do

@@ -1,3 +1,18 @@
+defmodule Wrinkle.V1.BlobPurpose do
+  @moduledoc false
+
+  use Protobuf,
+    enum: true,
+    full_name: "wrinkle.v1.BlobPurpose",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :BLOB_PURPOSE_UNSPECIFIED, 0
+  field :BLOB_PURPOSE_AVATAR, 1
+  field :BLOB_PURPOSE_STICKER, 2
+  field :BLOB_PURPOSE_ATTACHMENT, 3
+end
+
 defmodule Wrinkle.V1.PushService do
   @moduledoc false
 
@@ -129,6 +144,7 @@ defmodule Wrinkle.V1.UpdateProfileRequest do
 
   field :name, 1, proto3_optional: true, type: :string
   field :icon, 2, proto3_optional: true, type: :string
+  field :avatar, 3, proto3_optional: true, type: :bytes
 end
 
 defmodule Wrinkle.V1.UpdateProfileResponse do
@@ -158,6 +174,115 @@ defmodule Wrinkle.V1.SignOutResponse do
     full_name: "wrinkle.v1.SignOutResponse",
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
+end
+
+defmodule Wrinkle.V1.ListDevicesRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ListDevicesRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.ListDevicesResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ListDevicesResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :devices, 1, repeated: true, type: Wrinkle.V1.Device
+end
+
+defmodule Wrinkle.V1.RenameDeviceRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RenameDeviceRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :device_id, 1, type: :uint64, json_name: "deviceId"
+  field :name, 2, type: :string
+end
+
+defmodule Wrinkle.V1.RenameDeviceResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RenameDeviceResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :device, 1, type: Wrinkle.V1.Device
+end
+
+defmodule Wrinkle.V1.SignOutDeviceRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SignOutDeviceRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :device_id, 1, type: :uint64, json_name: "deviceId"
+end
+
+defmodule Wrinkle.V1.SignOutDeviceResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.SignOutDeviceResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.DeleteAccountRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.DeleteAccountRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :password, 1, type: :string
+end
+
+defmodule Wrinkle.V1.DeleteAccountResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.DeleteAccountResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.CreateUploadRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.CreateUploadRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :purpose, 1, type: Wrinkle.V1.BlobPurpose, enum: true
+  field :media_type, 2, type: :string, json_name: "mediaType"
+  field :size, 3, type: :uint64
+end
+
+defmodule Wrinkle.V1.CreateUploadResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.CreateUploadResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :blob_id, 1, type: :bytes, json_name: "blobId"
+  field :upload_path, 2, type: :string, json_name: "uploadPath"
+  field :expires_at, 3, type: Google.Protobuf.Timestamp, json_name: "expiresAt"
 end
 
 defmodule Wrinkle.V1.OpenConversationRequest do

@@ -3,8 +3,9 @@
 // owns the connection state: it knows which user and device a connection
 // belongs to after Connect, and enforces "connect first" and "already
 // connected" itself. Push channels and presence keys name a user by the
-// lowercase hex of the user id. Pushes reach gateways through Valkey, not through this
-// service.
+// lowercase hex of the user id. Pushes reach gateways through Valkey, not
+// through this service: each message on a user's channel is a serialized
+// Push.
 
 syntax = "proto3";
 
@@ -43,3 +44,20 @@ message AckRequest {
 }
 
 message AckResponse {}
+
+// A message on a user's push channel.
+message Push {
+  oneof kind {
+    // A serialized wrinkle.v1.Event, appended to the user's log, for the
+    // gateway to send to the user's connections as it is.
+    bytes event = 1;
+    // Devices signed out: the gateway closes their connections with 4001.
+    SignedOut signed_out = 2;
+  }
+}
+
+message SignedOut {
+  repeated uint64 device_ids = 1;
+  // Every device of the user, as when the account is deleted.
+  bool all_devices = 2;
+}

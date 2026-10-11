@@ -20,6 +20,23 @@ message User {
   // frog 🐸, panda 🐼, rabbit 🐰, tiger 🐯, penguin 🐧, octopus 🐙,
   // unicorn 🦄.
   string icon = 3;
+  // An uploaded picture, by blob id (see frame.proto for where blobs are
+  // read); empty for none. Shown instead of the icon when set.
+  bytes avatar = 4;
+  // The account was deleted: the name is empty and free for others, and
+  // clients show the user as a deleted account.
+  bool deleted = 5;
+}
+
+// A device signed in to the requesting user's account.
+message Device {
+  uint64 device_id = 1;
+  string name = 2;
+  google.protobuf.Timestamp created_at = 3;
+  // When the device last connected or acked.
+  google.protobuf.Timestamp last_seen_at = 4;
+  // The device has registered for push notifications.
+  bool push = 5;
 }
 
 // A message in a conversation. (conversation_id, seq) identifies it; seq is

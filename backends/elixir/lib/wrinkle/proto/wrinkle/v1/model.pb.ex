@@ -6,6 +6,23 @@ defmodule Wrinkle.V1.User do
   field :user_id, 1, type: :bytes, json_name: "userId"
   field :name, 2, type: :string
   field :icon, 3, type: :string
+  field :avatar, 4, type: :bytes
+  field :deleted, 5, type: :bool
+end
+
+defmodule Wrinkle.V1.Device do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.Device",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :device_id, 1, type: :uint64, json_name: "deviceId"
+  field :name, 2, type: :string
+  field :created_at, 3, type: Google.Protobuf.Timestamp, json_name: "createdAt"
+  field :last_seen_at, 4, type: Google.Protobuf.Timestamp, json_name: "lastSeenAt"
+  field :push, 5, type: :bool
 end
 
 defmodule Wrinkle.V1.Message do

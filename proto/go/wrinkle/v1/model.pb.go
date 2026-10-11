@@ -32,7 +32,13 @@ type User struct {
 	// emoji clients draw them as: cat 🐱, dog 🐶, fox 🦊, owl 🦉, bear 🐻,
 	// frog 🐸, panda 🐼, rabbit 🐰, tiger 🐯, penguin 🐧, octopus 🐙,
 	// unicorn 🦄.
-	Icon          string `protobuf:"bytes,3,opt,name=icon,proto3" json:"icon,omitempty"`
+	Icon string `protobuf:"bytes,3,opt,name=icon,proto3" json:"icon,omitempty"`
+	// An uploaded picture, by blob id (see frame.proto for where blobs are
+	// read); empty for none. Shown instead of the icon when set.
+	Avatar []byte `protobuf:"bytes,4,opt,name=avatar,proto3" json:"avatar,omitempty"`
+	// The account was deleted: the name is empty and free for others, and
+	// clients show the user as a deleted account.
+	Deleted       bool `protobuf:"varint,5,opt,name=deleted,proto3" json:"deleted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -88,6 +94,99 @@ func (x *User) GetIcon() string {
 	return ""
 }
 
+func (x *User) GetAvatar() []byte {
+	if x != nil {
+		return x.Avatar
+	}
+	return nil
+}
+
+func (x *User) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+// A device signed in to the requesting user's account.
+type Device struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	DeviceId  uint64                 `protobuf:"varint,1,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
+	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// When the device last connected or acked.
+	LastSeenAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	// The device has registered for push notifications.
+	Push          bool `protobuf:"varint,5,opt,name=push,proto3" json:"push,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Device) Reset() {
+	*x = Device{}
+	mi := &file_wrinkle_v1_model_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Device) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Device) ProtoMessage() {}
+
+func (x *Device) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_model_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Device.ProtoReflect.Descriptor instead.
+func (*Device) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Device) GetDeviceId() uint64 {
+	if x != nil {
+		return x.DeviceId
+	}
+	return 0
+}
+
+func (x *Device) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Device) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *Device) GetLastSeenAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenAt
+	}
+	return nil
+}
+
+func (x *Device) GetPush() bool {
+	if x != nil {
+		return x.Push
+	}
+	return false
+}
+
 // A message in a conversation. (conversation_id, seq) identifies it; seq is
 // assigned by the conversation when the message is stored, is dense (1, 2,
 // 3, ...), and orders the conversation for everyone.
@@ -107,7 +206,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[1]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -119,7 +218,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[1]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -132,7 +231,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{1}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Message) GetConversationId() []byte {
@@ -197,7 +296,7 @@ type Conversation struct {
 
 func (x *Conversation) Reset() {
 	*x = Conversation{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -209,7 +308,7 @@ func (x *Conversation) String() string {
 func (*Conversation) ProtoMessage() {}
 
 func (x *Conversation) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -222,7 +321,7 @@ func (x *Conversation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conversation.ProtoReflect.Descriptor instead.
 func (*Conversation) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{2}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Conversation) GetConversationId() []byte {
@@ -272,11 +371,21 @@ var File_wrinkle_v1_model_proto protoreflect.FileDescriptor
 const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\n" +
 	"\x16wrinkle/v1/model.proto\x12\n" +
-	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"G\n" +
+	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"y\n" +
 	"\x04User\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\fR\x06userId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04icon\x18\x03 \x01(\tR\x04icon\"\xdf\x01\n" +
+	"\x04icon\x18\x03 \x01(\tR\x04icon\x12\x16\n" +
+	"\x06avatar\x18\x04 \x01(\fR\x06avatar\x12\x18\n" +
+	"\adeleted\x18\x05 \x01(\bR\adeleted\"\xc6\x01\n" +
+	"\x06Device\x12\x1b\n" +
+	"\tdevice_id\x18\x01 \x01(\x04R\bdeviceId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x129\n" +
+	"\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12<\n" +
+	"\flast_seen_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastSeenAt\x12\x12\n" +
+	"\x04push\x18\x05 \x01(\bR\x04push\"\xdf\x01\n" +
 	"\aMessage\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12$\n" +
@@ -308,22 +417,25 @@ func file_wrinkle_v1_model_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_model_proto_rawDescData
 }
 
-var file_wrinkle_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_wrinkle_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_wrinkle_v1_model_proto_goTypes = []any{
 	(*User)(nil),                  // 0: wrinkle.v1.User
-	(*Message)(nil),               // 1: wrinkle.v1.Message
-	(*Conversation)(nil),          // 2: wrinkle.v1.Conversation
-	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
+	(*Device)(nil),                // 1: wrinkle.v1.Device
+	(*Message)(nil),               // 2: wrinkle.v1.Message
+	(*Conversation)(nil),          // 3: wrinkle.v1.Conversation
+	(*timestamppb.Timestamp)(nil), // 4: google.protobuf.Timestamp
 }
 var file_wrinkle_v1_model_proto_depIdxs = []int32{
-	3, // 0: wrinkle.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
-	0, // 1: wrinkle.v1.Conversation.peer:type_name -> wrinkle.v1.User
-	1, // 2: wrinkle.v1.Conversation.last_message:type_name -> wrinkle.v1.Message
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 0: wrinkle.v1.Device.created_at:type_name -> google.protobuf.Timestamp
+	4, // 1: wrinkle.v1.Device.last_seen_at:type_name -> google.protobuf.Timestamp
+	4, // 2: wrinkle.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
+	0, // 3: wrinkle.v1.Conversation.peer:type_name -> wrinkle.v1.User
+	2, // 4: wrinkle.v1.Conversation.last_message:type_name -> wrinkle.v1.Message
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_model_proto_init() }
@@ -337,7 +449,7 @@ func file_wrinkle_v1_model_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_model_proto_rawDesc), len(file_wrinkle_v1_model_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -9,7 +9,7 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Message as Message$1, User } from "./model_pb";
+import type { Device, Message as Message$1, User } from "./model_pb";
 import { file_wrinkle_v1_model } from "./model_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIosCCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXJCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIrYCCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SABCBgoEYm9keSI0CgxNZXNzYWdlRXZlbnQSJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSJCCglSZWFkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg8KB3VzZXJfaWQYAiABKAwSCwoDc2VxGAMgASgEIlgKEk1lc3NhZ2VGYWlsZWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSGQoRY2xpZW50X21lc3NhZ2VfaWQYAiABKAkSDgoGcmVhc29uGAMgASgJIi4KDFByb2ZpbGVFdmVudBIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIkUKC0RldmljZUV2ZW50EiIKBmRldmljZRgBIAEoCzISLndyaW5rbGUudjEuRGV2aWNlEhIKCnNpZ25lZF9vdXQYAiABKAhCnQEKDmNvbS53cmlua2xlLnYxQgpFdmVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -63,6 +63,12 @@ export type Event = Message<"wrinkle.v1.Event"> & {
      */
     value: ProfileEvent;
     case: "profile";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.DeviceEvent device = 14;
+     */
+    value: DeviceEvent;
+    case: "device";
   } | { case: undefined; value?: undefined };
 };
 
@@ -172,4 +178,29 @@ export type ProfileEvent = Message<"wrinkle.v1.ProfileEvent"> & {
  */
 export const ProfileEventSchema: GenMessage<ProfileEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 4);
+
+/**
+ * A device of the user signed in, was renamed or signed out. Received by
+ * the user only.
+ *
+ * @generated from message wrinkle.v1.DeviceEvent
+ */
+export type DeviceEvent = Message<"wrinkle.v1.DeviceEvent"> & {
+  /**
+   * @generated from field: wrinkle.v1.Device device = 1;
+   */
+  device?: Device | undefined;
+
+  /**
+   * @generated from field: bool signed_out = 2;
+   */
+  signedOut: boolean;
+};
+
+/**
+ * Describes the message wrinkle.v1.DeviceEvent.
+ * Use `create(DeviceEventSchema)` to create a new message.
+ */
+export const DeviceEventSchema: GenMessage<DeviceEvent> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_event, 5);
 

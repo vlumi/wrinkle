@@ -22,6 +22,7 @@ message Event {
     ReadEvent read = 11;
     MessageFailedEvent message_failed = 12;
     ProfileEvent profile = 13;
+    DeviceEvent device = 14;
   }
 }
 
@@ -51,4 +52,11 @@ message MessageFailedEvent {
 // learn of it, and by everyone they have a conversation with.
 message ProfileEvent {
   User user = 1;
+}
+
+// A device of the user signed in, was renamed or signed out. Received by
+// the user only.
+message DeviceEvent {
+  Device device = 1;
+  bool signed_out = 2;
 }

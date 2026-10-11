@@ -42,9 +42,57 @@ public nonisolated struct Wrinkle_V1_User: Sendable {
   /// unicorn 🦄.
   public var icon: String = String()
 
+  /// An uploaded picture, by blob id (see frame.proto for where blobs are
+  /// read); empty for none. Shown instead of the icon when set.
+  public var avatar: Data = Data()
+
+  /// The account was deleted: the name is empty and free for others, and
+  /// clients show the user as a deleted account.
+  public var deleted: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+}
+
+/// A device signed in to the requesting user's account.
+public nonisolated struct Wrinkle_V1_Device: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var deviceID: UInt64 = 0
+
+  public var name: String = String()
+
+  public var createdAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_createdAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_createdAt = newValue}
+  }
+  /// Returns true if `createdAt` has been explicitly set.
+  public var hasCreatedAt: Bool {self._createdAt != nil}
+  /// Clears the value of `createdAt`. Subsequent reads from it will return its default value.
+  public mutating func clearCreatedAt() {self._createdAt = nil}
+
+  /// When the device last connected or acked.
+  public var lastSeenAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_lastSeenAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_lastSeenAt = newValue}
+  }
+  /// Returns true if `lastSeenAt` has been explicitly set.
+  public var hasLastSeenAt: Bool {self._lastSeenAt != nil}
+  /// Clears the value of `lastSeenAt`. Subsequent reads from it will return its default value.
+  public mutating func clearLastSeenAt() {self._lastSeenAt = nil}
+
+  /// The device has registered for push notifications.
+  public var push: Bool = false
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+  fileprivate var _lastSeenAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 /// A message in a conversation. (conversation_id, seq) identifies it; seq is
@@ -134,7 +182,7 @@ fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".User"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{1}name\0\u{1}icon\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}user_id\0\u{1}name\0\u{1}icon\0\u{1}avatar\0\u{1}deleted\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -145,6 +193,8 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
       case 1: try { try decoder.decodeSingularBytesField(value: &self.userID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
       case 3: try { try decoder.decodeSingularStringField(value: &self.icon) }()
+      case 4: try { try decoder.decodeSingularBytesField(value: &self.avatar) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.deleted) }()
       default: break
       }
     }
@@ -160,6 +210,12 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if !self.icon.isEmpty {
       try visitor.visitSingularStringField(value: self.icon, fieldNumber: 3)
     }
+    if !self.avatar.isEmpty {
+      try visitor.visitSingularBytesField(value: self.avatar, fieldNumber: 4)
+    }
+    if self.deleted != false {
+      try visitor.visitSingularBoolField(value: self.deleted, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -167,6 +223,62 @@ nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._Mes
     if lhs.userID != rhs.userID {return false}
     if lhs.name != rhs.name {return false}
     if lhs.icon != rhs.icon {return false}
+    if lhs.avatar != rhs.avatar {return false}
+    if lhs.deleted != rhs.deleted {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Device"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}device_id\0\u{1}name\0\u{3}created_at\0\u{3}last_seen_at\0\u{1}push\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.deviceID) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._createdAt) }()
+      case 4: try { try decoder.decodeSingularMessageField(value: &self._lastSeenAt) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.push) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    if self.deviceID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.deviceID, fieldNumber: 1)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 2)
+    }
+    try { if let v = self._createdAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try { if let v = self._lastSeenAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    } }()
+    if self.push != false {
+      try visitor.visitSingularBoolField(value: self.push, fieldNumber: 5)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Device, rhs: Wrinkle_V1_Device) -> Bool {
+    if lhs.deviceID != rhs.deviceID {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs._createdAt != rhs._createdAt {return false}
+    if lhs._lastSeenAt != rhs._lastSeenAt {return false}
+    if lhs.push != rhs.push {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

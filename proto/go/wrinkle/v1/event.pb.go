@@ -37,6 +37,7 @@ type Event struct {
 	//	*Event_Read
 	//	*Event_MessageFailed
 	//	*Event_Profile
+	//	*Event_Device
 	Body          isEvent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -129,6 +130,15 @@ func (x *Event) GetProfile() *ProfileEvent {
 	return nil
 }
 
+func (x *Event) GetDevice() *DeviceEvent {
+	if x != nil {
+		if x, ok := x.Body.(*Event_Device); ok {
+			return x.Device
+		}
+	}
+	return nil
+}
+
 type isEvent_Body interface {
 	isEvent_Body()
 }
@@ -149,6 +159,10 @@ type Event_Profile struct {
 	Profile *ProfileEvent `protobuf:"bytes,13,opt,name=profile,proto3,oneof"`
 }
 
+type Event_Device struct {
+	Device *DeviceEvent `protobuf:"bytes,14,opt,name=device,proto3,oneof"`
+}
+
 func (*Event_Message) isEvent_Body() {}
 
 func (*Event_Read) isEvent_Body() {}
@@ -156,6 +170,8 @@ func (*Event_Read) isEvent_Body() {}
 func (*Event_MessageFailed) isEvent_Body() {}
 
 func (*Event_Profile) isEvent_Body() {}
+
+func (*Event_Device) isEvent_Body() {}
 
 // A message was stored in one of the user's conversations. The sender's own
 // devices receive it too.
@@ -373,12 +389,66 @@ func (x *ProfileEvent) GetUser() *User {
 	return nil
 }
 
+// A device of the user signed in, was renamed or signed out. Received by
+// the user only.
+type DeviceEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Device        *Device                `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`
+	SignedOut     bool                   `protobuf:"varint,2,opt,name=signed_out,json=signedOut,proto3" json:"signed_out,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceEvent) Reset() {
+	*x = DeviceEvent{}
+	mi := &file_wrinkle_v1_event_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceEvent) ProtoMessage() {}
+
+func (x *DeviceEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_event_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceEvent.ProtoReflect.Descriptor instead.
+func (*DeviceEvent) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_event_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DeviceEvent) GetDevice() *Device {
+	if x != nil {
+		return x.Device
+	}
+	return nil
+}
+
+func (x *DeviceEvent) GetSignedOut() bool {
+	if x != nil {
+		return x.SignedOut
+	}
+	return false
+}
+
 var File_wrinkle_v1_event_proto protoreflect.FileDescriptor
 
 const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\n" +
 	"\x16wrinkle/v1/event.proto\x12\n" +
-	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16wrinkle/v1/model.proto\"\xc6\x02\n" +
+	"wrinkle.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16wrinkle/v1/model.proto\"\xf9\x02\n" +
 	"\x05Event\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x04R\x06cursor\x12;\n" +
 	"\voccurred_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -387,7 +457,8 @@ const file_wrinkle_v1_event_proto_rawDesc = "" +
 	" \x01(\v2\x18.wrinkle.v1.MessageEventH\x00R\amessage\x12+\n" +
 	"\x04read\x18\v \x01(\v2\x15.wrinkle.v1.ReadEventH\x00R\x04read\x12G\n" +
 	"\x0emessage_failed\x18\f \x01(\v2\x1e.wrinkle.v1.MessageFailedEventH\x00R\rmessageFailed\x124\n" +
-	"\aprofile\x18\r \x01(\v2\x18.wrinkle.v1.ProfileEventH\x00R\aprofileB\x06\n" +
+	"\aprofile\x18\r \x01(\v2\x18.wrinkle.v1.ProfileEventH\x00R\aprofile\x121\n" +
+	"\x06device\x18\x0e \x01(\v2\x17.wrinkle.v1.DeviceEventH\x00R\x06deviceB\x06\n" +
 	"\x04body\"=\n" +
 	"\fMessageEvent\x12-\n" +
 	"\amessage\x18\x01 \x01(\v2\x13.wrinkle.v1.MessageR\amessage\"_\n" +
@@ -400,7 +471,11 @@ const file_wrinkle_v1_event_proto_rawDesc = "" +
 	"\x11client_message_id\x18\x02 \x01(\tR\x0fclientMessageId\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\"4\n" +
 	"\fProfileEvent\x12$\n" +
-	"\x04user\x18\x01 \x01(\v2\x10.wrinkle.v1.UserR\x04userB\x9d\x01\n" +
+	"\x04user\x18\x01 \x01(\v2\x10.wrinkle.v1.UserR\x04user\"X\n" +
+	"\vDeviceEvent\x12*\n" +
+	"\x06device\x18\x01 \x01(\v2\x12.wrinkle.v1.DeviceR\x06device\x12\x1d\n" +
+	"\n" +
+	"signed_out\x18\x02 \x01(\bR\tsignedOutB\x9d\x01\n" +
 	"\x0ecom.wrinkle.v1B\n" +
 	"EventProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +
@@ -418,30 +493,34 @@ func file_wrinkle_v1_event_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_event_proto_rawDescData
 }
 
-var file_wrinkle_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_wrinkle_v1_event_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_wrinkle_v1_event_proto_goTypes = []any{
 	(*Event)(nil),                 // 0: wrinkle.v1.Event
 	(*MessageEvent)(nil),          // 1: wrinkle.v1.MessageEvent
 	(*ReadEvent)(nil),             // 2: wrinkle.v1.ReadEvent
 	(*MessageFailedEvent)(nil),    // 3: wrinkle.v1.MessageFailedEvent
 	(*ProfileEvent)(nil),          // 4: wrinkle.v1.ProfileEvent
-	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
-	(*Message)(nil),               // 6: wrinkle.v1.Message
-	(*User)(nil),                  // 7: wrinkle.v1.User
+	(*DeviceEvent)(nil),           // 5: wrinkle.v1.DeviceEvent
+	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*Message)(nil),               // 7: wrinkle.v1.Message
+	(*User)(nil),                  // 8: wrinkle.v1.User
+	(*Device)(nil),                // 9: wrinkle.v1.Device
 }
 var file_wrinkle_v1_event_proto_depIdxs = []int32{
-	5, // 0: wrinkle.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
+	6, // 0: wrinkle.v1.Event.occurred_at:type_name -> google.protobuf.Timestamp
 	1, // 1: wrinkle.v1.Event.message:type_name -> wrinkle.v1.MessageEvent
 	2, // 2: wrinkle.v1.Event.read:type_name -> wrinkle.v1.ReadEvent
 	3, // 3: wrinkle.v1.Event.message_failed:type_name -> wrinkle.v1.MessageFailedEvent
 	4, // 4: wrinkle.v1.Event.profile:type_name -> wrinkle.v1.ProfileEvent
-	6, // 5: wrinkle.v1.MessageEvent.message:type_name -> wrinkle.v1.Message
-	7, // 6: wrinkle.v1.ProfileEvent.user:type_name -> wrinkle.v1.User
-	7, // [7:7] is the sub-list for method output_type
-	7, // [7:7] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	5, // 5: wrinkle.v1.Event.device:type_name -> wrinkle.v1.DeviceEvent
+	7, // 6: wrinkle.v1.MessageEvent.message:type_name -> wrinkle.v1.Message
+	8, // 7: wrinkle.v1.ProfileEvent.user:type_name -> wrinkle.v1.User
+	9, // 8: wrinkle.v1.DeviceEvent.device:type_name -> wrinkle.v1.Device
+	9, // [9:9] is the sub-list for method output_type
+	9, // [9:9] is the sub-list for method input_type
+	9, // [9:9] is the sub-list for extension type_name
+	9, // [9:9] is the sub-list for extension extendee
+	0, // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_event_proto_init() }
@@ -455,6 +534,7 @@ func file_wrinkle_v1_event_proto_init() {
 		(*Event_Read)(nil),
 		(*Event_MessageFailed)(nil),
 		(*Event_Profile)(nil),
+		(*Event_Device)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -462,7 +542,7 @@ func file_wrinkle_v1_event_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_event_proto_rawDesc), len(file_wrinkle_v1_event_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

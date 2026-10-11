@@ -44,6 +44,32 @@ defmodule Wrinkle.Backend.V1.AckResponse do
     syntax: :proto3
 end
 
+defmodule Wrinkle.Backend.V1.Push do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.backend.v1.Push",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  oneof :kind, 0
+
+  field :event, 1, type: :bytes, oneof: 0
+  field :signed_out, 2, type: Wrinkle.Backend.V1.SignedOut, json_name: "signedOut", oneof: 0
+end
+
+defmodule Wrinkle.Backend.V1.SignedOut do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.backend.v1.SignedOut",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :device_ids, 1, repeated: true, type: :uint64, json_name: "deviceIds"
+  field :all_devices, 2, type: :bool, json_name: "allDevices"
+end
+
 defmodule Wrinkle.Backend.V1.BackendService.Service do
   @moduledoc false
 

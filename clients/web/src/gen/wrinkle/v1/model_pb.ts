@@ -14,7 +14,7 @@ import type { Message as Message$1 } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/model.proto.
  */
 export const file_wrinkle_v1_model: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL21vZGVsLnByb3RvEgp3cmlua2xlLnYxIjMKBFVzZXISDwoHdXNlcl9pZBgBIAEoDBIMCgRuYW1lGAIgASgJEgwKBGljb24YAyABKAkinQEKB01lc3NhZ2USFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIWCg5zZW5kZXJfdXNlcl9pZBgDIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgEIAEoCRIMCgR0ZXh0GAUgASgJEisKB3NlbnRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIq0BCgxDb252ZXJzYXRpb24SFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEh4KBHBlZXIYAiABKAsyEC53cmlua2xlLnYxLlVzZXISEAoIbGFzdF9zZXEYAyABKAQSKQoMbGFzdF9tZXNzYWdlGAQgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlEhAKCHJlYWRfc2VxGAUgASgEEhUKDXBlZXJfcmVhZF9zZXEYBiABKARCnQEKDmNvbS53cmlua2xlLnYxQgpNb2RlbFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChZ3cmlua2xlL3YxL21vZGVsLnByb3RvEgp3cmlua2xlLnYxIlQKBFVzZXISDwoHdXNlcl9pZBgBIAEoDBIMCgRuYW1lGAIgASgJEgwKBGljb24YAyABKAkSDgoGYXZhdGFyGAQgASgMEg8KB2RlbGV0ZWQYBSABKAgimQEKBkRldmljZRIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCRIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3NlZW5fYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEgwKBHB1c2gYBSABKAginQEKB01lc3NhZ2USFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIWCg5zZW5kZXJfdXNlcl9pZBgDIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgEIAEoCRIMCgR0ZXh0GAUgASgJEisKB3NlbnRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIq0BCgxDb252ZXJzYXRpb24SFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEh4KBHBlZXIYAiABKAsyEC53cmlua2xlLnYxLlVzZXISEAoIbGFzdF9zZXEYAyABKAQSKQoMbGFzdF9tZXNzYWdlGAQgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlEhAKCHJlYWRfc2VxGAUgASgEEhUKDXBlZXJfcmVhZF9zZXEYBiABKARCnQEKDmNvbS53cmlua2xlLnYxQgpNb2RlbFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message wrinkle.v1.User
@@ -39,6 +39,22 @@ export type User = Message$1<"wrinkle.v1.User"> & {
    * @generated from field: string icon = 3;
    */
   icon: string;
+
+  /**
+   * An uploaded picture, by blob id (see frame.proto for where blobs are
+   * read); empty for none. Shown instead of the icon when set.
+   *
+   * @generated from field: bytes avatar = 4;
+   */
+  avatar: Uint8Array;
+
+  /**
+   * The account was deleted: the name is empty and free for others, and
+   * clients show the user as a deleted account.
+   *
+   * @generated from field: bool deleted = 5;
+   */
+  deleted: boolean;
 };
 
 /**
@@ -47,6 +63,49 @@ export type User = Message$1<"wrinkle.v1.User"> & {
  */
 export const UserSchema: GenMessage<User> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_model, 0);
+
+/**
+ * A device signed in to the requesting user's account.
+ *
+ * @generated from message wrinkle.v1.Device
+ */
+export type Device = Message$1<"wrinkle.v1.Device"> & {
+  /**
+   * @generated from field: uint64 device_id = 1;
+   */
+  deviceId: bigint;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp created_at = 3;
+   */
+  createdAt?: Timestamp | undefined;
+
+  /**
+   * When the device last connected or acked.
+   *
+   * @generated from field: google.protobuf.Timestamp last_seen_at = 4;
+   */
+  lastSeenAt?: Timestamp | undefined;
+
+  /**
+   * The device has registered for push notifications.
+   *
+   * @generated from field: bool push = 5;
+   */
+  push: boolean;
+};
+
+/**
+ * Describes the message wrinkle.v1.Device.
+ * Use `create(DeviceSchema)` to create a new message.
+ */
+export const DeviceSchema: GenMessage<Device> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_model, 1);
 
 /**
  * A message in a conversation. (conversation_id, seq) identifies it; seq is
@@ -95,7 +154,7 @@ export type Message = Message$1<"wrinkle.v1.Message"> & {
  * Use `create(MessageSchema)` to create a new message.
  */
 export const MessageSchema: GenMessage<Message> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_model, 1);
+  messageDesc(file_wrinkle_v1_model, 2);
 
 /**
  * A conversation as seen by the requesting user.
@@ -148,5 +207,5 @@ export type Conversation = Message$1<"wrinkle.v1.Conversation"> & {
  * Use `create(ConversationSchema)` to create a new message.
  */
 export const ConversationSchema: GenMessage<Conversation> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_model, 2);
+  messageDesc(file_wrinkle_v1_model, 3);
 

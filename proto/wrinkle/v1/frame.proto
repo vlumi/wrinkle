@@ -29,7 +29,13 @@
 // open but not connected; the client may send Connect again within a fresh
 // 5 seconds.
 //
-// The server closes a connection with these codes; after any of them, a
+// Blobs (avatars, stickers, attachments) are read with a plain HTTP GET of
+// /blobs/<lowercase hex blob id> and uploaded with the PUT CreateUpload
+// describes, at the blob address: https://<host>:<port> of a wss endpoint,
+// or http://<host>:9200 beside a ws endpoint on the loopback interface.
+// Blobs never change, so clients cache them for good.
+//
+// The server closes a connection with these codes; after the first six, a
 // client reconnects with backoff and syncs:
 //   1001  the server is shutting down or the connection was idle
 //   1003  a text frame
@@ -37,6 +43,8 @@
 //   1009  a frame over the size limit
 //   1011  an internal error
 //   1013  the client did not keep up with its events
+//   4001  the device was signed out, or the account deleted; the client
+//         forgets its credentials and does not reconnect
 
 syntax = "proto3";
 
@@ -77,6 +85,11 @@ message Request {
     ChangePasswordRequest change_password = 20;
     UpdateProfileRequest update_profile = 21;
     SignOutRequest sign_out = 22;
+    ListDevicesRequest list_devices = 23;
+    RenameDeviceRequest rename_device = 24;
+    SignOutDeviceRequest sign_out_device = 25;
+    DeleteAccountRequest delete_account = 26;
+    CreateUploadRequest create_upload = 27;
   }
 }
 
@@ -97,6 +110,11 @@ message Response {
     ChangePasswordResponse change_password = 20;
     UpdateProfileResponse update_profile = 21;
     SignOutResponse sign_out = 22;
+    ListDevicesResponse list_devices = 23;
+    RenameDeviceResponse rename_device = 24;
+    SignOutDeviceResponse sign_out_device = 25;
+    DeleteAccountResponse delete_account = 26;
+    CreateUploadResponse create_upload = 27;
   }
 }
 

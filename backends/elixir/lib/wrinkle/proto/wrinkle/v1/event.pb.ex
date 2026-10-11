@@ -19,6 +19,7 @@ defmodule Wrinkle.V1.Event do
     oneof: 0
 
   field :profile, 13, type: Wrinkle.V1.ProfileEvent, oneof: 0
+  field :device, 14, type: Wrinkle.V1.DeviceEvent, oneof: 0
 end
 
 defmodule Wrinkle.V1.MessageEvent do
@@ -67,4 +68,16 @@ defmodule Wrinkle.V1.ProfileEvent do
     syntax: :proto3
 
   field :user, 1, type: Wrinkle.V1.User
+end
+
+defmodule Wrinkle.V1.DeviceEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.DeviceEvent",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :device, 1, type: Wrinkle.V1.Device
+  field :signed_out, 2, type: :bool, json_name: "signedOut"
 end

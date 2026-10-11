@@ -4,6 +4,7 @@ syntax = "proto3";
 
 package wrinkle.v1;
 
+import "google/protobuf/timestamp.proto";
 import "wrinkle/v1/event.proto";
 import "wrinkle/v1/model.proto";
 
@@ -82,6 +83,10 @@ message UpdateProfileRequest {
   optional string name = 1;
   // One of the standard icons listed at User.icon, or empty for none.
   optional string icon = 2;
+  // A blob uploaded by the user for BLOB_PURPOSE_AVATAR, or empty for none.
+  // A blob that is not the user's or not uploaded yet fails with
+  // ERROR_CODE_FAILED_PRECONDITION.
+  optional bytes avatar = 3;
 }
 
 message UpdateProfileResponse {
@@ -93,6 +98,75 @@ message UpdateProfileResponse {
 message SignOutRequest {}
 
 message SignOutResponse {}
+
+// Lists the account's signed-in devices, this one included.
+message ListDevicesRequest {}
+
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+// Renames one of the account's devices, this one included. Names are UTF-8
+// of at most 64 bytes.
+message RenameDeviceRequest {
+  uint64 device_id = 1;
+  string name = 2;
+}
+
+message RenameDeviceResponse {
+  Device device = 1;
+}
+
+// Signs out another of the account's devices, as SignOut does for this one;
+// its open connections are closed with code 4001. A device that is not the
+// account's, or already signed out, fails with ERROR_CODE_NOT_FOUND.
+message SignOutDeviceRequest {
+  uint64 device_id = 1;
+}
+
+message SignOutDeviceResponse {}
+
+// Deletes the account after checking its password (a wrong one fails with
+// ERROR_CODE_UNAUTHENTICATED). The name becomes free at once; every device
+// is signed out and its connections closed with code 4001; conversation
+// partners see a deleted account. The user's event log, conversation list,
+// devices and uploads are removed; messages already sent stay with the
+// conversations.
+message DeleteAccountRequest {
+  string password = 1;
+}
+
+message DeleteAccountResponse {}
+
+// Asks for a slot to upload a blob to. The client then sends the bytes with
+// an HTTP PUT to upload_path, relative to the blob address (see
+// frame.proto), with Content-Type and Content-Length exactly as requested,
+// before expires_at. A blob nothing refers to a day after the slot was made
+// is deleted.
+//
+// Limits by purpose: avatars image/jpeg, image/png or image/webp up to
+// 512 KiB; stickers image/png, image/webp or image/gif up to 256 KiB;
+// attachments any media type up to 25 MiB. Beyond them the request fails
+// with ERROR_CODE_INVALID_ARGUMENT.
+message CreateUploadRequest {
+  BlobPurpose purpose = 1;
+  string media_type = 2;
+  uint64 size = 3;
+}
+
+message CreateUploadResponse {
+  bytes blob_id = 1;
+  // Path and query, starting with /blobs/.
+  string upload_path = 2;
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+enum BlobPurpose {
+  BLOB_PURPOSE_UNSPECIFIED = 0;
+  BLOB_PURPOSE_AVATAR = 1;
+  BLOB_PURPOSE_STICKER = 2;
+  BLOB_PURPOSE_ATTACHMENT = 3;
+}
 
 // Finds or creates the conversation between the requesting user and the peer.
 // The peer is found by name, ignoring case.
