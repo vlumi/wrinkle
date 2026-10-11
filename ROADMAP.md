@@ -154,6 +154,13 @@ Notes:
 - [ ] Packs, and the sticker editor (#8).
 - [ ] Animated stickers: GIF and WebP upload, but clients redraw them as still images.
 
+## Attachments
+
+- [x] Images and files, encrypted on the device with a key per file, uploaded through the blob proxy, with keys, digests, names and thumbnails in the sealed content and the blob ids in clear for their lifecycle. Images are scaled and thumbnailed on the device. Go and Java check and keep the blobs; both clients send, show thumbnails, open a full-screen viewer and download files; the load generator can include attachments (`--attachment-share`, `--attachment-size`).
+- [ ] A send that fails after its uploads were marked used leaves them used with nothing referring to them, so the sweeper never deletes them.
+- [ ] Load-generator attachments are never deleted, so blob storage grows with each run until `make infra-reset`.
+- [ ] Video thumbnails and playback; downloads served through a CDN.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -178,7 +185,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3, done), deleting one's own messages (#4, done), stickers (#5, done), end-to-end encryption (#6, done), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3, done), deleting one's own messages (#4, done), stickers (#5, done), end-to-end encryption (#6, done), image and file attachments (#7, done), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 

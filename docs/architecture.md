@@ -20,7 +20,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 | User DB | users, devices, event logs, conversation lists | sharded by user id | Vitess shards |
 | Kafka and Debezium | committed outbox rows of both keyspaces, in commit order per conversation or user | the topics | partitions |
 | Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
-| Object storage | blobs: avatars, later stickers and attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
+| Object storage | blobs: avatars, stickers, encrypted attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
 
 The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
 
@@ -104,6 +104,8 @@ Message content is encrypted on the sending device and decrypted on the recipien
 ## Blobs
 
 Pictures, and later stickers and attachments, are blobs in object storage, never in the databases or through the WebSocket. A device asks the services for an upload slot with CreateUpload, giving the purpose, media type and size; the services record the upload in the user keyspace and answer with a path signed for an HTTP PUT of exactly that type and size (AWS signature version 4, by hand in Go and Java, with shared test vectors). The device uploads, then refers to the blob, as UpdateProfile does for an avatar; the services check that the blob is the user's and is there. Blobs are read with a plain GET by their random id and never change, so clients cache them for good.
+
+Attachments are blobs the sending device encrypts first: each file gets its own key, and the device uploads only the ciphertext. The message's sealed content carries each file's key, the ciphertext's digest, its name, type and size, and for images a small thumbnail, all made on the device, since the services cannot read the file to resize it. The message also lists the blob ids in clear: the services check that each is the sender's own, unused attachment upload, keep it while the message exists, and let the sweeper delete it once the message is deleted. Recipients download a blob by id, check the digest, decrypt and cache it.
 
 Stickers are blobs too: a user uploads a small image and makes it a sticker, whose id is the blob's. Stickers are public and permanent, so anyone who receives one can show it from the blob address and save it to their palette, a private ordered list in the user keyspace synced to the user's devices with `PaletteEvent`s through the user outbox. Sending a sticker is a sealed message naming it, so the services do not know a sticker was sent; they do know who made which sticker and who saved it.
 
