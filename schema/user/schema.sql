@@ -88,7 +88,7 @@ CREATE TABLE user_conversation (
   -- The last message, NULL while the conversation is empty.
   last_sender_user_id BINARY(16) NULL,
   last_client_message_id VARCHAR(64) NULL,
-  -- As message.body.
+  -- As message.body, deleted messages included.
   last_body BLOB NULL,
   last_sent_at DATETIME(6) NULL,
   read_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,

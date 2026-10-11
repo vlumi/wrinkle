@@ -62,7 +62,8 @@ CREATE TABLE message (
   seq BIGINT UNSIGNED NOT NULL,
   sender_user_id BINARY(16) NOT NULL,
   client_message_id VARCHAR(64) NOT NULL,
-  -- The content: serialized wrinkle.v1.Message with only its content set.
+  -- The content: serialized wrinkle.v1.Message with only its content set,
+  -- or only deleted_at once the sender deleted it.
   body BLOB NOT NULL,
   sent_at DATETIME(6) NOT NULL,
   -- The outbox row that carried the message, which identifies its copies
@@ -94,8 +95,11 @@ CREATE TABLE outbox (
   conversation_kind VARCHAR(8) NOT NULL,
   topic VARCHAR(255) NOT NULL DEFAULT '',
   member_count INT UNSIGNED NOT NULL,
-  -- Event body type: message, read.
+  -- Event body type: message, read, message_deleted.
   kind VARCHAR(32) NOT NULL,
+  -- message_deleted: the outbox row of the deleted message, which names its
+  -- copies in the recipients' logs.
+  target_outbox_id BIGINT UNSIGNED NULL,
   -- Serialized wrinkle.v1.Event without a cursor; each recipient's log
   -- assigns its own.
   payload BLOB NOT NULL,
