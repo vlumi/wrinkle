@@ -265,12 +265,12 @@ public final class Devices {
     }
   }
 
-  interface Work<T> {
+  public interface Work<T> {
     T run(Connection c) throws SQLException;
   }
 
   /** Runs the work in one transaction, rolled back on any failure. */
-  static <T> T inTransaction(DataSource db, Work<T> work) throws SQLException {
+  public static <T> T inTransaction(DataSource db, Work<T> work) throws SQLException {
     try (Connection c = db.getConnection()) {
       c.setAutoCommit(false);
       try {

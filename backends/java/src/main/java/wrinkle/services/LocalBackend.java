@@ -11,27 +11,34 @@ import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
+import wrinkle.stickers.StickerService;
 import wrinkle.uploads.UploadService;
 import wrinkle.v1.AddMembersResponse;
 import wrinkle.v1.ChangePasswordResponse;
 import wrinkle.v1.CreateGroupResponse;
+import wrinkle.v1.CreateStickerResponse;
 import wrinkle.v1.DeleteAccountResponse;
 import wrinkle.v1.DeleteMessageResponse;
 import wrinkle.v1.GetDeviceKeysResponse;
 import wrinkle.v1.GetMembersResponse;
 import wrinkle.v1.GetMessagesResponse;
+import wrinkle.v1.GetPaletteResponse;
+import wrinkle.v1.GetStickersResponse;
 import wrinkle.v1.LeaveGroupResponse;
 import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
+import wrinkle.v1.MoveStickerResponse;
 import wrinkle.v1.OpenConversationResponse;
 import wrinkle.v1.PublishKeysResponse;
 import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.RegisterResponse;
 import wrinkle.v1.RemoveMemberResponse;
+import wrinkle.v1.RemoveStickerResponse;
 import wrinkle.v1.RenameDeviceResponse;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
+import wrinkle.v1.SaveStickerResponse;
 import wrinkle.v1.SendMessageResponse;
 import wrinkle.v1.SetAdminResponse;
 import wrinkle.v1.SetDeviceKeyResponse;
@@ -42,7 +49,7 @@ import wrinkle.v1.SignOutDeviceResponse;
 import wrinkle.v1.SignOutResponse;
 import wrinkle.v1.UpdateProfileResponse;
 
-/** Runs the account, conversation and sync services in-process. */
+/** Runs the account, conversation, sticker and sync services in-process. */
 public final class LocalBackend implements Backend {
   private static final Logger log = LoggerFactory.getLogger(LocalBackend.class);
 
@@ -53,6 +60,7 @@ public final class LocalBackend implements Backend {
   private final GroupService groups;
   private final ConversationKeys keys;
   private final DeviceSyncService users;
+  private final StickerService stickers;
 
   public LocalBackend(
       AccountService accounts,
@@ -61,7 +69,8 @@ public final class LocalBackend implements Backend {
       ConversationService conversations,
       GroupService groups,
       ConversationKeys keys,
-      DeviceSyncService users) {
+      DeviceSyncService users,
+      StickerService stickers) {
     this.accounts = accounts;
     this.devices = devices;
     this.uploads = uploads;
@@ -69,6 +78,7 @@ public final class LocalBackend implements Backend {
     this.groups = groups;
     this.keys = keys;
     this.users = users;
+    this.stickers = stickers;
   }
 
   @Override
@@ -250,6 +260,30 @@ public final class LocalBackend implements Backend {
         var r = req.getRegisterPushToken();
         users.registerPushToken(userId, deviceId, r.getService(), r.getToken());
         yield resp.setRegisterPushToken(RegisterPushTokenResponse.getDefaultInstance());
+      }
+      case CREATE_STICKER ->
+          resp.setCreateSticker(
+              CreateStickerResponse.newBuilder()
+                  .setSticker(stickers.create(userId, req.getCreateSticker().getBlobId())));
+      case GET_STICKERS ->
+          resp.setGetStickers(
+              GetStickersResponse.newBuilder()
+                  .addAllStickers(stickers.get(req.getGetStickers().getStickerIdsList())));
+      case GET_PALETTE ->
+          resp.setGetPalette(
+              GetPaletteResponse.newBuilder().addAllStickers(stickers.palette(userId)));
+      case SAVE_STICKER -> {
+        stickers.save(userId, req.getSaveSticker().getStickerId());
+        yield resp.setSaveSticker(SaveStickerResponse.getDefaultInstance());
+      }
+      case REMOVE_STICKER -> {
+        stickers.remove(userId, req.getRemoveSticker().getStickerId());
+        yield resp.setRemoveSticker(RemoveStickerResponse.getDefaultInstance());
+      }
+      case MOVE_STICKER -> {
+        var r = req.getMoveSticker();
+        stickers.move(userId, r.getStickerId(), r.getBeforeStickerId());
+        yield resp.setMoveSticker(MoveStickerResponse.getDefaultInstance());
       }
       default -> throw ApiError.invalidArgument("unknown request");
     };

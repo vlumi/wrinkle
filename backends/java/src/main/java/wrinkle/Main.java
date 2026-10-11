@@ -27,6 +27,7 @@ import wrinkle.services.Backend;
 import wrinkle.services.LocalBackend;
 import wrinkle.services.RpcClient;
 import wrinkle.services.RpcServer;
+import wrinkle.stickers.StickerService;
 import wrinkle.uploads.Blobs;
 import wrinkle.uploads.Presigner;
 import wrinkle.uploads.UploadService;
@@ -75,7 +76,8 @@ public final class Main {
               conversations,
               new GroupService(conversationDb, userDb, accounts),
               new ConversationKeys(conversationDb, userDb),
-              new DeviceSyncService(userDb, accounts, conversations));
+              new DeviceSyncService(userDb, accounts, conversations),
+              new StickerService(userDb, uploads));
     }
     Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;
 

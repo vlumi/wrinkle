@@ -35,7 +35,8 @@ import wrinkle.v1.Event;
  * Turns committed outbox rows, read from Kafka, into entries in the event logs of everyone
  * concerned, and pushes them to connected devices: a conversation's events to the recipients its
  * outbox row names, a user's profile changes to the user and every direct conversation partner, a
- * device's key changes to the user, the partners and the members of the user's groups.
+ * device's key changes to the user, the partners and the members of the user's groups, a palette
+ * change to the user alone.
  */
 public final class FanoutWorker {
   // The outbox topics: conversations' rows keyed by conversation id, users' by user id.
@@ -243,9 +244,11 @@ public final class FanoutWorker {
     switch (o.event().getBodyCase()) {
       case PROFILE -> profiles.deliver(o);
       case DEVICE -> devices.deliver(o);
+      // The user's own devices only.
+      case PALETTE -> userLog.append(o.userId(), o.userId(), o.outboxId(), o.event(), null);
       default ->
           log.error(
-              "skipping user outbox record without a profile or device, kind {}, offset {}",
+              "skipping user outbox record without a profile, device or palette, kind {}, offset {}",
               o.kind(),
               rec.offset());
     }

@@ -98,19 +98,22 @@ final class ProfileFanout {
   }
 
   /**
-   * Removes a deleted account's log, conversation list and devices, and leaves its uploads to the
-   * sweeper. The user row stays, so nothing is appended for it again. Repeating it is harmless.
+   * Removes a deleted account's log, conversation list, devices and palette, and leaves its uploads
+   * to the sweeper, but those made stickers, which stay. The user row stays, so nothing is appended
+   * for it again. Repeating it is harmless.
    */
   private void purge(Uuid userId) throws SQLException {
     try (Connection c = userLog.db().getConnection()) {
-      for (String table : List.of("user_event", "user_conversation", "device")) {
+      for (String table : List.of("user_event", "user_conversation", "device", "palette_sticker")) {
         while (Sql.update(
                 c, "DELETE FROM " + table + " WHERE user_id = ? LIMIT ?", userId, PURGE_BATCH)
             == PURGE_BATCH) {
           // Until a batch comes up short.
         }
       }
-      Sql.update(c, "UPDATE upload SET used = FALSE WHERE user_id = ?", userId);
+      // A sticker upload is used only once it is a sticker.
+      Sql.update(
+          c, "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose <> 'sticker'", userId);
     }
   }
 

@@ -16,6 +16,7 @@ import wrinkle.ApiError;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
+import wrinkle.accounts.Devices;
 import wrinkle.v1.CreateUploadRequest;
 import wrinkle.v1.CreateUploadResponse;
 
@@ -132,5 +133,57 @@ public final class UploadService {
         throw ApiError.failedPrecondition("not an avatar upload of yours");
       }
     }
+  }
+
+  /**
+   * The media type of the user's sticker upload, already uploaded. Fails with FAILED_PRECONDITION
+   * otherwise.
+   */
+  public String checkSticker(Uuid userId, Uuid blobId) throws Exception {
+    String mediaType;
+    try (Connection c = db.getConnection();
+        PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT media_type FROM upload WHERE user_id = ? AND blob_id = ? AND purpose ="
+                    + " 'sticker'",
+                userId,
+                blobId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw ApiError.failedPrecondition("not a sticker upload of yours");
+      }
+      mediaType = rs.getString(1);
+    }
+    if (!blobs.exists(blobId)) {
+      throw ApiError.failedPrecondition("not uploaded");
+    }
+    return mediaType;
+  }
+
+  /**
+   * Marks the sticker upload used, for good, so the sweeper leaves it; FAILED_PRECONDITION if the
+   * sweeper took it first.
+   */
+  public void useSticker(Uuid userId, Uuid blobId) throws SQLException {
+    Devices.inTransaction(
+        db,
+        c -> {
+          try (PreparedStatement ps =
+                  Sql.prepare(
+                      c,
+                      "SELECT 1 FROM upload WHERE user_id = ? AND blob_id = ? AND purpose ="
+                          + " 'sticker' FOR UPDATE",
+                      userId,
+                      blobId);
+              ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+              throw ApiError.failedPrecondition("not a sticker upload of yours");
+            }
+          }
+          Sql.update(
+              c, "UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id = ?", userId, blobId);
+          return null;
+        });
   }
 }
