@@ -1,6 +1,6 @@
 # Agent instructions
 
-Wrinkle is a prototype one-to-one messaging backend, implemented in several languages against one contract, with shared clients and a load generator for comparing how the implementations scale. README.md describes the design; ROADMAP.md has the plan and its open questions.
+Wrinkle is a prototype messaging backend, one-to-one and in groups, implemented in several languages against one contract, with shared clients and a load generator for comparing how the implementations scale. README.md describes the design; ROADMAP.md has the plan and its open questions.
 
 ## Rules
 

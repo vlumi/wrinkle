@@ -123,6 +123,12 @@ Notes:
 - A conversation list entry the fan-out creates while the peer renames may keep the old name until the peer's next change: the entry reads the peer's profile when it is created, and the rename's fan-out pages through the lists that exist when it runs.
 - Hashing a password takes about 19 MiB and tens of milliseconds, so the services run at most as many hashes at once as they have cores. A burst of sign-ins, as the load generator makes before a run, raises the services' resident memory; measurements force a garbage collection before sampling.
 
+## Groups
+
+- [x] Group conversations: a kind fixed at creation, a topic, admins, members added by anyone and removed by admins, leaving with promotion of the earliest member, at most 256 members. Changes are notices in the group's sequence; outbox rows carry their recipients. Read events go to the senders of the messages read, so clients show "read by n" without a fan-out to every member per read. Go and Java implement it; the web and iOS clients create groups, show members and sender names; the load generator can send a share of its messages to groups (`--group-share`, `--group-size`).
+- Profile changes reach direct partners only; a group's member names refresh when a client opens the group.
+- A user deleted right after being added to a group, before the fan-out has put the group in their list, stays a member.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -147,7 +153,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 

@@ -35,14 +35,16 @@ The fan-out runs inside the services processes. A gateway, the services and the 
 
 ## Data model
 
-Two Vitess keyspaces, each sharded by the id that every query of it carries, so a request touches one shard of each keyspace it needs. Two claim tables are sharded by what they are looked up by instead: names, and pairs of users. The schemas are in [`schema/`](../schema).
+Two Vitess keyspaces, each sharded by the id that every query of it carries, so a request touches one shard of each keyspace it needs. Three claim tables are sharded by what they are looked up by instead: names, pairs of users, and groups by their creator's client id. The schemas are in [`schema/`](../schema).
 
 ```mermaid
 flowchart TB
   subgraph conv ["Conversation keyspace, by conversation_id"]
-    c["conversation: participants, last_seq"]
+    c["conversation: kind, topic, current members, last_seq"]
+    cm["conversation_member: role, joined and left seq"]
     p["conversation_pair: claim of a pair, by user_a"]
-    m["message: seq, sender, client id, body"]
+    g["group_claim: a group by creator and client id"]
+    m["message: seq, sender, client id, content"]
     r["read_mark: per participant"]
     o["outbox: change events, deleted on insert"]
   end
@@ -69,6 +71,14 @@ Claims make the lookups that ids no longer answer, each sharded by its own key, 
 - **Pairs.** `conversation_pair` maps two users, smaller id first bytewise, to their conversation, sharded by the first user. The first opener's insert claims the pair; both opening at once end up with the same conversation. A claim whose conversation row is missing is completed by the next open.
 
 Go and Java implement both, and the password and token formats, alike (unit tests in each hold the same vectors), so both work on the same data; the Elixir and Rust gateways only carry ids.
+
+## Groups
+
+A conversation's kind is fixed when it is created. A direct conversation has its two participants for good and is found by the pair claim; a group is created with a topic and optional invitees, its creator as admin, and found again on a retry by the creator's client id. Any member adds people and changes the topic; admins remove members and make others admins; anyone leaves, and when the last admin leaves, the member who joined first becomes one. A group has at most 256 members.
+
+Every change to a group is a notice: a message in the group's sequence, with the acting user as its sender, so every member sees the changes and the messages in one order, and devices sync them like any message. The conversation row holds the current members' ids, so a send checks membership and learns its recipients from the row it locks anyway; `conversation_member` keeps each member's role and the part of the sequence they may read, from the notice that added them to the one that removed them. A removed member keeps the history they had and gets nothing new.
+
+Outbox rows carry their recipients and the conversation's kind, topic and member count as of the change, so a fan-out worker still needs no lookup, and each recipient's list entry follows the group: its topic, its size, and whether the user is still a member or an admin. Profile changes still reach direct partners only; clients refresh a group's members when they open it. A group message costs one log append per member, which is what caps the size: rooms with thousands of readers would need a read path per room instead (issue #9).
 
 ## Accounts
 
@@ -151,7 +161,7 @@ The sender's response returns after step 1; everything after it is asynchronous.
 
 ### Read marks
 
-`MarkRead` moves the user's read position in the conversation forward, never back, and writes an outbox row like a message. Fan-out appends a read event to both participants' logs: the peer learns the message was read, and the user's other devices learn what was read elsewhere.
+`MarkRead` moves the user's read position in the conversation forward, never back, and writes an outbox row like a message; sending a message moves the sender's own position with it. In a direct conversation fan-out appends the read event to both participants' logs: the peer learns the message was read, and the user's other devices learn what was read elsewhere. In a group it goes to the reader and to the senders of the messages the read covers (among the newest 1000 of them), not to every member: each sender learns who has read their messages, which is what the clients show ("read by 2"), and a read costs about one append per sender instead of one per member. Clients get everyone's positions from `GetMembers` when they open a group.
 
 ### Acks
 

@@ -2,7 +2,7 @@
 
 *A new wrinkle on messaging.*
 
-Wrinkle is a prototype backend for one-to-one text messaging across multiple devices per user: real-time delivery to connected devices, incremental sync for the rest, and read receipts. The same architecture is implemented in several languages, with shared clients and a load generator, to see how each implementation behaves as load grows.
+Wrinkle is a prototype backend for text messaging, one-to-one and in groups, across multiple devices per user: real-time delivery to connected devices, incremental sync for the rest, and read receipts. The same architecture is implemented in several languages, with shared clients and a load generator, to see how each implementation behaves as load grows.
 
 It is an experiment, not a product. Nothing here is production-hardened; [docs/production.md](docs/production.md) lists what that would take, with deployment options and their costs.
 
