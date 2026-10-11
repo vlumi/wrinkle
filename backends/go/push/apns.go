@@ -1,0 +1,189 @@
+// Package push notifies devices that are not connected, through APNs. The
+// fan-out worker calls the notifier after appending a message to a user's
+// log; devices that are connected get the event over their WebSocket
+// instead.
+package push
+
+import (
+	"bytes"
+	"context"
+	"crypto/ecdsa"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"sync"
+	"time"
+)
+
+// APNs endpoints; the tests point both at a local server.
+const (
+	ProductionURL = "https://api.push.apple.com"
+	SandboxURL    = "https://api.sandbox.push.apple.com"
+)
+
+// APNsConfig is a token-based provider: a .p8 key from the developer
+// account, its key id, the team id, and the app's bundle id as the topic.
+type APNsConfig struct {
+	KeyFile       string
+	KeyID         string
+	TeamID        string
+	Topic         string
+	ProductionURL string
+	SandboxURL    string
+	HTTPClient    *http.Client
+}
+
+// ErrUnregistered means the token is no longer valid for the topic; the
+// registration should be removed.
+var ErrUnregistered = errors.New("device token is no longer registered")
+
+type APNs struct {
+	cfg  APNsConfig
+	key  *ecdsa.PrivateKey
+	http *http.Client
+
+	mu        sync.Mutex
+	token     string
+	tokenTime time.Time
+}
+
+// Apple accepts a provider token for an hour and rejects one refreshed more
+// often than every 20 minutes.
+const tokenLifetime = 45 * time.Minute
+
+func NewAPNs(cfg APNsConfig) (*APNs, error) {
+	pemBytes, err := os.ReadFile(cfg.KeyFile)
+	if err != nil {
+		return nil, fmt.Errorf("apns key: %w", err)
+	}
+	block, _ := pem.Decode(pemBytes)
+	if block == nil {
+		return nil, errors.New("apns key: not PEM")
+	}
+	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("apns key: %w", err)
+	}
+	key, ok := parsed.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("apns key: not an EC key")
+	}
+	if cfg.KeyID == "" || cfg.TeamID == "" || cfg.Topic == "" {
+		return nil, errors.New("apns: key id, team id and topic are all required")
+	}
+	if cfg.ProductionURL == "" {
+		cfg.ProductionURL = ProductionURL
+	}
+	if cfg.SandboxURL == "" {
+		cfg.SandboxURL = SandboxURL
+	}
+	client := cfg.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	return &APNs{cfg: cfg, key: key, http: client}, nil
+}
+
+// providerToken returns the current JWT, signing a new one when it is old.
+func (a *APNs) providerToken() (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.token != "" && time.Since(a.tokenTime) < tokenLifetime {
+		return a.token, nil
+	}
+	now := time.Now()
+	enc := base64.RawURLEncoding
+	header, _ := json.Marshal(map[string]string{"alg": "ES256", "kid": a.cfg.KeyID})
+	claims, _ := json.Marshal(map[string]any{"iss": a.cfg.TeamID, "iat": now.Unix()})
+	signingInput := enc.EncodeToString(header) + "." + enc.EncodeToString(claims)
+	digest := sha256.Sum256([]byte(signingInput))
+	r, s, err := ecdsa.Sign(rand.Reader, a.key, digest[:])
+	if err != nil {
+		return "", err
+	}
+	// JWS wants the raw 64-byte r || s, not ASN.1.
+	sig := make([]byte, 64)
+	r.FillBytes(sig[:32])
+	s.FillBytes(sig[32:])
+	a.token = signingInput + "." + enc.EncodeToString(sig)
+	a.tokenTime = now
+	return a.token, nil
+}
+
+// Alert is what a notification shows.
+type Alert struct {
+	Title    string
+	Body     string
+	Badge    int
+	ThreadID string
+	// Custom keys beside "aps", for the app to act on when the alert is
+	// tapped.
+	Data map[string]string
+}
+
+// Send delivers one alert to one device token.
+func (a *APNs) Send(ctx context.Context, sandbox bool, deviceToken string, alert Alert) error {
+	jwt, err := a.providerToken()
+	if err != nil {
+		return err
+	}
+	payload := map[string]any{
+		"aps": map[string]any{
+			"alert":     map[string]string{"title": alert.Title, "body": alert.Body},
+			"badge":     alert.Badge,
+			"sound":     "default",
+			"thread-id": alert.ThreadID,
+		},
+	}
+	for k, v := range alert.Data {
+		payload[k] = v
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	base := a.cfg.ProductionURL
+	if sandbox {
+		base = a.cfg.SandboxURL
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base+"/3/device/"+deviceToken, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("authorization", "bearer "+jwt)
+	req.Header.Set("apns-topic", a.cfg.Topic)
+	req.Header.Set("apns-push-type", "alert")
+	req.Header.Set("apns-priority", "10")
+	resp, err := a.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	var reason struct {
+		Reason string `json:"reason"`
+	}
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	_ = json.Unmarshal(raw, &reason)
+	switch {
+	case resp.StatusCode == http.StatusGone,
+		reason.Reason == "BadDeviceToken",
+		reason.Reason == "DeviceTokenNotForTopic":
+		return fmt.Errorf("%w: %s", ErrUnregistered, reason.Reason)
+	case reason.Reason == "ExpiredProviderToken":
+		a.mu.Lock()
+		a.token = ""
+		a.mu.Unlock()
+	}
+	return fmt.Errorf("apns: %d %s", resp.StatusCode, reason.Reason)
+}

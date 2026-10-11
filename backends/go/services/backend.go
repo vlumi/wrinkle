@@ -33,9 +33,9 @@ func NewLocal(conversations *conversation.Service, users *devicesync.Service, lo
 	return &Local{conversations: conversations, users: users, log: log}
 }
 
-func (l *Local) Call(ctx context.Context, userID, _ uint64, req *pb.Request) (*pb.Response, error) {
+func (l *Local) Call(ctx context.Context, userID, deviceID uint64, req *pb.Request) (*pb.Response, error) {
 	resp := &pb.Response{RequestId: req.GetId()}
-	if err := l.dispatch(ctx, userID, req, resp); err != nil {
+	if err := l.dispatch(ctx, userID, deviceID, req, resp); err != nil {
 		if apierror.Code(err) == pb.ErrorCode_ERROR_CODE_INTERNAL {
 			l.log.Error("request failed", "request", req.GetId(), "err", err)
 		}
@@ -49,7 +49,7 @@ func (l *Local) Ack(ctx context.Context, userID, deviceID, cursor uint64) error 
 }
 
 // dispatch handles one request, setting the response body on success.
-func (l *Local) dispatch(ctx context.Context, userID uint64, req *pb.Request, resp *pb.Response) error {
+func (l *Local) dispatch(ctx context.Context, userID, deviceID uint64, req *pb.Request, resp *pb.Response) error {
 	if connect := req.GetConnect(); connect != nil {
 		connected, err := l.users.Connect(ctx, connect)
 		if err != nil {
@@ -99,6 +99,12 @@ func (l *Local) dispatch(ctx context.Context, userID uint64, req *pb.Request, re
 			return err
 		}
 		resp.Body = &pb.Response_GetMessages{GetMessages: &pb.GetMessagesResponse{Messages: msgs}}
+	case *pb.Request_RegisterPushToken:
+		if err := l.users.RegisterPushToken(ctx, userID, deviceID,
+			r.RegisterPushToken.GetService(), r.RegisterPushToken.GetToken()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_RegisterPushToken{RegisterPushToken: &pb.RegisterPushTokenResponse{}}
 	default:
 		return apierror.InvalidArgument("request has no body")
 	}

@@ -37,6 +37,10 @@ var (
 		Name: "wrinkle_fanout_deliveries_total",
 		Help: "Events appended to a user's log.",
 	})
+	PushSent = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "wrinkle_push_sent_total",
+		Help: "Push notifications to devices not connected, by result: ok, unregistered, error, dropped.",
+	}, []string{"result"})
 	FanoutLag = promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "wrinkle_fanout_lag_seconds",
 		Help:    "Time from an event being stored to its append to a user's log.",

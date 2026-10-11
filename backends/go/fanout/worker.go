@@ -31,10 +31,17 @@ type Publisher interface {
 	Publish(ctx context.Context, userID uint64, payload []byte) error
 }
 
+// Notifier is told about messages appended to a user's log, to push them to
+// devices that are not connected. Nil disables it.
+type Notifier interface {
+	MessageDelivered(userID uint64, peerName string, msg *pb.Message)
+}
+
 type Worker struct {
 	db          *sql.DB
 	kafka       *kgo.Client
 	pub         Publisher
+	notifier    Notifier
 	log         *slog.Logger
 	concurrency int
 
@@ -43,7 +50,7 @@ type Worker struct {
 }
 
 // New makes a worker that delivers up to concurrency conversations at a time.
-func New(ctx context.Context, brokers []string, group string, concurrency int, db *sql.DB, pub Publisher, log *slog.Logger) (*Worker, error) {
+func New(ctx context.Context, brokers []string, group string, concurrency int, db *sql.DB, pub Publisher, notifier Notifier, log *slog.Logger) (*Worker, error) {
 	client, err := kgo.NewClient(
 		kgo.SeedBrokers(brokers...),
 		kgo.ConsumerGroup(group),
@@ -63,7 +70,7 @@ func New(ctx context.Context, brokers []string, group string, concurrency int, d
 		client.Close()
 		return nil, fmt.Errorf("kafka at %v: %w", brokers, err)
 	}
-	return &Worker{db: db, kafka: client, pub: pub, log: log, concurrency: max(concurrency, 1), names: map[uint64]string{}}, nil
+	return &Worker{db: db, kafka: client, pub: pub, notifier: notifier, log: log, concurrency: max(concurrency, 1), names: map[uint64]string{}}, nil
 }
 
 // Close leaves the consumer group. Polling blocks rebalances until the
@@ -325,7 +332,10 @@ func (w *Worker) deliver(ctx context.Context, userID uint64, o *outboxRow) error
 	metrics.FanoutLag.Observe(time.Since(occurredAt).Seconds())
 	if err := w.pub.Publish(ctx, userID, payload); err != nil {
 		// The log has it; devices catch up on their next sync.
-		w.log.Warn("push failed", "user", userID, "err", err)
+		w.log.Warn("publish failed", "user", userID, "err", err)
+	}
+	if msg := event.GetMessage().GetMessage(); msg != nil && w.notifier != nil {
+		w.notifier.MessageDelivered(userID, peerName, msg)
 	}
 	return nil
 }

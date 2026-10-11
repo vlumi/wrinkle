@@ -247,6 +247,8 @@ func requestType(req *pb.Request) string {
 		return "list_conversations"
 	case *pb.Request_GetMessages:
 		return "get_messages"
+	case *pb.Request_RegisterPushToken:
+		return "register_push_token"
 	default:
 		return "unknown"
 	}

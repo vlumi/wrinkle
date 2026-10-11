@@ -28,6 +28,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	"github.com/vlumi/wrinkle/backends/go/presence"
+	"github.com/vlumi/wrinkle/backends/go/push"
 	"github.com/vlumi/wrinkle/backends/go/services"
 )
 
@@ -39,6 +40,7 @@ func main() {
 }
 
 func run() error {
+	dotenv := loadDotEnv()
 	hostname, _ := os.Hostname()
 	var (
 		roles   = flag.String("roles", env("WRINKLE_ROLES", "gateway,fanout"), "comma-separated roles: gateway, fanout, services")
@@ -51,6 +53,10 @@ func run() error {
 		node    = flag.String("node", env("WRINKLE_NODE", hostname), "this node's name in presence")
 		dbConns = flag.Int("db-conns", 64, "connections per keyspace")
 		fanoutN = flag.Int("fanout-concurrency", 64, "fanout: conversations delivered at a time")
+		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
+		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
+		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
+		apnsTop = flag.String("apns-topic", env("WRINKLE_APNS_TOPIC", "fi.misaki.wrinkle"), "fanout: the iOS app's bundle id")
 		debug   = flag.Bool("debug", false, "debug logging")
 	)
 	flag.Parse()
@@ -61,6 +67,9 @@ func run() error {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(log)
+	if dotenv != "" {
+		log.Info("settings read", "file", dotenv)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -155,7 +164,21 @@ func run() error {
 	}
 	start("http", func(ctx context.Context) error { return serveHTTP(ctx, *listen, mux, log) })
 	if wantFanout {
-		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, pres, log.With("role", "fanout"))
+		var notifier fanout.Notifier
+		if *apnsKey != "" {
+			keyFile := expandHome(*apnsKey)
+			keyID := *apnsKID
+			if keyID == "" {
+				keyID = keyIDFromFile(keyFile)
+			}
+			apns, err := push.NewAPNs(push.APNsConfig{KeyFile: keyFile, KeyID: keyID, TeamID: *apnsTID, Topic: *apnsTop})
+			if err != nil {
+				return err
+			}
+			notifier = push.NewNotifier(apns, userDB, pres, log.With("role", "push"))
+			log.Info("push notifications on", "topic", *apnsTop)
+		}
+		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, pres, notifier, log.With("role", "fanout"))
 		if err != nil {
 			return err
 		}

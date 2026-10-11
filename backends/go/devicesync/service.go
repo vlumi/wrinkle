@@ -93,6 +93,32 @@ func (s *Service) Ack(ctx context.Context, userID, deviceID, cursor uint64) erro
 	return err
 }
 
+const maxPushToken = 200
+
+// RegisterPushToken records where to push for the device while it is not
+// connected; an empty token removes the registration.
+func (s *Service) RegisterPushToken(ctx context.Context, userID, deviceID uint64, service pb.PushService, token string) error {
+	if token == "" {
+		_, err := s.db.ExecContext(ctx, `
+			UPDATE device SET push_service = NULL, push_token = NULL
+			WHERE user_id = ? AND device_id = ?`, userID, deviceID)
+		return err
+	}
+	switch service {
+	case pb.PushService_PUSH_SERVICE_APNS, pb.PushService_PUSH_SERVICE_APNS_SANDBOX:
+	default:
+		return apierror.InvalidArgument("unknown push service %v", service)
+	}
+	if len(token) > maxPushToken {
+		return apierror.InvalidArgument("push token is longer than %d bytes", maxPushToken)
+	}
+	_, err := s.db.ExecContext(ctx, `
+		UPDATE device SET push_service = ?, push_token = ?
+		WHERE user_id = ? AND device_id = ?`,
+		service.String(), token, userID, deviceID)
+	return err
+}
+
 // Sync returns events after the cursor, oldest first.
 func (s *Service) Sync(ctx context.Context, userID, cursor uint64, limit uint32) (*pb.SyncResponse, error) {
 	if limit == 0 {

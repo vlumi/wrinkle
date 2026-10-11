@@ -65,6 +65,21 @@ func (c *Client) DeviceDisconnected(ctx context.Context, userID, deviceID uint64
 	return c.rdb.HDel(ctx, presenceKey(userID), strconv.FormatUint(deviceID, 10)).Err()
 }
 
+// ConnectedDevices returns the user's devices that some gateway holds.
+func (c *Client) ConnectedDevices(ctx context.Context, userID uint64) (map[uint64]bool, error) {
+	ids, err := c.rdb.HKeys(ctx, presenceKey(userID)).Result()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uint64]bool, len(ids))
+	for _, id := range ids {
+		if v, err := strconv.ParseUint(id, 10, 64); err == nil {
+			out[v] = true
+		}
+	}
+	return out, nil
+}
+
 func presenceKey(userID uint64) string {
 	return "presence:" + strconv.FormatUint(userID, 10)
 }
