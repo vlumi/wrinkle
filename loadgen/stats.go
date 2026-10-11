@@ -16,6 +16,13 @@ type stats struct {
 	sentInWindow  atomic.Int64
 	groupSent     atomic.Int64 // of sentInWindow, to groups
 	expected      atomic.Int64 // receipts due for sentInWindow
+	// Attachments of messages sent in the window: uploaded by senders,
+	// downloaded, checked and decrypted by receivers.
+	uploads        atomic.Int64
+	uploadErrors   atomic.Int64
+	downloads      atomic.Int64
+	downloadErrors atomic.Int64
+	downloading    atomic.Int64 // in progress, any message
 
 	mu          sync.Mutex
 	windowStart time.Time
@@ -75,4 +82,28 @@ func (s *stats) recordReceipt(sentAt time.Time, latency time.Duration) {
 
 func (s *stats) expectedReceipts() int64 {
 	return s.expected.Load()
+}
+
+// recordUpload counts an attachment upload started at the time, and
+// returns the errors so far.
+func (s *stats) recordUpload(at time.Time, ok bool) int64 {
+	if !ok {
+		return s.uploadErrors.Add(1)
+	}
+	if s.inWindow(at) {
+		s.uploads.Add(1)
+	}
+	return s.uploadErrors.Load()
+}
+
+// recordDownload counts an attachment download of a message sent at the
+// time, and returns the errors so far.
+func (s *stats) recordDownload(sentAt time.Time, ok bool) int64 {
+	if !ok {
+		return s.downloadErrors.Add(1)
+	}
+	if s.inWindow(sentAt) {
+		s.downloads.Add(1)
+	}
+	return s.downloadErrors.Load()
 }

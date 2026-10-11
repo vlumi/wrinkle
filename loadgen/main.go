@@ -15,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	wrinkleclient "github.com/vlumi/wrinkle/clients/go"
 )
 
 type config struct {
@@ -29,6 +31,8 @@ type config struct {
 	markRead       bool
 	groupSize      int
 	groupShare     float64
+	attachShare    float64
+	attachSize     int
 	label          string
 	commit         string
 	out            string
@@ -47,6 +51,8 @@ func main() {
 	flag.BoolVar(&cfg.markRead, "mark-read", false, "receivers mark every message read")
 	flag.IntVar(&cfg.groupSize, "group-size", 8, "users per group, with --group-share")
 	flag.Float64Var(&cfg.groupShare, "group-share", 0, "share of sends that go to the sender's group, 0 to 1; 0 forms no groups")
+	flag.Float64Var(&cfg.attachShare, "attachment-share", 0, "share of sends that carry an attachment, 0 to 1")
+	flag.IntVar(&cfg.attachSize, "attachment-size", 50<<10, "attachment size in bytes, with --attachment-share")
 	flag.StringVar(&cfg.label, "label", "", "free text recorded with the result, such as the backend")
 	flag.StringVar(&cfg.commit, "commit", "", "commit recorded with the result")
 	flag.StringVar(&cfg.out, "out", "", "append the result as a JSON line to this file")
@@ -67,11 +73,21 @@ func run(cfg config) error {
 	if cfg.groupShare > 0 && (cfg.groupSize < 2 || cfg.groupSize > 256 || cfg.groupSize > cfg.connections/cfg.devicesPerUser) {
 		return fmt.Errorf("group-size must be 2 to 256 and at most the number of users")
 	}
+	if cfg.attachShare < 0 || cfg.attachShare > 1 {
+		return fmt.Errorf("attachment-share must be between 0 and 1")
+	}
+	if cfg.attachShare > 0 && (cfg.attachSize < 1 || cfg.attachSize > maxAttachmentSize) {
+		return fmt.Errorf("attachment-size must be 1 to %d bytes", maxAttachmentSize)
+	}
+	blobAddress, err := wrinkleclient.BlobAddress(cfg.url)
+	if err != nil {
+		return err
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	stats := &stats{}
-	devices := newDevices(cfg, stats)
+	devices := newDevices(cfg, blobAddress, stats)
 	fmt.Fprintf(os.Stderr, "signing in %d devices (%d users)\n", cfg.connections, cfg.connections/cfg.devicesPerUser)
 	start := time.Now()
 	signInAll(ctx, devices, cfg.url, cfg.devicesPerUser, stats)
@@ -124,7 +140,7 @@ func run(cfg config) error {
 
 // newDevices makes the devices of users paired into conversations: user
 // 2n talks to user 2n+1.
-func newDevices(cfg config, stats *stats) []*device {
+func newDevices(cfg config, blobAddress string, stats *stats) []*device {
 	devices := make([]*device, 0, cfg.connections)
 	for i := range cfg.connections {
 		user := i / cfg.devicesPerUser
@@ -136,6 +152,9 @@ func newDevices(cfg config, stats *stats) []*device {
 			markRead:        cfg.markRead,
 			directReceivers: int64(cfg.devicesPerUser),
 			groupShare:      cfg.groupShare,
+			attachShare:     cfg.attachShare,
+			attachSize:      cfg.attachSize,
+			blobAddress:     blobAddress,
 		})
 	}
 	return devices
@@ -191,10 +210,11 @@ func openAll(ctx context.Context, devices []*device, stats *stats) []*device {
 	return ready
 }
 
-// waitForReceipts lets messages sent at the end of the window arrive.
+// waitForReceipts lets messages sent at the end of the window arrive, and
+// their attachments download.
 func waitForReceipts(ctx context.Context, stats *stats, grace time.Duration) {
 	deadline := time.Now().Add(grace)
-	for time.Now().Before(deadline) && stats.received.Load() < stats.expectedReceipts() {
+	for time.Now().Before(deadline) && (stats.received.Load() < stats.expectedReceipts() || stats.downloading.Load() > 0) {
 		sleepCtx(ctx, 200*time.Millisecond)
 	}
 }

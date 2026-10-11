@@ -21,11 +21,17 @@ type result struct {
 	MarkRead       bool    `json:"mark_read"`
 	GroupSize      int     `json:"group_size,omitempty"`
 	GroupShare     float64 `json:"group_share,omitempty"`
+	AttachShare    float64 `json:"attachment_share,omitempty"`
+	AttachSize     int     `json:"attachment_size,omitempty"`
 	ConnectErrors  int64   `json:"connect_errors"`
 	Sent           int64   `json:"sent"`
 	GroupSent      int64   `json:"group_sent,omitempty"`
 	SendErrors     int64   `json:"send_errors"`
 	DecryptErrors  int64   `json:"decrypt_errors"`
+	Uploads        int64   `json:"uploads,omitempty"`
+	UploadErrors   int64   `json:"upload_errors,omitempty"`
+	Downloads      int64   `json:"downloads,omitempty"`
+	DownloadErrors int64   `json:"download_errors,omitempty"`
 	Received       int64   `json:"received"`
 	Expected       int64   `json:"expected"`
 	SentRate       float64 `json:"sent_rate"`
@@ -82,6 +88,11 @@ func (s *stats) result(cfg config, before, after sample) result {
 	if cfg.groupShare > 0 {
 		r.GroupSize, r.GroupShare = cfg.groupSize, cfg.groupShare
 	}
+	if cfg.attachShare > 0 {
+		r.AttachShare, r.AttachSize = cfg.attachShare, cfg.attachSize
+		r.Uploads, r.UploadErrors = s.uploads.Load(), s.uploadErrors.Load()
+		r.Downloads, r.DownloadErrors = s.downloads.Load(), s.downloadErrors.Load()
+	}
 	if window > 0 {
 		r.SentRate = float64(r.Sent) / window
 	}
@@ -108,6 +119,10 @@ func (r result) String() string {
 	groups := ""
 	if r.GroupShare > 0 {
 		groups = fmt.Sprintf(" groups of %d: %.0f%% of sends (%d)", r.GroupSize, 100*r.GroupShare, r.GroupSent)
+	}
+	if r.AttachShare > 0 {
+		groups += fmt.Sprintf("\nattachments of %d bytes: %.0f%% of sends, uploads=%d (errors=%d) downloads=%d (errors=%d)",
+			r.AttachSize, 100*r.AttachShare, r.Uploads, r.UploadErrors, r.Downloads, r.DownloadErrors)
 	}
 	return fmt.Sprintf(
 		"connections=%d devices/user=%d target=%.0f/s sent=%d (%.1f/s) errors=%d undecryptable=%d received=%d/%d%s\n"+
