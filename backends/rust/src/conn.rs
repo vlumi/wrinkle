@@ -16,7 +16,7 @@ use futures_util::stream::SplitSink;
 use futures_util::{SinkExt, StreamExt};
 use prost::Message as _;
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{Notify, mpsc, oneshot};
 
 use crate::pb::backend::v1::{AckRequest, CallRequest};
 use crate::pb::v1::{
@@ -218,6 +218,8 @@ pub struct Conn {
     app: Arc<App>,
     link: Arc<Link>,
     binding: Mutex<Binding>,
+    /// Signaled when a Connect is undone, so a retry gets a fresh deadline.
+    unbound: Notify,
     in_flight: AtomicUsize,
     acks: Mutex<Acks>,
 }
@@ -242,6 +244,7 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
         app: app.clone(),
         link: link.clone(),
         binding: Mutex::new(Binding::Pending),
+        unbound: Notify::new(),
         in_flight: AtomicUsize::default(),
         acks: Mutex::default(),
     });
@@ -281,6 +284,12 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
                     link.close(POLICY_VIOLATION, "connect first");
                     break;
                 }
+            }
+            () = conn.unbound.notified() => {
+                connect_deadline
+                    .as_mut()
+                    .reset(tokio::time::Instant::now() + CONNECT_TIMEOUT);
+                awaiting_connect = true;
             }
             _ = &mut writer => {
                 writer_done = true;
@@ -451,7 +460,13 @@ impl Conn {
             match self.attach(device).await {
                 Attach::Bound => {}
                 Attach::Taken => return already_connected(request_id),
-                Attach::Unsubscribed => return services_unavailable(request_id),
+                Attach::Unsubscribed => {
+                    return error(
+                        request_id,
+                        ErrorCode::Unavailable,
+                        "push channel unavailable",
+                    );
+                }
             }
         }
         response
@@ -477,6 +492,7 @@ impl Conn {
             let mut binding = self.binding.lock().unwrap();
             if matches!(*binding, Binding::Bound(_)) {
                 *binding = Binding::Pending;
+                self.unbound.notify_one();
             }
             drop(binding);
             self.app.push.detach(device.user_id, &self.link);
