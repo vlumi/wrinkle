@@ -6,7 +6,7 @@ Wrinkle is a prototype backend for one-to-one text messaging across multiple dev
 
 It is an experiment, not a product. Nothing here is production-hardened.
 
-**Status:** Go and Java backends and Elixir and Rust gateways pass the same conformance tests; the web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements and the four-way comparison are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
+**Status:** Go and Java backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements and the four-way comparison are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
 
 ## How it works
 
@@ -21,6 +21,7 @@ flowchart TB
   devices(["Devices"])
   lb["Load balancer"]
   gw["Gateways"]
+  slb["Load balancer"]
   subgraph services ["Services"]
     conv["Conversation"]
     sync["Sync"]
@@ -33,7 +34,7 @@ flowchart TB
   apns["APNs"]
 
   devices <-- "WebSocket" --> lb <--> gw
-  gw -- "gRPC or in-process" --> services
+  gw -- "gRPC" --> slb --> services
   conv -- "message + outbox" --> convdb
   sync --> userdb
   convdb -- "CDC" --> kafka --> fanout
@@ -46,13 +47,15 @@ flowchart TB
   class devices user
 ```
 
+The diagram shows the split shape, which scales by adding gateways and services instances. A monolith runs the gateway, the services and the fan-out in one process, without the balancers.
+
 Components:
 
-- **Load balancers:** one spreads devices' connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy, in the side-by-side setup.
+- **Load balancers:** one spreads devices' connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy.
 - **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`).
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
 - **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
-- **Fan-out workers:** read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
+- **Fan-out workers:** run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
 - **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.
 - **Presence:** which device is connected to which gateway node, and one push channel per user, in Valkey.
 
@@ -84,7 +87,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters. Plain `make` lists every routine operation, grouped; the common ones:
+Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, and `make tools` once for the code generators and linters. The cluster alone needs only Docker. Plain `make` lists every routine operation, grouped; the common ones:
 
 ```sh
 make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
