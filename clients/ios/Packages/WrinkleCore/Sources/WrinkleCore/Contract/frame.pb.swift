@@ -20,6 +20,22 @@
 // Responses carry the id of the request they answer. Requests may be
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
+//
+// Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
+// of the connection opening; a connection may have 32 requests in flight and
+// send 50 frames a second on average, in bursts of 100. Requests beyond the
+// limits fail with ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them
+// are dropped. The server sends WebSocket pings every 30 seconds and closes
+// a connection it has received nothing on for 90.
+//
+// The server closes a connection with these codes; after any of them, a
+// client reconnects with backoff and syncs:
+//   1001  the server is shutting down or the connection was idle
+//   1003  a text frame
+//   1008  a malformed or unexpected frame, or no Connect in time
+//   1009  a frame over the size limit
+//   1011  an internal error
+//   1013  the client did not keep up with its events
 
 import SwiftProtobuf
 
@@ -56,6 +72,9 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
   /// A dependency is down or overloaded; the client may retry.
   case unavailable // = 6
   case `internal` // = 7
+
+  /// The connection is over its request limits; the client may retry later.
+  case resourceExhausted // = 8
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -72,6 +91,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     case 5: self = .failedPrecondition
     case 6: self = .unavailable
     case 7: self = .internal
+    case 8: self = .resourceExhausted
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -86,6 +106,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     case .failedPrecondition: return 5
     case .unavailable: return 6
     case .internal: return 7
+    case .resourceExhausted: return 8
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -100,6 +121,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     .failedPrecondition,
     .unavailable,
     .internal,
+    .resourceExhausted,
   ]
 
 }
@@ -420,7 +442,7 @@ public nonisolated struct Wrinkle_V1_Pong: Sendable {
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_ErrorCode: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0\u{1}ERROR_CODE_RESOURCE_EXHAUSTED\0")
 }
 
 nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

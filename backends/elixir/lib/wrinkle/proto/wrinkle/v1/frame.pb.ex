@@ -15,6 +15,7 @@ defmodule Wrinkle.V1.ErrorCode do
   field :ERROR_CODE_FAILED_PRECONDITION, 5
   field :ERROR_CODE_UNAVAILABLE, 6
   field :ERROR_CODE_INTERNAL, 7
+  field :ERROR_CODE_RESOURCE_EXHAUSTED, 8
 end
 
 defmodule Wrinkle.V1.Frame do
