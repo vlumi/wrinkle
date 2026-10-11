@@ -163,6 +163,10 @@ The sender's response returns after step 1; everything after it is asynchronous.
 
 `MarkRead` moves the user's read position in the conversation forward, never back, and writes an outbox row like a message; sending a message moves the sender's own position with it. In a direct conversation fan-out appends the read event to both participants' logs: the peer learns the message was read, and the user's other devices learn what was read elsewhere. In a group it goes to the reader and to the senders of the messages the read covers (among the newest 1000 of them), not to every member: each sender learns who has read their messages, which is what the clients show ("read by 2"), and a read costs about one append per sender instead of one per member. Clients get everyone's positions from `GetMembers` when they open a group.
 
+### Deleting a message
+
+A sender deletes their own message for everyone with `DeleteMessage`. The message keeps its seq, since sequences are dense and devices find gaps by them; its content is cleared and `deleted_at` set, in the conversation keyspace, with an outbox row that names the outbox row which carried the message. The fan-out appends a `MessageDeletedEvent` to each member's log and, in the same transaction, rewrites the member's earlier copy of the message (found by that outbox row, through the log's source key) and the conversation list's preview if it was the last message. A device syncing from an old cursor therefore never receives the text. Devices that are not connected get a background push, so the iOS app can withdraw a notification it already showed; nothing guarantees that.
+
 ### Acks
 
 A device acks the cursor it has processed. The gateway writes it to the device's row, at most one write at a time per connection, keeping only the highest cursor that arrived meanwhile. The next Connect returns it, so a device that lost its local state can resume.

@@ -129,6 +129,11 @@ Notes:
 - Profile changes reach direct partners only; a group's member names refresh when a client opens the group.
 - A user deleted right after being added to a group, before the fan-out has put the group in their list, stays a member.
 
+## Deleting messages
+
+- [x] Senders delete their own messages for everyone: a tombstone that keeps the seq, the copies in members' logs and the list preview scrubbed by the fan-out, and a background push so iOS withdraws a notification already shown. Go and Java implement it; both clients delete from a message's menu and show "Message removed".
+- [ ] Editing a message (a replacement body by the same path) and deleting only on one's own devices.
+
 ## Push notifications
 
 - [x] `RegisterPushToken` in the contract; every backend stores the token.
@@ -153,7 +158,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3), deleting one's own messages (#4, done), stickers (#5), end-to-end encryption (#6), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 
