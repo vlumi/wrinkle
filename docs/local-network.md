@@ -45,11 +45,7 @@ The first time each program listens, macOS asks whether to accept incoming conne
 make run-go
 ```
 
-The same backend as a gateway and a services process, the shape the Elixir and Rust gateways use:
-
-```sh
-make run-go-split
-```
+The Go gateway can also run as a separate process beside the Go services, as the Elixir and Rust gateways do; see [Gateways side by side](#gateways-side-by-side).
 
 ### Java
 
@@ -92,10 +88,10 @@ make run-rust
 The gateways can also run at the same time against one services process, each on its own port, so users on different gateways can message each other:
 
 ```sh
-make run-services          # the Go services and fan-out; leave it running
-make run-go-gateway        # in another terminal: ws://<address>:8180/v1/ws
-make run-elixir-gateway    # ws://<address>:8181/v1/ws
-make run-rust-gateway      # ws://<address>:8182/v1/ws
+make run-go-services       # the Go services and fan-out; leave it running
+make run-go-gw             # in another terminal: ws://<address>:8180/v1/ws
+make run-elixir-gw         # ws://<address>:8181/v1/ws
+make run-rust-gw           # ws://<address>:8182/v1/ws
 ```
 
 Stop any `run-*` backend first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.

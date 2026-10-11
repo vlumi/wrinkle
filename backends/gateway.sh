@@ -1,5 +1,5 @@
 #!/bin/bash
-# One gateway against the services process from services.sh. Each language
+# One gateway against a services process (make run-go-services). Each language
 # has its own port, so they can run side by side against the same users.
 # Usage: gateway.sh go|elixir|rust [port]
 set -euo pipefail
@@ -12,7 +12,7 @@ case $lang in
   *) echo "usage: gateway.sh go|elixir|rust [port]" >&2; exit 2 ;;
 esac
 if ! curl -sf http://localhost:8090/healthz >/dev/null; then
-  echo "The services are not running: start them with make run-services first." >&2
+  echo "The services are not running: start them with make run-go-services first." >&2
   exit 1
 fi
 ./ports-free.sh "$port"

@@ -68,8 +68,8 @@ Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 
 
 ```sh
 make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
-make run-go            # a backend on ws://localhost:8080/v1/ws; also run-go-split, run-java, run-elixir, run-rust
-make run-services      # or the gateways side by side: run-go-gateway, run-elixir-gateway, run-rust-gateway, and lb-up
+make run-go            # a backend on ws://localhost:8080/v1/ws; also run-java, run-elixir, run-rust
+make run-go-services   # or the gateways side by side: run-go-gw, run-elixir-gw, run-rust-gw, and lb-up
 make web               # the web client, built and served on port 8081
 make ios-sim           # the iOS app in a simulator; ios-device on a paired iPhone
 make load              # a quick load run against the running backend

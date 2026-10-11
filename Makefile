@@ -58,14 +58,10 @@ reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backen
 ##@ Run a backend (gateway on :8080; one at a time; Ctrl-C stops it)
 ##~ Settings for push and the iOS team come from .env (see .env.example). ARGS=... passes flags.
 
-.PHONY: run-go run-go-split run-java run-elixir run-rust
+.PHONY: run-go run-java run-elixir run-rust
 run-go: build-go  ## Go, all roles in one process
 	backends/ports-free.sh 8080
 	$(GO_BACKEND) $(ARGS)
-
-run-go-split: build-go  ## Go as a gateway and a services process over the internal RPC
-	backends/ports-free.sh 8080 8090 9000
-	backends/go/split.sh $(ARGS)
 
 run-java: build-java  ## Java, all roles in one process
 	backends/ports-free.sh 8080
@@ -80,20 +76,20 @@ run-rust: build-go build-rust  ## Rust gateway, with the Go services beside it
 	backends/rust/run.sh
 
 ##@ Gateways side by side (one services process, a gateway per language on its own port)
-##~ Start run-services first, then any of the gateways in other terminals. PORT=... overrides the port.
+##~ Start run-go-services first, then any of the gateways in other terminals. PORT=... overrides the port.
 
-.PHONY: run-services run-go-gateway run-elixir-gateway run-rust-gateway
-run-services: build-go  ## Go services and fan-out alone, for the gateways below
+.PHONY: run-go-services run-go-gw run-elixir-gw run-rust-gw
+run-go-services: build-go  ## Go services and fan-out alone, for the gateways below
 	backends/ports-free.sh 8090 9000
-	backends/services.sh $(ARGS)
+	backends/go/services.sh $(ARGS)
 
-run-go-gateway: build-go  ## Go gateway on :8180
+run-go-gw: build-go  ## Go gateway on :8180
 	backends/gateway.sh go $(PORT)
 
-run-elixir-gateway: build-elixir  ## Elixir gateway on :8181
+run-elixir-gw: build-elixir  ## Elixir gateway on :8181
 	backends/gateway.sh elixir $(PORT)
 
-run-rust-gateway: build-rust  ## Rust gateway on :8182
+run-rust-gw: build-rust  ## Rust gateway on :8182
 	backends/gateway.sh rust $(PORT)
 
 .PHONY: lb-up lb-down
