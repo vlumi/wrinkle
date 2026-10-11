@@ -27,7 +27,19 @@ export WRINKLE_SERVICES=127.0.0.1:9100 WRINKLE_LISTEN=":$port" WRINKLE_NODE="$no
 echo "$lang gateway on ws://localhost:$port/v1/ws"
 case $lang in
   go) exec ../bin/wrinkle --roles gateway ;;
-  elixir) cd elixir && exec mix run --no-halt ;;
+  elixir)
+    # The VM ignores SIGINT, which would open its break menu; Ctrl-C becomes
+    # SIGTERM, on which the gateway drains.
+    cd elixir
+    ELIXIR_ERL_OPTIONS="+Bi ${ELIXIR_ERL_OPTIONS:-}" mix run --no-halt &
+    vm=$!
+    trap 'kill $vm 2>/dev/null || true' INT TERM
+    status=0
+    wait $vm || status=$?
+    # A signal ends the first wait while the VM is still draining.
+    if kill -0 $vm 2>/dev/null; then wait $vm || status=$?; fi
+    exit $status
+    ;;
   rust) exec rust/target/release/wrinkle ;;
   java) exec java/build/install/wrinkle/bin/wrinkle --roles gateway ;;
 esac

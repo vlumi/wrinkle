@@ -1,21 +1,40 @@
 defmodule Wrinkle.Router do
   @moduledoc "HTTP: the WebSocket endpoint, health and metrics."
   use Plug.Router
+  import Bitwise
 
+  alias Wrinkle.Drain
+
+  @max_frame 64 * 1024
+  # A client frame of 64 KiB has a 14-byte header; Bandit counts it in.
+  @max_frame_header 14
+  # Only a backstop for a closed connection whose peer never completes the
+  # closing handshake: Wrinkle.Keepalive closes idle ones well before.
+  @read_timeout 150_000
+
+  plug(:loopback_debug)
   plug(:match)
   plug(:dispatch)
 
   get "/v1/ws" do
-    conn
-    |> WebSockAdapter.upgrade(Wrinkle.Socket, %{remote: conn.remote_ip},
-      timeout: :infinity,
-      max_frame_size: 65_536
-    )
-    |> halt()
+    if Drain.draining?() do
+      send_resp(conn, 503, "shutting down\n")
+    else
+      conn
+      |> WebSockAdapter.upgrade(Wrinkle.Socket, [],
+        timeout: @read_timeout,
+        max_frame_size: @max_frame + @max_frame_header,
+        max_fragmented_message_size: @max_frame,
+        validate_text_frames: false
+      )
+      |> halt()
+    end
   end
 
   get "/healthz" do
-    send_resp(conn, 200, "ok\n")
+    if Drain.draining?(),
+      do: send_resp(conn, 503, "shutting down\n"),
+      else: send_resp(conn, 200, "ok\n")
   end
 
   get "/metrics" do
@@ -36,6 +55,17 @@ defmodule Wrinkle.Router do
   match _ do
     send_resp(conn, 404, "not found\n")
   end
+
+  defp loopback_debug(%{path_info: ["debug" | _]} = conn, _opts) do
+    if loopback?(conn.remote_ip), do: conn, else: conn |> send_resp(403, "forbidden\n") |> halt()
+  end
+
+  defp loopback_debug(conn, _opts), do: conn
+
+  defp loopback?({127, _, _, _}), do: true
+  defp loopback?({0, 0, 0, 0, 0, 0, 0, 1}), do: true
+  defp loopback?({0, 0, 0, 0, 0, 0xFFFF, high, _}), do: high >>> 8 == 127
+  defp loopback?(_), do: false
 
   # The processes with the longest mailboxes, for finding a bottleneck.
   defp longest_queues(count) do

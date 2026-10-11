@@ -27,19 +27,33 @@ defmodule Wrinkle.Backend do
 
   defp channel, do: :persistent_term.get({__MODULE__, :channel})
 
-  @doc "Handles one request for a device; returns the response as it goes to the device."
+  @doc """
+  Handles one request for a device; returns the response as it goes to the
+  device, or an error when the services fail or take over 10 seconds.
+  """
   def call(user_id, device_id, request) do
     req = %CallRequest{user_id: user_id, device_id: device_id, request: request}
 
-    with {:ok, %{response: response}} <-
-           BackendService.Stub.call(channel(), req, timeout: @timeout) do
-      {:ok, response}
-    end
+    guarded(fn ->
+      with {:ok, %{response: response}} <-
+             BackendService.Stub.call(channel(), req, timeout: @timeout) do
+        {:ok, response}
+      end
+    end)
   end
 
   def ack(user_id, device_id, cursor) do
     req = %AckRequest{user_id: user_id, device_id: device_id, cursor: cursor}
 
-    with {:ok, _} <- BackendService.Stub.ack(channel(), req, timeout: @timeout), do: :ok
+    guarded(fn ->
+      with {:ok, _} <- BackendService.Stub.ack(channel(), req, timeout: @timeout), do: :ok
+    end)
+  end
+
+  # A failure of any kind is an error result, so every request is answered.
+  defp guarded(fun) do
+    fun.()
+  catch
+    kind, reason -> {:error, {kind, reason}}
   end
 end
