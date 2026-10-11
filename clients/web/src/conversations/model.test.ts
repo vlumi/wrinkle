@@ -18,12 +18,16 @@ import {
   inOrder,
   isDeleted,
   preview,
+  STICKER,
+  stickerOf,
   textKey,
   textOf,
   UNDECRYPTABLE,
   unread,
   upsertConversation,
+  withDeleted,
   withMembers,
+  withStickers,
   withTexts,
 } from "./model";
 import type { Data } from "./model";
@@ -308,6 +312,18 @@ test("a sealed message this device cannot open says so", () => {
   const next = withTexts(data, { [textKey(m)]: null });
   expect(textOf(m, next.texts)).toBe(UNDECRYPTABLE);
   expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe(UNDECRYPTABLE);
+});
+
+test("a sticker message shows its sticker, and reads as a sticker in the list", () => {
+  const data = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
+  const m = data.messages[k7]["1"];
+  expect(stickerOf(m, data.stickers)).toBeUndefined();
+  const next = withStickers(data, { [textKey(m)]: "ab12" });
+  expect(stickerOf(m, next.stickers)).toBe("ab12");
+  expect(textOf(m, next.texts)).toBe(STICKER);
+  expect(preview(next.conversations[k7], me, next.users, next.texts)).toBe(STICKER);
+  const deleted = withDeleted(next, c7, 1n);
+  expect(stickerOf(deleted.messages[k7]["1"], deleted.stickers)).toBeUndefined();
 });
 
 test("reaction events, history and a deletion", () => {

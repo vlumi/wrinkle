@@ -8,6 +8,7 @@ import type { MessageInitShape } from "@bufbuild/protobuf";
 import { BackendError } from "../connection/connection";
 import type { Connection } from "../connection/connection";
 import { ContentSchema, ReactionsSchema } from "../gen/wrinkle/v1/content_pb";
+import type { Content } from "../gen/wrinkle/v1/content_pb";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { ReceivedKey } from "../gen/wrinkle/v1/messaging_pb";
 import type { Device, Message, Sealed, SealedSchema } from "../gen/wrinkle/v1/model_pb";
@@ -18,6 +19,9 @@ import type { KeyStore } from "./store";
 
 export type Call = Connection["call"];
 export type SealedInit = MessageInitShape<typeof SealedSchema>;
+/** What a message says: a text or a sticker. */
+export type Body = Exclude<Content["body"], { case: undefined }>;
+export type BodyInit = Exclude<MessageInitShape<typeof ContentSchema>["body"], { case: undefined } | undefined>;
 
 const MAX_KEYS = 500;
 const MAX_USERS = 256;
@@ -269,8 +273,8 @@ export class Keys {
     });
   }
 
-  /** A sealed message's text, or null if this device cannot open it. */
-  async open(m: Message): Promise<string | null> {
+  /** A sealed message's body, or null if this device cannot open it or does not know its kind. */
+  async open(m: Message): Promise<Body | null> {
     if (m.content.case !== "sealed") return null;
     const sealed = m.content.value;
     const key = await this.keyFor(m.conversationId, sealed.epoch);
@@ -283,7 +287,7 @@ export class Keys {
         clientMessageId: m.clientMessageId,
       });
       const content = fromBinary(ContentSchema, plaintext);
-      return content.body.case === "text" ? content.body.value : null;
+      return content.body.case === undefined ? null : content.body;
     } catch {
       return null;
     }
@@ -321,11 +325,11 @@ export class Keys {
     this.states.delete(conversationId);
   }
 
-  /** Seals a text with the conversation's current epoch, making the next epoch first if needed. */
-  async seal(conversationId: Uint8Array, clientMessageId: string, text: string): Promise<SealedInit> {
+  /** Seals a message body with the conversation's current epoch, making the next epoch first if needed. */
+  async seal(conversationId: Uint8Array, clientMessageId: string, body: BodyInit): Promise<SealedInit> {
     const { epoch, key } = await this.locked(hex(conversationId), () => this.current(conversationId));
     const nonce = crypto.randomBytes(crypto.NONCE_BYTES);
-    const plaintext = toBinary(ContentSchema, create(ContentSchema, { body: { case: "text", value: text } }));
+    const plaintext = toBinary(ContentSchema, create(ContentSchema, { body }));
     const ciphertext = await crypto.seal(key, nonce, plaintext, {
       conversationId,
       epoch,

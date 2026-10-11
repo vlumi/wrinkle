@@ -1,5 +1,6 @@
 // A chosen picture made into an avatar: the center square, at most 512
-// pixels a side, encoded under the contract's 512 KiB limit.
+// pixels a side, encoded under the contract's 512 KiB limit. Stickers are
+// drawn the same way.
 
 export const AVATAR_SIDE = 512;
 export const AVATAR_MAX_BYTES = 512 * 1024;
@@ -26,28 +27,46 @@ export function squareCrop(width: number, height: number, max = AVATAR_SIDE): Cr
   };
 }
 
-function encode(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
-  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
-}
-
-/** The picture as an avatar: WebP, or JPEG where the browser cannot encode WebP. */
-export async function preparePicture(file: Blob): Promise<Blob> {
+/** The center square of a chosen picture, drawn at most max pixels a side. */
+export async function squareCanvas(file: Blob, max: number): Promise<HTMLCanvasElement> {
   let image: ImageBitmap;
   try {
     image = await createImageBitmap(file, { imageOrientation: "from-image" });
   } catch {
     throw new Error("That file is not a picture this browser can read.");
   }
-  const { sx, sy, side, size } = squareCrop(image.width, image.height);
+  const { sx, sy, side, size } = squareCrop(image.width, image.height, max);
   if (side === 0) throw new Error("The picture is empty.");
+  const canvas = scaled(image, sx, sy, side, size);
+  image.close();
+  return canvas;
+}
+
+/** A size × size canvas with the source square drawn on it. */
+export function scaled(
+  source: CanvasImageSource,
+  sx: number,
+  sy: number,
+  side: number,
+  size: number,
+): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Pictures cannot be drawn in this browser.");
   ctx.imageSmoothingQuality = "high";
-  ctx.drawImage(image, sx, sy, side, side, 0, 0, size, size);
-  image.close();
+  ctx.drawImage(source, sx, sy, side, side, 0, 0, size, size);
+  return canvas;
+}
+
+export function encode(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+}
+
+/** The picture as an avatar: WebP, or JPEG where the browser cannot encode WebP. */
+export async function preparePicture(file: Blob): Promise<Blob> {
+  const canvas = await squareCanvas(file, AVATAR_SIDE);
   for (const type of ["image/webp", "image/jpeg"]) {
     for (const quality of QUALITIES) {
       const blob = await encode(canvas, type, quality);

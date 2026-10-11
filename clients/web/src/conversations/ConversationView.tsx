@@ -11,12 +11,16 @@ import { FingerprintWarning } from "../e2ee/FingerprintWarning";
 import { Verify } from "../e2ee/Verify";
 import { chips, isEmoji, MAX_OWN, ownEmoji, QUICK, toggled } from "../reactions/model";
 import type { Entry } from "../reactions/model";
-import { inOrder, isDeleted, isUndecryptable, REMOVED, textKey, textOf } from "./model";
-import type { Texts } from "./model";
+import { StickerImage } from "../stickers/StickerImage";
+import { StickerPicker } from "../stickers/StickerPicker";
+import { inOrder, isDeleted, isUndecryptable, REMOVED, stickerOf, textKey, textOf } from "./model";
+import type { Stickers, Texts } from "./model";
 import type { Pending } from "./pending";
 
 /** How close to the end still counts as scrolled to the bottom, in pixels. */
 const BOTTOM_SLACK = 24;
+/** A sticker's side in a conversation, in pixels. */
+const STICKER_SIZE = 144;
 
 export function ConversationView({ id }: { id: string }) {
   const conversation = useSession((s) => s.conversations[id]);
@@ -25,11 +29,15 @@ export function ConversationView({ id }: { id: string }) {
   const members = useSession((s) => s.members[id]);
   const users = useSession((s) => s.users);
   const texts = useSession((s) => s.texts);
+  const stickers = useSession((s) => s.stickers);
+  const palette = useSession((s) => s.palette);
   const reactions = useSession((s) => s.reactions);
   const complete = useSession((s) => s.complete[id]);
   const me = useSession((s) => s.me);
   const show = useSession((s) => s.show);
   const send = useSession((s) => s.send);
+  const sendSticker = useSession((s) => s.sendSticker);
+  const saveSticker = useSession((s) => s.saveSticker);
   const deleteMessage = useSession((s) => s.deleteMessage);
   const react = useSession((s) => s.react);
   const loadEarlier = useSession((s) => s.loadEarlier);
@@ -150,11 +158,15 @@ export function ConversationView({ id }: { id: string }) {
             );
           }
           const mine = sameId(m.senderUserId, me?.userId);
+          const sticker = stickerOf(m, stickers);
           return (
             <MessageItem
               key={m.seq.toString()}
               message={m}
               texts={texts}
+              stickers={stickers}
+              saved={sticker && !mine && palette ? palette.includes(sticker) : undefined}
+              onSave={sticker && !mine && palette ? () => saveSticker(sticker) : undefined}
               mine={mine}
               sender={group && !mine ? (users[hex(m.senderUserId)] ?? null) : undefined}
               receipt={mine ? receipt(m) : ""}
@@ -182,6 +194,10 @@ export function ConversationView({ id }: { id: string }) {
             atBottom.current = true;
             send(text).catch(() => {});
           }}
+          onSticker={(sticker) => {
+            atBottom.current = true;
+            sendSticker(sticker).catch(() => {});
+          }}
         />
       )}
     </section>
@@ -191,6 +207,9 @@ export function ConversationView({ id }: { id: string }) {
 function MessageItem({
   message: m,
   texts,
+  stickers,
+  saved,
+  onSave,
   mine,
   sender,
   receipt,
@@ -202,6 +221,10 @@ function MessageItem({
 }: {
   message: Message;
   texts: Texts;
+  stickers: Stickers;
+  /** For others' stickers: whether the sticker is in the user's palette. */
+  saved?: boolean;
+  onSave?: () => Promise<void>;
   mine: boolean;
   /** In groups, others' messages show who sent them; null for a sender not known yet. */
   sender?: User | null;
@@ -220,6 +243,7 @@ function MessageItem({
   const [failed, setFailed] = useState(false);
   const [picking, setPicking] = useState(false);
   const [reactFailed, setReactFailed] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const shown = chips(reactions, me);
   const own = ownEmoji(reactions, me);
   const toggle = (emoji: string) => {
@@ -229,7 +253,15 @@ function MessageItem({
   };
   const removed = isDeleted(m);
   const undecryptable = isUndecryptable(m, texts);
-  const classes = ["message", mine && "mine", removed && "removed", undecryptable && "undecryptable", open && "open"]
+  const sticker = stickerOf(m, stickers);
+  const classes = [
+    "message",
+    mine && "mine",
+    sticker && "sticker",
+    removed && "removed",
+    undecryptable && "undecryptable",
+    open && "open",
+  ]
     .filter(Boolean)
     .join(" ");
   return (
@@ -245,7 +277,32 @@ function MessageItem({
           <span className="sender-name">{sender ? displayName(sender) : "…"}</span>
         </span>
       )}
-      <span className="text">{removed ? REMOVED : textOf(m, texts)}</span>
+      {sticker ? (
+        <span className="text">
+          <StickerImage id={sticker} size={STICKER_SIZE} />
+        </span>
+      ) : (
+        <span className="text">{removed ? REMOVED : textOf(m, texts)}</span>
+      )}
+      {saved !== undefined &&
+        (saved ? (
+          <span className="sticker-saved" data-testid="sticker-saved">
+            Saved
+          </span>
+        ) : (
+          <button
+            className="sticker-save"
+            data-testid="save-sticker"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSaveFailed(false);
+              onSave?.().catch(() => setSaveFailed(true));
+            }}
+          >
+            Save to palette
+          </button>
+        ))}
+      {saveFailed && <span className="reaction-error">Could not save. Is your palette full?</span>}
       {shown.length > 0 && (
         <span className="reactions">
           {shown.map((c) => (
@@ -389,40 +446,62 @@ function ReactionPicker({ own, onPick }: { own: string[]; onPick(emoji: string):
 
 function PendingItem({ pending: p }: { pending: Pending }) {
   return (
-    <li className="message mine pending" data-testid="pending">
-      <span className="text">{p.text}</span>
+    <li className={p.sticker ? "message mine sticker pending" : "message mine pending"} data-testid="pending">
+      <span className="text">{p.sticker ? <StickerImage id={p.sticker} size={STICKER_SIZE} /> : p.text}</span>
       <span className="meta">{p.failed ? "failed" : "sending…"}</span>
     </li>
   );
 }
 
-function Composer({ onSend }: { onSend(text: string): void }) {
+function Composer({ onSend, onSticker }: { onSend(text: string): void; onSticker(id: string): void }) {
   const [text, setText] = useState("");
+  const [picking, setPicking] = useState(false);
 
   return (
-    <form
-      className="composer"
-      onSubmit={(e) => {
-        e.preventDefault();
-        const t = text.trim();
-        if (!t) return;
-        setText("");
-        onSend(t);
-      }}
-    >
-      <input
-        data-testid="text"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="Message"
-        maxLength={4000}
-        autoComplete="off"
-        enterKeyHint="send"
-      />
-      <button type="submit" disabled={!text.trim()}>
-        Send
-      </button>
-    </form>
+    <>
+      {picking && (
+        <StickerPicker
+          onPick={(id) => {
+            setPicking(false);
+            onSticker(id);
+          }}
+          onClose={() => setPicking(false)}
+        />
+      )}
+      <form
+        className="composer"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const t = text.trim();
+          if (!t) return;
+          setText("");
+          onSend(t);
+        }}
+      >
+        <button
+          type="button"
+          className="sticker-button secondary"
+          data-testid="stickers"
+          aria-label="Stickers"
+          aria-expanded={picking}
+          onClick={() => setPicking(!picking)}
+        >
+          ☺
+        </button>
+        <input
+          data-testid="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Message"
+          maxLength={4000}
+          autoComplete="off"
+          enterKeyHint="send"
+        />
+        <button type="submit" disabled={!text.trim()}>
+          Send
+        </button>
+      </form>
+    </>
   );
 }
 

@@ -7,6 +7,8 @@ import { key } from "./model";
 export interface Pending {
   clientMessageId: string;
   text: string;
+  /** A sticker's id in hex, for a sticker message. */
+  sticker?: string;
   failed?: boolean;
 }
 

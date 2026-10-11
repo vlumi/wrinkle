@@ -674,6 +674,132 @@ button:disabled {
   font-size: 13px;
 }
 
+/* Stickers: shown without a bubble, at a fixed size. */
+
+.message.sticker {
+  padding: 0;
+  background: transparent;
+}
+
+.sticker-image {
+  display: block;
+  object-fit: contain;
+}
+
+.sticker-image.missing {
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+}
+
+.message.sticker .meta {
+  padding: 0 4px;
+}
+
+.sticker-save,
+.sticker-saved {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+}
+
+.sticker-save {
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background: var(--panel);
+}
+
+.sticker-saved {
+  color: var(--muted);
+}
+
+.sticker-picker {
+  display: grid;
+  gap: 8px;
+  max-height: 40dvh;
+  padding: 8px calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px);
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.sticker-picker .hint {
+  margin: 0;
+}
+
+.sticker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+}
+
+.sticker-grid button {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border-radius: 12px;
+  background: transparent;
+}
+
+.sticker-grid button:hover,
+.sticker-grid button:focus-visible {
+  background: var(--theirs);
+}
+
+.sticker-picker-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sticker-picker-actions button {
+  padding: 4px 12px;
+  font-size: 13px;
+}
+
+.composer .sticker-button {
+  padding: 0 12px;
+  font-size: 20px;
+}
+
+.palette-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.palette-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+}
+
+.palette-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.palette-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.palette-actions button {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+
 .composer {
   display: flex;
   gap: 8px;

@@ -22,11 +22,13 @@ import {
   isDeleted,
   key,
   noteLatest,
+  STICKER,
   textKey,
   unread,
   upsertConversation,
   withDeleted,
   withMembers,
+  withStickers,
   withTexts,
   withUsers,
 } from "../conversations/model";
@@ -36,7 +38,7 @@ import type { PendingByConversation } from "../conversations/pending";
 import { deviceLabel, sortDevices, withDevice } from "../devices/model";
 import { available } from "../e2ee/crypto";
 import { Keys } from "../e2ee/keys";
-import type { Call } from "../e2ee/keys";
+import type { BodyInit, Call } from "../e2ee/keys";
 import { deleteStore, openStore, storeName } from "../e2ee/store";
 import type { KeyStore } from "../e2ee/store";
 import { loadVerified, saveVerified } from "../e2ee/verified";
@@ -45,6 +47,7 @@ import { isFormer, isGroup, noticeUsers } from "../groups/model";
 import { fromHex, hex, sameId } from "../ids";
 import { cleaned, ownEmoji, toggled, withOpened, withReaction } from "../reactions/model";
 import { rememberGateway } from "../signin/gateways";
+import { moved, withoutSticker, withSaved } from "../stickers/model";
 import { saved } from "./saved";
 import type { Credentials } from "./saved";
 
@@ -85,6 +88,8 @@ export interface Session extends Data {
   newDevice: NewDevice | null;
   /** What changed about the account's encryption, until dismissed. */
   securityNotice: string | null;
+  /** The user's saved stickers, ids in hex in the user's order, once loaded. */
+  palette: string[] | null;
   /** Reconnects with the saved credentials, if any. */
   resume(): void;
   /** Registers or signs in, then connects; rejects with the backend's error. */
@@ -112,6 +117,14 @@ export interface Session extends Data {
   showSettings(open: boolean): void;
   loadEarlier(): Promise<void>;
   send(text: string): Promise<void>;
+  /** Sends a sticker, by its id in hex, to the current conversation. */
+  sendSticker(stickerId: string): Promise<void>;
+  /** Uploads a prepared picture as a new sticker, which the backend saves to the palette. */
+  createSticker(picture: Blob): Promise<void>;
+  saveSticker(stickerId: string): Promise<void>;
+  removeSticker(stickerId: string): Promise<void>;
+  /** Moves a saved sticker before another, or to the end when before is empty. */
+  moveSticker(stickerId: string, before: string): Promise<void>;
   /** Deletes one of the user's own messages in the current conversation, for everyone. */
   deleteMessage(seq: bigint): Promise<void>;
   /** Adds the emoji to the user's reactions to a message in the current conversation, or removes it if there. */
@@ -171,6 +184,7 @@ const blank = {
   verified: {},
   newDevice: null,
   securityNotice: null,
+  palette: null,
 } satisfies Partial<Session>;
 
 const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
@@ -254,8 +268,10 @@ export const useSession = create<Session>((set, get) => {
       if (opening.has(t) || (known !== undefined && !(again && known === null))) continue;
       opening.add(t);
       k.open(m)
-        .then((text) => {
-          if (keys === k && (text !== null || get().texts[t] == null)) set(withTexts(get(), { [t]: text }));
+        .then((body) => {
+          if (keys !== k || (body === null && get().texts[t] != null)) return;
+          if (body?.case === "sticker") set(withStickers(get(), { [t]: hex(body.value.stickerId) }));
+          else set(withTexts(get(), { [t]: body?.case === "text" ? body.value : null }));
         })
         .catch(() => {
           // Not reachable now: tried again on the next look.
@@ -410,6 +426,7 @@ export const useSession = create<Session>((set, get) => {
     }
     set({ me: resp.user ?? null, status: "connected", error: null });
     if (!(await startKeys(credentials))) return;
+    refreshPalette().catch(fail);
     await refreshConversations();
     await syncFromCursor();
     const current = get().current;
@@ -427,6 +444,67 @@ export const useSession = create<Session>((set, get) => {
     set({ conversations: data.conversations, users: data.users });
     for (const c of resp.conversations) learnSender(key(c.conversationId));
     openLatest();
+  }
+
+  async function refreshPalette() {
+    if (!conn) return;
+    const resp = await conn.call("getPalette", { case: "getPalette", value: {} });
+    set({ palette: resp.stickers.map((st) => hex(st.stickerId)) });
+  }
+
+  /** Uploads a blob for the purpose; resolves with its id. */
+  async function upload(purpose: BlobPurpose, blob: Blob): Promise<Uint8Array> {
+    const c = conn;
+    const address = c && blobAddress(c.url);
+    if (!c || !address) throw new Error("not connected");
+    const u = await c.call("createUpload", {
+      case: "createUpload",
+      value: { purpose, mediaType: blob.type, size: BigInt(blob.size) },
+    });
+    // The browser sets Content-Length from the body, which is the size asked for.
+    const resp = await fetch(address + u.uploadPath, {
+      method: "PUT",
+      headers: { "Content-Type": blob.type },
+      body: blob,
+    });
+    if (!resp.ok) throw new Error(`The upload failed (HTTP ${resp.status}).`);
+    return u.blobId;
+  }
+
+  /** Seals and sends a message to the current conversation, shown pending until confirmed. */
+  async function sendBody(body: BodyInit, text: string, sticker?: string) {
+    const id = get().current;
+    if (!id || !conn) return;
+    const clientMessageId = newMessageId();
+    set({ pending: addPending(get().pending, id, { clientMessageId, text, sticker }) });
+    try {
+      const conversationId = fromHex(id);
+      let resp;
+      for (let attempt = 1; ; attempt++) {
+        if (!keys?.ready) throw new Error(available() ? "Encryption is not ready yet." : NO_CRYPTO);
+        const sealed = await keys.seal(conversationId, clientMessageId, body);
+        try {
+          resp = await call("sendMessage", {
+            case: "sendMessage",
+            value: { conversationId, clientMessageId, sealed },
+          });
+          break;
+        } catch (err) {
+          // Another device made a newer epoch, or the members changed: look again, once.
+          if (attempt > 1 || !(err instanceof BackendError) || err.code !== ErrorCode.FAILED_PRECONDITION) throw err;
+          keys.invalidate(id);
+        }
+      }
+      const m = resp.message;
+      if (!m) return;
+      const t = textKey(m);
+      const sent = noteLatest(addMessages(get(), m.conversationId, [m]), m, true);
+      const data = sticker ? withStickers(sent, { [t]: sticker }) : withTexts(sent, { [t]: text });
+      set({ ...data, pending: confirmPending(get().pending, m.conversationId, m.clientMessageId) });
+    } catch (err) {
+      set({ pending: failPending(get().pending, id, clientMessageId) });
+      throw err;
+    }
   }
 
   /** Groups listing members right now, so each is asked once at a time. */
@@ -481,6 +559,10 @@ export const useSession = create<Session>((set, get) => {
     if (!me) return;
     if (event.body.case === "profile" && sameId(event.body.value.user?.userId, me.userId)) {
       set({ me: event.body.value.user ?? me });
+      return;
+    }
+    if (event.body.case === "palette") {
+      set({ palette: event.body.value.stickerIds.map(hex) });
       return;
     }
     if (event.body.case === "device") {
@@ -602,21 +684,8 @@ export const useSession = create<Session>((set, get) => {
     },
 
     async setPicture(picture) {
-      const c = conn;
-      const address = c && blobAddress(c.url);
-      if (!c || !address) throw new Error("not connected");
-      const upload = await c.call("createUpload", {
-        case: "createUpload",
-        value: { purpose: BlobPurpose.AVATAR, mediaType: picture.type, size: BigInt(picture.size) },
-      });
-      // The browser sets Content-Length from the body, which is the size asked for.
-      const resp = await fetch(address + upload.uploadPath, {
-        method: "PUT",
-        headers: { "Content-Type": picture.type },
-        body: picture,
-      });
-      if (!resp.ok) throw new Error(`The upload failed (HTTP ${resp.status}).`);
-      await get().updateProfile({ avatar: upload.blobId });
+      const avatar = await upload(BlobPurpose.AVATAR, picture);
+      await get().updateProfile({ avatar });
     },
 
     async changePassword(current, next) {
@@ -741,37 +810,41 @@ export const useSession = create<Session>((set, get) => {
       await loadHistory(id, oldest);
     },
 
-    async send(text) {
-      const id = get().current;
-      if (!id || !conn) return;
-      const clientMessageId = newMessageId();
-      set({ pending: addPending(get().pending, id, { clientMessageId, text }) });
-      try {
-        const conversationId = fromHex(id);
-        let resp;
-        for (let attempt = 1; ; attempt++) {
-          if (!keys?.ready) throw new Error(available() ? "Encryption is not ready yet." : NO_CRYPTO);
-          const sealed = await keys.seal(conversationId, clientMessageId, text);
-          try {
-            resp = await call("sendMessage", {
-              case: "sendMessage",
-              value: { conversationId, clientMessageId, sealed },
-            });
-            break;
-          } catch (err) {
-            // Another device made a newer epoch, or the members changed: look again, once.
-            if (attempt > 1 || !(err instanceof BackendError) || err.code !== ErrorCode.FAILED_PRECONDITION) throw err;
-            keys.invalidate(id);
-          }
-        }
-        const m = resp.message;
-        if (!m) return;
-        const data = withTexts(noteLatest(addMessages(get(), m.conversationId, [m]), m, true), { [textKey(m)]: text });
-        set({ ...data, pending: confirmPending(get().pending, m.conversationId, m.clientMessageId) });
-      } catch (err) {
-        set({ pending: failPending(get().pending, id, clientMessageId) });
-        throw err;
-      }
+    send(text) {
+      return sendBody({ case: "text", value: text }, text);
+    },
+
+    sendSticker(stickerId) {
+      return sendBody({ case: "sticker", value: { stickerId: fromHex(stickerId) } }, STICKER, stickerId);
+    },
+
+    async createSticker(picture) {
+      const blobId = await upload(BlobPurpose.STICKER, picture);
+      await call("createSticker", { case: "createSticker", value: { blobId } });
+      // The palette event follows; showing it now does not wait for it.
+      const palette = get().palette;
+      if (palette) set({ palette: withSaved(palette, hex(blobId)) });
+    },
+
+    async saveSticker(stickerId) {
+      await call("saveSticker", { case: "saveSticker", value: { stickerId: fromHex(stickerId) } });
+      const palette = get().palette;
+      if (palette) set({ palette: withSaved(palette, stickerId) });
+    },
+
+    async removeSticker(stickerId) {
+      await call("removeSticker", { case: "removeSticker", value: { stickerId: fromHex(stickerId) } });
+      const palette = get().palette;
+      if (palette) set({ palette: withoutSticker(palette, stickerId) });
+    },
+
+    async moveSticker(stickerId, before) {
+      await call("moveSticker", {
+        case: "moveSticker",
+        value: { stickerId: fromHex(stickerId), beforeStickerId: fromHex(before) },
+      });
+      const palette = get().palette;
+      if (palette) set({ palette: moved(palette, stickerId, before) });
     },
 
     async deleteMessage(seq) {

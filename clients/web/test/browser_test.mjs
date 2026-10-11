@@ -5,7 +5,8 @@
 // out from the first, delete an account, reload, sign out and in again;
 // then three users in a group: members added, messages, a topic change,
 // read counts and a removal, after which the group has a new key epoch.
-// Reactions in both, toggled on and off. Every message and reaction is end-to-end encrypted.
+// Reactions in both, toggled on and off; a sticker made, sent, saved, and
+// the palette reordered. Every message and reaction is end-to-end encrypted.
 // Needs the page served at WEB_URL and a backend behind it; run.sh
 // arranges both. No dependencies beyond Node and Chrome.
 import { spawn } from "node:child_process";
@@ -747,6 +748,106 @@ await gina.waitFor(fromSender(hankName, "hank still here"));
 check((await gina.eval(epochOf("hank still here"))) === after, "hank replies in the new epoch");
 await sleep(500);
 check(await ivy.eval(`${qa("message")}.length === 3`), "ivy gets no messages after her removal");
+
+// Stickers: Gina makes one from a picture and sends it; Hank sees it, saves
+// it, makes one of his own, and reorders and removes them in his palette.
+/** Chooses a width × height picture, two colors, in the file input. */
+const choosePicture = (testid, width, height, colors) => `new Promise((resolve) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = ${width};
+  canvas.height = ${height};
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = ${JSON.stringify(colors[0])};
+  ctx.fillRect(0, 0, ${width}, ${height});
+  ctx.fillStyle = ${JSON.stringify(colors[1])};
+  ctx.beginPath();
+  ctx.arc(${width / 2}, ${height / 2}, ${Math.min(width, height) / 3}, 0, 2 * Math.PI);
+  ctx.fill();
+  canvas.toBlob((blob) => {
+    const input = ${q(testid)};
+    const files = new DataTransfer();
+    files.items.add(new File([blob], "sticker.png", { type: "image/png" }));
+    input.files = files.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    resolve(true);
+  }, "image/png");
+})`;
+const paletteOrder = `${qa("palette-item")}.map(li => li.dataset.sticker).join(",")`;
+/** The sticker message showing the sticker, loaded at the given natural side. */
+const stickerShown = (id, side) =>
+  `${qa("message")}.some(li => { const img = li.querySelector('.sticker-image[data-sticker="' + ${JSON.stringify(id)} + '"]'); return li.classList.contains("sticker") && !!img && img.complete && img.naturalWidth === ${side} && img.src === "http://wrinkle.test:9200/blobs/" + ${JSON.stringify(id)}; })`;
+const stickerMessage = (id) =>
+  `${qa("message")}.find(li => !!li.querySelector('.sticker-image[data-sticker="' + ${JSON.stringify(id)} + '"]'))`;
+
+await gina.eval(click('[data-testid="open-settings"]'));
+await gina.waitFor(`!!${q("new-sticker")} && !${q("palette")}`);
+await gina.eval(choosePicture("sticker-input", 800, 600, ["#fc3", "#c33"]));
+await gina.waitFor(`${text("palette-done")}?.startsWith("Sticker made") && ${qa("palette-item")}.length === 1`);
+const ginaSticker = await gina.eval(`${qa("palette-item")}[0].dataset.sticker`);
+check(/^[0-9a-f]{32}$/.test(ginaSticker), "gina made a sticker from a picture; it is saved to her palette");
+check(await gina.eval(noOverflow), "the palette fits the phone's width");
+await gina.eval(click('[data-testid="close-settings"]'));
+await gina.waitFor(`${text("topic")} === ${JSON.stringify(topic2)}`);
+await gina.eval(click('[data-testid="stickers"]'));
+await gina.waitFor(`${qa("pick-sticker")}.length === 1`);
+await gina.eval(click('[data-testid="pick-sticker"]'));
+await gina.waitFor(stickerShown(ginaSticker, 512) + ` && !${q("sticker-picker")}`);
+check(
+  await gina.eval(`!${stickerMessage(ginaSticker)}.querySelector('[data-testid="save-sticker"]')`),
+  "gina sent the sticker from her palette; it shows at 512 × 512, without a save action on her own",
+);
+await hank.waitFor(stickerShown(ginaSticker, 512));
+check(
+  (await hank.eval(`${stickerMessage(ginaSticker)}.querySelector(".sticker-image").getBoundingClientRect().width`)) ===
+    144,
+  "hank sees gina's sticker, at a fixed size",
+);
+await hank.waitFor(
+  `[...document.querySelectorAll(".row")].some(r => r.querySelector(".last").textContent === ${JSON.stringify(`${ginaName}: Sticker`)})`,
+);
+check(true, "hank's list previews it as a sticker");
+await hank.eval(click('[data-testid="stickers"]'));
+await hank.waitFor(`!!${q("palette-empty")}`);
+check(true, "hank's palette is empty and says how to add stickers");
+await hank.eval(click('[data-testid="stickers"]'));
+await hank.eval(`(${stickerMessage(ginaSticker)}.querySelector('[data-testid="save-sticker"]').click(), true)`);
+await hank.waitFor(
+  `${stickerMessage(ginaSticker)}.querySelector('[data-testid="sticker-saved"]')?.textContent === "Saved"`,
+);
+check(true, "hank saved gina's sticker to his palette");
+await hank.eval(click('[data-testid="stickers"]'));
+await hank.waitFor(
+  `${qa("pick-sticker")}.length === 1 && ${qa("pick-sticker")}[0].dataset.sticker === ${JSON.stringify(ginaSticker)}`,
+);
+await hank.eval(click('[data-testid="edit-palette"]'));
+await hank.waitFor(`${paletteOrder} === ${JSON.stringify(ginaSticker)}`);
+check(true, "the picker lists it, and leads to the palette in settings");
+await hank.eval(choosePicture("sticker-input", 300, 400, ["#36c", "#fff"]));
+await hank.waitFor(`${qa("palette-item")}.length === 2`);
+const hankSticker = await hank.eval(`${qa("palette-item")}[1].dataset.sticker`);
+check(
+  await hank.eval(`${qa("palette-item")}[1].querySelector("img").naturalWidth === 300`),
+  "hank made a sticker of a small picture; it is kept at its size, at the end of his palette",
+);
+await hank.eval(`(${qa("palette-item")}[1].querySelector('[data-testid="sticker-up"]').click(), true)`);
+await hank.waitFor(`${paletteOrder} === ${JSON.stringify(`${hankSticker},${ginaSticker}`)}`);
+check(true, "hank moved his sticker up");
+await hank.eval(`(${qa("palette-item")}[1].querySelector('[data-testid="remove-sticker"]').click(), true)`);
+await hank.waitFor(`${paletteOrder} === ${JSON.stringify(hankSticker)}`);
+check(true, "hank removed gina's sticker from his palette");
+// The palette comes back from the backend in the order left.
+await hank.send("Page.reload");
+await sleep(1500);
+await hank.waitFor(`${text("status")} === "online"`);
+await hank.eval(click('[data-testid="open-settings"]'));
+await hank.waitFor(`${paletteOrder} === ${JSON.stringify(hankSticker)}`);
+await hank.eval(click('[data-testid="close-settings"]'));
+await hank.eval(click(".row"));
+await hank.waitFor(
+  stickerShown(ginaSticker, 512) +
+    ` && !!${stickerMessage(ginaSticker)}?.querySelector('[data-testid="save-sticker"]')`,
+);
+check(true, "after a reload the palette is as hank left it, and gina's sticker can be saved again");
 for (const p of [gina, hank, ivy]) {
   check(await p.eval(`!${q("error")}`), `${p.name} saw no error banner`);
 }

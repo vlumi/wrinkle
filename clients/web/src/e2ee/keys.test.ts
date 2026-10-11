@@ -11,7 +11,7 @@ import { DeviceSchema, MessageSchema } from "../gen/wrinkle/v1/model_pb";
 import { hex, sameId } from "../ids";
 import type { DeviceRef } from "./crypto";
 import { deviceId, Keys, needsEpoch } from "./keys";
-import type { Call } from "./keys";
+import type { BodyInit, Call } from "./keys";
 import { memoryStore } from "./store";
 
 interface Wrap {
@@ -137,9 +137,9 @@ const alice = user(1),
 const conversation = user(9);
 let seq = 0n;
 
-async function send(from: Keys, text: string): Promise<Message> {
+async function send(from: Keys, text: string, body: BodyInit = { case: "text", value: text }): Promise<Message> {
   const clientMessageId = `m${++seq}`;
-  const sealed = await from.seal(conversation, clientMessageId, text);
+  const sealed = await from.seal(conversation, clientMessageId, body);
   return create(MessageSchema, {
     conversationId: conversation,
     seq,
@@ -149,6 +149,12 @@ async function send(from: Keys, text: string): Promise<Message> {
   });
 }
 
+/** The text of a message as the device opens it, or null. */
+async function opened(k: Keys, m: Message): Promise<string | null> {
+  const body = await k.open(m);
+  return body?.case === "text" ? body.value : null;
+}
+
 test("the first send makes epoch 1, which the other side opens", async () => {
   const b = new Backend();
   b.conversation(conversation, [alice, bob]);
@@ -156,12 +162,24 @@ test("the first send makes epoch 1, which the other side opens", async () => {
   const b1 = await b.device(bob, 21n);
   const m = await send(a1, "hello");
   expect(m.content.case === "sealed" && m.content.value.epoch).toBe(1);
-  expect(await b1.open(m)).toBe("hello");
-  expect(await a1.open(m)).toBe("hello");
+  expect(await opened(b1, m)).toBe("hello");
+  expect(await opened(a1, m)).toBe("hello");
   // Replies use the same epoch while nothing changes.
   const r = await send(b1, "hi");
   expect(r.content.case === "sealed" && r.content.value.epoch).toBe(1);
-  expect(await a1.open(r)).toBe("hi");
+  expect(await opened(a1, r)).toBe("hi");
+});
+
+test("a sticker is sealed content too", async () => {
+  const b = new Backend();
+  b.conversation(conversation, [alice, bob]);
+  const a1 = await b.device(alice, 11n);
+  const b1 = await b.device(bob, 21n);
+  const stickerId = user(7);
+  const m = await send(a1, "", { case: "sticker", value: { stickerId } });
+  const body = await b1.open(m);
+  expect(body?.case).toBe("sticker");
+  expect(body?.case === "sticker" && hex(body.value.stickerId)).toBe(hex(stickerId));
 });
 
 test("content moved to another message does not open", async () => {
@@ -170,8 +188,8 @@ test("content moved to another message does not open", async () => {
   const a1 = await b.device(alice, 11n);
   const b1 = await b.device(bob, 21n);
   const m = await send(a1, "hello");
-  expect(await b1.open({ ...m, clientMessageId: "other" })).toBeNull();
-  expect(await b1.open({ ...m, senderUserId: bob })).toBeNull();
+  expect(await opened(b1, { ...m, clientMessageId: "other" })).toBeNull();
+  expect(await opened(b1, { ...m, senderUserId: bob })).toBeNull();
 });
 
 test("a new device opens nothing until another device of its user shares the history", async () => {
@@ -180,20 +198,20 @@ test("a new device opens nothing until another device of its user shares the his
   const a1 = await b.device(alice, 11n);
   const b1 = await b.device(bob, 21n);
   const m = await send(a1, "before");
-  expect(await b1.open(m)).toBe("before");
+  expect(await opened(b1, m)).toBe("before");
   const b2 = await b.device(bob, 22n);
-  expect(await b2.open(m)).toBeNull();
+  expect(await opened(b2, m)).toBeNull();
   const event = create(DeviceSchema, { deviceId: 22n, publicKey: b.keys.get(deviceId(bob, 22n)) }) as Device;
   expect(b1.deviceChanged(bob, event, false)).toBe(true);
   expect(await b1.share({ deviceId: 22n, publicKey: event.publicKey })).toBe(1);
   await b1.markKnown(22n);
   expect(b1.deviceChanged(bob, event, false)).toBe(false);
   b2.retry(hex(conversation));
-  expect(await b2.open(m)).toBe("before");
+  expect(await opened(b2, m)).toBe("before");
   // The shared current epoch already covers the new device: no new epoch.
   const next = await send(a1, "after");
   expect(next.content.case === "sealed" && next.content.value.epoch).toBe(1);
-  expect(await b2.open(next)).toBe("after");
+  expect(await opened(b2, next)).toBe("after");
 });
 
 test("a new device of a member, or a membership change, makes a new epoch", async () => {
@@ -213,9 +231,9 @@ test("a new device of a member, or a membership change, makes a new epoch", asyn
   a1.invalidate(hex(conversation));
   const three = await send(a1, "three");
   expect(three.content.case === "sealed" && three.content.value.epoch).toBe(3);
-  expect(await b1.open(three)).toBe("three");
-  expect(await c1.open(three)).toBeNull();
-  expect(await c1.open(two)).toBe("two");
+  expect(await opened(b1, three)).toBe("three");
+  expect(await opened(c1, three)).toBeNull();
+  expect(await opened(c1, two)).toBe("two");
 });
 
 test("two devices racing for the next epoch both end up sealing with the winner's", async () => {
@@ -227,8 +245,8 @@ test("two devices racing for the next epoch both end up sealing with the winner'
   const [x, y] = await Promise.all([send(a1, "x"), send(b1, "y")]);
   const epochs = [x, y].map((m) => (m.content.case === "sealed" ? m.content.value.epoch : 0));
   expect(epochs).toEqual([1, 1]);
-  expect(await a1.open(y)).toBe("y");
-  expect(await b1.open(x)).toBe("x");
+  expect(await opened(a1, y)).toBe("y");
+  expect(await opened(b1, x)).toBe("x");
 });
 
 test("a key wrapped under a sender key the directory does not know is refused", async () => {
@@ -238,7 +256,7 @@ test("a key wrapped under a sender key the directory does not know is refused", 
   const b1 = await b.device(bob, 21n);
   const m = await send(a1, "hello");
   b.forge = new Uint8Array(32).fill(7);
-  expect(await b1.open(m)).toBeNull();
+  expect(await opened(b1, m)).toBeNull();
 });
 
 test("an epoch is needed with none yet, on rotate, without the key, or when the devices differ", () => {

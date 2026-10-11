@@ -3,6 +3,7 @@ import { errorText } from "../connection/connection";
 import { Devices } from "../devices/Devices";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { useSession } from "../session/session";
+import { Palette } from "../stickers/Palette";
 import { Avatar } from "./Avatar";
 import { ICONS } from "./icons";
 import { preparePicture } from "./picture";
@@ -29,6 +30,7 @@ export function Settings({ onClose }: { onClose(): void }) {
         <NameForm current={me?.name ?? ""} />
         <PictureForm hasPicture={(me?.avatar.length ?? 0) > 0} />
         <IconPicker current={me?.icon ?? ""} />
+        <Palette />
         <PasswordForm />
         <Devices />
         <button className="signout" data-testid="signout" onClick={() => signOut()}>

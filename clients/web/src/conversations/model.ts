@@ -31,10 +31,13 @@ export interface Data {
   users: Users;
   /** Sealed messages' texts as this device opened them, by textKey; null for those it cannot open. */
   texts: Texts;
+  /** Opened messages that are stickers, by textKey: the sticker's id in hex. Their text is STICKER. */
+  stickers: Stickers;
   reactions: Reactions;
 }
 
 export type Texts = Record<string, string | null>;
+export type Stickers = Record<string, string>;
 
 export const emptyData = (): Data => ({
   conversations: {},
@@ -42,6 +45,7 @@ export const emptyData = (): Data => ({
   members: {},
   users: {},
   texts: {},
+  stickers: {},
   reactions: {},
 });
 
@@ -65,6 +69,22 @@ export const isUndecryptable = (m: Message, texts: Texts): boolean =>
 /** Records opened texts. */
 export function withTexts(data: Data, texts: Texts): Data {
   return Object.keys(texts).length === 0 ? data : { ...data, texts: { ...data.texts, ...texts } };
+}
+
+/** What a sticker message reads as, as in the list's preview. */
+export const STICKER = "Sticker";
+
+/** The id in hex of the sticker a message shows; undefined for anything else. */
+export function stickerOf(m: Message, stickers: Stickers): string | undefined {
+  if (m.content.case !== "sealed" || isDeleted(m)) return undefined;
+  return stickers[textKey(m)];
+}
+
+/** Records opened stickers, by textKey, with their text. */
+export function withStickers(data: Data, stickers: Stickers): Data {
+  if (Object.keys(stickers).length === 0) return data;
+  const texts = Object.fromEntries(Object.keys(stickers).map((k) => [k, STICKER]));
+  return { ...withTexts(data, texts), stickers: { ...data.stickers, ...stickers } };
 }
 
 /** What a deleted message shows in its place. */
