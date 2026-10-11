@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { forgetGateway, gatewayLabel, loadGateways } from "../lib/gateways";
-import { useSession } from "../lib/session";
-import { defaultGatewayURL } from "../lib/util";
+import { useSession } from "../session/session";
+import { defaultGatewayURL, forgetGateway, gatewayLabel, loadGateways } from "./gateways";
 
 export function SignIn({ initialName, initialURL }: { initialName?: string; initialURL?: string }) {
   const signIn = useSession((s) => s.signIn);
   const [name, setName] = useState(initialName ?? "");
   const [url, setURL] = useState(initialURL ?? defaultGatewayURL());
-  const [gateways, setGateways] = useState(loadGateways);
 
   return (
     <main className="signin">
@@ -41,35 +39,42 @@ export function SignIn({ initialName, initialURL }: { initialName?: string; init
             required
           />
         </label>
-        {gateways.length > 0 && (
-          <ul className="gateways" aria-label="Gateways used before">
-            {gateways.map((g) => (
-              <li key={g} className={g === url.trim() ? "chosen" : undefined}>
-                <button
-                  type="button"
-                  className="pick"
-                  data-testid="gateway"
-                  title={g}
-                  aria-pressed={g === url.trim()}
-                  onClick={() => setURL(g)}
-                >
-                  {gatewayLabel(g)}
-                </button>
-                <button
-                  type="button"
-                  className="forget"
-                  data-testid="forget-gateway"
-                  aria-label={`Forget ${g}`}
-                  onClick={() => setGateways(forgetGateway(g))}
-                >
-                  ×
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <RememberedGateways chosen={url.trim()} onPick={setURL} />
         <button type="submit">Sign in</button>
       </form>
     </main>
+  );
+}
+
+function RememberedGateways({ chosen, onPick }: { chosen: string; onPick(url: string): void }) {
+  const [gateways, setGateways] = useState(loadGateways);
+  if (gateways.length === 0) return null;
+
+  return (
+    <ul className="gateways" aria-label="Gateways used before">
+      {gateways.map((g) => (
+        <li key={g} className={g === chosen ? "chosen" : undefined}>
+          <button
+            type="button"
+            className="pick"
+            data-testid="gateway"
+            title={g}
+            aria-pressed={g === chosen}
+            onClick={() => onPick(g)}
+          >
+            {gatewayLabel(g)}
+          </button>
+          <button
+            type="button"
+            className="forget"
+            data-testid="forget-gateway"
+            aria-label={`Forget ${g}`}
+            onClick={() => setGateways(forgetGateway(g))}
+          >
+            ×
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }

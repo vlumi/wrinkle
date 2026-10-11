@@ -1,4 +1,4 @@
-import type { ConnectionState } from "../lib/connection";
+import type { ConnectionState } from "./connection";
 
 const labels: Record<ConnectionState, string> = { connected: "online", connecting: "connecting", offline: "offline" };
 

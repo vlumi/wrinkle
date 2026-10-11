@@ -1,10 +1,16 @@
 // Gateways this browser has signed in through, most recent first, to pick
 // from on the sign-in screen.
 
-import { storage } from "./util";
+import { storage } from "../storage";
 
 const KEY = "gateways";
 const MAX = 12;
+
+/** The gateway, or the load balancer in front of several, on the host that served this page. */
+export function defaultGatewayURL(loc: Pick<Location, "protocol" | "hostname"> = location): string {
+  const scheme = loc.protocol === "https:" ? "wss" : "ws";
+  return `${scheme}://${loc.hostname || "localhost"}:8080/v1/ws`;
+}
 
 /** The list with url moved to the front. */
 export function withGateway(list: string[], url: string): string[] {
@@ -28,12 +34,16 @@ export function loadGateways(): string[] {
   }
 }
 
+function saveGateways(list: string[]): void {
+  storage.set(KEY, JSON.stringify(list));
+}
+
 export function rememberGateway(url: string): void {
-  storage.set(KEY, JSON.stringify(withGateway(loadGateways(), url)));
+  saveGateways(withGateway(loadGateways(), url));
 }
 
 export function forgetGateway(url: string): string[] {
   const list = loadGateways().filter((u) => u !== url);
-  storage.set(KEY, JSON.stringify(list));
+  saveGateways(list);
   return list;
 }

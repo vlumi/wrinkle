@@ -5,21 +5,17 @@
 import { create } from "zustand";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import type { User } from "../gen/wrinkle/v1/model_pb";
-import { Connection } from "./connection";
-import type { ConnectionState } from "./connection";
-import { rememberGateway } from "./gateways";
-import { addMessages, applyEvent, key, noteLatest, unread, upsertConversation } from "./model";
-import type { Data } from "./model";
-import { newMessageId, storage } from "./util";
+import { Connection } from "../connection/connection";
+import type { ConnectionState } from "../connection/connection";
+import { addMessages, applyEvent, key, noteLatest, unread, upsertConversation } from "../conversations/model";
+import type { Data } from "../conversations/model";
+import { addPending, confirmPending, failPending, newMessageId } from "../conversations/pending";
+import type { PendingByConversation } from "../conversations/pending";
+import { rememberGateway } from "../signin/gateways";
+import { saved } from "./saved";
 
 const SYNC_LIMIT = 200;
-export const HISTORY_PAGE = 50;
-
-export interface Pending {
-  clientMessageId: string;
-  text: string;
-  failed?: boolean;
-}
+const HISTORY_PAGE = 50;
 
 export interface Session extends Data {
   name: string | null;
@@ -27,7 +23,7 @@ export interface Session extends Data {
   status: ConnectionState;
   /** The conversation on screen. */
   current: string | null;
-  pending: Record<string, Pending[]>;
+  pending: PendingByConversation;
   error: string | null;
   signIn(name: string, url: string): void;
   signOut(): void;
@@ -42,17 +38,19 @@ export interface Session extends Data {
 let conn: Connection | null = null;
 let cursor = 0n;
 let deviceId = 0n;
-let gatewayURL = "";
 
-const empty: Data = { conversations: {}, messages: {} };
+/** The state with no user's data in it. */
+const blank = { conversations: {}, messages: {}, me: null, current: null, pending: {} } satisfies Partial<Session>;
+
+const isVisible = () => typeof document === "undefined" || document.visibilityState === "visible";
 
 export const useSession = create<Session>((set, get) => {
   const fail = (err: unknown) => set({ error: err instanceof Error ? err.message : String(err) });
-  const userKey = (what: string) => `${get().name}.${what}`;
 
   function saveCursor(next: bigint) {
     cursor = next;
-    storage.set(userKey("cursor"), cursor.toString());
+    const name = get().name;
+    if (name) saved.setCursor(name, cursor);
   }
 
   async function onOpen() {
@@ -64,8 +62,8 @@ export const useSession = create<Session>((set, get) => {
       value: { userName: name, deviceId, deviceName: navigator.userAgent.slice(0, 64) },
     });
     deviceId = resp.deviceId;
-    rememberGateway(gatewayURL);
-    storage.set(userKey("device"), deviceId.toString());
+    rememberGateway(c.url);
+    saved.setDeviceId(name, deviceId);
     if (cursor === 0n) {
       // A device without history starts at the head; the past comes from the
       // conversation list and history requests.
@@ -102,10 +100,8 @@ export const useSession = create<Session>((set, get) => {
     const me = get().me;
     if (!me) return;
     const { data, unknownConversation } = applyEvent(get(), event, me.userId);
-    let pending = get().pending;
-    if (event.body.case === "message" && event.body.value.message) {
-      pending = dropPending(pending, event.body.value.message.conversationId, event.body.value.message.clientMessageId);
-    }
+    const m = event.body.case === "message" ? event.body.value.message : undefined;
+    const pending = m ? confirmPending(get().pending, m.conversationId, m.clientMessageId) : get().pending;
     set({ conversations: data.conversations, messages: data.messages, pending });
     if (unknownConversation) refreshConversations().catch(fail);
   }
@@ -133,17 +129,10 @@ export const useSession = create<Session>((set, get) => {
     set({ messages: addMessages(get(), BigInt(conversationId), resp.messages).messages });
   }
 
-  function dropPending(pending: Record<string, Pending[]>, conversationId: bigint, clientMessageId: string) {
-    const id = key(conversationId);
-    const list = pending[id];
-    if (!list?.some((p) => p.clientMessageId === clientMessageId)) return pending;
-    return { ...pending, [id]: list.filter((p) => p.clientMessageId !== clientMessageId) };
-  }
-
   // Back on screen: reconnect now instead of waiting out the backoff.
   if (typeof document !== "undefined") {
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") {
+      if (isVisible()) {
         conn?.wake();
         get().markReadIfVisible();
       }
@@ -151,21 +140,17 @@ export const useSession = create<Session>((set, get) => {
   }
 
   return {
-    ...empty,
+    ...blank,
     name: null,
-    me: null,
     status: "offline",
-    current: null,
-    pending: {},
     error: null,
 
     signIn(name, url) {
       conn?.close();
-      set({ ...empty, name, me: null, current: null, pending: {}, error: null });
-      deviceId = BigInt(storage.get(`${name}.device`) ?? "0");
-      cursor = BigInt(storage.get(`${name}.cursor`) ?? "0");
-      storage.set("last", JSON.stringify({ name, url }));
-      gatewayURL = url;
+      set({ ...blank, name, error: null });
+      deviceId = saved.deviceId(name);
+      cursor = saved.cursor(name);
+      saved.setLastSession({ name, url });
       conn = new Connection(url, {
         state: (status) => set({ status }),
         open: () => onOpen().catch(fail),
@@ -177,8 +162,8 @@ export const useSession = create<Session>((set, get) => {
     signOut() {
       conn?.close();
       conn = null;
-      storage.remove("last");
-      set({ ...empty, name: null, me: null, current: null, pending: {}, status: "offline" });
+      saved.forgetLastSession();
+      set({ ...blank, name: null, status: "offline" });
     },
 
     async openConversation(peerName) {
@@ -208,23 +193,19 @@ export const useSession = create<Session>((set, get) => {
     async send(text) {
       const id = get().current;
       if (!id || !conn) return;
-      const p: Pending = { clientMessageId: newMessageId(), text };
-      set({ pending: { ...get().pending, [id]: [...(get().pending[id] ?? []), p] } });
+      const clientMessageId = newMessageId();
+      set({ pending: addPending(get().pending, id, { clientMessageId, text }) });
       try {
         const resp = await conn.call("sendMessage", {
           case: "sendMessage",
-          value: { conversationId: BigInt(id), clientMessageId: p.clientMessageId, text },
+          value: { conversationId: BigInt(id), clientMessageId, text },
         });
         const m = resp.message;
         if (!m) return;
-        let data: Data = addMessages(get(), m.conversationId, [m]);
-        data = noteLatest(data, m, true);
-        set({ ...data, pending: dropPending(get().pending, m.conversationId, m.clientMessageId) });
+        const data = noteLatest(addMessages(get(), m.conversationId, [m]), m, true);
+        set({ ...data, pending: confirmPending(get().pending, m.conversationId, m.clientMessageId) });
       } catch (err) {
-        const list = (get().pending[id] ?? []).map((q) =>
-          q.clientMessageId === p.clientMessageId ? { ...q, failed: true } : q,
-        );
-        set({ pending: { ...get().pending, [id]: list } });
+        set({ pending: failPending(get().pending, id, clientMessageId) });
         throw err;
       }
     },
@@ -232,10 +213,9 @@ export const useSession = create<Session>((set, get) => {
     markReadIfVisible() {
       const id = get().current;
       const c = id ? get().conversations[id] : undefined;
-      if (!c || !conn || unread(c) === 0n) return;
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+      if (!id || !c || !conn || unread(c) === 0n || !isVisible()) return;
       const seq = c.lastSeq;
-      set({ conversations: { ...get().conversations, [id!]: { ...c, readSeq: seq } } });
+      set({ conversations: { ...get().conversations, [id]: { ...c, readSeq: seq } } });
       conn.call("markRead", { case: "markRead", value: { conversationId: c.conversationId, seq } }).catch(fail);
     },
 
@@ -244,12 +224,3 @@ export const useSession = create<Session>((set, get) => {
     },
   };
 });
-
-/** The last session, to resume on load. */
-export function lastSession(): { name: string; url: string } | null {
-  try {
-    return JSON.parse(storage.get("last") ?? "null");
-  } catch {
-    return null;
-  }
-}

@@ -1,4 +1,9 @@
-import { gatewayLabel, withGateway } from "./gateways";
+import { defaultGatewayURL, gatewayLabel, withGateway } from "./gateways";
+
+test("the gateway defaults to the page's host", () => {
+  expect(defaultGatewayURL({ protocol: "http:", hostname: "mac-mini.local" })).toBe("ws://mac-mini.local:8080/v1/ws");
+  expect(defaultGatewayURL({ protocol: "https:", hostname: "example.test" })).toBe("wss://example.test:8080/v1/ws");
+});
 
 test("a gateway moves to the front without duplicates", () => {
   expect(withGateway([], "ws://a:8180/v1/ws")).toEqual(["ws://a:8180/v1/ws"]);

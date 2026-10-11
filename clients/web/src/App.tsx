@@ -1,11 +1,12 @@
 import { useEffect } from "react";
-import { ConversationList } from "./components/ConversationList";
-import { ConversationView } from "./components/ConversationView";
-import { SignIn } from "./components/SignIn";
-import { StatusBadge } from "./components/StatusBadge";
-import { lastSession, useSession } from "./lib/session";
+import { StatusBadge } from "./connection/StatusBadge";
+import { ConversationList } from "./conversations/ConversationList";
+import { ConversationView } from "./conversations/ConversationView";
+import { saved } from "./session/saved";
+import { useSession } from "./session/session";
+import { SignIn } from "./signin/SignIn";
 
-const last = lastSession();
+const last = saved.lastSession();
 
 export function App() {
   const name = useSession((s) => s.name);

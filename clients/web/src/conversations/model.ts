@@ -12,22 +12,27 @@ export interface Data {
 
 export const key = (id: bigint): string => id.toString();
 
+const max = (a: bigint, b: bigint): bigint => (a > b ? a : b);
+const compare = (a: bigint, b: bigint): number => (a < b ? -1 : a > b ? 1 : 0);
+
+function withConversation(data: Data, c: Conversation): Data {
+  return { ...data, conversations: { ...data.conversations, [key(c.conversationId)]: c } };
+}
+
 export function unread(c: Conversation): bigint {
   return c.lastSeq > c.readSeq ? c.lastSeq - c.readSeq : 0n;
 }
 
 export function upsertConversation(data: Data, c: Conversation): Data {
   const old = data.conversations[key(c.conversationId)];
-  const merged: Conversation = old
-    ? {
-        ...c,
-        lastSeq: c.lastSeq > old.lastSeq ? c.lastSeq : old.lastSeq,
-        lastMessage: c.lastSeq >= old.lastSeq ? c.lastMessage : old.lastMessage,
-        readSeq: c.readSeq > old.readSeq ? c.readSeq : old.readSeq,
-        peerReadSeq: c.peerReadSeq > old.peerReadSeq ? c.peerReadSeq : old.peerReadSeq,
-      }
-    : c;
-  return { ...data, conversations: { ...data.conversations, [key(c.conversationId)]: merged } };
+  if (!old) return withConversation(data, c);
+  return withConversation(data, {
+    ...c,
+    lastSeq: max(c.lastSeq, old.lastSeq),
+    lastMessage: c.lastSeq >= old.lastSeq ? c.lastMessage : old.lastMessage,
+    readSeq: max(c.readSeq, old.readSeq),
+    peerReadSeq: max(c.peerReadSeq, old.peerReadSeq),
+  });
 }
 
 export function addMessages(data: Data, conversationId: bigint, messages: Message[]): Data {
@@ -42,13 +47,12 @@ export function addMessages(data: Data, conversationId: bigint, messages: Messag
 export function noteLatest(data: Data, m: Message, readByMe: boolean): Data {
   const c = data.conversations[key(m.conversationId)];
   if (!c || m.seq < c.lastSeq) return data;
-  const next: Conversation = {
+  return withConversation(data, {
     ...c,
     lastSeq: m.seq,
     lastMessage: m,
-    readSeq: readByMe && m.seq > c.readSeq ? m.seq : c.readSeq,
-  };
-  return { ...data, conversations: { ...data.conversations, [key(c.conversationId)]: next } };
+    readSeq: readByMe ? max(m.seq, c.readSeq) : c.readSeq,
+  });
 }
 
 export interface Applied {
@@ -73,13 +77,8 @@ export function applyEvent(data: Data, event: Event, me: bigint): Applied {
       const c = data.conversations[key(r.conversationId)];
       if (!c) return { data, unknownConversation: true };
       const next: Conversation =
-        r.userId === me
-          ? { ...c, readSeq: r.seq > c.readSeq ? r.seq : c.readSeq }
-          : { ...c, peerReadSeq: r.seq > c.peerReadSeq ? r.seq : c.peerReadSeq };
-      return {
-        data: { ...data, conversations: { ...data.conversations, [key(c.conversationId)]: next } },
-        unknownConversation: false,
-      };
+        r.userId === me ? { ...c, readSeq: max(r.seq, c.readSeq) } : { ...c, peerReadSeq: max(r.seq, c.peerReadSeq) };
+      return { data: withConversation(data, next), unknownConversation: false };
     }
     default:
       return { data, unknownConversation: false };
@@ -89,13 +88,10 @@ export function applyEvent(data: Data, event: Event, me: bigint): Applied {
 /** Conversations with the most recently active first. */
 export function byActivity(conversations: Record<string, Conversation>): Conversation[] {
   const time = (c: Conversation) => c.lastMessage?.sentAt?.seconds ?? 0n;
-  return Object.values(conversations).sort((a, b) => {
-    const d = time(b) - time(a);
-    return d > 0n ? 1 : d < 0n ? -1 : 0;
-  });
+  return Object.values(conversations).sort((a, b) => compare(time(b), time(a)));
 }
 
 /** A conversation's messages in sequence order. */
 export function inOrder(messages: Record<string, Message> | undefined): Message[] {
-  return Object.values(messages ?? {}).sort((a, b) => (a.seq < b.seq ? -1 : a.seq > b.seq ? 1 : 0));
+  return Object.values(messages ?? {}).sort((a, b) => compare(a.seq, b.seq));
 }
