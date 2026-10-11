@@ -6,4 +6,5 @@ cd "$(dirname "$0")/.."
 echo "Building Wrinkle-iOS..."
 xcodebuild -project Wrinkle.xcodeproj -scheme Wrinkle-iOS \
     -destination "generic/platform=iOS Simulator" \
-    -derivedDataPath .build-xcode -quiet build
+    -derivedDataPath .build-xcode -quiet \
+    CODE_SIGNING_ALLOWED=NO build

@@ -15,12 +15,16 @@ public final class AppState {
     public private(set) var me: Wrinkle_V1_User?
     public private(set) var state: ConnectionState = .offline
     public var lastError: String?
+    /// A conversation to show, set when a notification is tapped.
+    public var pendingConversation: Int64?
 
     private var connection: Connection?
     private var store: Store?
     private var cursor: UInt64 = 0
     private var deviceID: UInt64 = 0
     private var sessionTask: Task<Void, Never>?
+    private var url: URL?
+    private var pushToken: (service: Wrinkle_V1_PushService, token: String)?
 
     public static let defaultURL = "ws://localhost:8080/v1/ws"
     private static let syncLimit: UInt32 = 200
@@ -46,6 +50,7 @@ public final class AppState {
             return
         }
         userName = name
+        self.url = wsURL
         store = Store(context: context)
         let defaults = UserDefaults.standard
         deviceID = UInt64(defaults.string(forKey: key(name, "device")) ?? "0") ?? 0
@@ -64,6 +69,34 @@ public final class AppState {
         me = nil
         state = .offline
         UserDefaults.standard.removeObject(forKey: "wrinkle.last.name")
+    }
+
+    /// The app went to the background: close the connection, so the backend
+    /// sees the device as gone and pushes to it instead. iOS would suspend the
+    /// socket within seconds anyway, leaving it half-open.
+    public func enterBackground() {
+        guard sessionTask != nil else { return }
+        sessionTask?.cancel()
+        sessionTask = nil
+        if let c = connection { Task { await c.close() } }
+        connection = nil
+        state = .offline
+    }
+
+    /// The app is active again: reconnect and sync what was missed.
+    public func enterForeground() {
+        guard let userName, let url, sessionTask == nil else { return }
+        sessionTask = Task { await self.runSession(name: userName, url: url) }
+    }
+
+    /// The token APNs issued this device; registered now if connected, and
+    /// after every connect.
+    public func setPushToken(_ token: String, sandbox: Bool) {
+        let service: Wrinkle_V1_PushService = sandbox ? .apnsSandbox : .apns
+        pushToken = (service, token)
+        if let connection, me != nil {
+            Task { try? await connection.registerPushToken(service: service, token: token) }
+        }
     }
 
     /// Resumes the last session, if there was one.
@@ -113,6 +146,9 @@ public final class AppState {
             // conversation list and history requests.
             cursor = resp.logHead
             persistCursor()
+        }
+        if let pushToken {
+            try await conn.registerPushToken(service: pushToken.service, token: pushToken.token)
         }
         try await refreshConversations(conn)
         try await syncFromCursor(conn)

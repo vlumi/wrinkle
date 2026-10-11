@@ -207,4 +207,13 @@ public actor Connection {
                 })
         ).getMessages.messages
     }
+
+    public func registerPushToken(service: Wrinkle_V1_PushService, token: String) async throws {
+        _ = try await call(
+            .registerPushToken(
+                .with {
+                    $0.service = service
+                    $0.token = token
+                }))
+    }
 }

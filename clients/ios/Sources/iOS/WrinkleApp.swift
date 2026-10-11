@@ -1,17 +1,77 @@
 import SwiftData
 import SwiftUI
+import UIKit
+import UserNotifications
 import WrinkleCore
 import WrinkleKit
 
 @main
 struct WrinkleApp: App {
-    @State private var app = AppState()
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
     var body: some Scene {
         WindowGroup {
             RootView()
-                .environment(app)
+                .environment(delegate.app)
         }
         .modelContainer(for: [StoredConversation.self, StoredMessage.self])
+    }
+}
+
+/// Owns the session so push registration and notification taps, which
+/// arrive through UIKit, reach it.
+@MainActor
+final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    let app = AppState()
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        Task {
+            let granted =
+                (try? await center.requestAuthorization(options: [.alert, .badge, .sound]))
+            if granted == true { application.registerForRemoteNotifications() }
+        }
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        // Debug builds are signed for development and get sandbox pushes.
+        #if DEBUG
+        app.setPushToken(token, sandbox: true)
+        #else
+        app.setPushToken(token, sandbox: false)
+        #endif
+    }
+
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        // The simulator and unsigned builds land here; the app works without push.
+    }
+
+    /// A tapped notification opens its conversation.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse
+    ) async {
+        let info = response.notification.request.content.userInfo
+        guard let id = (info["conversation_id"] as? String).flatMap(Int64.init) else { return }
+        await MainActor.run { app.pendingConversation = id }
+    }
+
+    /// The backend does not push to a connected device; anything that does
+    /// arrive in the foreground is already on screen.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, willPresent notification: UNNotification
+    ) async -> UNNotificationPresentationOptions {
+        []
     }
 }

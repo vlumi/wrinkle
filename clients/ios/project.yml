@@ -20,9 +20,11 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_TREAT_WARNINGS_AS_ERRORS: "YES"
-    # A prototype that runs in the simulator; nothing is signed.
-    CODE_SIGNING_ALLOWED: "NO"
-    CODE_SIGN_IDENTITY: ""
+    # The team comes from WRINKLE_TEAM_ID in the repository's .env, which
+    # Scripts/generate.sh reads; automatic signing does the rest. Simulator
+    # builds are unsigned (Scripts/build.sh), so the gate needs no team.
+    DEVELOPMENT_TEAM: ${WRINKLE_TEAM_ID}
+    CODE_SIGN_STYLE: Automatic
 
 packages:
   WrinkleCore:
@@ -34,6 +36,12 @@ targets:
     platform: iOS
     sources:
       - path: Sources/iOS
+    entitlements:
+      path: Sources/iOS/Wrinkle.entitlements
+      properties:
+        # Development builds get sandbox pushes; TestFlight and the App Store
+        # are re-signed for production.
+        aps-environment: development
     info:
       path: Sources/iOS/Info.plist
       properties:
@@ -42,9 +50,17 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        # A universal app must support all four for iPad multitasking.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         # A development client talking to a local backend over plain ws://.
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: true
+        # Asked the first time the app reaches a backend on the local network.
+        NSLocalNetworkUsageDescription: Wrinkle connects to a messaging backend on your local network.
     dependencies:
       - package: WrinkleCore
         product: WrinkleKit

@@ -49,6 +49,8 @@ final class BackendTests: XCTestCase {
         let b = try await bob.connect(
             userName: "ios-bob-\(suffix)", deviceID: 0, deviceName: "test")
         XCTAssertNotEqual(a.user.userID, b.user.userID)
+        try await alice.registerPushToken(
+            service: .apnsSandbox, token: String(repeating: "ab", count: 32))
 
         let conv = try await alice.openConversation(peerUserName: b.user.name)
         let sent = try await alice.sendMessage(

@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UserNotifications
 import WrinkleCore
 
 struct ConversationListView: View {
@@ -37,6 +38,14 @@ struct ConversationListView: View {
             .navigationDestination(for: Int64.self) { id in
                 ConversationView(conversationID: id)
             }
+            .onChange(of: app.pendingConversation, initial: true) { _, id in
+                guard let id else { return }
+                path = [id]
+                app.pendingConversation = nil
+            }
+            .onChange(of: totalUnread, initial: true) { _, count in
+                UNUserNotificationCenter.current().setBadgeCount(Int(count))
+            }
             .toolbar {
                 ToolbarItem(placement: Toolbar.leading) {
                     StatusBadge(state: app.state)
@@ -47,6 +56,8 @@ struct ConversationListView: View {
             }
         }
     }
+
+    private var totalUnread: Int64 { conversations.reduce(0) { $0 + $1.unread } }
 
     private func open() {
         let name = peerName.trimmingCharacters(in: .whitespaces)
