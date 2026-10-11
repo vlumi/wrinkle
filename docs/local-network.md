@@ -35,7 +35,7 @@ The generated code is committed, so the code generators (`make tools`) are not n
 
 ## Backends
 
-Run one backend at a time: they all serve port 8080. Stop one with Ctrl-C before starting the next; they share the database, so users and conversations carry over. `make` lists every target.
+Run one backend at a time: they all serve port 8080. Stop one with Ctrl-C before starting the next, or run the gateways side by side as described below; they share the database, so users and conversations carry over. `make` lists every target.
 
 The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
@@ -86,6 +86,19 @@ rustup default stable
 
 make run-rust
 ```
+
+### Gateways side by side
+
+The gateways can also run at the same time against one services process, each on its own port, so users on different gateways can message each other:
+
+```sh
+make run-services          # the Go services and fan-out; leave it running
+make run-go-gateway        # in another terminal: ws://<address>:8180/v1/ws
+make run-elixir-gateway    # ws://<address>:8181/v1/ws
+make run-rust-gateway      # ws://<address>:8182/v1/ws
+```
+
+Stop any `run-*` backend first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Set the port in the client's gateway field, which defaults to 8080. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
 
 ## Clients
 
@@ -145,6 +158,6 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 ## Things to know
 
-- Only the gateway (8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
+- Only the gateways (8080, or 8180 to 8182 side by side) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.
