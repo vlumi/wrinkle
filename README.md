@@ -69,6 +69,7 @@ Needs Docker Desktop with at least 8 GB of memory, Go, Node 22 or later, JDK 25 
 ```sh
 make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
 make run-go            # a backend on ws://localhost:8080/v1/ws; also run-go-split, run-java, run-elixir, run-rust
+make run-services      # or the gateways side by side: run-go-gateway, run-elixir-gateway, run-rust-gateway, and lb-up
 make web               # the web client, built and served on port 8081
 make ios-sim           # the iOS app in a simulator; ios-device on a paired iPhone
 make load              # a quick load run against the running backend
@@ -86,7 +87,7 @@ To run it on one Mac and connect from phones and other computers on the same net
 ```text
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
-infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Prometheus and Grafana; the arm64 Vitess image
+infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Prometheus and Grafana, and HAProxy for side-by-side gateways; the arm64 Vitess image
 backends/     go/, java/, elixir/ and rust/ (gateways)
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)

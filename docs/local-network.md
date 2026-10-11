@@ -98,7 +98,16 @@ make run-elixir-gateway    # ws://<address>:8181/v1/ws
 make run-rust-gateway      # ws://<address>:8182/v1/ws
 ```
 
-Stop any `run-*` backend first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Set the port in the client's gateway field, which defaults to 8080. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
+Stop any `run-*` backend first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
+
+To connect to one particular gateway, put its port in the client's gateway field. Or put a load balancer in front of them all on port 8080, where the clients connect by default:
+
+```sh
+make lb-up                 # HAProxy on ws://<address>:8080/v1/ws
+make lb-down
+```
+
+Each new connection goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds. Its devices reconnect and land on the others, then come back to it as new connections once it is running again. `http://localhost:8404/` on the host shows each gateway's state and connections. The balancer holds port 8080, so stop it before running a `run-*` backend.
 
 ## Clients
 
@@ -110,7 +119,7 @@ A React app built to static files and served by a small Node server. It needs No
 make web
 ```
 
-That installs the dependencies, builds the app, and serves it on port 8081 to the network. Open `http://<address>:8081/` on the device. The gateway field defaults to the same host on port 8080; a browser that signed in before remembers the address it used. On a phone it shows one pane at a time, the conversations and then a conversation with a back button; on a wider screen both side by side. Each browser is a separate device; a private window is a quick second one.
+That installs the dependencies, builds the app, and serves it on port 8081 to the network. Open `http://<address>:8081/` on the device. The gateway field defaults to the same host on port 8080. Every gateway the browser has signed in through is listed under the field, most recent first: tap one to fill the field, or × to forget it. On a phone it shows one pane at a time, the conversations and then a conversation with a back button; on a wider screen both side by side. Each browser is a separate device; a private window is a quick second one.
 
 For working on the client itself, `make web-dev` serves it with live reload on the same port.
 
@@ -158,6 +167,6 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 ## Things to know
 
-- Only the gateways (8080, or 8180 to 8182 side by side) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
+- Only the gateways (8080, or 8180 to 8182 side by side, with the load balancer on 8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.
