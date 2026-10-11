@@ -17,7 +17,7 @@ Three ideas carry the design:
 - **Push is an optimization, sync is the guarantee.** Connected devices get events over WebSocket as they happen. A device that misses a push gets the same events from its log on the next sync.
 
 ```mermaid
-flowchart LR
+flowchart TB
   devices(["📱 Devices<br/><small>web · iOS</small>"])
   lb["Load balancer"]
   gw["Gateways<br/><small>WebSocket connections</small>"]
@@ -25,17 +25,17 @@ flowchart LR
     conv["Conversation service<br/><small>send · read marks</small>"]
     sync["Sync service<br/><small>sign-in · sync · lists</small>"]
   end
-  convdb[("Conversation DB<br/><small>messages + outbox<br/>sharded by conversation</small>")]
-  userdb[("User DB<br/><small>event logs · lists · devices<br/>sharded by user</small>")]
+  convdb[("Conversation DB<br/><small>messages + outbox<br/>by conversation</small>")]
+  userdb[("User DB<br/><small>event logs · lists<br/>by user</small>")]
   kafka[["Kafka"]]
   fanout["Fan-out workers"]
   valkey[("Valkey<br/><small>presence ·<br/>a channel per user</small>")]
   apns["APNs<br/><small>to iOS devices<br/>not connected</small>"]
 
   devices <-- "WebSocket" --> lb <--> gw
-  gw -- "gRPC or<br/>in-process" --> conv & sync
-  conv -- "message + outbox,<br/>one transaction" --> convdb
-  sync -- "sync" --> userdb
+  gw -- "gRPC or in-process" --> services
+  conv -- "one transaction" --> convdb
+  sync --> userdb
   convdb -- "CDC (Debezium)" --> kafka --> fanout
   fanout -- "append" --> userdb
   fanout -- "publish" --> valkey
