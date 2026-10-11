@@ -161,4 +161,5 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 - Only the gateways (8080, or 8180 to 8182 side by side, with the load balancer on 8080) and the web client's server (8081) face the network. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Sign-in is by name only; anyone who can reach the host can connect as any user.
+- `http://localhost:8081/monitor` on the host, with `make web` running, links to every monitoring page (Grafana, Prometheus, the load balancer's statistics, Kafka Connect, Vitess, each backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.

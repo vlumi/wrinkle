@@ -94,12 +94,15 @@ lb-down:  ## Stop the load balancer
 
 ##@ Clients
 
-.PHONY: web web-dev ios-sim ios-device ios-project
+.PHONY: web web-dev monitor ios-sim ios-device ios-project
 web: build-web  ## Web client, built and served to the network on :8081
 	$(NPM) run --silent serve
 
 web-dev: web-deps  ## Web client with live reload on :8081, for working on it
 	$(NPM) run dev
+
+monitor:  ## Open the monitoring page, links to every dashboard (on this host, with make web running)
+	open http://localhost:8081/monitor
 
 ios-sim:  ## iOS app in an iPhone simulator (DEVICE="17 Pro" to pick one)
 	clients/ios/Scripts/generate.sh

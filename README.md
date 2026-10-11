@@ -78,7 +78,7 @@ make measure-go        # the measurement protocol for one backend; measure-all f
 make infra-down        # stop and discard all data
 ```
 
-Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090.
+Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090. With `make web` running, http://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer; like them, it is served only on the host.
 
 To run it on one Mac and connect from phones and other computers on the same network, see [docs/local-network.md](docs/local-network.md).
 
