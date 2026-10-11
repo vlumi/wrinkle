@@ -20,6 +20,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 | User DB | users, devices, event logs, conversation lists | sharded by user id | Vitess shards |
 | Kafka and Debezium | committed outbox rows of both keyspaces, in commit order per conversation or user | the topics | partitions |
 | Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
+| Object storage | blobs: avatars, later stickers and attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
 
 The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
 
@@ -46,12 +47,13 @@ flowchart TB
     o["outbox: change events, deleted on insert"]
   end
   subgraph user ["User keyspace, by user_id"]
-    u["user: name, icon, password hash, log_head"]
+    u["user: name, icon, avatar, password hash, log_head"]
     n["user_name: claim of a name, by name"]
     d["device: token hash, acked position, push token"]
     e["user_event: the log, by position"]
     l["user_conversation: the list, with peers' profiles"]
-    uo["user_outbox: profile changes, deleted on insert"]
+    uo["user_outbox: profile and device changes, deleted on insert"]
+    up["upload: blobs by uploader, used or not"]
   end
 ```
 
@@ -73,8 +75,15 @@ Go and Java implement both, and the password and token formats, alike (unit test
 - **Register** takes a name, a password and a device name; **SignIn** the same for an existing account, matching the name ignoring case. Both return the device's credentials: user id, device id and a device token. Only they and Connect are allowed before Connect.
 - **Passwords** are stored as argon2id hashes (19 MiB, 2 passes) in the standard string form, which records its parameters, so they can be raised later. A wrong name and a wrong password get the same answer, in the same time.
 - **Device tokens** are `v1.` and the base64url of the user id, the device id and a 32-byte secret; the device row keeps a SHA-256 of the secret. Connect with a token is one indexed read on the user's shard, so the cost of a password is paid at sign-in only, not on every reconnect.
-- **ChangePassword** signs out every other device of the account, clearing their tokens and push registrations; **SignOut** does the same for the calling device.
-- **Profiles** are the name and one of a fixed set of icons, changed with UpdateProfile. A change goes through the user keyspace's outbox like a message through the conversation keyspace's: the fan-out appends a `ProfileEvent` to the user's own log and to the log of everyone they have a conversation with, updating each partner's conversation list in the same transaction.
+- **Devices** are listed, renamed and signed out with ListDevices, RenameDevice and SignOutDevice; **SignOut** signs out the calling device and **ChangePassword** every other one, clearing their tokens and push registrations. Each change goes through the user's outbox as a `DeviceEvent` to the user's own log, so the other devices' lists follow. For a sign-out the fan-out also publishes a sign-out on the user's push channel, and the gateways holding that device close its connections with 4001; the client then forgets its credentials.
+- **DeleteAccount** checks the password, clears the profile and every device's token, marks the user deleted and frees the name. Its `ProfileEvent` reaches the conversation partners, who see a deleted account; the fan-out then signs out every device and removes the user's log, list, devices and uploads. The user row stays as a tombstone so that nothing is delivered to it again, and messages already sent stay with the conversations.
+- **Profiles** are the name, one of a fixed set of icons and an optional uploaded picture, changed with UpdateProfile. A change goes through the user keyspace's outbox like a message through the conversation keyspace's: the fan-out appends a `ProfileEvent` to the user's own log and to the log of everyone they have a conversation with, updating each partner's conversation list in the same transaction.
+
+## Blobs
+
+Pictures, and later stickers and attachments, are blobs in object storage, never in the databases or through the WebSocket. A device asks the services for an upload slot with CreateUpload, giving the purpose, media type and size; the services record the upload in the user keyspace and answer with a path signed for an HTTP PUT of exactly that type and size (AWS signature version 4, by hand in Go and Java, with shared test vectors). The device uploads, then refers to the blob, as UpdateProfile does for an avatar; the services check that the blob is the user's and is there. Blobs are read with a plain GET by their random id and never change, so clients cache them for good.
+
+Locally the store is Garage, behind an HAProxy on loopback port 9200 that also takes `/blobs/` from the TLS edge, so devices use one address for the WebSocket and the blobs. Uploads are signed for a fixed host name that the proxy sets, whatever address a device used. Uploads nothing refers to are deleted by a sweeper in the fan-out a day after their slot was made; a replaced avatar goes back to unused and is deleted the same way.
 
 ## Flows
 

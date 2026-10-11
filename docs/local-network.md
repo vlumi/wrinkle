@@ -38,7 +38,7 @@ Run the stack and the backends on a Mac, then connect to them from phones and ot
    make tls-up        # the TLS edge on port 8443, in front of whatever serves port 8080
    ```
 
-   Devices connect to `wss://<address>:8443/v1/ws`. Port 8080 itself listens on loopback only, for the clients, tests and load runs on the Mac. Each device that connects must trust the local authority once; see [Trusting the certificate](#trusting-the-certificate). `make tls-down` stops the edge.
+   Devices connect to `wss://<address>:8443/v1/ws`, and read and upload pictures at `https://<address>:8443/blobs/` on the same edge. Port 8080 itself listens on loopback only, for the clients, tests and load runs on the Mac. Each device that connects must trust the local authority once; see [Trusting the certificate](#trusting-the-certificate). `make tls-down` stops the edge.
 
 The generated code is committed, so the code generators (`make tools`) are not needed to run anything.
 
@@ -142,7 +142,7 @@ A React app built to static files and served by a small Node server. It needs No
 make web
 ```
 
-That installs the dependencies, builds the app, and serves it on port 8081 to the network, over HTTPS with the certificate from `make certs`. Open `https://<address>:8081/` on the device. The gateway field defaults to the TLS edge on the same host, `wss://<address>:8443/v1/ws`; on the Mac itself, `ws://localhost:8080/v1/ws` works too. Without a certificate the server falls back to plain HTTP, which only works on the Mac. Every gateway the browser has signed in through is listed under the field, most recent first: tap one to fill the field, or × to forget it. On a phone it shows one pane at a time, the conversations and then a conversation with a back button; on a wider screen both side by side. Create an account or sign in with a name and password; the browser keeps its device token and reconnects with it. Your own name at the top opens the settings: name, icon, password and sign out. Each browser is a separate device; a private window is a quick second one.
+That installs the dependencies, builds the app, and serves it on port 8081 to the network, over HTTPS with the certificate from `make certs`. Open `https://<address>:8081/` on the device. The gateway field defaults to the TLS edge on the same host, `wss://<address>:8443/v1/ws`; on the Mac itself, `ws://localhost:8080/v1/ws` works too. Without a certificate the server falls back to plain HTTP, which only works on the Mac. Every gateway the browser has signed in through is listed under the field, most recent first: tap one to fill the field, or × to forget it. On a phone it shows one pane at a time, the conversations and then a conversation with a back button; on a wider screen both side by side. Create an account or sign in with a name and password; the browser keeps its device token and reconnects with it. Your own name at the top opens the settings: name, icon or picture, password, the account's devices (rename, or sign out another one, which closes its connection at once), sign out and delete account. Each browser is a separate device; a private window is a quick second one.
 
 For working on the client itself, `make web-dev` serves it with live reload on the same port, over HTTPS likewise.
 
@@ -215,7 +215,7 @@ xcrun simctl push booted fi.misaki.wrinkle push.json
 
 ## Things to know
 
-- Only the TLS edge (8443) and the web client's server (8081) face the network. The backends, the balancer and the cluster serve devices on loopback port 8080, and side-by-side gateways on loopback 8180 to 8183. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
+- Only the TLS edge (8443) and the web client's server (8081) face the network. The backends, the balancer and the cluster serve devices on loopback port 8080, and side-by-side gateways on loopback 8180 to 8183. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, the blob proxy, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Accounts have passwords, stored as argon2id hashes, and sign-in gives each device a token. There is no password recovery: a forgotten password means a new account, or `make infra-reset` for everyone.
 - `http://localhost:8081/monitor` on the host, with `make web` running, links to every monitoring page (Grafana, Prometheus, the balancers' statistics, Kafka Connect, Vitess, each native backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.

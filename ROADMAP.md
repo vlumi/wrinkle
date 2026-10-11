@@ -117,9 +117,9 @@ Notes:
 
 - [x] Accounts with passwords: Register and SignIn return a device token, and Connect carries the token. Names are unique ignoring case and can change; ids are random UUIDs, for users and conversations both, so groups (#2) fit later. Profiles have a name and one of a fixed set of icons, and changes reach the user's devices and conversation partners through a second outbox, in the user keyspace, and its own Debezium connector.
 - [x] TLS for devices on the network: an HAProxy edge with a certificate from mkcert, in front of whatever serves port 8080, which listens on loopback only. The web client is served over HTTPS likewise.
-- [ ] A device signed out by a password change elsewhere, or by SignOut, keeps its open connection until it reconnects; its token stops working then. Closing it at once needs a notice to the gateways holding it, through the user's push channel.
-- [ ] No limit on sign-in attempts per account or per address, no password recovery, no account deletion; all needed for a public service (`docs/production.md`).
-- [ ] Uploaded icons, through object storage shared with attachments (#7); the fixed set stands in until then.
+- [x] Devices listed, renamed and signed out from another device; a signed-out device's connections close at once (4001), through a sign-out on the user's push channel. Account deletion frees the name, signs every device out and removes the user's data; partners see a deleted account.
+- [x] Object storage for blobs: Garage behind a proxy on loopback 9200 and at `/blobs/` on the TLS edge (MinIO no longer publishes images). Uploads are signed by the services; avatars are the first use.
+- [ ] No limit on sign-in attempts per account or per address, no password recovery; both needed for a public service (`docs/production.md`).
 - A conversation list entry the fan-out creates while the peer renames may keep the old name until the peer's next change: the entry reads the peer's profile when it is created, and the rename's fan-out pages through the lists that exist when it runs.
 - Hashing a password takes about 19 MiB and tens of milliseconds, so the services run at most as many hashes at once as they have cores. A burst of sign-ins, as the load generator makes before a run, raises the services' resident memory; measurements force a garbage collection before sampling.
 
@@ -147,7 +147,7 @@ Options, cheapest first:
 
 ## Features
 
-Tracked as issues: user accounts and profiles (#1, accounts and profiles with standard icons done; uploads and devices open), group conversations (#2), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6), image and file attachments (#7). What a public deployment would need, and its cost, is in `docs/production.md`.
+Tracked as issues: user accounts and profiles (#1, done), group conversations (#2), reactions (#3), deleting one's own messages (#4), stickers (#5), end-to-end encryption (#6), image and file attachments (#7), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
 
 ## Later
 

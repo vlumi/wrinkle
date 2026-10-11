@@ -59,7 +59,7 @@ Components:
 - **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.
 - **Presence:** which device is connected to which gateway process, kept only while that process keeps announcing itself, and one push channel per user, in Valkey.
 
-Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, and Prometheus with Grafana for the metrics every backend exposes under the same names.
+Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, Garage for blobs (pictures), and Prometheus with Grafana for the metrics every backend exposes under the same names.
 
 ## Implementations
 
@@ -90,7 +90,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, mkcert for TLS on the local network, and `make tools` once for the code generators and linters. The cluster alone needs only Docker. Plain `make` lists every routine operation, grouped; the common ones:
 
 ```sh
-make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Prometheus, Grafana
+make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana
 make run-go-mono       # a whole backend on ws://localhost:8080/v1/ws; also run-java-mono
 make lb-up             # or side by side: balancers, then run-go-services or run-java-services, and gateways run-*-gw
 make cluster-up        # or all of that in containers, any number of each: GO_GW=3 JAVA_SERVICES=0 ...
@@ -112,7 +112,7 @@ To run it on one Mac and connect from phones and other computers on the same net
 ```text
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
-infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Prometheus and Grafana, HAProxy for the side-by-side setup, and the cluster; the arm64 Vitess image
+infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana, HAProxy for the side-by-side setup, and the cluster; the arm64 Vitess image
 backends/     go/, java/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)

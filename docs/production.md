@@ -22,8 +22,8 @@ Done, without authentication or encryption (ROADMAP.md, "Hardening"): limits on 
 Done: accounts with random ids and changeable names, passwords hashed with argon2id, and a token per device that Connect carries ([architecture](architecture.md#accounts)). For a public service:
 
 - **Sign-in** with passkeys (WebAuthn, supported by both the browsers and iOS) as the main method, or an identity provider over OpenID Connect. An iOS app that offers third-party sign-in must offer Sign in with Apple too.
-- **Sessions per device**: the device tokens could become refresh tokens, with short-lived signed access tokens that a gateway verifies without a database read. Signing a device out, or changing the password, should close its open connection at once; today it lasts until the device reconnects.
-- **Password recovery** by email, if passwords stay, and account deletion.
+- **Sessions per device**: the device tokens could become refresh tokens, with short-lived signed access tokens that a gateway verifies without a database read. Signing a device out already closes its open connections.
+- **Password recovery** by email, if passwords stay. Account deletion is done.
 - **Never a token in the URL**: the first frame already has to be the connect request, which keeps tokens out of logs. Browsers' WebSocket handshakes are checked against an allowed `Origin`.
 - Sign-in is rate limited per account and per address.
 
@@ -36,6 +36,7 @@ The services already refuse requests about conversations the user is not in. Mis
 
 ### 5. Data
 
+- Object storage from the provider (S3, GCS or another S3-compatible service) in place of the local Garage node, with blobs served through a CDN; uploads stay signed by the services.
 - Backups taken automatically, kept off the machine, and restored on a schedule to prove they work.
 - A retention policy: the capacity estimates assume two weeks of history on the server; the prototype keeps everything.
 - Privacy obligations where users are in the EU (GDPR): a privacy policy, export and deletion of a user's data (including the copies in partners' logs and in backups as they age out), data processing agreements with the hosting providers, and an EU region.
