@@ -240,6 +240,14 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     set {body = .getMessages(newValue)}
   }
 
+  public var registerPushToken: Wrinkle_V1_RegisterPushTokenRequest {
+    get {
+      if case .registerPushToken(let v)? = body {return v}
+      return Wrinkle_V1_RegisterPushTokenRequest()
+    }
+    set {body = .registerPushToken(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -250,6 +258,7 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     case sync(Wrinkle_V1_SyncRequest)
     case listConversations(Wrinkle_V1_ListConversationsRequest)
     case getMessages(Wrinkle_V1_GetMessagesRequest)
+    case registerPushToken(Wrinkle_V1_RegisterPushTokenRequest)
 
   }
 
@@ -329,6 +338,14 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     set {body = .getMessages(newValue)}
   }
 
+  public var registerPushToken: Wrinkle_V1_RegisterPushTokenResponse {
+    get {
+      if case .registerPushToken(let v)? = body {return v}
+      return Wrinkle_V1_RegisterPushTokenResponse()
+    }
+    set {body = .registerPushToken(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -340,6 +357,7 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
     case sync(Wrinkle_V1_SyncResponse)
     case listConversations(Wrinkle_V1_ListConversationsResponse)
     case getMessages(Wrinkle_V1_GetMessagesResponse)
+    case registerPushToken(Wrinkle_V1_RegisterPushTokenResponse)
 
   }
 
@@ -542,7 +560,7 @@ nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -642,6 +660,19 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .getMessages(v)
         }
       }()
+      case 17: try {
+        var v: Wrinkle_V1_RegisterPushTokenRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .registerPushToken(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .registerPushToken(v)
+        }
+      }()
       default: break
       }
     }
@@ -684,6 +715,10 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .getMessages(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
     }()
+    case .registerPushToken?: try {
+      guard case .registerPushToken(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -699,7 +734,7 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -812,6 +847,19 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
           self.body = .getMessages(v)
         }
       }()
+      case 17: try {
+        var v: Wrinkle_V1_RegisterPushTokenResponse?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .registerPushToken(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .registerPushToken(v)
+        }
+      }()
       default: break
       }
     }
@@ -857,6 +905,10 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
     case .getMessages?: try {
       guard case .getMessages(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
+    }()
+    case .registerPushToken?: try {
+      guard case .registerPushToken(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
     }()
     case nil: break
     }

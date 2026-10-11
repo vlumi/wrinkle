@@ -1,3 +1,17 @@
+defmodule Wrinkle.V1.PushService do
+  @moduledoc false
+
+  use Protobuf,
+    enum: true,
+    full_name: "wrinkle.v1.PushService",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :PUSH_SERVICE_UNSPECIFIED, 0
+  field :PUSH_SERVICE_APNS_SANDBOX, 1
+  field :PUSH_SERVICE_APNS, 2
+end
+
 defmodule Wrinkle.V1.ConnectRequest do
   @moduledoc false
 
@@ -159,4 +173,25 @@ defmodule Wrinkle.V1.GetMessagesResponse do
     syntax: :proto3
 
   field :messages, 1, repeated: true, type: Wrinkle.V1.Message
+end
+
+defmodule Wrinkle.V1.RegisterPushTokenRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RegisterPushTokenRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :service, 1, type: Wrinkle.V1.PushService, enum: true
+  field :token, 2, type: :string
+end
+
+defmodule Wrinkle.V1.RegisterPushTokenResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RegisterPushTokenResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
 end

@@ -23,6 +23,57 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type PushService int32
+
+const (
+	PushService_PUSH_SERVICE_UNSPECIFIED PushService = 0
+	// APNs, development environment: apps built and signed for development.
+	PushService_PUSH_SERVICE_APNS_SANDBOX PushService = 1
+	// APNs, production environment: TestFlight and App Store builds.
+	PushService_PUSH_SERVICE_APNS PushService = 2
+)
+
+// Enum value maps for PushService.
+var (
+	PushService_name = map[int32]string{
+		0: "PUSH_SERVICE_UNSPECIFIED",
+		1: "PUSH_SERVICE_APNS_SANDBOX",
+		2: "PUSH_SERVICE_APNS",
+	}
+	PushService_value = map[string]int32{
+		"PUSH_SERVICE_UNSPECIFIED":  0,
+		"PUSH_SERVICE_APNS_SANDBOX": 1,
+		"PUSH_SERVICE_APNS":         2,
+	}
+)
+
+func (x PushService) Enum() *PushService {
+	p := new(PushService)
+	*p = x
+	return p
+}
+
+func (x PushService) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PushService) Descriptor() protoreflect.EnumDescriptor {
+	return file_wrinkle_v1_messaging_proto_enumTypes[0].Descriptor()
+}
+
+func (PushService) Type() protoreflect.EnumType {
+	return &file_wrinkle_v1_messaging_proto_enumTypes[0]
+}
+
+func (x PushService) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PushService.Descriptor instead.
+func (PushService) EnumDescriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{0}
+}
+
 // Signs in by name and registers the device. Users and devices are created on
 // first use; there are no passwords. Must be the first request on a connection.
 type ConnectRequest struct {
@@ -745,6 +796,99 @@ func (x *GetMessagesResponse) GetMessages() []*Message {
 	return nil
 }
 
+// Registers where to push notifications for the requesting device while it
+// is not connected. Replaces any earlier registration of the device; an
+// empty token removes it.
+type RegisterPushTokenRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Service PushService            `protobuf:"varint,1,opt,name=service,proto3,enum=wrinkle.v1.PushService" json:"service,omitempty"`
+	// The token the push service issued to the device, as text; for APNs the
+	// device token in hex.
+	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterPushTokenRequest) Reset() {
+	*x = RegisterPushTokenRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterPushTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterPushTokenRequest) ProtoMessage() {}
+
+func (x *RegisterPushTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterPushTokenRequest.ProtoReflect.Descriptor instead.
+func (*RegisterPushTokenRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *RegisterPushTokenRequest) GetService() PushService {
+	if x != nil {
+		return x.Service
+	}
+	return PushService_PUSH_SERVICE_UNSPECIFIED
+}
+
+func (x *RegisterPushTokenRequest) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+type RegisterPushTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterPushTokenResponse) Reset() {
+	*x = RegisterPushTokenResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterPushTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterPushTokenResponse) ProtoMessage() {}
+
+func (x *RegisterPushTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterPushTokenResponse.ProtoReflect.Descriptor instead.
+func (*RegisterPushTokenResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{15}
+}
+
 var File_wrinkle_v1_messaging_proto protoreflect.FileDescriptor
 
 const file_wrinkle_v1_messaging_proto_rawDesc = "" +
@@ -791,7 +935,15 @@ const file_wrinkle_v1_messaging_proto_rawDesc = "" +
 	"before_seq\x18\x02 \x01(\x04R\tbeforeSeq\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\rR\x05limit\"F\n" +
 	"\x13GetMessagesResponse\x12/\n" +
-	"\bmessages\x18\x01 \x03(\v2\x13.wrinkle.v1.MessageR\bmessagesB\xa1\x01\n" +
+	"\bmessages\x18\x01 \x03(\v2\x13.wrinkle.v1.MessageR\bmessages\"c\n" +
+	"\x18RegisterPushTokenRequest\x121\n" +
+	"\aservice\x18\x01 \x01(\x0e2\x17.wrinkle.v1.PushServiceR\aservice\x12\x14\n" +
+	"\x05token\x18\x02 \x01(\tR\x05token\"\x1b\n" +
+	"\x19RegisterPushTokenResponse*a\n" +
+	"\vPushService\x12\x1c\n" +
+	"\x18PUSH_SERVICE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19PUSH_SERVICE_APNS_SANDBOX\x10\x01\x12\x15\n" +
+	"\x11PUSH_SERVICE_APNS\x10\x02B\xa1\x01\n" +
 	"\x0ecom.wrinkle.v1B\x0eMessagingProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +
 	"Wrinkle\\V1\xe2\x02\x16Wrinkle\\V1\\GPBMetadata\xea\x02\vWrinkle::V1b\x06proto3"
@@ -808,39 +960,44 @@ func file_wrinkle_v1_messaging_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_messaging_proto_rawDescData
 }
 
-var file_wrinkle_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_wrinkle_v1_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_wrinkle_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_wrinkle_v1_messaging_proto_goTypes = []any{
-	(*ConnectRequest)(nil),            // 0: wrinkle.v1.ConnectRequest
-	(*ConnectResponse)(nil),           // 1: wrinkle.v1.ConnectResponse
-	(*OpenConversationRequest)(nil),   // 2: wrinkle.v1.OpenConversationRequest
-	(*OpenConversationResponse)(nil),  // 3: wrinkle.v1.OpenConversationResponse
-	(*SendMessageRequest)(nil),        // 4: wrinkle.v1.SendMessageRequest
-	(*SendMessageResponse)(nil),       // 5: wrinkle.v1.SendMessageResponse
-	(*MarkReadRequest)(nil),           // 6: wrinkle.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),          // 7: wrinkle.v1.MarkReadResponse
-	(*SyncRequest)(nil),               // 8: wrinkle.v1.SyncRequest
-	(*SyncResponse)(nil),              // 9: wrinkle.v1.SyncResponse
-	(*ListConversationsRequest)(nil),  // 10: wrinkle.v1.ListConversationsRequest
-	(*ListConversationsResponse)(nil), // 11: wrinkle.v1.ListConversationsResponse
-	(*GetMessagesRequest)(nil),        // 12: wrinkle.v1.GetMessagesRequest
-	(*GetMessagesResponse)(nil),       // 13: wrinkle.v1.GetMessagesResponse
-	(*User)(nil),                      // 14: wrinkle.v1.User
-	(*Conversation)(nil),              // 15: wrinkle.v1.Conversation
-	(*Message)(nil),                   // 16: wrinkle.v1.Message
-	(*Event)(nil),                     // 17: wrinkle.v1.Event
+	(PushService)(0),                  // 0: wrinkle.v1.PushService
+	(*ConnectRequest)(nil),            // 1: wrinkle.v1.ConnectRequest
+	(*ConnectResponse)(nil),           // 2: wrinkle.v1.ConnectResponse
+	(*OpenConversationRequest)(nil),   // 3: wrinkle.v1.OpenConversationRequest
+	(*OpenConversationResponse)(nil),  // 4: wrinkle.v1.OpenConversationResponse
+	(*SendMessageRequest)(nil),        // 5: wrinkle.v1.SendMessageRequest
+	(*SendMessageResponse)(nil),       // 6: wrinkle.v1.SendMessageResponse
+	(*MarkReadRequest)(nil),           // 7: wrinkle.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),          // 8: wrinkle.v1.MarkReadResponse
+	(*SyncRequest)(nil),               // 9: wrinkle.v1.SyncRequest
+	(*SyncResponse)(nil),              // 10: wrinkle.v1.SyncResponse
+	(*ListConversationsRequest)(nil),  // 11: wrinkle.v1.ListConversationsRequest
+	(*ListConversationsResponse)(nil), // 12: wrinkle.v1.ListConversationsResponse
+	(*GetMessagesRequest)(nil),        // 13: wrinkle.v1.GetMessagesRequest
+	(*GetMessagesResponse)(nil),       // 14: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenRequest)(nil),  // 15: wrinkle.v1.RegisterPushTokenRequest
+	(*RegisterPushTokenResponse)(nil), // 16: wrinkle.v1.RegisterPushTokenResponse
+	(*User)(nil),                      // 17: wrinkle.v1.User
+	(*Conversation)(nil),              // 18: wrinkle.v1.Conversation
+	(*Message)(nil),                   // 19: wrinkle.v1.Message
+	(*Event)(nil),                     // 20: wrinkle.v1.Event
 }
 var file_wrinkle_v1_messaging_proto_depIdxs = []int32{
-	14, // 0: wrinkle.v1.ConnectResponse.user:type_name -> wrinkle.v1.User
-	15, // 1: wrinkle.v1.OpenConversationResponse.conversation:type_name -> wrinkle.v1.Conversation
-	16, // 2: wrinkle.v1.SendMessageResponse.message:type_name -> wrinkle.v1.Message
-	17, // 3: wrinkle.v1.SyncResponse.events:type_name -> wrinkle.v1.Event
-	15, // 4: wrinkle.v1.ListConversationsResponse.conversations:type_name -> wrinkle.v1.Conversation
-	16, // 5: wrinkle.v1.GetMessagesResponse.messages:type_name -> wrinkle.v1.Message
-	6,  // [6:6] is the sub-list for method output_type
-	6,  // [6:6] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	17, // 0: wrinkle.v1.ConnectResponse.user:type_name -> wrinkle.v1.User
+	18, // 1: wrinkle.v1.OpenConversationResponse.conversation:type_name -> wrinkle.v1.Conversation
+	19, // 2: wrinkle.v1.SendMessageResponse.message:type_name -> wrinkle.v1.Message
+	20, // 3: wrinkle.v1.SyncResponse.events:type_name -> wrinkle.v1.Event
+	18, // 4: wrinkle.v1.ListConversationsResponse.conversations:type_name -> wrinkle.v1.Conversation
+	19, // 5: wrinkle.v1.GetMessagesResponse.messages:type_name -> wrinkle.v1.Message
+	0,  // 6: wrinkle.v1.RegisterPushTokenRequest.service:type_name -> wrinkle.v1.PushService
+	7,  // [7:7] is the sub-list for method output_type
+	7,  // [7:7] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_messaging_proto_init() }
@@ -855,13 +1012,14 @@ func file_wrinkle_v1_messaging_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_messaging_proto_rawDesc), len(file_wrinkle_v1_messaging_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   14,
+			NumEnums:      1,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_wrinkle_v1_messaging_proto_goTypes,
 		DependencyIndexes: file_wrinkle_v1_messaging_proto_depIdxs,
+		EnumInfos:         file_wrinkle_v1_messaging_proto_enumTypes,
 		MessageInfos:      file_wrinkle_v1_messaging_proto_msgTypes,
 	}.Build()
 	File_wrinkle_v1_messaging_proto = out.File

@@ -93,3 +93,23 @@ message GetMessagesRequest {
 message GetMessagesResponse {
   repeated Message messages = 1;
 }
+
+// Registers where to push notifications for the requesting device while it
+// is not connected. Replaces any earlier registration of the device; an
+// empty token removes it.
+message RegisterPushTokenRequest {
+  PushService service = 1;
+  // The token the push service issued to the device, as text; for APNs the
+  // device token in hex.
+  string token = 2;
+}
+
+message RegisterPushTokenResponse {}
+
+enum PushService {
+  PUSH_SERVICE_UNSPECIFIED = 0;
+  // APNs, development environment: apps built and signed for development.
+  PUSH_SERVICE_APNS_SANDBOX = 1;
+  // APNs, production environment: TestFlight and App Store builds.
+  PUSH_SERVICE_APNS = 2;
+}

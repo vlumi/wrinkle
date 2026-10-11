@@ -16,6 +16,10 @@ CREATE TABLE device (
   name VARCHAR(64) NOT NULL,
   -- The log position the device last acked.
   acked_position BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  -- Where to push while the device is not connected: the PushService name
+  -- and the token it issued; NULL when the device has not registered.
+  push_service VARCHAR(32) NULL,
+  push_token VARCHAR(200) NULL,
   created_at DATETIME(6) NOT NULL,
   last_seen_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, device_id)

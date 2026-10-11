@@ -44,6 +44,7 @@ message Request {
     SyncRequest sync = 14;
     ListConversationsRequest list_conversations = 15;
     GetMessagesRequest get_messages = 16;
+    RegisterPushTokenRequest register_push_token = 17;
   }
 }
 
@@ -58,6 +59,7 @@ message Response {
     SyncResponse sync = 14;
     ListConversationsResponse list_conversations = 15;
     GetMessagesResponse get_messages = 16;
+    RegisterPushTokenResponse register_push_token = 17;
   }
 }
 

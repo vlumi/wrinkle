@@ -22,6 +22,48 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
+public nonisolated enum Wrinkle_V1_PushService: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// APNs, development environment: apps built and signed for development.
+  case apnsSandbox // = 1
+
+  /// APNs, production environment: TestFlight and App Store builds.
+  case apns // = 2
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .apnsSandbox
+    case 2: self = .apns
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .apnsSandbox: return 1
+    case .apns: return 2
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Wrinkle_V1_PushService] = [
+    .unspecified,
+    .apnsSandbox,
+    .apns,
+  ]
+
+}
+
 /// Signs in by name and registers the device. Users and devices are created on
 /// first use; there are no passwords. Must be the first request on a connection.
 public nonisolated struct Wrinkle_V1_ConnectRequest: Sendable {
@@ -257,9 +299,42 @@ public nonisolated struct Wrinkle_V1_GetMessagesResponse: Sendable {
   public init() {}
 }
 
+/// Registers where to push notifications for the requesting device while it
+/// is not connected. Replaces any earlier registration of the device; an
+/// empty token removes it.
+public nonisolated struct Wrinkle_V1_RegisterPushTokenRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var service: Wrinkle_V1_PushService = .unspecified
+
+  /// The token the push service issued to the device, as text; for APNs the
+  /// device token in hex.
+  public var token: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_RegisterPushTokenResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
+
+nonisolated extension Wrinkle_V1_PushService: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0PUSH_SERVICE_UNSPECIFIED\0\u{1}PUSH_SERVICE_APNS_SANDBOX\0\u{1}PUSH_SERVICE_APNS\0")
+}
 
 nonisolated extension Wrinkle_V1_ConnectRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ConnectRequest"
@@ -731,6 +806,60 @@ nonisolated extension Wrinkle_V1_GetMessagesResponse: SwiftProtobuf.Message, Swi
 
   public static func ==(lhs: Wrinkle_V1_GetMessagesResponse, rhs: Wrinkle_V1_GetMessagesResponse) -> Bool {
     if lhs.messages != rhs.messages {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_RegisterPushTokenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RegisterPushTokenRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}service\0\u{1}token\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularEnumField(value: &self.service) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.token) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.service != .unspecified {
+      try visitor.visitSingularEnumField(value: self.service, fieldNumber: 1)
+    }
+    if !self.token.isEmpty {
+      try visitor.visitSingularStringField(value: self.token, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_RegisterPushTokenRequest, rhs: Wrinkle_V1_RegisterPushTokenRequest) -> Bool {
+    if lhs.service != rhs.service {return false}
+    if lhs.token != rhs.token {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_RegisterPushTokenResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".RegisterPushTokenResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_RegisterPushTokenResponse, rhs: Wrinkle_V1_RegisterPushTokenResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

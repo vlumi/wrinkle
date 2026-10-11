@@ -264,6 +264,7 @@ type Request struct {
 	//	*Request_Sync
 	//	*Request_ListConversations
 	//	*Request_GetMessages
+	//	*Request_RegisterPushToken
 	Body          isRequest_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -376,6 +377,15 @@ func (x *Request) GetGetMessages() *GetMessagesRequest {
 	return nil
 }
 
+func (x *Request) GetRegisterPushToken() *RegisterPushTokenRequest {
+	if x != nil {
+		if x, ok := x.Body.(*Request_RegisterPushToken); ok {
+			return x.RegisterPushToken
+		}
+	}
+	return nil
+}
+
 type isRequest_Body interface {
 	isRequest_Body()
 }
@@ -408,6 +418,10 @@ type Request_GetMessages struct {
 	GetMessages *GetMessagesRequest `protobuf:"bytes,16,opt,name=get_messages,json=getMessages,proto3,oneof"`
 }
 
+type Request_RegisterPushToken struct {
+	RegisterPushToken *RegisterPushTokenRequest `protobuf:"bytes,17,opt,name=register_push_token,json=registerPushToken,proto3,oneof"`
+}
+
 func (*Request_Connect) isRequest_Body() {}
 
 func (*Request_OpenConversation) isRequest_Body() {}
@@ -422,6 +436,8 @@ func (*Request_ListConversations) isRequest_Body() {}
 
 func (*Request_GetMessages) isRequest_Body() {}
 
+func (*Request_RegisterPushToken) isRequest_Body() {}
+
 type Response struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	RequestId uint64                 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
@@ -435,6 +451,7 @@ type Response struct {
 	//	*Response_Sync
 	//	*Response_ListConversations
 	//	*Response_GetMessages
+	//	*Response_RegisterPushToken
 	Body          isResponse_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -556,6 +573,15 @@ func (x *Response) GetGetMessages() *GetMessagesResponse {
 	return nil
 }
 
+func (x *Response) GetRegisterPushToken() *RegisterPushTokenResponse {
+	if x != nil {
+		if x, ok := x.Body.(*Response_RegisterPushToken); ok {
+			return x.RegisterPushToken
+		}
+	}
+	return nil
+}
+
 type isResponse_Body interface {
 	isResponse_Body()
 }
@@ -592,6 +618,10 @@ type Response_GetMessages struct {
 	GetMessages *GetMessagesResponse `protobuf:"bytes,16,opt,name=get_messages,json=getMessages,proto3,oneof"`
 }
 
+type Response_RegisterPushToken struct {
+	RegisterPushToken *RegisterPushTokenResponse `protobuf:"bytes,17,opt,name=register_push_token,json=registerPushToken,proto3,oneof"`
+}
+
 func (*Response_Error) isResponse_Body() {}
 
 func (*Response_Connect) isResponse_Body() {}
@@ -607,6 +637,8 @@ func (*Response_Sync) isResponse_Body() {}
 func (*Response_ListConversations) isResponse_Body() {}
 
 func (*Response_GetMessages) isResponse_Body() {}
+
+func (*Response_RegisterPushToken) isResponse_Body() {}
 
 type Error struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -794,7 +826,7 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x03ack\x18\x04 \x01(\v2\x0f.wrinkle.v1.AckH\x00R\x03ack\x12&\n" +
 	"\x04ping\x18\x05 \x01(\v2\x10.wrinkle.v1.PingH\x00R\x04ping\x12&\n" +
 	"\x04pong\x18\x06 \x01(\v2\x10.wrinkle.v1.PongH\x00R\x04pongB\x06\n" +
-	"\x04kind\"\xf9\x03\n" +
+	"\x04kind\"\xd1\x04\n" +
 	"\aRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x04R\x02id\x126\n" +
 	"\aconnect\x18\n" +
@@ -804,8 +836,9 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\tmark_read\x18\r \x01(\v2\x1b.wrinkle.v1.MarkReadRequestH\x00R\bmarkRead\x12-\n" +
 	"\x04sync\x18\x0e \x01(\v2\x17.wrinkle.v1.SyncRequestH\x00R\x04sync\x12U\n" +
 	"\x12list_conversations\x18\x0f \x01(\v2$.wrinkle.v1.ListConversationsRequestH\x00R\x11listConversations\x12C\n" +
-	"\fget_messages\x18\x10 \x01(\v2\x1e.wrinkle.v1.GetMessagesRequestH\x00R\vgetMessagesB\x06\n" +
-	"\x04body\"\xbb\x04\n" +
+	"\fget_messages\x18\x10 \x01(\v2\x1e.wrinkle.v1.GetMessagesRequestH\x00R\vgetMessages\x12V\n" +
+	"\x13register_push_token\x18\x11 \x01(\v2$.wrinkle.v1.RegisterPushTokenRequestH\x00R\x11registerPushTokenB\x06\n" +
+	"\x04body\"\x94\x05\n" +
 	"\bResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\x04R\trequestId\x12)\n" +
@@ -817,7 +850,8 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\tmark_read\x18\r \x01(\v2\x1c.wrinkle.v1.MarkReadResponseH\x00R\bmarkRead\x12.\n" +
 	"\x04sync\x18\x0e \x01(\v2\x18.wrinkle.v1.SyncResponseH\x00R\x04sync\x12V\n" +
 	"\x12list_conversations\x18\x0f \x01(\v2%.wrinkle.v1.ListConversationsResponseH\x00R\x11listConversations\x12D\n" +
-	"\fget_messages\x18\x10 \x01(\v2\x1f.wrinkle.v1.GetMessagesResponseH\x00R\vgetMessagesB\x06\n" +
+	"\fget_messages\x18\x10 \x01(\v2\x1f.wrinkle.v1.GetMessagesResponseH\x00R\vgetMessages\x12W\n" +
+	"\x13register_push_token\x18\x11 \x01(\v2%.wrinkle.v1.RegisterPushTokenResponseH\x00R\x11registerPushTokenB\x06\n" +
 	"\x04body\"L\n" +
 	"\x05Error\x12)\n" +
 	"\x04code\x18\x01 \x01(\x0e2\x15.wrinkle.v1.ErrorCodeR\x04code\x12\x18\n" +
@@ -871,13 +905,15 @@ var file_wrinkle_v1_frame_proto_goTypes = []any{
 	(*SyncRequest)(nil),               // 13: wrinkle.v1.SyncRequest
 	(*ListConversationsRequest)(nil),  // 14: wrinkle.v1.ListConversationsRequest
 	(*GetMessagesRequest)(nil),        // 15: wrinkle.v1.GetMessagesRequest
-	(*ConnectResponse)(nil),           // 16: wrinkle.v1.ConnectResponse
-	(*OpenConversationResponse)(nil),  // 17: wrinkle.v1.OpenConversationResponse
-	(*SendMessageResponse)(nil),       // 18: wrinkle.v1.SendMessageResponse
-	(*MarkReadResponse)(nil),          // 19: wrinkle.v1.MarkReadResponse
-	(*SyncResponse)(nil),              // 20: wrinkle.v1.SyncResponse
-	(*ListConversationsResponse)(nil), // 21: wrinkle.v1.ListConversationsResponse
-	(*GetMessagesResponse)(nil),       // 22: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenRequest)(nil),  // 16: wrinkle.v1.RegisterPushTokenRequest
+	(*ConnectResponse)(nil),           // 17: wrinkle.v1.ConnectResponse
+	(*OpenConversationResponse)(nil),  // 18: wrinkle.v1.OpenConversationResponse
+	(*SendMessageResponse)(nil),       // 19: wrinkle.v1.SendMessageResponse
+	(*MarkReadResponse)(nil),          // 20: wrinkle.v1.MarkReadResponse
+	(*SyncResponse)(nil),              // 21: wrinkle.v1.SyncResponse
+	(*ListConversationsResponse)(nil), // 22: wrinkle.v1.ListConversationsResponse
+	(*GetMessagesResponse)(nil),       // 23: wrinkle.v1.GetMessagesResponse
+	(*RegisterPushTokenResponse)(nil), // 24: wrinkle.v1.RegisterPushTokenResponse
 }
 var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	2,  // 0: wrinkle.v1.Frame.request:type_name -> wrinkle.v1.Request
@@ -893,20 +929,22 @@ var file_wrinkle_v1_frame_proto_depIdxs = []int32{
 	13, // 10: wrinkle.v1.Request.sync:type_name -> wrinkle.v1.SyncRequest
 	14, // 11: wrinkle.v1.Request.list_conversations:type_name -> wrinkle.v1.ListConversationsRequest
 	15, // 12: wrinkle.v1.Request.get_messages:type_name -> wrinkle.v1.GetMessagesRequest
-	4,  // 13: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
-	16, // 14: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
-	17, // 15: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
-	18, // 16: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
-	19, // 17: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
-	20, // 18: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
-	21, // 19: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
-	22, // 20: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
-	0,  // 21: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
-	22, // [22:22] is the sub-list for method output_type
-	22, // [22:22] is the sub-list for method input_type
-	22, // [22:22] is the sub-list for extension type_name
-	22, // [22:22] is the sub-list for extension extendee
-	0,  // [0:22] is the sub-list for field type_name
+	16, // 13: wrinkle.v1.Request.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenRequest
+	4,  // 14: wrinkle.v1.Response.error:type_name -> wrinkle.v1.Error
+	17, // 15: wrinkle.v1.Response.connect:type_name -> wrinkle.v1.ConnectResponse
+	18, // 16: wrinkle.v1.Response.open_conversation:type_name -> wrinkle.v1.OpenConversationResponse
+	19, // 17: wrinkle.v1.Response.send_message:type_name -> wrinkle.v1.SendMessageResponse
+	20, // 18: wrinkle.v1.Response.mark_read:type_name -> wrinkle.v1.MarkReadResponse
+	21, // 19: wrinkle.v1.Response.sync:type_name -> wrinkle.v1.SyncResponse
+	22, // 20: wrinkle.v1.Response.list_conversations:type_name -> wrinkle.v1.ListConversationsResponse
+	23, // 21: wrinkle.v1.Response.get_messages:type_name -> wrinkle.v1.GetMessagesResponse
+	24, // 22: wrinkle.v1.Response.register_push_token:type_name -> wrinkle.v1.RegisterPushTokenResponse
+	0,  // 23: wrinkle.v1.Error.code:type_name -> wrinkle.v1.ErrorCode
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_frame_proto_init() }
@@ -932,6 +970,7 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Request_Sync)(nil),
 		(*Request_ListConversations)(nil),
 		(*Request_GetMessages)(nil),
+		(*Request_RegisterPushToken)(nil),
 	}
 	file_wrinkle_v1_frame_proto_msgTypes[2].OneofWrappers = []any{
 		(*Response_Error)(nil),
@@ -942,6 +981,7 @@ func file_wrinkle_v1_frame_proto_init() {
 		(*Response_Sync)(nil),
 		(*Response_ListConversations)(nil),
 		(*Response_GetMessages)(nil),
+		(*Response_RegisterPushToken)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

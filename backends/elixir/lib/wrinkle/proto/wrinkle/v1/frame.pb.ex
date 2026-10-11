@@ -63,6 +63,11 @@ defmodule Wrinkle.V1.Request do
     oneof: 0
 
   field :get_messages, 16, type: Wrinkle.V1.GetMessagesRequest, json_name: "getMessages", oneof: 0
+
+  field :register_push_token, 17,
+    type: Wrinkle.V1.RegisterPushTokenRequest,
+    json_name: "registerPushToken",
+    oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -100,6 +105,11 @@ defmodule Wrinkle.V1.Response do
   field :get_messages, 16,
     type: Wrinkle.V1.GetMessagesResponse,
     json_name: "getMessages",
+    oneof: 0
+
+  field :register_push_token, 17,
+    type: Wrinkle.V1.RegisterPushTokenResponse,
+    json_name: "registerPushToken",
     oneof: 0
 end
 
