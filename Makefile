@@ -79,6 +79,23 @@ run-rust: build-go build-rust  ## Rust gateway, with the Go services beside it
 	backends/ports-free.sh 8080 8090 9000
 	backends/rust/run.sh
 
+##@ Gateways side by side (one services process, a gateway per language on its own port)
+##~ Start run-services first, then any of the gateways in other terminals. PORT=... overrides the port.
+
+.PHONY: run-services run-go-gateway run-elixir-gateway run-rust-gateway
+run-services: build-go  ## Go services and fan-out alone, for the gateways below
+	backends/ports-free.sh 8090 9000
+	backends/services.sh $(ARGS)
+
+run-go-gateway: build-go  ## Go gateway on :8180
+	backends/gateway.sh go $(PORT)
+
+run-elixir-gateway: build-elixir  ## Elixir gateway on :8181
+	backends/gateway.sh elixir $(PORT)
+
+run-rust-gateway: build-rust  ## Rust gateway on :8182
+	backends/gateway.sh rust $(PORT)
+
 ##@ Clients
 
 .PHONY: web web-dev ios-sim ios-device ios-project
