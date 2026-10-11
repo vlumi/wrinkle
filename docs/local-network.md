@@ -35,7 +35,7 @@ The generated code is committed, so the code generators (`make tools`) are not n
 
 ## Backends
 
-Run one backend at a time: they all serve port 8080. Stop one with Ctrl-C before starting the next, or run the gateways side by side as described below; they share the database, so users and conversations carry over. `make` lists every target.
+`make run-go` and `make run-java` each run a whole backend on port 8080, so one at a time; Ctrl-C stops one. The Go, Elixir and Rust gateways instead run beside the Go services, described below. All of them share the database, so users and conversations carry over. `make` lists every target.
 
 The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
@@ -61,31 +61,27 @@ The symlink lets `java_home` find the Homebrew JDK, which the Makefile uses. The
 
 ### Elixir
 
-The Elixir implementation is a gateway; the Go services and fan-out run beside it.
+The Elixir implementation is a gateway, run beside the Go services as described in [Gateways side by side](#gateways-side-by-side). Its toolchain:
 
 ```sh
 brew install elixir
 mix local.hex --force
 mix local.rebar --force
-
-make run-elixir
 ```
 
 ### Rust
 
-Also a gateway, run beside the Go services.
+Also a gateway, run the same way. Its toolchain:
 
 ```sh
 brew install rustup
 export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 rustup default stable
-
-make run-rust
 ```
 
 ### Gateways side by side
 
-The gateways can also run at the same time against one services process, each on its own port, so users on different gateways can message each other:
+The Go, Elixir and Rust gateways run against one Go services process, each on its own port. Run any one of them, or all at once, and users on different gateways can message each other:
 
 ```sh
 make run-go-services       # the Go services and fan-out; leave it running
@@ -94,7 +90,7 @@ make run-elixir-gw         # ws://<address>:8181/v1/ws
 make run-rust-gw           # ws://<address>:8182/v1/ws
 ```
 
-Stop any `run-*` backend first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
+Stop `run-go` or `run-java` first; they hold the same ports. `PORT=...` moves a gateway elsewhere. Prometheus scrapes only port 8080, so these gateways don't show in Grafana.
 
 To connect to one particular gateway, put its port in the client's gateway field. Or put a load balancer in front of them all on port 8080, where the clients connect by default:
 
@@ -103,7 +99,7 @@ make lb-up                 # HAProxy on ws://<address>:8080/v1/ws
 make lb-down
 ```
 
-Each new connection goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds. Its devices reconnect and land on the others, then come back to it as new connections once it is running again. `http://localhost:8404/` on the host shows each gateway's state and connections. The balancer holds port 8080, so stop it before running a `run-*` backend.
+Each new connection goes to the healthy gateway with the fewest connections. Stop a gateway and the balancer marks it down within about two seconds. Its devices reconnect and land on the others, then come back to it as new connections once it is running again. `http://localhost:8404/` on the host shows each gateway's state and connections. The balancer holds port 8080, so stop it before `run-go` or `run-java`.
 
 ## Clients
 
