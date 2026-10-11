@@ -1,11 +1,13 @@
 // Serves the built web client (dist/) to the network, with no dependencies.
 // Usage: node server.mjs [port]; HOST and PORT override the defaults
 // (0.0.0.0:8081). The page connects to the gateway on its own host, port 8080.
+// /monitor, for requests from this host only, links to the monitoring pages.
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { monitor } from "./monitor.mjs";
 
 const root = resolve(fileURLToPath(new URL(".", import.meta.url)), "dist");
 const host = process.env.HOST ?? "0.0.0.0";
@@ -37,6 +39,7 @@ const server = createServer(async (req, res) => {
     res.end("ok\n");
     return;
   }
+  if (await monitor(req, res, url.pathname)) return;
   const rel = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
   // One page: anything that is not a file gets index.html.
   const path = (await file(join(root, rel))) ?? join(root, "index.html");
@@ -55,4 +58,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(port, host, () => {
   console.log(`web client on http://${host === "0.0.0.0" ? "<this host>" : host}:${port}/`);
+  console.log(`monitoring on http://localhost:${port}/monitor (this host only)`);
 });
