@@ -1,0 +1,16 @@
+# The backend images build from the repository root; keep build output,
+# dependencies and the clients out of the context.
+.git
+.env
+*.local
+**/.DS_Store
+bin/
+**/build/
+**/target/
+**/_build/
+**/deps/
+**/node_modules/
+**/.gradle/
+clients/ios/
+clients/web/
+docs/
