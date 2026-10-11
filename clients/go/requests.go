@@ -88,6 +88,14 @@ func (c *Client) DeleteMessage(ctx context.Context, conversationID []byte, seq u
 	return err
 }
 
+// SetReaction sends the user's sealed reactions to a message as they are,
+// or removes them when sealed is nil; SetReactions seals and sends.
+func (c *Client) SetReaction(ctx context.Context, conversationID []byte, seq uint64, sealed *pb.Sealed) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SetReaction{
+		SetReaction: &pb.SetReactionRequest{ConversationId: conversationID, Seq: seq, Sealed: sealed}}})
+	return err
+}
+
 func (c *Client) MarkRead(ctx context.Context, conversationID []byte, seq uint64) error {
 	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_MarkRead{
 		MarkRead: &pb.MarkReadRequest{ConversationId: conversationID, Seq: seq}}})

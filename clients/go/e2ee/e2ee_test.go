@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -69,6 +70,18 @@ type vectors struct {
 		AAD             string `json:"aad"`
 		Ciphertext      string `json:"ciphertext"`
 	} `json:"seal"`
+	Reaction struct {
+		Key            string   `json:"key"`
+		Nonce          string   `json:"nonce"`
+		ConversationID string   `json:"conversation_id"`
+		Epoch          uint32   `json:"epoch"`
+		UserID         string   `json:"user_id"`
+		Seq            uint64   `json:"seq"`
+		Emoji          []string `json:"emoji"`
+		Plaintext      string   `json:"plaintext"`
+		AAD            string   `json:"aad"`
+		Ciphertext     string   `json:"ciphertext"`
+	} `json:"reaction"`
 	Fingerprints struct {
 		Users []struct {
 			UserID      string   `json:"user_id"`
@@ -134,6 +147,15 @@ func inputs() *vectors {
 	v.Seal.SenderUserID = userA
 	v.Seal.ClientMessageID = "client-message-1"
 	v.Seal.Text = "hello"
+	v.Reaction.Key = v.Wrap.Key
+	v.Reaction.Nonce = h(seq(0x50, 12))
+	v.Reaction.ConversationID = v.Wrap.ConversationID
+	v.Reaction.Epoch = 2
+	v.Reaction.UserID = userB
+	// Above 2^32, so 32-bit encodings show; below 2^53 for JSON.
+	v.Reaction.Seq = 1<<32 + 2
+	// One code point, one with a variation selector, one ZWJ sequence.
+	v.Reaction.Emoji = []string{"👍", "❤️", "👩‍👩‍👧"}
 	v.Fingerprints.Users = make([]struct {
 		UserID      string   `json:"user_id"`
 		Devices     []string `json:"devices"`
@@ -154,6 +176,16 @@ func deviceID(t *testing.T, d vectorDevice) uint64 {
 		t.Fatal(err)
 	}
 	return id
+}
+
+func reactionContext(t *testing.T, v *vectors) ReactionContext {
+	t.Helper()
+	return ReactionContext{
+		ConversationID: unhex(t, v.Reaction.ConversationID),
+		Epoch:          v.Reaction.Epoch,
+		UserID:         unhex(t, v.Reaction.UserID),
+		Seq:            v.Reaction.Seq,
+	}
 }
 
 // compute fills in every expected value from the inputs.
@@ -207,6 +239,17 @@ func compute(t *testing.T, v *vectors) {
 		t.Fatal(err)
 	}
 	v.Seal.Plaintext, v.Seal.AAD, v.Seal.Ciphertext = h(plaintext), h(c.AAD()), h(ct)
+
+	rc := reactionContext(t, v)
+	plaintext, err = MarshalReactions(&pb.Reactions{Emoji: v.Reaction.Emoji})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct, err = Seal(unhex(t, v.Reaction.Key), unhex(t, v.Reaction.Nonce), plaintext, rc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Reaction.Plaintext, v.Reaction.AAD, v.Reaction.Ciphertext = h(plaintext), h(rc.AAD()), h(ct)
 
 	var fps [][]byte
 	for i, u := range v.Fingerprints.Users {
@@ -274,6 +317,12 @@ func TestVectors(t *testing.T) {
 	})
 	if err != nil || content.GetText() != got.Seal.Text {
 		t.Fatalf("open: %v, %v", content, err)
+	}
+	reactions, err := OpenReactions(unhex(t, got.Reaction.Key), reactionContext(t, &got), &pb.Sealed{
+		Epoch: got.Reaction.Epoch, Nonce: unhex(t, got.Reaction.Nonce), Ciphertext: unhex(t, got.Reaction.Ciphertext),
+	})
+	if err != nil || !slices.Equal(reactions.GetEmoji(), got.Reaction.Emoji) {
+		t.Fatalf("open reactions: %v, %v", reactions, err)
 	}
 }
 

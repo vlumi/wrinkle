@@ -1,5 +1,6 @@
 // Package e2ee is the end-to-end cryptography of content.proto: device key
-// pairs, wrapping conversation epoch keys for devices, sealing content,
+// pairs, wrapping conversation epoch keys for devices, sealing content and
+// reactions,
 // fingerprints and safety numbers. Functions that need a nonce take it, so
 // the test vectors are reproducible; callers pass random ones.
 package e2ee
@@ -30,6 +31,7 @@ const (
 
 	wrapLabel        = "wrinkle wrap v1"
 	contentLabel     = "wrinkle content v1"
+	reactionLabel    = "wrinkle reaction v1"
 	fingerprintLabel = "wrinkle fingerprint v1"
 )
 
@@ -167,9 +169,31 @@ func (c ContentContext) AAD() []byte {
 	return append(b, c.ClientMessageID...)
 }
 
+// ReactionContext identifies a user's reactions to a message.
+type ReactionContext struct {
+	ConversationID []byte
+	Epoch          uint32
+	UserID         []byte
+	Seq            uint64
+}
+
+// AAD is the associated data of sealed reactions.
+func (c ReactionContext) AAD() []byte {
+	b := []byte(reactionLabel)
+	b = append(b, c.ConversationID...)
+	b = binary.BigEndian.AppendUint32(b, c.Epoch)
+	b = append(b, c.UserID...)
+	return binary.BigEndian.AppendUint64(b, c.Seq)
+}
+
+// Context is what a sealed plaintext is bound to.
+type Context interface {
+	AAD() []byte
+}
+
 // Seal encrypts plaintext under epoch key k; the result has the tag
 // appended.
-func Seal(k, nonce, plaintext []byte, c ContentContext) ([]byte, error) {
+func Seal(k, nonce, plaintext []byte, c Context) ([]byte, error) {
 	if len(nonce) != NonceSize {
 		return nil, errors.New("e2ee: wrong nonce size")
 	}
@@ -181,7 +205,7 @@ func Seal(k, nonce, plaintext []byte, c ContentContext) ([]byte, error) {
 }
 
 // Open decrypts what Seal made.
-func Open(k, nonce, ciphertext []byte, c ContentContext) ([]byte, error) {
+func Open(k, nonce, ciphertext []byte, c Context) ([]byte, error) {
 	if len(nonce) != NonceSize {
 		return nil, ErrDecrypt
 	}
@@ -231,6 +255,43 @@ func OpenContent(k []byte, c ContentContext, sealed *pb.Sealed) (*pb.Content, er
 		return nil, ErrDecrypt
 	}
 	return content, nil
+}
+
+// MarshalReactions serializes reactions as devices seal them.
+func MarshalReactions(r *pb.Reactions) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(r)
+}
+
+// SealReactions seals a user's reactions under epoch key k of c.Epoch with
+// a random nonce.
+func SealReactions(k []byte, c ReactionContext, r *pb.Reactions) (*pb.Sealed, error) {
+	plaintext, err := MarshalReactions(r)
+	if err != nil {
+		return nil, err
+	}
+	nonce := NewNonce()
+	ct, err := Seal(k, nonce, plaintext, c)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.Sealed{Epoch: c.Epoch, Nonce: nonce, Ciphertext: ct}, nil
+}
+
+// OpenReactions opens a user's sealed reactions; c.Epoch must be the
+// sealed epoch, whose key k is.
+func OpenReactions(k []byte, c ReactionContext, sealed *pb.Sealed) (*pb.Reactions, error) {
+	if sealed.GetEpoch() != c.Epoch {
+		return nil, fmt.Errorf("e2ee: sealed with epoch %d, not %d", sealed.GetEpoch(), c.Epoch)
+	}
+	plaintext, err := Open(k, sealed.GetNonce(), sealed.GetCiphertext(), c)
+	if err != nil {
+		return nil, err
+	}
+	r := &pb.Reactions{}
+	if err := proto.Unmarshal(plaintext, r); err != nil {
+		return nil, ErrDecrypt
+	}
+	return r, nil
 }
 
 // DeviceKey is a device's public key in a user's fingerprint.
