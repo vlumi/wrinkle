@@ -22,6 +22,10 @@
 //   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
 //   5-byte big-endian numbers, each modulo 100000, written as five digits
 //   and separated by spaces. Both users see the same number.
+// - An attachment's blob: a random 32-byte key per file; the blob is nonce
+//   || AES-GCM(key, nonce, the file, associated data "wrinkle blob v1"),
+//   uploaded as application/octet-stream. Its SHA-256 goes in the content,
+//   and recipients check it before decrypting.
 // - Reactions are sealed like content, with associated data "wrinkle
 //   reaction v1" || conversation_id || epoch (4 bytes) || the reacting
 //   user's id || the message's seq (8 bytes).
@@ -39,7 +43,31 @@ message Content {
     // 1 to 4000 characters.
     string text = 1;
     StickerRef sticker = 2;
+    Attachments attachments = 3;
   }
+}
+
+message Attachments {
+  // 1 to 10, each also listed in the message's blob_ids.
+  repeated Attachment items = 1;
+  // 0 to 4000 characters.
+  string caption = 2;
+}
+
+message Attachment {
+  bytes blob_id = 1;
+  // The file's key, 32 bytes.
+  bytes key = 2;
+  // SHA-256 of the blob as uploaded.
+  bytes digest = 3;
+  string media_type = 4;
+  // The file's size in bytes, before encryption.
+  uint64 size = 5;
+  string name = 6;
+  // Images: the size in pixels, and a small JPEG preview, at most 16 KiB.
+  uint32 width = 7;
+  uint32 height = 8;
+  bytes thumbnail = 9;
 }
 
 message StickerRef {

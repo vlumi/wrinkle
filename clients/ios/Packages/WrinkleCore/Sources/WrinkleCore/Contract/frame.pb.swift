@@ -574,317 +574,323 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
   public init() {}
 }
 
-public nonisolated struct Wrinkle_V1_Response: Sendable {
+public nonisolated struct Wrinkle_V1_Response: @unchecked Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var requestID: UInt64 = 0
+  public var requestID: UInt64 {
+    get {_storage._requestID}
+    set {_uniqueStorage()._requestID = newValue}
+  }
 
-  public var body: Wrinkle_V1_Response.OneOf_Body? = nil
+  public var body: OneOf_Body? {
+    get {return _storage._body}
+    set {_uniqueStorage()._body = newValue}
+  }
 
   public var error: Wrinkle_V1_Error {
     get {
-      if case .error(let v)? = body {return v}
+      if case .error(let v)? = _storage._body {return v}
       return Wrinkle_V1_Error()
     }
-    set {body = .error(newValue)}
+    set {_uniqueStorage()._body = .error(newValue)}
   }
 
   public var connect: Wrinkle_V1_ConnectResponse {
     get {
-      if case .connect(let v)? = body {return v}
+      if case .connect(let v)? = _storage._body {return v}
       return Wrinkle_V1_ConnectResponse()
     }
-    set {body = .connect(newValue)}
+    set {_uniqueStorage()._body = .connect(newValue)}
   }
 
   public var openConversation: Wrinkle_V1_OpenConversationResponse {
     get {
-      if case .openConversation(let v)? = body {return v}
+      if case .openConversation(let v)? = _storage._body {return v}
       return Wrinkle_V1_OpenConversationResponse()
     }
-    set {body = .openConversation(newValue)}
+    set {_uniqueStorage()._body = .openConversation(newValue)}
   }
 
   public var sendMessage: Wrinkle_V1_SendMessageResponse {
     get {
-      if case .sendMessage(let v)? = body {return v}
+      if case .sendMessage(let v)? = _storage._body {return v}
       return Wrinkle_V1_SendMessageResponse()
     }
-    set {body = .sendMessage(newValue)}
+    set {_uniqueStorage()._body = .sendMessage(newValue)}
   }
 
   public var markRead: Wrinkle_V1_MarkReadResponse {
     get {
-      if case .markRead(let v)? = body {return v}
+      if case .markRead(let v)? = _storage._body {return v}
       return Wrinkle_V1_MarkReadResponse()
     }
-    set {body = .markRead(newValue)}
+    set {_uniqueStorage()._body = .markRead(newValue)}
   }
 
   public var sync: Wrinkle_V1_SyncResponse {
     get {
-      if case .sync(let v)? = body {return v}
+      if case .sync(let v)? = _storage._body {return v}
       return Wrinkle_V1_SyncResponse()
     }
-    set {body = .sync(newValue)}
+    set {_uniqueStorage()._body = .sync(newValue)}
   }
 
   public var listConversations: Wrinkle_V1_ListConversationsResponse {
     get {
-      if case .listConversations(let v)? = body {return v}
+      if case .listConversations(let v)? = _storage._body {return v}
       return Wrinkle_V1_ListConversationsResponse()
     }
-    set {body = .listConversations(newValue)}
+    set {_uniqueStorage()._body = .listConversations(newValue)}
   }
 
   public var getMessages: Wrinkle_V1_GetMessagesResponse {
     get {
-      if case .getMessages(let v)? = body {return v}
+      if case .getMessages(let v)? = _storage._body {return v}
       return Wrinkle_V1_GetMessagesResponse()
     }
-    set {body = .getMessages(newValue)}
+    set {_uniqueStorage()._body = .getMessages(newValue)}
   }
 
   public var registerPushToken: Wrinkle_V1_RegisterPushTokenResponse {
     get {
-      if case .registerPushToken(let v)? = body {return v}
+      if case .registerPushToken(let v)? = _storage._body {return v}
       return Wrinkle_V1_RegisterPushTokenResponse()
     }
-    set {body = .registerPushToken(newValue)}
+    set {_uniqueStorage()._body = .registerPushToken(newValue)}
   }
 
   public var register: Wrinkle_V1_RegisterResponse {
     get {
-      if case .register(let v)? = body {return v}
+      if case .register(let v)? = _storage._body {return v}
       return Wrinkle_V1_RegisterResponse()
     }
-    set {body = .register(newValue)}
+    set {_uniqueStorage()._body = .register(newValue)}
   }
 
   public var signIn: Wrinkle_V1_SignInResponse {
     get {
-      if case .signIn(let v)? = body {return v}
+      if case .signIn(let v)? = _storage._body {return v}
       return Wrinkle_V1_SignInResponse()
     }
-    set {body = .signIn(newValue)}
+    set {_uniqueStorage()._body = .signIn(newValue)}
   }
 
   public var changePassword: Wrinkle_V1_ChangePasswordResponse {
     get {
-      if case .changePassword(let v)? = body {return v}
+      if case .changePassword(let v)? = _storage._body {return v}
       return Wrinkle_V1_ChangePasswordResponse()
     }
-    set {body = .changePassword(newValue)}
+    set {_uniqueStorage()._body = .changePassword(newValue)}
   }
 
   public var updateProfile: Wrinkle_V1_UpdateProfileResponse {
     get {
-      if case .updateProfile(let v)? = body {return v}
+      if case .updateProfile(let v)? = _storage._body {return v}
       return Wrinkle_V1_UpdateProfileResponse()
     }
-    set {body = .updateProfile(newValue)}
+    set {_uniqueStorage()._body = .updateProfile(newValue)}
   }
 
   public var signOut: Wrinkle_V1_SignOutResponse {
     get {
-      if case .signOut(let v)? = body {return v}
+      if case .signOut(let v)? = _storage._body {return v}
       return Wrinkle_V1_SignOutResponse()
     }
-    set {body = .signOut(newValue)}
+    set {_uniqueStorage()._body = .signOut(newValue)}
   }
 
   public var listDevices: Wrinkle_V1_ListDevicesResponse {
     get {
-      if case .listDevices(let v)? = body {return v}
+      if case .listDevices(let v)? = _storage._body {return v}
       return Wrinkle_V1_ListDevicesResponse()
     }
-    set {body = .listDevices(newValue)}
+    set {_uniqueStorage()._body = .listDevices(newValue)}
   }
 
   public var renameDevice: Wrinkle_V1_RenameDeviceResponse {
     get {
-      if case .renameDevice(let v)? = body {return v}
+      if case .renameDevice(let v)? = _storage._body {return v}
       return Wrinkle_V1_RenameDeviceResponse()
     }
-    set {body = .renameDevice(newValue)}
+    set {_uniqueStorage()._body = .renameDevice(newValue)}
   }
 
   public var signOutDevice: Wrinkle_V1_SignOutDeviceResponse {
     get {
-      if case .signOutDevice(let v)? = body {return v}
+      if case .signOutDevice(let v)? = _storage._body {return v}
       return Wrinkle_V1_SignOutDeviceResponse()
     }
-    set {body = .signOutDevice(newValue)}
+    set {_uniqueStorage()._body = .signOutDevice(newValue)}
   }
 
   public var deleteAccount: Wrinkle_V1_DeleteAccountResponse {
     get {
-      if case .deleteAccount(let v)? = body {return v}
+      if case .deleteAccount(let v)? = _storage._body {return v}
       return Wrinkle_V1_DeleteAccountResponse()
     }
-    set {body = .deleteAccount(newValue)}
+    set {_uniqueStorage()._body = .deleteAccount(newValue)}
   }
 
   public var createUpload: Wrinkle_V1_CreateUploadResponse {
     get {
-      if case .createUpload(let v)? = body {return v}
+      if case .createUpload(let v)? = _storage._body {return v}
       return Wrinkle_V1_CreateUploadResponse()
     }
-    set {body = .createUpload(newValue)}
+    set {_uniqueStorage()._body = .createUpload(newValue)}
   }
 
   public var createGroup: Wrinkle_V1_CreateGroupResponse {
     get {
-      if case .createGroup(let v)? = body {return v}
+      if case .createGroup(let v)? = _storage._body {return v}
       return Wrinkle_V1_CreateGroupResponse()
     }
-    set {body = .createGroup(newValue)}
+    set {_uniqueStorage()._body = .createGroup(newValue)}
   }
 
   public var addMembers: Wrinkle_V1_AddMembersResponse {
     get {
-      if case .addMembers(let v)? = body {return v}
+      if case .addMembers(let v)? = _storage._body {return v}
       return Wrinkle_V1_AddMembersResponse()
     }
-    set {body = .addMembers(newValue)}
+    set {_uniqueStorage()._body = .addMembers(newValue)}
   }
 
   public var removeMember: Wrinkle_V1_RemoveMemberResponse {
     get {
-      if case .removeMember(let v)? = body {return v}
+      if case .removeMember(let v)? = _storage._body {return v}
       return Wrinkle_V1_RemoveMemberResponse()
     }
-    set {body = .removeMember(newValue)}
+    set {_uniqueStorage()._body = .removeMember(newValue)}
   }
 
   public var leaveGroup: Wrinkle_V1_LeaveGroupResponse {
     get {
-      if case .leaveGroup(let v)? = body {return v}
+      if case .leaveGroup(let v)? = _storage._body {return v}
       return Wrinkle_V1_LeaveGroupResponse()
     }
-    set {body = .leaveGroup(newValue)}
+    set {_uniqueStorage()._body = .leaveGroup(newValue)}
   }
 
   public var setTopic: Wrinkle_V1_SetTopicResponse {
     get {
-      if case .setTopic(let v)? = body {return v}
+      if case .setTopic(let v)? = _storage._body {return v}
       return Wrinkle_V1_SetTopicResponse()
     }
-    set {body = .setTopic(newValue)}
+    set {_uniqueStorage()._body = .setTopic(newValue)}
   }
 
   public var setAdmin: Wrinkle_V1_SetAdminResponse {
     get {
-      if case .setAdmin(let v)? = body {return v}
+      if case .setAdmin(let v)? = _storage._body {return v}
       return Wrinkle_V1_SetAdminResponse()
     }
-    set {body = .setAdmin(newValue)}
+    set {_uniqueStorage()._body = .setAdmin(newValue)}
   }
 
   public var getMembers: Wrinkle_V1_GetMembersResponse {
     get {
-      if case .getMembers(let v)? = body {return v}
+      if case .getMembers(let v)? = _storage._body {return v}
       return Wrinkle_V1_GetMembersResponse()
     }
-    set {body = .getMembers(newValue)}
+    set {_uniqueStorage()._body = .getMembers(newValue)}
   }
 
   public var deleteMessage: Wrinkle_V1_DeleteMessageResponse {
     get {
-      if case .deleteMessage(let v)? = body {return v}
+      if case .deleteMessage(let v)? = _storage._body {return v}
       return Wrinkle_V1_DeleteMessageResponse()
     }
-    set {body = .deleteMessage(newValue)}
+    set {_uniqueStorage()._body = .deleteMessage(newValue)}
   }
 
   public var setDeviceKey: Wrinkle_V1_SetDeviceKeyResponse {
     get {
-      if case .setDeviceKey(let v)? = body {return v}
+      if case .setDeviceKey(let v)? = _storage._body {return v}
       return Wrinkle_V1_SetDeviceKeyResponse()
     }
-    set {body = .setDeviceKey(newValue)}
+    set {_uniqueStorage()._body = .setDeviceKey(newValue)}
   }
 
   public var getDeviceKeys: Wrinkle_V1_GetDeviceKeysResponse {
     get {
-      if case .getDeviceKeys(let v)? = body {return v}
+      if case .getDeviceKeys(let v)? = _storage._body {return v}
       return Wrinkle_V1_GetDeviceKeysResponse()
     }
-    set {body = .getDeviceKeys(newValue)}
+    set {_uniqueStorage()._body = .getDeviceKeys(newValue)}
   }
 
   public var publishKeys: Wrinkle_V1_PublishKeysResponse {
     get {
-      if case .publishKeys(let v)? = body {return v}
+      if case .publishKeys(let v)? = _storage._body {return v}
       return Wrinkle_V1_PublishKeysResponse()
     }
-    set {body = .publishKeys(newValue)}
+    set {_uniqueStorage()._body = .publishKeys(newValue)}
   }
 
   public var getConversationKeys: Wrinkle_V1_GetConversationKeysResponse {
     get {
-      if case .getConversationKeys(let v)? = body {return v}
+      if case .getConversationKeys(let v)? = _storage._body {return v}
       return Wrinkle_V1_GetConversationKeysResponse()
     }
-    set {body = .getConversationKeys(newValue)}
+    set {_uniqueStorage()._body = .getConversationKeys(newValue)}
   }
 
   public var setReaction: Wrinkle_V1_SetReactionResponse {
     get {
-      if case .setReaction(let v)? = body {return v}
+      if case .setReaction(let v)? = _storage._body {return v}
       return Wrinkle_V1_SetReactionResponse()
     }
-    set {body = .setReaction(newValue)}
+    set {_uniqueStorage()._body = .setReaction(newValue)}
   }
 
   public var createSticker: Wrinkle_V1_CreateStickerResponse {
     get {
-      if case .createSticker(let v)? = body {return v}
+      if case .createSticker(let v)? = _storage._body {return v}
       return Wrinkle_V1_CreateStickerResponse()
     }
-    set {body = .createSticker(newValue)}
+    set {_uniqueStorage()._body = .createSticker(newValue)}
   }
 
   public var getStickers: Wrinkle_V1_GetStickersResponse {
     get {
-      if case .getStickers(let v)? = body {return v}
+      if case .getStickers(let v)? = _storage._body {return v}
       return Wrinkle_V1_GetStickersResponse()
     }
-    set {body = .getStickers(newValue)}
+    set {_uniqueStorage()._body = .getStickers(newValue)}
   }
 
   public var getPalette: Wrinkle_V1_GetPaletteResponse {
     get {
-      if case .getPalette(let v)? = body {return v}
+      if case .getPalette(let v)? = _storage._body {return v}
       return Wrinkle_V1_GetPaletteResponse()
     }
-    set {body = .getPalette(newValue)}
+    set {_uniqueStorage()._body = .getPalette(newValue)}
   }
 
   public var saveSticker: Wrinkle_V1_SaveStickerResponse {
     get {
-      if case .saveSticker(let v)? = body {return v}
+      if case .saveSticker(let v)? = _storage._body {return v}
       return Wrinkle_V1_SaveStickerResponse()
     }
-    set {body = .saveSticker(newValue)}
+    set {_uniqueStorage()._body = .saveSticker(newValue)}
   }
 
   public var removeSticker: Wrinkle_V1_RemoveStickerResponse {
     get {
-      if case .removeSticker(let v)? = body {return v}
+      if case .removeSticker(let v)? = _storage._body {return v}
       return Wrinkle_V1_RemoveStickerResponse()
     }
-    set {body = .removeSticker(newValue)}
+    set {_uniqueStorage()._body = .removeSticker(newValue)}
   }
 
   public var moveSticker: Wrinkle_V1_MoveStickerResponse {
     get {
-      if case .moveSticker(let v)? = body {return v}
+      if case .moveSticker(let v)? = _storage._body {return v}
       return Wrinkle_V1_MoveStickerResponse()
     }
-    set {body = .moveSticker(newValue)}
+    set {_uniqueStorage()._body = .moveSticker(newValue)}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -932,6 +938,8 @@ public nonisolated struct Wrinkle_V1_Response: Sendable {
   }
 
   public init() {}
+
+  fileprivate var _storage = _StorageClass.defaultInstance
 }
 
 public nonisolated struct Wrinkle_V1_Error: Sendable {
@@ -1799,681 +1807,719 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
   public static let protoMessageName: String = _protobuf_package + ".Response"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0")
 
+  fileprivate class _StorageClass {
+    var _requestID: UInt64 = 0
+    var _body: Wrinkle_V1_Response.OneOf_Body?
+
+      // This property is used as the initial default value for new instances of the type.
+      // The type itself is protecting the reference to its storage via CoW semantics.
+      // This will force a copy to be made of this reference when the first mutation occurs;
+      // hence, it is safe to mark this as `nonisolated(unsafe)`.
+      static nonisolated(unsafe) let defaultInstance = _StorageClass()
+
+    private init() {}
+
+    init(copying source: _StorageClass) {
+      _requestID = source._requestID
+      _body = source._body
+    }
+  }
+
+  fileprivate mutating func _uniqueStorage() -> _StorageClass {
+    if !isKnownUniquelyReferenced(&_storage) {
+      _storage = _StorageClass(copying: _storage)
+    }
+    return _storage
+  }
+
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularUInt64Field(value: &self.requestID) }()
-      case 2: try {
-        var v: Wrinkle_V1_Error?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .error(let m) = current {v = m}
+    _ = _uniqueStorage()
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      while let fieldNumber = try decoder.nextFieldNumber() {
+        // The use of inline closures is to circumvent an issue where the compiler
+        // allocates stack space for every case branch when no optimizations are
+        // enabled. https://github.com/apple/swift-protobuf/issues/1034
+        switch fieldNumber {
+        case 1: try { try decoder.decodeSingularUInt64Field(value: &_storage._requestID) }()
+        case 2: try {
+          var v: Wrinkle_V1_Error?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .error(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .error(v)
+          }
+        }()
+        case 10: try {
+          var v: Wrinkle_V1_ConnectResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .connect(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .connect(v)
+          }
+        }()
+        case 11: try {
+          var v: Wrinkle_V1_OpenConversationResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .openConversation(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .openConversation(v)
+          }
+        }()
+        case 12: try {
+          var v: Wrinkle_V1_SendMessageResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .sendMessage(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .sendMessage(v)
+          }
+        }()
+        case 13: try {
+          var v: Wrinkle_V1_MarkReadResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .markRead(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .markRead(v)
+          }
+        }()
+        case 14: try {
+          var v: Wrinkle_V1_SyncResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .sync(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .sync(v)
+          }
+        }()
+        case 15: try {
+          var v: Wrinkle_V1_ListConversationsResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .listConversations(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .listConversations(v)
+          }
+        }()
+        case 16: try {
+          var v: Wrinkle_V1_GetMessagesResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .getMessages(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .getMessages(v)
+          }
+        }()
+        case 17: try {
+          var v: Wrinkle_V1_RegisterPushTokenResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .registerPushToken(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .registerPushToken(v)
+          }
+        }()
+        case 18: try {
+          var v: Wrinkle_V1_RegisterResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .register(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .register(v)
+          }
+        }()
+        case 19: try {
+          var v: Wrinkle_V1_SignInResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .signIn(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .signIn(v)
+          }
+        }()
+        case 20: try {
+          var v: Wrinkle_V1_ChangePasswordResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .changePassword(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .changePassword(v)
+          }
+        }()
+        case 21: try {
+          var v: Wrinkle_V1_UpdateProfileResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .updateProfile(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .updateProfile(v)
+          }
+        }()
+        case 22: try {
+          var v: Wrinkle_V1_SignOutResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .signOut(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .signOut(v)
+          }
+        }()
+        case 23: try {
+          var v: Wrinkle_V1_ListDevicesResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .listDevices(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .listDevices(v)
+          }
+        }()
+        case 24: try {
+          var v: Wrinkle_V1_RenameDeviceResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .renameDevice(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .renameDevice(v)
+          }
+        }()
+        case 25: try {
+          var v: Wrinkle_V1_SignOutDeviceResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .signOutDevice(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .signOutDevice(v)
+          }
+        }()
+        case 26: try {
+          var v: Wrinkle_V1_DeleteAccountResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .deleteAccount(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .deleteAccount(v)
+          }
+        }()
+        case 27: try {
+          var v: Wrinkle_V1_CreateUploadResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .createUpload(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .createUpload(v)
+          }
+        }()
+        case 28: try {
+          var v: Wrinkle_V1_CreateGroupResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .createGroup(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .createGroup(v)
+          }
+        }()
+        case 29: try {
+          var v: Wrinkle_V1_AddMembersResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .addMembers(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .addMembers(v)
+          }
+        }()
+        case 30: try {
+          var v: Wrinkle_V1_RemoveMemberResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .removeMember(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .removeMember(v)
+          }
+        }()
+        case 31: try {
+          var v: Wrinkle_V1_LeaveGroupResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .leaveGroup(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .leaveGroup(v)
+          }
+        }()
+        case 32: try {
+          var v: Wrinkle_V1_SetTopicResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .setTopic(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .setTopic(v)
+          }
+        }()
+        case 33: try {
+          var v: Wrinkle_V1_SetAdminResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .setAdmin(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .setAdmin(v)
+          }
+        }()
+        case 34: try {
+          var v: Wrinkle_V1_GetMembersResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .getMembers(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .getMembers(v)
+          }
+        }()
+        case 35: try {
+          var v: Wrinkle_V1_DeleteMessageResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .deleteMessage(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .deleteMessage(v)
+          }
+        }()
+        case 36: try {
+          var v: Wrinkle_V1_SetDeviceKeyResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .setDeviceKey(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .setDeviceKey(v)
+          }
+        }()
+        case 37: try {
+          var v: Wrinkle_V1_GetDeviceKeysResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .getDeviceKeys(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .getDeviceKeys(v)
+          }
+        }()
+        case 38: try {
+          var v: Wrinkle_V1_PublishKeysResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .publishKeys(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .publishKeys(v)
+          }
+        }()
+        case 39: try {
+          var v: Wrinkle_V1_GetConversationKeysResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .getConversationKeys(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .getConversationKeys(v)
+          }
+        }()
+        case 40: try {
+          var v: Wrinkle_V1_SetReactionResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .setReaction(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .setReaction(v)
+          }
+        }()
+        case 41: try {
+          var v: Wrinkle_V1_CreateStickerResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .createSticker(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .createSticker(v)
+          }
+        }()
+        case 42: try {
+          var v: Wrinkle_V1_GetStickersResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .getStickers(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .getStickers(v)
+          }
+        }()
+        case 43: try {
+          var v: Wrinkle_V1_GetPaletteResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .getPalette(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .getPalette(v)
+          }
+        }()
+        case 44: try {
+          var v: Wrinkle_V1_SaveStickerResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .saveSticker(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .saveSticker(v)
+          }
+        }()
+        case 45: try {
+          var v: Wrinkle_V1_RemoveStickerResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .removeSticker(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .removeSticker(v)
+          }
+        }()
+        case 46: try {
+          var v: Wrinkle_V1_MoveStickerResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .moveSticker(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .moveSticker(v)
+          }
+        }()
+        default: break
         }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .error(v)
-        }
-      }()
-      case 10: try {
-        var v: Wrinkle_V1_ConnectResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .connect(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .connect(v)
-        }
-      }()
-      case 11: try {
-        var v: Wrinkle_V1_OpenConversationResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .openConversation(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .openConversation(v)
-        }
-      }()
-      case 12: try {
-        var v: Wrinkle_V1_SendMessageResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .sendMessage(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .sendMessage(v)
-        }
-      }()
-      case 13: try {
-        var v: Wrinkle_V1_MarkReadResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .markRead(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .markRead(v)
-        }
-      }()
-      case 14: try {
-        var v: Wrinkle_V1_SyncResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .sync(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .sync(v)
-        }
-      }()
-      case 15: try {
-        var v: Wrinkle_V1_ListConversationsResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .listConversations(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .listConversations(v)
-        }
-      }()
-      case 16: try {
-        var v: Wrinkle_V1_GetMessagesResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .getMessages(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .getMessages(v)
-        }
-      }()
-      case 17: try {
-        var v: Wrinkle_V1_RegisterPushTokenResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .registerPushToken(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .registerPushToken(v)
-        }
-      }()
-      case 18: try {
-        var v: Wrinkle_V1_RegisterResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .register(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .register(v)
-        }
-      }()
-      case 19: try {
-        var v: Wrinkle_V1_SignInResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .signIn(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .signIn(v)
-        }
-      }()
-      case 20: try {
-        var v: Wrinkle_V1_ChangePasswordResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .changePassword(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .changePassword(v)
-        }
-      }()
-      case 21: try {
-        var v: Wrinkle_V1_UpdateProfileResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .updateProfile(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .updateProfile(v)
-        }
-      }()
-      case 22: try {
-        var v: Wrinkle_V1_SignOutResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .signOut(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .signOut(v)
-        }
-      }()
-      case 23: try {
-        var v: Wrinkle_V1_ListDevicesResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .listDevices(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .listDevices(v)
-        }
-      }()
-      case 24: try {
-        var v: Wrinkle_V1_RenameDeviceResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .renameDevice(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .renameDevice(v)
-        }
-      }()
-      case 25: try {
-        var v: Wrinkle_V1_SignOutDeviceResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .signOutDevice(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .signOutDevice(v)
-        }
-      }()
-      case 26: try {
-        var v: Wrinkle_V1_DeleteAccountResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .deleteAccount(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .deleteAccount(v)
-        }
-      }()
-      case 27: try {
-        var v: Wrinkle_V1_CreateUploadResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .createUpload(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .createUpload(v)
-        }
-      }()
-      case 28: try {
-        var v: Wrinkle_V1_CreateGroupResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .createGroup(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .createGroup(v)
-        }
-      }()
-      case 29: try {
-        var v: Wrinkle_V1_AddMembersResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .addMembers(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .addMembers(v)
-        }
-      }()
-      case 30: try {
-        var v: Wrinkle_V1_RemoveMemberResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .removeMember(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .removeMember(v)
-        }
-      }()
-      case 31: try {
-        var v: Wrinkle_V1_LeaveGroupResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .leaveGroup(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .leaveGroup(v)
-        }
-      }()
-      case 32: try {
-        var v: Wrinkle_V1_SetTopicResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .setTopic(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .setTopic(v)
-        }
-      }()
-      case 33: try {
-        var v: Wrinkle_V1_SetAdminResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .setAdmin(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .setAdmin(v)
-        }
-      }()
-      case 34: try {
-        var v: Wrinkle_V1_GetMembersResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .getMembers(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .getMembers(v)
-        }
-      }()
-      case 35: try {
-        var v: Wrinkle_V1_DeleteMessageResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .deleteMessage(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .deleteMessage(v)
-        }
-      }()
-      case 36: try {
-        var v: Wrinkle_V1_SetDeviceKeyResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .setDeviceKey(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .setDeviceKey(v)
-        }
-      }()
-      case 37: try {
-        var v: Wrinkle_V1_GetDeviceKeysResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .getDeviceKeys(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .getDeviceKeys(v)
-        }
-      }()
-      case 38: try {
-        var v: Wrinkle_V1_PublishKeysResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .publishKeys(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .publishKeys(v)
-        }
-      }()
-      case 39: try {
-        var v: Wrinkle_V1_GetConversationKeysResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .getConversationKeys(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .getConversationKeys(v)
-        }
-      }()
-      case 40: try {
-        var v: Wrinkle_V1_SetReactionResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .setReaction(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .setReaction(v)
-        }
-      }()
-      case 41: try {
-        var v: Wrinkle_V1_CreateStickerResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .createSticker(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .createSticker(v)
-        }
-      }()
-      case 42: try {
-        var v: Wrinkle_V1_GetStickersResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .getStickers(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .getStickers(v)
-        }
-      }()
-      case 43: try {
-        var v: Wrinkle_V1_GetPaletteResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .getPalette(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .getPalette(v)
-        }
-      }()
-      case 44: try {
-        var v: Wrinkle_V1_SaveStickerResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .saveSticker(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .saveSticker(v)
-        }
-      }()
-      case 45: try {
-        var v: Wrinkle_V1_RemoveStickerResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .removeSticker(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .removeSticker(v)
-        }
-      }()
-      case 46: try {
-        var v: Wrinkle_V1_MoveStickerResponse?
-        var hadOneofValue = false
-        if let current = self.body {
-          hadOneofValue = true
-          if case .moveSticker(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {
-          if hadOneofValue {try decoder.handleConflictingOneOf()}
-          self.body = .moveSticker(v)
-        }
-      }()
-      default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    // The use of inline closures is to circumvent an issue where the compiler
-    // allocates stack space for every if/case branch local when no optimizations
-    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
-    // https://github.com/apple/swift-protobuf/issues/1182
-    if self.requestID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.requestID, fieldNumber: 1)
-    }
-    switch self.body {
-    case .error?: try {
-      guard case .error(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    }()
-    case .connect?: try {
-      guard case .connect(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
-    }()
-    case .openConversation?: try {
-      guard case .openConversation(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
-    }()
-    case .sendMessage?: try {
-      guard case .sendMessage(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
-    }()
-    case .markRead?: try {
-      guard case .markRead(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
-    }()
-    case .sync?: try {
-      guard case .sync(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
-    }()
-    case .listConversations?: try {
-      guard case .listConversations(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
-    }()
-    case .getMessages?: try {
-      guard case .getMessages(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
-    }()
-    case .registerPushToken?: try {
-      guard case .registerPushToken(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
-    }()
-    case .register?: try {
-      guard case .register(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
-    }()
-    case .signIn?: try {
-      guard case .signIn(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
-    }()
-    case .changePassword?: try {
-      guard case .changePassword(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
-    }()
-    case .updateProfile?: try {
-      guard case .updateProfile(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
-    }()
-    case .signOut?: try {
-      guard case .signOut(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 22)
-    }()
-    case .listDevices?: try {
-      guard case .listDevices(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 23)
-    }()
-    case .renameDevice?: try {
-      guard case .renameDevice(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 24)
-    }()
-    case .signOutDevice?: try {
-      guard case .signOutDevice(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 25)
-    }()
-    case .deleteAccount?: try {
-      guard case .deleteAccount(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 26)
-    }()
-    case .createUpload?: try {
-      guard case .createUpload(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 27)
-    }()
-    case .createGroup?: try {
-      guard case .createGroup(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 28)
-    }()
-    case .addMembers?: try {
-      guard case .addMembers(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 29)
-    }()
-    case .removeMember?: try {
-      guard case .removeMember(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 30)
-    }()
-    case .leaveGroup?: try {
-      guard case .leaveGroup(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 31)
-    }()
-    case .setTopic?: try {
-      guard case .setTopic(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 32)
-    }()
-    case .setAdmin?: try {
-      guard case .setAdmin(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 33)
-    }()
-    case .getMembers?: try {
-      guard case .getMembers(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 34)
-    }()
-    case .deleteMessage?: try {
-      guard case .deleteMessage(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
-    }()
-    case .setDeviceKey?: try {
-      guard case .setDeviceKey(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 36)
-    }()
-    case .getDeviceKeys?: try {
-      guard case .getDeviceKeys(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 37)
-    }()
-    case .publishKeys?: try {
-      guard case .publishKeys(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 38)
-    }()
-    case .getConversationKeys?: try {
-      guard case .getConversationKeys(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 39)
-    }()
-    case .setReaction?: try {
-      guard case .setReaction(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 40)
-    }()
-    case .createSticker?: try {
-      guard case .createSticker(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 41)
-    }()
-    case .getStickers?: try {
-      guard case .getStickers(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 42)
-    }()
-    case .getPalette?: try {
-      guard case .getPalette(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 43)
-    }()
-    case .saveSticker?: try {
-      guard case .saveSticker(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 44)
-    }()
-    case .removeSticker?: try {
-      guard case .removeSticker(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 45)
-    }()
-    case .moveSticker?: try {
-      guard case .moveSticker(let v)? = self.body else { preconditionFailure() }
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 46)
-    }()
-    case nil: break
+    try withExtendedLifetime(_storage) { (_storage: _StorageClass) in
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every if/case branch local when no optimizations
+      // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+      // https://github.com/apple/swift-protobuf/issues/1182
+      if _storage._requestID != 0 {
+        try visitor.visitSingularUInt64Field(value: _storage._requestID, fieldNumber: 1)
+      }
+      switch _storage._body {
+      case .error?: try {
+        guard case .error(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+      }()
+      case .connect?: try {
+        guard case .connect(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 10)
+      }()
+      case .openConversation?: try {
+        guard case .openConversation(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
+      }()
+      case .sendMessage?: try {
+        guard case .sendMessage(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
+      }()
+      case .markRead?: try {
+        guard case .markRead(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 13)
+      }()
+      case .sync?: try {
+        guard case .sync(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 14)
+      }()
+      case .listConversations?: try {
+        guard case .listConversations(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 15)
+      }()
+      case .getMessages?: try {
+        guard case .getMessages(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 16)
+      }()
+      case .registerPushToken?: try {
+        guard case .registerPushToken(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 17)
+      }()
+      case .register?: try {
+        guard case .register(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 18)
+      }()
+      case .signIn?: try {
+        guard case .signIn(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 19)
+      }()
+      case .changePassword?: try {
+        guard case .changePassword(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 20)
+      }()
+      case .updateProfile?: try {
+        guard case .updateProfile(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 21)
+      }()
+      case .signOut?: try {
+        guard case .signOut(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 22)
+      }()
+      case .listDevices?: try {
+        guard case .listDevices(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 23)
+      }()
+      case .renameDevice?: try {
+        guard case .renameDevice(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 24)
+      }()
+      case .signOutDevice?: try {
+        guard case .signOutDevice(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 25)
+      }()
+      case .deleteAccount?: try {
+        guard case .deleteAccount(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 26)
+      }()
+      case .createUpload?: try {
+        guard case .createUpload(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 27)
+      }()
+      case .createGroup?: try {
+        guard case .createGroup(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 28)
+      }()
+      case .addMembers?: try {
+        guard case .addMembers(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 29)
+      }()
+      case .removeMember?: try {
+        guard case .removeMember(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 30)
+      }()
+      case .leaveGroup?: try {
+        guard case .leaveGroup(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 31)
+      }()
+      case .setTopic?: try {
+        guard case .setTopic(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 32)
+      }()
+      case .setAdmin?: try {
+        guard case .setAdmin(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 33)
+      }()
+      case .getMembers?: try {
+        guard case .getMembers(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 34)
+      }()
+      case .deleteMessage?: try {
+        guard case .deleteMessage(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 35)
+      }()
+      case .setDeviceKey?: try {
+        guard case .setDeviceKey(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 36)
+      }()
+      case .getDeviceKeys?: try {
+        guard case .getDeviceKeys(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 37)
+      }()
+      case .publishKeys?: try {
+        guard case .publishKeys(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 38)
+      }()
+      case .getConversationKeys?: try {
+        guard case .getConversationKeys(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 39)
+      }()
+      case .setReaction?: try {
+        guard case .setReaction(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 40)
+      }()
+      case .createSticker?: try {
+        guard case .createSticker(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 41)
+      }()
+      case .getStickers?: try {
+        guard case .getStickers(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 42)
+      }()
+      case .getPalette?: try {
+        guard case .getPalette(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 43)
+      }()
+      case .saveSticker?: try {
+        guard case .saveSticker(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 44)
+      }()
+      case .removeSticker?: try {
+        guard case .removeSticker(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 45)
+      }()
+      case .moveSticker?: try {
+        guard case .moveSticker(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 46)
+      }()
+      case nil: break
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_Response, rhs: Wrinkle_V1_Response) -> Bool {
-    if lhs.requestID != rhs.requestID {return false}
-    if lhs.body != rhs.body {return false}
+    if lhs._storage !== rhs._storage {
+      let storagesAreEqual: Bool = withExtendedLifetime((lhs._storage, rhs._storage)) { (_args: (_StorageClass, _StorageClass)) in
+        let _storage = _args.0
+        let rhs_storage = _args.1
+        if _storage._requestID != rhs_storage._requestID {return false}
+        if _storage._body != rhs_storage._body {return false}
+        return true
+      }
+      if !storagesAreEqual {return false}
+    }
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

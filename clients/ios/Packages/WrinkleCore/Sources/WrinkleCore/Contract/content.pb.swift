@@ -32,6 +32,10 @@
 //   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
 //   5-byte big-endian numbers, each modulo 100000, written as five digits
 //   and separated by spaces. Both users see the same number.
+// - An attachment's blob: a random 32-byte key per file; the blob is nonce
+//   || AES-GCM(key, nonce, the file, associated data "wrinkle blob v1"),
+//   uploaded as application/octet-stream. Its SHA-256 goes in the content,
+//   and recipients check it before decrypting.
 // - Reactions are sealed like content, with associated data "wrinkle
 //   reaction v1" || conversation_id || epoch (4 bytes) || the reacting
 //   user's id || the message's seq (8 bytes).
@@ -77,14 +81,71 @@ public nonisolated struct Wrinkle_V1_Content: Sendable {
     set {body = .sticker(newValue)}
   }
 
+  public var attachments: Wrinkle_V1_Attachments {
+    get {
+      if case .attachments(let v)? = body {return v}
+      return Wrinkle_V1_Attachments()
+    }
+    set {body = .attachments(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
     /// 1 to 4000 characters.
     case text(String)
     case sticker(Wrinkle_V1_StickerRef)
+    case attachments(Wrinkle_V1_Attachments)
 
   }
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_Attachments: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  /// 1 to 10, each also listed in the message's blob_ids.
+  public var items: [Wrinkle_V1_Attachment] = []
+
+  /// 0 to 4000 characters.
+  public var caption: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_Attachment: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var blobID: Data = Data()
+
+  /// The file's key, 32 bytes.
+  public var key: Data = Data()
+
+  /// SHA-256 of the blob as uploaded.
+  public var digest: Data = Data()
+
+  public var mediaType: String = String()
+
+  /// The file's size in bytes, before encryption.
+  public var size: UInt64 = 0
+
+  public var name: String = String()
+
+  /// Images: the size in pixels, and a small JPEG preview, at most 16 KiB.
+  public var width: UInt32 = 0
+
+  public var height: UInt32 = 0
+
+  public var thumbnail: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -121,7 +182,7 @@ fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_Content: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Content"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{1}sticker\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}text\0\u{1}sticker\0\u{1}attachments\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -150,6 +211,19 @@ nonisolated extension Wrinkle_V1_Content: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .sticker(v)
         }
       }()
+      case 3: try {
+        var v: Wrinkle_V1_Attachments?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .attachments(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .attachments(v)
+        }
+      }()
       default: break
       }
     }
@@ -169,6 +243,10 @@ nonisolated extension Wrinkle_V1_Content: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .sticker(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
     }()
+    case .attachments?: try {
+      guard case .attachments(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -176,6 +254,111 @@ nonisolated extension Wrinkle_V1_Content: SwiftProtobuf.Message, SwiftProtobuf._
 
   public static func ==(lhs: Wrinkle_V1_Content, rhs: Wrinkle_V1_Content) -> Bool {
     if lhs.body != rhs.body {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Attachments: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Attachments"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}items\0\u{1}caption\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeRepeatedMessageField(value: &self.items) }()
+      case 2: try { try decoder.decodeSingularStringField(value: &self.caption) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.items.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.items, fieldNumber: 1)
+    }
+    if !self.caption.isEmpty {
+      try visitor.visitSingularStringField(value: self.caption, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Attachments, rhs: Wrinkle_V1_Attachments) -> Bool {
+    if lhs.items != rhs.items {return false}
+    if lhs.caption != rhs.caption {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Attachment: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Attachment"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}blob_id\0\u{1}key\0\u{1}digest\0\u{3}media_type\0\u{1}size\0\u{1}name\0\u{1}width\0\u{1}height\0\u{1}thumbnail\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.blobID) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.key) }()
+      case 3: try { try decoder.decodeSingularBytesField(value: &self.digest) }()
+      case 4: try { try decoder.decodeSingularStringField(value: &self.mediaType) }()
+      case 5: try { try decoder.decodeSingularUInt64Field(value: &self.size) }()
+      case 6: try { try decoder.decodeSingularStringField(value: &self.name) }()
+      case 7: try { try decoder.decodeSingularUInt32Field(value: &self.width) }()
+      case 8: try { try decoder.decodeSingularUInt32Field(value: &self.height) }()
+      case 9: try { try decoder.decodeSingularBytesField(value: &self.thumbnail) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.blobID.isEmpty {
+      try visitor.visitSingularBytesField(value: self.blobID, fieldNumber: 1)
+    }
+    if !self.key.isEmpty {
+      try visitor.visitSingularBytesField(value: self.key, fieldNumber: 2)
+    }
+    if !self.digest.isEmpty {
+      try visitor.visitSingularBytesField(value: self.digest, fieldNumber: 3)
+    }
+    if !self.mediaType.isEmpty {
+      try visitor.visitSingularStringField(value: self.mediaType, fieldNumber: 4)
+    }
+    if self.size != 0 {
+      try visitor.visitSingularUInt64Field(value: self.size, fieldNumber: 5)
+    }
+    if !self.name.isEmpty {
+      try visitor.visitSingularStringField(value: self.name, fieldNumber: 6)
+    }
+    if self.width != 0 {
+      try visitor.visitSingularUInt32Field(value: self.width, fieldNumber: 7)
+    }
+    if self.height != 0 {
+      try visitor.visitSingularUInt32Field(value: self.height, fieldNumber: 8)
+    }
+    if !self.thumbnail.isEmpty {
+      try visitor.visitSingularBytesField(value: self.thumbnail, fieldNumber: 9)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Attachment, rhs: Wrinkle_V1_Attachment) -> Bool {
+    if lhs.blobID != rhs.blobID {return false}
+    if lhs.key != rhs.key {return false}
+    if lhs.digest != rhs.digest {return false}
+    if lhs.mediaType != rhs.mediaType {return false}
+    if lhs.size != rhs.size {return false}
+    if lhs.name != rhs.name {return false}
+    if lhs.width != rhs.width {return false}
+    if lhs.height != rhs.height {return false}
+    if lhs.thumbnail != rhs.thumbnail {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

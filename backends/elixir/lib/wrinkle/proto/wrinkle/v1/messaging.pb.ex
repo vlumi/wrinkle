@@ -469,6 +469,7 @@ defmodule Wrinkle.V1.SendMessageRequest do
   field :conversation_id, 1, type: :bytes, json_name: "conversationId"
   field :client_message_id, 2, type: :string, json_name: "clientMessageId"
   field :sealed, 4, type: Wrinkle.V1.Sealed
+  field :blob_ids, 5, repeated: true, type: :bytes, json_name: "blobIds"
 end
 
 defmodule Wrinkle.V1.SendMessageResponse do

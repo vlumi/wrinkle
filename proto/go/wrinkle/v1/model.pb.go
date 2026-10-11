@@ -340,6 +340,9 @@ type Message struct {
 	Content isMessage_Content `protobuf_oneof:"content"`
 	// Set once the sender deleted the message; its content is then unset.
 	DeletedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=deleted_at,json=deletedAt,proto3" json:"deleted_at,omitempty"`
+	// The attachment blobs the sealed content refers to; cleared when the
+	// message is deleted, and the blobs then go.
+	BlobIds [][]byte `protobuf:"bytes,11,rep,name=blob_ids,json=blobIds,proto3" json:"blob_ids,omitempty"`
 	// Members' reactions, oldest first. Only GetMessages fills them; events
 	// carry changes as ReactionEvents.
 	Reactions     []*Reaction `protobuf:"bytes,10,rep,name=reactions,proto3" json:"reactions,omitempty"`
@@ -440,6 +443,13 @@ func (x *Message) GetNotice() *Notice {
 func (x *Message) GetDeletedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.DeletedAt
+	}
+	return nil
+}
+
+func (x *Message) GetBlobIds() [][]byte {
+	if x != nil {
+		return x.BlobIds
 	}
 	return nil
 }
@@ -1264,7 +1274,7 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"lastSeenAt\x12\x12\n" +
 	"\x04push\x18\x05 \x01(\bR\x04push\x12\x1d\n" +
 	"\n" +
-	"public_key\x18\x06 \x01(\fR\tpublicKey\"\xad\x03\n" +
+	"public_key\x18\x06 \x01(\fR\tpublicKey\"\xc8\x03\n" +
 	"\aMessage\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x10\n" +
 	"\x03seq\x18\x02 \x01(\x04R\x03seq\x12$\n" +
@@ -1274,7 +1284,8 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\x06sealed\x18\t \x01(\v2\x12.wrinkle.v1.SealedH\x00R\x06sealed\x12,\n" +
 	"\x06notice\x18\a \x01(\v2\x12.wrinkle.v1.NoticeH\x00R\x06notice\x129\n" +
 	"\n" +
-	"deleted_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x122\n" +
+	"deleted_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x12\x19\n" +
+	"\bblob_ids\x18\v \x03(\fR\ablobIds\x122\n" +
 	"\treactions\x18\n" +
 	" \x03(\v2\x14.wrinkle.v1.ReactionR\treactionsB\t\n" +
 	"\acontentJ\x04\b\x05\x10\x06R\x04text\"\x8a\x01\n" +

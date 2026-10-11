@@ -267,6 +267,12 @@ message SendMessageRequest {
   reserved 3;
   reserved "text";
   Sealed sealed = 4;
+  // The attachments the sealed content refers to, at most 10, each an
+  // upload of the sender's for BLOB_PURPOSE_ATTACHMENT, already uploaded
+  // (otherwise ERROR_CODE_FAILED_PRECONDITION). The blobs hold ciphertext
+  // only (content.proto); listing them lets the services keep them while
+  // the message exists.
+  repeated bytes blob_ids = 5;
 }
 
 message SendMessageResponse {

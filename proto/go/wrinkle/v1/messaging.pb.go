@@ -2032,8 +2032,14 @@ type SendMessageRequest struct {
 	ConversationId  []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	ClientMessageId string                 `protobuf:"bytes,2,opt,name=client_message_id,json=clientMessageId,proto3" json:"client_message_id,omitempty"`
 	Sealed          *Sealed                `protobuf:"bytes,4,opt,name=sealed,proto3" json:"sealed,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The attachments the sealed content refers to, at most 10, each an
+	// upload of the sender's for BLOB_PURPOSE_ATTACHMENT, already uploaded
+	// (otherwise ERROR_CODE_FAILED_PRECONDITION). The blobs hold ciphertext
+	// only (content.proto); listing them lets the services keep them while
+	// the message exists.
+	BlobIds       [][]byte `protobuf:"bytes,5,rep,name=blob_ids,json=blobIds,proto3" json:"blob_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendMessageRequest) Reset() {
@@ -2083,6 +2089,13 @@ func (x *SendMessageRequest) GetClientMessageId() string {
 func (x *SendMessageRequest) GetSealed() *Sealed {
 	if x != nil {
 		return x.Sealed
+	}
+	return nil
+}
+
+func (x *SendMessageRequest) GetBlobIds() [][]byte {
+	if x != nil {
+		return x.BlobIds
 	}
 	return nil
 }
@@ -4090,11 +4103,12 @@ const file_wrinkle_v1_messaging_proto_rawDesc = "" +
 	"\x11GetMembersRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\"B\n" +
 	"\x12GetMembersResponse\x12,\n" +
-	"\amembers\x18\x01 \x03(\v2\x12.wrinkle.v1.MemberR\amembers\"\xa1\x01\n" +
+	"\amembers\x18\x01 \x03(\v2\x12.wrinkle.v1.MemberR\amembers\"\xbc\x01\n" +
 	"\x12SendMessageRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12*\n" +
 	"\x11client_message_id\x18\x02 \x01(\tR\x0fclientMessageId\x12*\n" +
-	"\x06sealed\x18\x04 \x01(\v2\x12.wrinkle.v1.SealedR\x06sealedJ\x04\b\x03\x10\x04R\x04text\"D\n" +
+	"\x06sealed\x18\x04 \x01(\v2\x12.wrinkle.v1.SealedR\x06sealed\x12\x19\n" +
+	"\bblob_ids\x18\x05 \x03(\fR\ablobIdsJ\x04\b\x03\x10\x04R\x04text\"D\n" +
 	"\x13SendMessageResponse\x12-\n" +
 	"\amessage\x18\x01 \x01(\v2\x13.wrinkle.v1.MessageR\amessage\"Q\n" +
 	"\x14DeleteMessageRequest\x12'\n" +

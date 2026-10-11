@@ -228,6 +228,10 @@ public nonisolated struct Wrinkle_V1_Message: Sendable {
   /// Clears the value of `deletedAt`. Subsequent reads from it will return its default value.
   public mutating func clearDeletedAt() {self._deletedAt = nil}
 
+  /// The attachment blobs the sealed content refers to; cleared when the
+  /// message is deleted, and the blobs then go.
+  public var blobIds: [Data] = []
+
   /// Members' reactions, oldest first. Only GetMessages fills them; events
   /// carry changes as ReactionEvents.
   public var reactions: [Wrinkle_V1_Reaction] = []
@@ -768,7 +772,7 @@ nonisolated extension Wrinkle_V1_Device: SwiftProtobuf.Message, SwiftProtobuf._M
 
 nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Message"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{4}\u{2}sent_at\0\u{1}notice\0\u{3}deleted_at\0\u{1}sealed\0\u{1}reactions\0\u{b}text\0\u{c}\u{5}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{1}seq\0\u{3}sender_user_id\0\u{3}client_message_id\0\u{4}\u{2}sent_at\0\u{1}notice\0\u{3}deleted_at\0\u{1}sealed\0\u{1}reactions\0\u{3}blob_ids\0\u{b}text\0\u{c}\u{5}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -809,6 +813,7 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
         }
       }()
       case 10: try { try decoder.decodeRepeatedMessageField(value: &self.reactions) }()
+      case 11: try { try decoder.decodeRepeatedBytesField(value: &self.blobIds) }()
       default: break
       }
     }
@@ -846,6 +851,9 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if !self.reactions.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.reactions, fieldNumber: 10)
     }
+    if !self.blobIds.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.blobIds, fieldNumber: 11)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -857,6 +865,7 @@ nonisolated extension Wrinkle_V1_Message: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs._sentAt != rhs._sentAt {return false}
     if lhs.content != rhs.content {return false}
     if lhs._deletedAt != rhs._deletedAt {return false}
+    if lhs.blobIds != rhs.blobIds {return false}
     if lhs.reactions != rhs.reactions {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

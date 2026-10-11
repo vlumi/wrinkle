@@ -22,6 +22,10 @@
 //   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
 //   5-byte big-endian numbers, each modulo 100000, written as five digits
 //   and separated by spaces. Both users see the same number.
+// - An attachment's blob: a random 32-byte key per file; the blob is nonce
+//   || AES-GCM(key, nonce, the file, associated data "wrinkle blob v1"),
+//   uploaded as application/octet-stream. Its SHA-256 goes in the content,
+//   and recipients check it before decrypting.
 // - Reactions are sealed like content, with associated data "wrinkle
 //   reaction v1" || conversation_id || epoch (4 bytes) || the reacting
 //   user's id || the message's seq (8 bytes).
@@ -38,7 +42,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/content.proto.
  */
 export const file_wrinkle_v1_content: GenFile = /*@__PURE__*/
-  fileDesc("Chh3cmlua2xlL3YxL2NvbnRlbnQucHJvdG8SCndyaW5rbGUudjEiTAoHQ29udGVudBIOCgR0ZXh0GAEgASgJSAASKQoHc3RpY2tlchgCIAEoCzIWLndyaW5rbGUudjEuU3RpY2tlclJlZkgAQgYKBGJvZHkiIAoKU3RpY2tlclJlZhISCgpzdGlja2VyX2lkGAEgASgMIhoKCVJlYWN0aW9ucxINCgVlbW9qaRgBIAMoCUKfAQoOY29tLndyaW5rbGUudjFCDENvbnRlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z");
+  fileDesc("Chh3cmlua2xlL3YxL2NvbnRlbnQucHJvdG8SCndyaW5rbGUudjEifAoHQ29udGVudBIOCgR0ZXh0GAEgASgJSAASKQoHc3RpY2tlchgCIAEoCzIWLndyaW5rbGUudjEuU3RpY2tlclJlZkgAEi4KC2F0dGFjaG1lbnRzGAMgASgLMhcud3JpbmtsZS52MS5BdHRhY2htZW50c0gAQgYKBGJvZHkiRQoLQXR0YWNobWVudHMSJQoFaXRlbXMYASADKAsyFi53cmlua2xlLnYxLkF0dGFjaG1lbnQSDwoHY2FwdGlvbhgCIAEoCSKcAQoKQXR0YWNobWVudBIPCgdibG9iX2lkGAEgASgMEgsKA2tleRgCIAEoDBIOCgZkaWdlc3QYAyABKAwSEgoKbWVkaWFfdHlwZRgEIAEoCRIMCgRzaXplGAUgASgEEgwKBG5hbWUYBiABKAkSDQoFd2lkdGgYByABKA0SDgoGaGVpZ2h0GAggASgNEhEKCXRodW1ibmFpbBgJIAEoDCIgCgpTdGlja2VyUmVmEhIKCnN0aWNrZXJfaWQYASABKAwiGgoJUmVhY3Rpb25zEg0KBWVtb2ppGAEgAygJQp8BCg5jb20ud3JpbmtsZS52MUIMQ29udGVudFByb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM");
 
 /**
  * @generated from message wrinkle.v1.Content
@@ -61,6 +65,12 @@ export type Content = Message<"wrinkle.v1.Content"> & {
      */
     value: StickerRef;
     case: "sticker";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.Attachments attachments = 3;
+     */
+    value: Attachments;
+    case: "attachments";
   } | { case: undefined; value?: undefined };
 };
 
@@ -70,6 +80,97 @@ export type Content = Message<"wrinkle.v1.Content"> & {
  */
 export const ContentSchema: GenMessage<Content> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_content, 0);
+
+/**
+ * @generated from message wrinkle.v1.Attachments
+ */
+export type Attachments = Message<"wrinkle.v1.Attachments"> & {
+  /**
+   * 1 to 10, each also listed in the message's blob_ids.
+   *
+   * @generated from field: repeated wrinkle.v1.Attachment items = 1;
+   */
+  items: Attachment[];
+
+  /**
+   * 0 to 4000 characters.
+   *
+   * @generated from field: string caption = 2;
+   */
+  caption: string;
+};
+
+/**
+ * Describes the message wrinkle.v1.Attachments.
+ * Use `create(AttachmentsSchema)` to create a new message.
+ */
+export const AttachmentsSchema: GenMessage<Attachments> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_content, 1);
+
+/**
+ * @generated from message wrinkle.v1.Attachment
+ */
+export type Attachment = Message<"wrinkle.v1.Attachment"> & {
+  /**
+   * @generated from field: bytes blob_id = 1;
+   */
+  blobId: Uint8Array;
+
+  /**
+   * The file's key, 32 bytes.
+   *
+   * @generated from field: bytes key = 2;
+   */
+  key: Uint8Array;
+
+  /**
+   * SHA-256 of the blob as uploaded.
+   *
+   * @generated from field: bytes digest = 3;
+   */
+  digest: Uint8Array;
+
+  /**
+   * @generated from field: string media_type = 4;
+   */
+  mediaType: string;
+
+  /**
+   * The file's size in bytes, before encryption.
+   *
+   * @generated from field: uint64 size = 5;
+   */
+  size: bigint;
+
+  /**
+   * @generated from field: string name = 6;
+   */
+  name: string;
+
+  /**
+   * Images: the size in pixels, and a small JPEG preview, at most 16 KiB.
+   *
+   * @generated from field: uint32 width = 7;
+   */
+  width: number;
+
+  /**
+   * @generated from field: uint32 height = 8;
+   */
+  height: number;
+
+  /**
+   * @generated from field: bytes thumbnail = 9;
+   */
+  thumbnail: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.Attachment.
+ * Use `create(AttachmentSchema)` to create a new message.
+ */
+export const AttachmentSchema: GenMessage<Attachment> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_content, 2);
 
 /**
  * @generated from message wrinkle.v1.StickerRef
@@ -86,7 +187,7 @@ export type StickerRef = Message<"wrinkle.v1.StickerRef"> & {
  * Use `create(StickerRefSchema)` to create a new message.
  */
 export const StickerRefSchema: GenMessage<StickerRef> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_content, 1);
+  messageDesc(file_wrinkle_v1_content, 3);
 
 /**
  * A user's reactions to one message.
@@ -107,5 +208,5 @@ export type Reactions = Message<"wrinkle.v1.Reactions"> & {
  * Use `create(ReactionsSchema)` to create a new message.
  */
 export const ReactionsSchema: GenMessage<Reactions> = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_content, 2);
+  messageDesc(file_wrinkle_v1_content, 4);
 

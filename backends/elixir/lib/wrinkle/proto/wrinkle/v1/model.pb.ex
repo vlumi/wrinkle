@@ -72,6 +72,7 @@ defmodule Wrinkle.V1.Message do
   field :sealed, 9, type: Wrinkle.V1.Sealed, oneof: 0
   field :notice, 7, type: Wrinkle.V1.Notice, oneof: 0
   field :deleted_at, 8, type: Google.Protobuf.Timestamp, json_name: "deletedAt"
+  field :blob_ids, 11, repeated: true, type: :bytes, json_name: "blobIds"
   field :reactions, 10, repeated: true, type: Wrinkle.V1.Reaction
 end
 

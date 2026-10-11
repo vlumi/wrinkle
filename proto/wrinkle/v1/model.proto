@@ -74,6 +74,9 @@ message Message {
   }
   // Set once the sender deleted the message; its content is then unset.
   google.protobuf.Timestamp deleted_at = 8;
+  // The attachment blobs the sealed content refers to; cleared when the
+  // message is deleted, and the blobs then go.
+  repeated bytes blob_ids = 11;
   // Members' reactions, oldest first. Only GetMessages fills them; events
   // carry changes as ReactionEvents.
   repeated Reaction reactions = 10;

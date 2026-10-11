@@ -800,6 +800,13 @@ public nonisolated struct Wrinkle_V1_SendMessageRequest: Sendable {
   /// Clears the value of `sealed`. Subsequent reads from it will return its default value.
   public mutating func clearSealed() {self._sealed = nil}
 
+  /// The attachments the sealed content refers to, at most 10, each an
+  /// upload of the sender's for BLOB_PURPOSE_ATTACHMENT, already uploaded
+  /// (otherwise ERROR_CODE_FAILED_PRECONDITION). The blobs hold ciphertext
+  /// only (content.proto); listing them lets the services keep them while
+  /// the message exists.
+  public var blobIds: [Data] = []
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2620,7 +2627,7 @@ nonisolated extension Wrinkle_V1_GetMembersResponse: SwiftProtobuf.Message, Swif
 
 nonisolated extension Wrinkle_V1_SendMessageRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".SendMessageRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}client_message_id\0\u{2}\u{2}sealed\0\u{b}text\0\u{c}\u{3}\u{1}")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}client_message_id\0\u{2}\u{2}sealed\0\u{3}blob_ids\0\u{b}text\0\u{c}\u{3}\u{1}")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2631,6 +2638,7 @@ nonisolated extension Wrinkle_V1_SendMessageRequest: SwiftProtobuf.Message, Swif
       case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
       case 4: try { try decoder.decodeSingularMessageField(value: &self._sealed) }()
+      case 5: try { try decoder.decodeRepeatedBytesField(value: &self.blobIds) }()
       default: break
       }
     }
@@ -2650,6 +2658,9 @@ nonisolated extension Wrinkle_V1_SendMessageRequest: SwiftProtobuf.Message, Swif
     try { if let v = self._sealed {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
     } }()
+    if !self.blobIds.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.blobIds, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2657,6 +2668,7 @@ nonisolated extension Wrinkle_V1_SendMessageRequest: SwiftProtobuf.Message, Swif
     if lhs.conversationID != rhs.conversationID {return false}
     if lhs.clientMessageID != rhs.clientMessageID {return false}
     if lhs._sealed != rhs._sealed {return false}
+    if lhs.blobIds != rhs.blobIds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -22,6 +22,10 @@
 //   fingerprint || the larger, compared bytewise); h's first 30 bytes as six
 //   5-byte big-endian numbers, each modulo 100000, written as five digits
 //   and separated by spaces. Both users see the same number.
+// - An attachment's blob: a random 32-byte key per file; the blob is nonce
+//   || AES-GCM(key, nonce, the file, associated data "wrinkle blob v1"),
+//   uploaded as application/octet-stream. Its SHA-256 goes in the content,
+//   and recipients check it before decrypting.
 // - Reactions are sealed like content, with associated data "wrinkle
 //   reaction v1" || conversation_id || epoch (4 bytes) || the reacting
 //   user's id || the message's seq (8 bytes).
@@ -55,6 +59,7 @@ type Content struct {
 	//
 	//	*Content_Text
 	//	*Content_Sticker
+	//	*Content_Attachments
 	Body          isContent_Body `protobuf_oneof:"body"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -115,6 +120,15 @@ func (x *Content) GetSticker() *StickerRef {
 	return nil
 }
 
+func (x *Content) GetAttachments() *Attachments {
+	if x != nil {
+		if x, ok := x.Body.(*Content_Attachments); ok {
+			return x.Attachments
+		}
+	}
+	return nil
+}
+
 type isContent_Body interface {
 	isContent_Body()
 }
@@ -128,9 +142,181 @@ type Content_Sticker struct {
 	Sticker *StickerRef `protobuf:"bytes,2,opt,name=sticker,proto3,oneof"`
 }
 
+type Content_Attachments struct {
+	Attachments *Attachments `protobuf:"bytes,3,opt,name=attachments,proto3,oneof"`
+}
+
 func (*Content_Text) isContent_Body() {}
 
 func (*Content_Sticker) isContent_Body() {}
+
+func (*Content_Attachments) isContent_Body() {}
+
+type Attachments struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// 1 to 10, each also listed in the message's blob_ids.
+	Items []*Attachment `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	// 0 to 4000 characters.
+	Caption       string `protobuf:"bytes,2,opt,name=caption,proto3" json:"caption,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Attachments) Reset() {
+	*x = Attachments{}
+	mi := &file_wrinkle_v1_content_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Attachments) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Attachments) ProtoMessage() {}
+
+func (x *Attachments) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_content_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Attachments.ProtoReflect.Descriptor instead.
+func (*Attachments) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_content_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Attachments) GetItems() []*Attachment {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *Attachments) GetCaption() string {
+	if x != nil {
+		return x.Caption
+	}
+	return ""
+}
+
+type Attachment struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	BlobId []byte                 `protobuf:"bytes,1,opt,name=blob_id,json=blobId,proto3" json:"blob_id,omitempty"`
+	// The file's key, 32 bytes.
+	Key []byte `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// SHA-256 of the blob as uploaded.
+	Digest    []byte `protobuf:"bytes,3,opt,name=digest,proto3" json:"digest,omitempty"`
+	MediaType string `protobuf:"bytes,4,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	// The file's size in bytes, before encryption.
+	Size uint64 `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	Name string `protobuf:"bytes,6,opt,name=name,proto3" json:"name,omitempty"`
+	// Images: the size in pixels, and a small JPEG preview, at most 16 KiB.
+	Width         uint32 `protobuf:"varint,7,opt,name=width,proto3" json:"width,omitempty"`
+	Height        uint32 `protobuf:"varint,8,opt,name=height,proto3" json:"height,omitempty"`
+	Thumbnail     []byte `protobuf:"bytes,9,opt,name=thumbnail,proto3" json:"thumbnail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Attachment) Reset() {
+	*x = Attachment{}
+	mi := &file_wrinkle_v1_content_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Attachment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Attachment) ProtoMessage() {}
+
+func (x *Attachment) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_content_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
+func (*Attachment) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_content_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Attachment) GetBlobId() []byte {
+	if x != nil {
+		return x.BlobId
+	}
+	return nil
+}
+
+func (x *Attachment) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *Attachment) GetDigest() []byte {
+	if x != nil {
+		return x.Digest
+	}
+	return nil
+}
+
+func (x *Attachment) GetMediaType() string {
+	if x != nil {
+		return x.MediaType
+	}
+	return ""
+}
+
+func (x *Attachment) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *Attachment) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Attachment) GetWidth() uint32 {
+	if x != nil {
+		return x.Width
+	}
+	return 0
+}
+
+func (x *Attachment) GetHeight() uint32 {
+	if x != nil {
+		return x.Height
+	}
+	return 0
+}
+
+func (x *Attachment) GetThumbnail() []byte {
+	if x != nil {
+		return x.Thumbnail
+	}
+	return nil
+}
 
 type StickerRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -141,7 +327,7 @@ type StickerRef struct {
 
 func (x *StickerRef) Reset() {
 	*x = StickerRef{}
-	mi := &file_wrinkle_v1_content_proto_msgTypes[1]
+	mi := &file_wrinkle_v1_content_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -153,7 +339,7 @@ func (x *StickerRef) String() string {
 func (*StickerRef) ProtoMessage() {}
 
 func (x *StickerRef) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_content_proto_msgTypes[1]
+	mi := &file_wrinkle_v1_content_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -166,7 +352,7 @@ func (x *StickerRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StickerRef.ProtoReflect.Descriptor instead.
 func (*StickerRef) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_content_proto_rawDescGZIP(), []int{1}
+	return file_wrinkle_v1_content_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StickerRef) GetStickerId() []byte {
@@ -187,7 +373,7 @@ type Reactions struct {
 
 func (x *Reactions) Reset() {
 	*x = Reactions{}
-	mi := &file_wrinkle_v1_content_proto_msgTypes[2]
+	mi := &file_wrinkle_v1_content_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -199,7 +385,7 @@ func (x *Reactions) String() string {
 func (*Reactions) ProtoMessage() {}
 
 func (x *Reactions) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_content_proto_msgTypes[2]
+	mi := &file_wrinkle_v1_content_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -212,7 +398,7 @@ func (x *Reactions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reactions.ProtoReflect.Descriptor instead.
 func (*Reactions) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_content_proto_rawDescGZIP(), []int{2}
+	return file_wrinkle_v1_content_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Reactions) GetEmoji() []string {
@@ -227,11 +413,27 @@ var File_wrinkle_v1_content_proto protoreflect.FileDescriptor
 const file_wrinkle_v1_content_proto_rawDesc = "" +
 	"\n" +
 	"\x18wrinkle/v1/content.proto\x12\n" +
-	"wrinkle.v1\"[\n" +
+	"wrinkle.v1\"\x98\x01\n" +
 	"\aContent\x12\x14\n" +
 	"\x04text\x18\x01 \x01(\tH\x00R\x04text\x122\n" +
-	"\asticker\x18\x02 \x01(\v2\x16.wrinkle.v1.StickerRefH\x00R\astickerB\x06\n" +
-	"\x04body\"+\n" +
+	"\asticker\x18\x02 \x01(\v2\x16.wrinkle.v1.StickerRefH\x00R\asticker\x12;\n" +
+	"\vattachments\x18\x03 \x01(\v2\x17.wrinkle.v1.AttachmentsH\x00R\vattachmentsB\x06\n" +
+	"\x04body\"U\n" +
+	"\vAttachments\x12,\n" +
+	"\x05items\x18\x01 \x03(\v2\x16.wrinkle.v1.AttachmentR\x05items\x12\x18\n" +
+	"\acaption\x18\x02 \x01(\tR\acaption\"\xe2\x01\n" +
+	"\n" +
+	"Attachment\x12\x17\n" +
+	"\ablob_id\x18\x01 \x01(\fR\x06blobId\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\fR\x03key\x12\x16\n" +
+	"\x06digest\x18\x03 \x01(\fR\x06digest\x12\x1d\n" +
+	"\n" +
+	"media_type\x18\x04 \x01(\tR\tmediaType\x12\x12\n" +
+	"\x04size\x18\x05 \x01(\x04R\x04size\x12\x12\n" +
+	"\x04name\x18\x06 \x01(\tR\x04name\x12\x14\n" +
+	"\x05width\x18\a \x01(\rR\x05width\x12\x16\n" +
+	"\x06height\x18\b \x01(\rR\x06height\x12\x1c\n" +
+	"\tthumbnail\x18\t \x01(\fR\tthumbnail\"+\n" +
 	"\n" +
 	"StickerRef\x12\x1d\n" +
 	"\n" +
@@ -254,19 +456,23 @@ func file_wrinkle_v1_content_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_content_proto_rawDescData
 }
 
-var file_wrinkle_v1_content_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_wrinkle_v1_content_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_wrinkle_v1_content_proto_goTypes = []any{
-	(*Content)(nil),    // 0: wrinkle.v1.Content
-	(*StickerRef)(nil), // 1: wrinkle.v1.StickerRef
-	(*Reactions)(nil),  // 2: wrinkle.v1.Reactions
+	(*Content)(nil),     // 0: wrinkle.v1.Content
+	(*Attachments)(nil), // 1: wrinkle.v1.Attachments
+	(*Attachment)(nil),  // 2: wrinkle.v1.Attachment
+	(*StickerRef)(nil),  // 3: wrinkle.v1.StickerRef
+	(*Reactions)(nil),   // 4: wrinkle.v1.Reactions
 }
 var file_wrinkle_v1_content_proto_depIdxs = []int32{
-	1, // 0: wrinkle.v1.Content.sticker:type_name -> wrinkle.v1.StickerRef
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	3, // 0: wrinkle.v1.Content.sticker:type_name -> wrinkle.v1.StickerRef
+	1, // 1: wrinkle.v1.Content.attachments:type_name -> wrinkle.v1.Attachments
+	2, // 2: wrinkle.v1.Attachments.items:type_name -> wrinkle.v1.Attachment
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_content_proto_init() }
@@ -277,6 +483,7 @@ func file_wrinkle_v1_content_proto_init() {
 	file_wrinkle_v1_content_proto_msgTypes[0].OneofWrappers = []any{
 		(*Content_Text)(nil),
 		(*Content_Sticker)(nil),
+		(*Content_Attachments)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -284,7 +491,7 @@ func file_wrinkle_v1_content_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_content_proto_rawDesc), len(file_wrinkle_v1_content_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
