@@ -15,6 +15,7 @@ import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.accounts.AccountService;
+import wrinkle.accounts.Devices;
 import wrinkle.conversation.ConversationService;
 import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.fanout.FanoutWorker;
@@ -24,6 +25,10 @@ import wrinkle.services.Backend;
 import wrinkle.services.LocalBackend;
 import wrinkle.services.RpcClient;
 import wrinkle.services.RpcServer;
+import wrinkle.uploads.Blobs;
+import wrinkle.uploads.Presigner;
+import wrinkle.uploads.UploadService;
+import wrinkle.uploads.UploadSweeper;
 
 /**
  * The Java backend: one binary whose roles are chosen by configuration. The gateway role serves
@@ -50,14 +55,22 @@ public final class Main {
 
     DataSource userDb = null;
     LocalBackend local = null;
+    Blobs blobs =
+        new Blobs(
+            cfg.blobUrl(), new Presigner(cfg.blobKeyId(), cfg.blobSecret(), cfg.blobRegion()));
     if (cfg.needsDatabase()) {
       DataSource conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
       userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
       ConversationService conversations = new ConversationService(conversationDb);
-      AccountService accounts = new AccountService(userDb);
+      UploadService uploads = new UploadService(userDb, blobs);
+      AccountService accounts = new AccountService(userDb, uploads);
       local =
           new LocalBackend(
-              accounts, conversations, new DeviceSyncService(userDb, accounts, conversations));
+              accounts,
+              new Devices(userDb),
+              uploads,
+              conversations,
+              new DeviceSyncService(userDb, accounts, conversations));
     }
     Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;
 
@@ -87,6 +100,7 @@ public final class Main {
       fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, presence);
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
+      new UploadSweeper(userDb, blobs).start();
     }
 
     Server server = sb.build();

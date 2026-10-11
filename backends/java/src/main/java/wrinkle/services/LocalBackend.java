@@ -6,19 +6,25 @@ import org.slf4j.LoggerFactory;
 import wrinkle.ApiError;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
+import wrinkle.accounts.Devices;
 import wrinkle.conversation.ConversationService;
 import wrinkle.devicesync.DeviceSyncService;
+import wrinkle.uploads.UploadService;
 import wrinkle.v1.ChangePasswordResponse;
+import wrinkle.v1.DeleteAccountResponse;
 import wrinkle.v1.GetMessagesResponse;
 import wrinkle.v1.ListConversationsResponse;
+import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
 import wrinkle.v1.OpenConversationResponse;
 import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.RegisterResponse;
+import wrinkle.v1.RenameDeviceResponse;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
 import wrinkle.v1.SendMessageResponse;
 import wrinkle.v1.SignInResponse;
+import wrinkle.v1.SignOutDeviceResponse;
 import wrinkle.v1.SignOutResponse;
 import wrinkle.v1.UpdateProfileResponse;
 
@@ -27,12 +33,20 @@ public final class LocalBackend implements Backend {
   private static final Logger log = LoggerFactory.getLogger(LocalBackend.class);
 
   private final AccountService accounts;
+  private final Devices devices;
+  private final UploadService uploads;
   private final ConversationService conversations;
   private final DeviceSyncService users;
 
   public LocalBackend(
-      AccountService accounts, ConversationService conversations, DeviceSyncService users) {
+      AccountService accounts,
+      Devices devices,
+      UploadService uploads,
+      ConversationService conversations,
+      DeviceSyncService users) {
     this.accounts = accounts;
+    this.devices = devices;
+    this.uploads = uploads;
     this.conversations = conversations;
     this.users = users;
   }
@@ -79,9 +93,26 @@ public final class LocalBackend implements Backend {
               UpdateProfileResponse.newBuilder()
                   .setUser(accounts.updateProfile(userId, req.getUpdateProfile())));
       case SIGN_OUT -> {
-        accounts.signOut(userId, deviceId);
+        devices.signOut(userId, deviceId);
         yield resp.setSignOut(SignOutResponse.getDefaultInstance());
       }
+      case LIST_DEVICES ->
+          resp.setListDevices(ListDevicesResponse.newBuilder().addAllDevices(devices.list(userId)));
+      case RENAME_DEVICE -> {
+        var r = req.getRenameDevice();
+        yield resp.setRenameDevice(
+            RenameDeviceResponse.newBuilder()
+                .setDevice(devices.rename(userId, r.getDeviceId(), r.getName())));
+      }
+      case SIGN_OUT_DEVICE -> {
+        devices.signOutOther(userId, deviceId, req.getSignOutDevice().getDeviceId());
+        yield resp.setSignOutDevice(SignOutDeviceResponse.getDefaultInstance());
+      }
+      case DELETE_ACCOUNT -> {
+        accounts.deleteAccount(userId, req.getDeleteAccount());
+        yield resp.setDeleteAccount(DeleteAccountResponse.getDefaultInstance());
+      }
+      case CREATE_UPLOAD -> resp.setCreateUpload(uploads.create(userId, req.getCreateUpload()));
       case OPEN_CONVERSATION ->
           resp.setOpenConversation(
               OpenConversationResponse.newBuilder()

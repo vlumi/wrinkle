@@ -17,7 +17,11 @@ public record Config(
     String services,
     InetSocketAddress servicesListen,
     String node,
-    int dbConns) {
+    int dbConns,
+    String blobUrl,
+    String blobKeyId,
+    String blobSecret,
+    String blobRegion) {
 
   private static final Set<String> ROLES = Set.of("gateway", "fanout", "services");
 
@@ -58,6 +62,14 @@ public record Config(
     String servicesListen = env("WRINKLE_SERVICES_LISTEN", ":9000");
     String node = env("WRINKLE_NODE", hostname());
     String dbConns = env("WRINKLE_DB_CONNS", "64");
+    // The local object storage's credentials; fine to commit.
+    String blobUrl = env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200");
+    String blobKeyId = env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000");
+    String blobSecret =
+        env(
+            "WRINKLE_BLOB_SECRET",
+            "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4");
+    String blobRegion = env("WRINKLE_BLOB_REGION", "garage");
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
       String value = null;
@@ -81,6 +93,10 @@ public record Config(
         case "services-listen" -> servicesListen = value;
         case "node" -> node = value;
         case "db-conns" -> dbConns = value;
+        case "blob-url" -> blobUrl = value;
+        case "blob-key-id" -> blobKeyId = value;
+        case "blob-secret" -> blobSecret = value;
+        case "blob-region" -> blobRegion = value;
         default -> throw new IllegalArgumentException("unknown flag " + a);
       }
     }
@@ -99,7 +115,11 @@ public record Config(
         services,
         address(servicesListen),
         node,
-        Integer.parseInt(dbConns));
+        Integer.parseInt(dbConns),
+        blobUrl,
+        blobKeyId,
+        blobSecret,
+        blobRegion);
   }
 
   /** host:port, or :port for every interface. */

@@ -46,6 +46,7 @@ services:
     command: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
     environment:
       <<: *infra
+      WRINKLE_BLOB_URL: http://blobs:9200
     restart: unless-stopped
 
   go-gw:

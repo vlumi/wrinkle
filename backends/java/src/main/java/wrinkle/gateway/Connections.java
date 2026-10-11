@@ -1,6 +1,7 @@
 package wrinkle.gateway;
 
 import com.google.protobuf.CodedOutputStream;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.WireFormat;
 import java.io.IOException;
 import java.util.Map;
@@ -13,6 +14,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
 import wrinkle.Uuid;
+import wrinkle.backend.v1.Push;
+import wrinkle.backend.v1.SignedOut;
 import wrinkle.presence.Presence;
 import wrinkle.v1.Frame;
 
@@ -23,6 +26,11 @@ import wrinkle.v1.Frame;
 final class Connections {
   private static final Logger log = LoggerFactory.getLogger(Connections.class);
   private static final long DRAIN_POLL_MILLIS = 20;
+  // The one-byte tags of Push.event and Frame.event, both length-delimited.
+  private static final byte PUSH_EVENT_TAG =
+      (byte) (Push.EVENT_FIELD_NUMBER << 3 | WireFormat.WIRETYPE_LENGTH_DELIMITED);
+  private static final byte FRAME_EVENT_TAG =
+      (byte) (Frame.EVENT_FIELD_NUMBER << 3 | WireFormat.WIRETYPE_LENGTH_DELIMITED);
 
   private final Presence presence;
   private final Subscriptions<Uuid> subscriptions;
@@ -122,12 +130,33 @@ final class Connections {
     subscriptions.stop();
   }
 
-  private void push(Uuid userId, byte[] event) {
+  /** Routes a message from the user's push channel: an event to send, or devices signed out. */
+  private void push(Uuid userId, byte[] message) {
     Set<Conn> conns = byUser.get(userId);
     if (conns == null) {
       return;
     }
-    byte[] frame = eventFrame(event);
+    byte[] frame = eventFrameOf(message);
+    if (frame == null) {
+      Push push;
+      try {
+        push = Push.parseFrom(message);
+      } catch (InvalidProtocolBufferException e) {
+        log.warn("dropping an undecodable push for user {}", userId);
+        return;
+      }
+      switch (push.getKindCase()) {
+        case EVENT -> frame = eventFrame(push.getEvent().toByteArray());
+        case SIGNED_OUT -> {
+          signOut(conns, push.getSignedOut());
+          return;
+        }
+        default -> {
+          log.warn("dropping an empty push for user {}", userId);
+          return;
+        }
+      }
+    }
     for (Conn c : conns) {
       if (c.push(frame)) {
         Metrics.EVENTS_PUSHED.inc();
@@ -135,8 +164,44 @@ final class Connections {
     }
   }
 
+  private static void signOut(Set<Conn> conns, SignedOut out) {
+    for (Conn c : conns) {
+      if (out.getAllDevices() || out.getDeviceIdsList().contains(c.deviceId())) {
+        c.closeSignedOut();
+      }
+    }
+  }
+
+  /**
+   * The Frame for a Push that is just an event, as fan-out writes it, without decoding either: both
+   * are one length-delimited field, so only the tag differs. Null for any other Push.
+   */
+  static byte[] eventFrameOf(byte[] push) {
+    if (push.length < 2 || push[0] != PUSH_EVENT_TAG) {
+      return null;
+    }
+    long length = 0;
+    int i = 1;
+    for (int shift = 0; ; shift += 7) {
+      if (i >= push.length || shift > 28) {
+        return null;
+      }
+      byte b = push[i++];
+      length |= (long) (b & 0x7f) << shift;
+      if (b >= 0) {
+        break;
+      }
+    }
+    if (i + length != push.length) {
+      return null;
+    }
+    byte[] frame = push.clone();
+    frame[0] = FRAME_EVENT_TAG;
+    return frame;
+  }
+
   /** Wraps an already serialized Event in a Frame without decoding it. */
-  private static byte[] eventFrame(byte[] event) {
+  static byte[] eventFrame(byte[] event) {
     int tagSize = CodedOutputStream.computeTagSize(Frame.EVENT_FIELD_NUMBER);
     int lengthSize = CodedOutputStream.computeUInt32SizeNoTag(event.length);
     byte[] frame = new byte[tagSize + lengthSize + event.length];

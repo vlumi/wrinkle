@@ -12,17 +12,21 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import wrinkle.Sql;
 import wrinkle.Uuid;
+import wrinkle.backend.v1.SignedOut;
 import wrinkle.v1.User;
 
 /**
  * Delivers a profile change to the user's own log, then to each conversation partner's, with the
- * partner's list entry updated in the same transaction.
+ * partner's list entry updated in the same transaction. A deleted account's change goes to the
+ * partners alike; then its devices are signed out and its data removed.
  */
 final class ProfileFanout {
   // How many conversation partners are read at a time.
   private static final int PAGE = 500;
   // How many partners of one user are delivered to at a time.
   private static final int CONCURRENCY = 16;
+  // Rows removed per statement when purging a deleted account.
+  private static final int PURGE_BATCH = 1000;
 
   private final UserLog userLog;
   private final ExecutorService tasks;
@@ -56,10 +60,13 @@ final class ProfileFanout {
                         (c, e) ->
                             Sql.update(
                                 c,
-                                "UPDATE user_conversation SET peer_name = ?, peer_icon = ? WHERE"
-                                    + " user_id = ? AND conversation_id = ?",
+                                "UPDATE user_conversation SET peer_name = ?, peer_icon = ?,"
+                                    + " peer_avatar = ?, peer_deleted = ? WHERE user_id = ? AND"
+                                    + " conversation_id = ?",
                                 user.getName(),
                                 user.getIcon(),
+                                user.getAvatar().isEmpty() ? null : user.getAvatar().toByteArray(),
+                                user.getDeleted(),
                                 p.peerId(),
                                 p.conversationId()));
                     return null;
@@ -80,9 +87,30 @@ final class ProfileFanout {
         throw failure;
       }
       if (page.size() < PAGE) {
-        return;
+        break;
       }
       after = page.getLast().conversationId();
+    }
+    if (user.getDeleted()) {
+      userLog.pushSignedOut(o.userId(), SignedOut.newBuilder().setAllDevices(true).build());
+      purge(o.userId());
+    }
+  }
+
+  /**
+   * Removes a deleted account's log, conversation list and devices, and leaves its uploads to the
+   * sweeper. The user row stays, so nothing is appended for it again. Repeating it is harmless.
+   */
+  private void purge(Uuid userId) throws SQLException {
+    try (Connection c = userLog.db().getConnection()) {
+      for (String table : List.of("user_event", "user_conversation", "device")) {
+        while (Sql.update(
+                c, "DELETE FROM " + table + " WHERE user_id = ? LIMIT ?", userId, PURGE_BATCH)
+            == PURGE_BATCH) {
+          // Until a batch comes up short.
+        }
+      }
+      Sql.update(c, "UPDATE upload SET used = FALSE WHERE user_id = ?", userId);
     }
   }
 

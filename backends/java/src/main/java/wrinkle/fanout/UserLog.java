@@ -1,5 +1,6 @@
 package wrinkle.fanout;
 
+import com.google.protobuf.UnsafeByteOperations;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -15,6 +16,9 @@ import wrinkle.Metrics;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
+import wrinkle.accounts.AccountService;
+import wrinkle.backend.v1.Push;
+import wrinkle.backend.v1.SignedOut;
 import wrinkle.presence.Presence;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
@@ -98,22 +102,25 @@ final class UserLog {
           return null;
         }
       }
-      User.Builder peer = User.newBuilder().setUserId(peerId.toByteString());
       try (PreparedStatement ps =
-              Sql.prepare(c, "SELECT name, icon FROM user WHERE user_id = ?", peerId);
+              Sql.prepare(
+                  c,
+                  "SELECT name, icon, avatar, deleted_at IS NOT NULL FROM user WHERE user_id = ?",
+                  peerId);
           ResultSet rs = ps.executeQuery()) {
         if (rs.next()) {
-          peer.setName(rs.getString(1)).setIcon(rs.getString(2));
+          return AccountService.user(
+              peerId, rs.getString(1), rs.getString(2), rs.getBytes(3), rs.getBoolean(4));
         }
       }
-      return peer.build();
+      return User.newBuilder().setUserId(peerId.toByteString()).build();
     }
   }
 
   /**
    * Appends the event to the user's log, in one transaction with the list update, then pushes it.
-   * Returns the event as stored, or null when there is nothing to push: the user does not exist, or
-   * the log already has the event from this source row.
+   * Returns the event as stored, or null when there is nothing to push: the user does not exist or
+   * was deleted, or the log already has the event from this source row.
    */
   Event append(Uuid userId, Uuid sourceId, long outboxId, Event source, ListUpdate update)
       throws SQLException {
@@ -124,7 +131,6 @@ final class UserLog {
       try {
         Long head = lockHead(c, userId);
         if (head == null) {
-          log.warn("no such user {}, dropping event", userId);
           c.rollback();
           return null;
         }
@@ -162,16 +168,30 @@ final class UserLog {
     LocalDateTime occurredAt = Timestamps.fromProto(event.getOccurredAt());
     Metrics.FANOUT_DELIVERIES.inc();
     Metrics.FANOUT_LAG.observe(Duration.between(occurredAt, Timestamps.now()).toNanos() / 1e9);
-    presence.publish(userId, payload);
+    presence.publish(
+        userId, Push.newBuilder().setEvent(UnsafeByteOperations.unsafeWrap(payload)).build());
     return event;
   }
 
-  /** The user's log head, locked for the transaction, or null if there is no such user. */
+  /** Tells the gateways to close the connections of devices signed out. */
+  void pushSignedOut(Uuid userId, SignedOut signedOut) {
+    presence.publish(userId, Push.newBuilder().setSignedOut(signedOut).build());
+  }
+
+  /**
+   * The user's log head, locked for the transaction, or null if there is no such user or the
+   * account was deleted.
+   */
   private static Long lockHead(Connection c, Uuid userId) throws SQLException {
     try (PreparedStatement ps =
-            Sql.prepare(c, "SELECT log_head FROM user WHERE user_id = ? FOR UPDATE", userId);
+            Sql.prepare(
+                c, "SELECT log_head, deleted_at FROM user WHERE user_id = ? FOR UPDATE", userId);
         ResultSet rs = ps.executeQuery()) {
-      return rs.next() ? rs.getLong(1) : null;
+      if (!rs.next()) {
+        log.warn("no such user {}, dropping event", userId);
+        return null;
+      }
+      return rs.getObject(2) == null ? rs.getLong(1) : null;
     }
   }
 
@@ -189,13 +209,17 @@ final class UserLog {
     long ownReadSeq = userId.matches(msg.getSenderUserId()) ? msg.getSeq() : 0;
     String peerName = peer == null ? "" : peer.getName();
     String peerIcon = peer == null ? "" : peer.getIcon();
+    byte[] peerAvatar =
+        peer == null || peer.getAvatar().isEmpty() ? null : peer.getAvatar().toByteArray();
+    boolean peerDeleted = peer != null && peer.getDeleted();
     byte[] sender = msg.getSenderUserId().toByteArray();
     Sql.update(
         c,
         "INSERT INTO user_conversation (user_id, conversation_id, peer_user_id, peer_name,"
-            + " peer_icon, last_seq, last_sender_user_id, last_client_message_id, last_body,"
-            + " last_sent_at, read_seq, peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?,"
-            + " ?, ?, ?, 0, ?) ON DUPLICATE KEY UPDATE last_seq = GREATEST(last_seq, ?),"
+            + " peer_icon, peer_avatar, peer_deleted, last_seq, last_sender_user_id,"
+            + " last_client_message_id, last_body, last_sent_at, read_seq, peer_read_seq,"
+            + " updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?) ON DUPLICATE KEY"
+            + " UPDATE last_seq = GREATEST(last_seq, ?),"
             + " last_sender_user_id = IF(? >= last_seq, ?, last_sender_user_id),"
             + " last_client_message_id = IF(? >= last_seq, ?, last_client_message_id),"
             + " last_body = IF(? >= last_seq, ?, last_body),"
@@ -207,6 +231,8 @@ final class UserLog {
         peerId,
         peerName,
         peerIcon,
+        peerAvatar,
+        peerDeleted,
         msg.getSeq(),
         sender,
         msg.getClientMessageId(),

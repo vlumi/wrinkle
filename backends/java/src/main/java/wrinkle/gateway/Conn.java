@@ -37,6 +37,9 @@ final class Conn {
   private static final int MAX_QUEUED_FRAMES = 32;
   private static final long SUBSCRIBE_TIMEOUT_MILLIS = 5000;
 
+  private static final WebSocketCloseStatus SIGNED_OUT =
+      WebSocketCloseStatus.ofPrivateUse(4001, "signed out");
+
   private static final byte[] PONG =
       Frame.newBuilder().setPong(Pong.getDefaultInstance()).build().toByteArray();
 
@@ -237,6 +240,11 @@ final class Conn {
 
   void closeForShutdown() {
     close(WebSocketCloseStatus.ENDPOINT_UNAVAILABLE, "shutting down");
+  }
+
+  /** The device was signed out or the account deleted; the client does not reconnect. */
+  void closeSignedOut() {
+    close(SIGNED_OUT, "signed out");
   }
 
   /** The periodic check: the connect deadline, idleness, and the keepalive ping. */

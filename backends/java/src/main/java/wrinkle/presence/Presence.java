@@ -14,6 +14,7 @@ import java.time.Duration;
 import java.util.HexFormat;
 import java.util.function.BiConsumer;
 import wrinkle.Uuid;
+import wrinkle.backend.v1.Push;
 
 /**
  * Which device is connected to which gateway instance, and the push channel from fan-out workers to
@@ -77,11 +78,12 @@ public final class Presence implements AutoCloseable {
     return Uuid.fromHex(s.substring(CHANNEL_PREFIX.length()));
   }
 
-  public void publish(Uuid userId, byte[] payload) {
-    commands.async().publish(channel(userId), payload);
+  /** Publishes on the user's push channel. */
+  public void publish(Uuid userId, Push push) {
+    commands.async().publish(channel(userId), push.toByteArray());
   }
 
-  /** Delivers pushes for subscribed users to the listener. */
+  /** Delivers pushes for subscribed users to the listener, as serialized Push messages. */
   public void listen(BiConsumer<Uuid, byte[]> listener) {
     pubsub.addListener(
         new RedisPubSubAdapter<>() {

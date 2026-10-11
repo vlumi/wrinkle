@@ -37,7 +37,7 @@ public final class DeviceSyncService {
   private static final String SELECT_CONVERSATIONS =
       "SELECT conversation_id, peer_user_id, peer_name, peer_icon, last_seq,"
           + " last_sender_user_id, last_client_message_id, last_body, last_sent_at, read_seq,"
-          + " peer_read_seq"
+          + " peer_read_seq, peer_avatar, peer_deleted"
           + " FROM user_conversation";
 
   private final DataSource db;
@@ -136,7 +136,7 @@ public final class DeviceSyncService {
       throw ApiError.invalidArgument("a conversation needs two different users");
     }
     User peer = accounts.profile(peerId);
-    if (peer == null) {
+    if (peer == null || peer.getDeleted()) {
       throw ApiError.notFound("no user named \"" + peerName + "\"");
     }
     boolean ordered = userId.compareTo(peerId) < 0;
@@ -145,13 +145,15 @@ public final class DeviceSyncService {
       Sql.update(
           c,
           "INSERT IGNORE INTO user_conversation (user_id, conversation_id, peer_user_id,"
-              + " peer_name, peer_icon, last_seq, read_seq, peer_read_seq, updated_at) VALUES (?,"
-              + " ?, ?, ?, ?, 0, 0, 0, ?)",
+              + " peer_name, peer_icon, peer_avatar, peer_deleted, last_seq, read_seq,"
+              + " peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?)",
           userId,
           conversationId,
           peerId,
           peer.getName(),
           peer.getIcon(),
+          peer.getAvatar().isEmpty() ? null : peer.getAvatar().toByteArray(),
+          peer.getDeleted(),
           Timestamps.now());
       List<Conversation> list =
           selectConversations(
@@ -196,10 +198,12 @@ public final class DeviceSyncService {
         Conversation.newBuilder()
             .setConversationId(conversationId)
             .setPeer(
-                User.newBuilder()
-                    .setUserId(ByteString.copyFrom(rs.getBytes(2)))
-                    .setName(rs.getString(3))
-                    .setIcon(rs.getString(4)))
+                AccountService.user(
+                    Uuid.of(rs.getBytes(2)),
+                    rs.getString(3),
+                    rs.getString(4),
+                    rs.getBytes(12),
+                    rs.getBoolean(13)))
             .setLastSeq(lastSeq)
             .setReadSeq(rs.getLong(10))
             .setPeerReadSeq(rs.getLong(11));

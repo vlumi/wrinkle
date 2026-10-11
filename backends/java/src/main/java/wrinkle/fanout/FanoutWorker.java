@@ -27,7 +27,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
 import wrinkle.Uuid;
+import wrinkle.backend.v1.SignedOut;
 import wrinkle.presence.Presence;
+import wrinkle.v1.DeviceEvent;
 import wrinkle.v1.Event;
 
 /**
@@ -217,13 +219,27 @@ public final class FanoutWorker {
       log.error("skipping user outbox record at offset {}: {}", rec.offset(), e.toString());
       return;
     }
-    if (!o.event().hasProfile()) {
-      log.error(
-          "skipping user outbox record without a profile, kind {}, offset {}",
-          o.kind(),
-          rec.offset());
-      return;
+    switch (o.event().getBodyCase()) {
+      case PROFILE -> profiles.deliver(o);
+      case DEVICE -> deliverDevice(o);
+      default ->
+          log.error(
+              "skipping user outbox record without a profile or device, kind {}, offset {}",
+              o.kind(),
+              rec.offset());
     }
-    profiles.deliver(o);
+  }
+
+  /**
+   * A device change goes to the user's own log. A sign-out also closes the device's connections,
+   * even when the event was already delivered before.
+   */
+  private void deliverDevice(UserOutboxRecord o) throws SQLException {
+    userLog.append(o.userId(), o.userId(), o.outboxId(), o.event(), null);
+    DeviceEvent d = o.event().getDevice();
+    if (d.getSignedOut()) {
+      userLog.pushSignedOut(
+          o.userId(), SignedOut.newBuilder().addDeviceIds(d.getDevice().getDeviceId()).build());
+    }
   }
 }

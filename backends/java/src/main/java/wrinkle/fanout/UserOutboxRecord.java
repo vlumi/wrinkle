@@ -6,7 +6,7 @@ import java.io.IOException;
 import wrinkle.Uuid;
 import wrinkle.v1.Event;
 
-/** A row of a user's outbox, a profile change, as Debezium emits it. */
+/** A row of a user's outbox, a profile or device change, as Debezium emits it. */
 record UserOutboxRecord(Uuid userId, long outboxId, String kind, Event event) {
   private static final ObjectMapper JSON = new ObjectMapper();
 

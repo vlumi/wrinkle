@@ -1,5 +1,6 @@
 package wrinkle.accounts;
 
+import com.google.protobuf.ByteString;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -7,6 +8,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
@@ -15,9 +18,11 @@ import wrinkle.ApiError;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
+import wrinkle.uploads.UploadService;
 import wrinkle.v1.ChangePasswordRequest;
 import wrinkle.v1.ConnectRequest;
 import wrinkle.v1.ConnectResponse;
+import wrinkle.v1.DeleteAccountRequest;
 import wrinkle.v1.DeviceCredentials;
 import wrinkle.v1.Event;
 import wrinkle.v1.ProfileEvent;
@@ -33,7 +38,6 @@ import wrinkle.v1.User;
 public final class AccountService {
   private static final Logger log = LoggerFactory.getLogger(AccountService.class);
   private static final int MAX_NAME_BYTES = 64;
-  private static final int MAX_DEVICE_NAME_BYTES = 64;
   private static final int MIN_PASSWORD_BYTES = 8;
   private static final int MAX_PASSWORD_BYTES = 256;
   private static final String WRONG_CREDENTIALS = "wrong name or password";
@@ -46,10 +50,12 @@ public final class AccountService {
 
   private final DataSource db;
   private final NameClaims names;
+  private final UploadService uploads;
 
-  public AccountService(DataSource db) {
+  public AccountService(DataSource db, UploadService uploads) {
     this.db = db;
     this.names = new NameClaims(db);
+    this.uploads = uploads;
   }
 
   private static int utf8Length(String s) {
@@ -111,26 +117,31 @@ public final class AccountService {
   }
 
   private static void checkDeviceName(String name) {
-    if (utf8Length(name) > MAX_DEVICE_NAME_BYTES) {
-      throw ApiError.invalidArgument(
-          "device_name must be UTF-8 of at most " + MAX_DEVICE_NAME_BYTES + " bytes");
+    Devices.checkName(name, "device_name");
+  }
+
+  /** A profile from its columns; a NULL avatar is none. */
+  public static User user(Uuid userId, String name, String icon, byte[] avatar, boolean deleted) {
+    User.Builder u = User.newBuilder().setUserId(userId.toByteString()).setName(name).setIcon(icon);
+    if (avatar != null) {
+      u.setAvatar(ByteString.copyFrom(avatar));
     }
+    return u.setDeleted(deleted).build();
   }
 
   /** The user's profile, or null when there is no such user. */
   public User profile(Uuid userId) throws SQLException {
     try (Connection c = db.getConnection();
         PreparedStatement ps =
-            Sql.prepare(c, "SELECT name, icon FROM user WHERE user_id = ?", userId);
+            Sql.prepare(
+                c,
+                "SELECT name, icon, avatar, deleted_at IS NOT NULL FROM user WHERE user_id = ?",
+                userId);
         ResultSet rs = ps.executeQuery()) {
       if (!rs.next()) {
         return null;
       }
-      return User.newBuilder()
-          .setUserId(userId.toByteString())
-          .setName(rs.getString(1))
-          .setIcon(rs.getString(2))
-          .build();
+      return user(userId, rs.getString(1), rs.getString(2), rs.getBytes(3), rs.getBoolean(4));
     }
   }
 
@@ -220,18 +231,22 @@ public final class AccountService {
   private DeviceCredentials newDevice(Uuid userId, String name) throws SQLException {
     DeviceToken token = DeviceToken.create(userId);
     LocalDateTime now = Timestamps.now();
-    try (Connection c = db.getConnection()) {
-      Sql.update(
-          c,
-          "INSERT INTO device (user_id, device_id, name, token_hash, acked_position, created_at,"
-              + " last_seen_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
-          userId,
-          token.deviceId(),
-          name,
-          token.hash(),
-          now,
-          now);
-    }
+    Devices.inTransaction(
+        db,
+        c -> {
+          Sql.update(
+              c,
+              "INSERT INTO device (user_id, device_id, name, token_hash, acked_position,"
+                  + " created_at, last_seen_at) VALUES (?, ?, ?, ?, 0, ?, ?)",
+              userId,
+              token.deviceId(),
+              name,
+              token.hash(),
+              now,
+              now);
+          UserOutbox.device(c, userId, token.deviceId(), false);
+          return null;
+        });
     return DeviceCredentials.newBuilder()
         .setUserId(userId.toByteString())
         .setDeviceId(token.deviceId())
@@ -270,17 +285,16 @@ public final class AccountService {
       }
       try (PreparedStatement ps =
               Sql.prepare(
-                  c, "SELECT name, icon, log_head FROM user WHERE user_id = ?", token.userId());
+                  c,
+                  "SELECT name, icon, avatar, log_head, deleted_at IS NOT NULL FROM user WHERE"
+                      + " user_id = ?",
+                  token.userId());
           ResultSet rs = ps.executeQuery()) {
-        if (!rs.next()) {
+        if (!rs.next() || rs.getBoolean(5)) {
           throw invalidToken();
         }
-        resp.setUser(
-                User.newBuilder()
-                    .setUserId(token.userId().toByteString())
-                    .setName(rs.getString(1))
-                    .setIcon(rs.getString(2)))
-            .setLogHead(rs.getLong(3));
+        resp.setUser(user(token.userId(), rs.getString(1), rs.getString(2), rs.getBytes(3), false))
+            .setLogHead(rs.getLong(4));
       }
       Sql.update(
           c,
@@ -293,11 +307,10 @@ public final class AccountService {
   }
 
   /**
-   * Replaces the password and signs out every other device of the user. Their connections already
-   * open keep running until they reconnect.
+   * Fails with UNAUTHENTICATED unless the password is the user's, in about the same time; returns
+   * the hash it was checked against.
    */
-  public void changePassword(Uuid userId, long deviceId, ChangePasswordRequest req)
-      throws Exception {
+  private String verifyPassword(Uuid userId, String password) throws Exception {
     String hash;
     try (Connection c = db.getConnection();
         PreparedStatement ps =
@@ -308,46 +321,138 @@ public final class AccountService {
       }
       hash = rs.getString(1);
     }
-    String current = req.getCurrentPassword();
-    if (!validPassword(current)) {
-      current = "";
-      hash = Passwords.dummy();
-    }
-    if (!Passwords.verify(current, hash) || !validPassword(req.getCurrentPassword())) {
+    // A deleted account has no hash.
+    boolean usable = validPassword(password) && !hash.isEmpty();
+    if (!Passwords.verify(usable ? password : "", usable ? hash : Passwords.dummy()) || !usable) {
       throw ApiError.unauthenticated("wrong password");
     }
-    checkPassword(req.getNewPassword());
-    String newHash = Passwords.hash(req.getNewPassword());
-    try (Connection c = db.getConnection()) {
-      Sql.update(c, "UPDATE user SET password_hash = ? WHERE user_id = ?", newHash, userId);
-      Sql.update(
-          c,
-          "UPDATE device SET token_hash = NULL, push_service = NULL, push_token = NULL WHERE"
-              + " user_id = ? AND device_id <> ?",
-          userId,
-          deviceId);
-    }
+    return hash;
   }
 
-  /** Invalidates the device's token and removes its push registration. */
-  public void signOut(Uuid userId, long deviceId) throws SQLException {
-    try (Connection c = db.getConnection()) {
-      Sql.update(
-          c,
-          "UPDATE device SET token_hash = NULL, push_service = NULL, push_token = NULL WHERE"
-              + " user_id = ? AND device_id = ?",
-          userId,
-          deviceId);
+  /**
+   * Locks the user row; UNAUTHENTICATED if the password changed, or the account was deleted, since
+   * it was verified.
+   */
+  private static void lockUnchanged(Connection c, Uuid userId, String verified)
+      throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(c, "SELECT password_hash FROM user WHERE user_id = ? FOR UPDATE", userId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw new SQLException("user " + userId + " missing");
+      }
+      if (!rs.getString(1).equals(verified)) {
+        throw ApiError.unauthenticated("wrong password");
+      }
     }
   }
 
   /**
-   * Changes the user's name, icon or both. A new name is claimed first; the change and its outbox
-   * row are one transaction on the user's shard; the old claim is released last. An interruption
-   * leaves at worst a stale claim, which the next claimant takes over.
+   * Replaces the password and signs out every other device of the user, whose connections the
+   * gateways close when the sign-out is pushed.
    */
-  public User updateProfile(Uuid userId, UpdateProfileRequest req) throws SQLException {
-    if (!req.hasName() && !req.hasIcon()) {
+  public void changePassword(Uuid userId, long deviceId, ChangePasswordRequest req)
+      throws Exception {
+    String verified = verifyPassword(userId, req.getCurrentPassword());
+    checkPassword(req.getNewPassword());
+    String newHash = Passwords.hash(req.getNewPassword());
+    Devices.inTransaction(
+        db,
+        c -> {
+          lockUnchanged(c, userId, verified);
+          Sql.update(c, "UPDATE user SET password_hash = ? WHERE user_id = ?", newHash, userId);
+          for (long other : signedIn(c, userId)) {
+            if (other != deviceId) {
+              Devices.signOut(c, userId, other);
+            }
+          }
+          return null;
+        });
+  }
+
+  /** The user's signed-in devices, locked for the transaction. */
+  private static List<Long> signedIn(Connection c, Uuid userId) throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT device_id FROM device WHERE user_id = ? AND token_hash IS NOT NULL FOR"
+                    + " UPDATE",
+                userId);
+        ResultSet rs = ps.executeQuery()) {
+      List<Long> ids = new ArrayList<>();
+      while (rs.next()) {
+        ids.add(rs.getLong(1));
+      }
+      return ids;
+    }
+  }
+
+  /**
+   * Deletes the account after checking its password. The user row stays as a tombstone with the
+   * profile cleared; every device is signed out; fan-out tells the partners, closes the connections
+   * and removes the user's data. The name is free once the transaction commits, since a claim is
+   * valid only while the user's name matches it.
+   */
+  public void deleteAccount(Uuid userId, DeleteAccountRequest req) throws Exception {
+    String verified = verifyPassword(userId, req.getPassword());
+    String oldName =
+        Devices.inTransaction(
+            db,
+            c -> {
+              lockUnchanged(c, userId, verified);
+              String name;
+              try (PreparedStatement ps =
+                      Sql.prepare(c, "SELECT name FROM user WHERE user_id = ? FOR UPDATE", userId);
+                  ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                  throw new SQLException("user " + userId + " missing");
+                }
+                name = rs.getString(1);
+              }
+              LocalDateTime now = Timestamps.now();
+              Sql.update(
+                  c,
+                  "UPDATE user SET name = '', icon = '', avatar = NULL, password_hash = '',"
+                      + " deleted_at = ? WHERE user_id = ?",
+                  now,
+                  userId);
+              Sql.update(
+                  c,
+                  "UPDATE device SET token_hash = NULL, push_service = NULL, push_token = NULL"
+                      + " WHERE user_id = ?",
+                  userId);
+              UserOutbox.write(
+                  c,
+                  userId,
+                  "profile",
+                  Event.newBuilder()
+                      .setOccurredAt(Timestamps.toProto(now))
+                      .setProfile(
+                          ProfileEvent.newBuilder()
+                              .setUser(
+                                  User.newBuilder()
+                                      .setUserId(userId.toByteString())
+                                      .setDeleted(true)))
+                      .build());
+              return name;
+            });
+    if (!oldName.isEmpty()) {
+      try (Connection c = db.getConnection()) {
+        Sql.update(c, "DELETE FROM user_name WHERE name = ? AND user_id = ?", oldName, userId);
+      } catch (SQLException e) {
+        // Stale anyway: the user's name no longer matches it.
+        log.warn("releasing the name of deleted user {} failed: {}", userId, e.toString());
+      }
+    }
+  }
+
+  /**
+   * Changes the user's name, icon, avatar or several. A new name is claimed first; the change and
+   * its outbox row are one transaction on the user's shard; the old claim is released last. An
+   * interruption leaves at worst a stale claim, which the next claimant takes over.
+   */
+  public User updateProfile(Uuid userId, UpdateProfileRequest req) throws Exception {
+    if (!req.hasName() && !req.hasIcon() && !req.hasAvatar()) {
       return existingProfile(userId);
     }
     if (req.hasName()) {
@@ -356,11 +461,18 @@ public final class AccountService {
     if (req.hasIcon() && !validIcon(req.getIcon())) {
       throw ApiError.invalidArgument("unknown icon \"" + req.getIcon() + "\"");
     }
+    Uuid avatar = null;
+    if (req.hasAvatar() && !req.getAvatar().isEmpty()) {
+      avatar = uploads.checkAvatar(userId, req.getAvatar());
+    }
     User current = existingProfile(userId);
+    if (current.getDeleted()) {
+      throw ApiError.unauthenticated("account deleted");
+    }
     if (req.hasName() && !req.getName().equals(current.getName())) {
       names.claim(req.getName(), userId);
     }
-    Change change = storeProfile(userId, req);
+    Change change = storeProfile(userId, req, avatar);
     User user = change.user();
     if (!user.getName().equals(change.oldName())) {
       // The change is committed; a claim left behind is stale and is taken over by the next
@@ -388,35 +500,34 @@ public final class AccountService {
    * Applies the change and writes its outbox row in one transaction, returning the name before and
    * the profile after.
    */
-  private Change storeProfile(Uuid userId, UpdateProfileRequest req) throws SQLException {
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Change change = storeProfile(c, userId, req);
-        c.commit();
-        return change;
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
+  private Change storeProfile(Uuid userId, UpdateProfileRequest req, Uuid avatar)
+      throws SQLException {
+    return Devices.inTransaction(db, c -> storeProfile(c, userId, req, avatar));
   }
 
-  private static Change storeProfile(Connection c, Uuid userId, UpdateProfileRequest req)
-      throws SQLException {
+  /**
+   * The avatar's upload becomes used, and the one it replaces unused again, which the sweeper then
+   * deletes.
+   */
+  private static Change storeProfile(
+      Connection c, Uuid userId, UpdateProfileRequest req, Uuid avatar) throws SQLException {
     User.Builder user = User.newBuilder().setUserId(userId.toByteString());
-    long outboxId;
+    Uuid oldAvatar;
     try (PreparedStatement ps =
             Sql.prepare(
                 c,
-                "SELECT name, icon, last_outbox_id FROM user WHERE user_id = ? FOR UPDATE",
+                "SELECT name, icon, avatar, deleted_at IS NOT NULL FROM user WHERE user_id = ? FOR"
+                    + " UPDATE",
                 userId);
         ResultSet rs = ps.executeQuery()) {
       if (!rs.next()) {
         throw new SQLException("user " + userId + " missing");
       }
+      if (rs.getBoolean(4)) {
+        throw ApiError.unauthenticated("account deleted");
+      }
       user.setName(rs.getString(1)).setIcon(rs.getString(2));
-      outboxId = rs.getLong(3);
+      oldAvatar = Uuid.parse(rs.getBytes(3));
     }
     String oldName = user.getName();
     if (req.hasName()) {
@@ -425,31 +536,42 @@ public final class AccountService {
     if (req.hasIcon()) {
       user.setIcon(req.getIcon());
     }
-    outboxId++;
-    LocalDateTime now = Timestamps.now();
+    Uuid newAvatar = req.hasAvatar() ? avatar : oldAvatar;
+    if (newAvatar != null) {
+      user.setAvatar(newAvatar.toByteString());
+    }
     Sql.update(
         c,
-        "UPDATE user SET name = ?, icon = ?, last_outbox_id = ? WHERE user_id = ?",
+        "UPDATE user SET name = ?, icon = ?, avatar = ? WHERE user_id = ?",
         user.getName(),
         user.getIcon(),
-        outboxId,
+        newAvatar == null ? null : newAvatar.bytes(),
         userId);
-    byte[] payload =
-        Event.newBuilder()
-            .setOccurredAt(Timestamps.toProto(now))
-            .setProfile(ProfileEvent.newBuilder().setUser(user))
-            .build()
-            .toByteArray();
-    Sql.update(
+    if (req.hasAvatar()) {
+      if (newAvatar != null) {
+        UploadService.lockAvatar(c, userId, newAvatar);
+        Sql.update(
+            c,
+            "UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id = ?",
+            userId,
+            newAvatar);
+      }
+      if (oldAvatar != null && !oldAvatar.equals(newAvatar)) {
+        Sql.update(
+            c,
+            "UPDATE upload SET used = FALSE WHERE user_id = ? AND blob_id = ?",
+            userId,
+            oldAvatar);
+      }
+    }
+    UserOutbox.write(
         c,
-        "INSERT INTO user_outbox (user_id, outbox_id, kind, payload, created_at) VALUES (?, ?,"
-            + " 'profile', ?, ?)",
         userId,
-        outboxId,
-        payload,
-        now);
-    // As with the conversation outbox: the binlog keeps the insert.
-    Sql.update(c, "DELETE FROM user_outbox WHERE user_id = ? AND outbox_id = ?", userId, outboxId);
+        "profile",
+        Event.newBuilder()
+            .setOccurredAt(Timestamps.toProto(Timestamps.now()))
+            .setProfile(ProfileEvent.newBuilder().setUser(user))
+            .build());
     return new Change(oldName, user.build());
   }
 }

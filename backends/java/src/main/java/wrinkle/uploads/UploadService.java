@@ -1,0 +1,136 @@
+package wrinkle.uploads;
+
+import com.google.protobuf.ByteString;
+import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.Set;
+import java.util.regex.Pattern;
+import javax.sql.DataSource;
+import wrinkle.ApiError;
+import wrinkle.Sql;
+import wrinkle.Timestamps;
+import wrinkle.Uuid;
+import wrinkle.v1.CreateUploadRequest;
+import wrinkle.v1.CreateUploadResponse;
+
+/** Upload slots for blobs, and the checks that a blob was uploaded by the user who refers to it. */
+public final class UploadService {
+  private static final long EXPIRES_SECONDS = 900;
+  private static final int MAX_MEDIA_TYPE_BYTES = 100;
+  // type/subtype, ASCII without spaces or controls.
+  private static final Pattern MEDIA_TYPE = Pattern.compile("[!-.0-~]+/[!-.0-~]+");
+
+  private record Limits(String purpose, Set<String> mediaTypes, long maxSize) {}
+
+  private static final Limits AVATAR =
+      new Limits("avatar", Set.of("image/jpeg", "image/png", "image/webp"), 512 * 1024);
+  private static final Limits STICKER =
+      new Limits("sticker", Set.of("image/png", "image/webp", "image/gif"), 256 * 1024);
+  // Any media type.
+  private static final Limits ATTACHMENT = new Limits("attachment", null, 25L * 1024 * 1024);
+
+  private final DataSource db;
+  private final Blobs blobs;
+
+  public UploadService(DataSource db, Blobs blobs) {
+    this.db = db;
+    this.blobs = blobs;
+  }
+
+  /** Records a new upload slot and returns where to PUT the bytes. */
+  public CreateUploadResponse create(Uuid userId, CreateUploadRequest req) throws SQLException {
+    Limits limits =
+        switch (req.getPurpose()) {
+          case BLOB_PURPOSE_AVATAR -> AVATAR;
+          case BLOB_PURPOSE_STICKER -> STICKER;
+          case BLOB_PURPOSE_ATTACHMENT -> ATTACHMENT;
+          default -> throw ApiError.invalidArgument("unknown purpose " + req.getPurpose());
+        };
+    String mediaType = req.getMediaType();
+    if (limits.mediaTypes() == null
+        ? !validMediaType(mediaType)
+        : !limits.mediaTypes().contains(mediaType)) {
+      throw ApiError.invalidArgument(
+          "media type \"" + mediaType + "\" not allowed for " + limits.purpose());
+    }
+    // size is unsigned; a huge one reads as negative.
+    if (req.getSize() < 1 || req.getSize() > limits.maxSize()) {
+      throw ApiError.invalidArgument(
+          "size must be 1 to " + limits.maxSize() + " bytes for " + limits.purpose());
+    }
+    Uuid blobId = Uuid.random();
+    LocalDateTime now = Timestamps.now();
+    try (Connection c = db.getConnection()) {
+      Sql.update(
+          c,
+          "INSERT INTO upload (user_id, blob_id, purpose, media_type, size, used, created_at)"
+              + " VALUES (?, ?, ?, ?, ?, FALSE, ?)",
+          userId,
+          blobId,
+          limits.purpose(),
+          mediaType,
+          req.getSize(),
+          now);
+    }
+    Instant t = now.toInstant(ZoneOffset.UTC);
+    return CreateUploadResponse.newBuilder()
+        .setBlobId(blobId.toByteString())
+        .setUploadPath(blobs.presignPut(blobId, mediaType, req.getSize(), t, EXPIRES_SECONDS))
+        .setExpiresAt(Timestamps.toProto(now.plusSeconds(EXPIRES_SECONDS)))
+        .build();
+  }
+
+  static boolean validMediaType(String s) {
+    return !s.isEmpty()
+        && s.getBytes(StandardCharsets.UTF_8).length <= MAX_MEDIA_TYPE_BYTES
+        && MEDIA_TYPE.matcher(s).matches();
+  }
+
+  /**
+   * The avatar a profile may refer to: an avatar upload of the user's, already uploaded. Fails with
+   * INVALID_ARGUMENT for a malformed id, FAILED_PRECONDITION otherwise.
+   */
+  public Uuid checkAvatar(Uuid userId, ByteString avatar) throws Exception {
+    Uuid blobId = Uuid.parse(avatar);
+    if (blobId == null) {
+      throw ApiError.invalidArgument("avatar must be 16 bytes or empty");
+    }
+    try (Connection c = db.getConnection()) {
+      checkAvatarRow(c, userId, blobId, "");
+    }
+    if (!blobs.exists(blobId)) {
+      throw ApiError.failedPrecondition("not uploaded");
+    }
+    return blobId;
+  }
+
+  /**
+   * Locks the avatar's upload row in the profile transaction, so the sweeper cannot delete it
+   * meanwhile; FAILED_PRECONDITION if it is gone.
+   */
+  public static void lockAvatar(Connection c, Uuid userId, Uuid blobId) throws SQLException {
+    checkAvatarRow(c, userId, blobId, " FOR UPDATE");
+  }
+
+  private static void checkAvatarRow(Connection c, Uuid userId, Uuid blobId, String lock)
+      throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT 1 FROM upload WHERE user_id = ? AND blob_id = ? AND purpose = 'avatar'"
+                    + lock,
+                userId,
+                blobId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw ApiError.failedPrecondition("not an avatar upload of yours");
+      }
+    }
+  }
+}
