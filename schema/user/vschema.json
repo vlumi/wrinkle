@@ -26,6 +26,9 @@
     },
     "user_outbox": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "upload": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
     }
   }
 }

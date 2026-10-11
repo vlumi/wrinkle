@@ -8,13 +8,18 @@ CREATE TABLE user (
   name VARCHAR(64) NOT NULL,
   -- A standard icon key, empty for none.
   icon VARCHAR(32) NOT NULL DEFAULT '',
-  -- argon2id in the PHC string format.
+  -- An uploaded picture's blob id, NULL for none.
+  avatar BINARY(16) NULL,
+  -- argon2id in the PHC string format; empty once the account is deleted.
   password_hash VARCHAR(255) NOT NULL,
   -- Position counter of the event log; the next event gets log_head + 1.
   log_head BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- Outbox id counter for this user's profile changes.
   last_outbox_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
   created_at DATETIME(6) NOT NULL,
+  -- Set when the account is deleted; the row stays so that nothing is
+  -- delivered to it again.
+  deleted_at DATETIME(6) NULL,
   PRIMARY KEY (user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
@@ -69,6 +74,8 @@ CREATE TABLE user_conversation (
   -- The peer's profile, updated by their profile changes.
   peer_name VARCHAR(64) NOT NULL,
   peer_icon VARCHAR(32) NOT NULL DEFAULT '',
+  peer_avatar BINARY(16) NULL,
+  peer_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   last_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- The last message, NULL while the conversation is empty.
   last_sender_user_id BINARY(16) NULL,
@@ -83,18 +90,36 @@ CREATE TABLE user_conversation (
   KEY user_conversation_peer (user_id, peer_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
--- Transactional outbox of profile changes, like the conversation keyspace's:
--- each row is deleted in the transaction that inserts it, and Debezium
--- streams the insert to Kafka. Fan-out appends a ProfileEvent to the user's
--- log and to each conversation partner's.
+-- Transactional outbox of a user's own changes, like the conversation
+-- keyspace's: each row is deleted in the transaction that inserts it, and
+-- Debezium streams the insert to Kafka. Fan-out appends a ProfileEvent to
+-- the user's log and to each conversation partner's, a DeviceEvent to the
+-- user's log only.
 CREATE TABLE user_outbox (
   user_id BINARY(16) NOT NULL,
   -- From user.last_outbox_id.
   outbox_id BIGINT UNSIGNED NOT NULL,
-  -- Event body type: profile.
+  -- Event body type: profile, device.
   kind VARCHAR(32) NOT NULL,
   -- Serialized wrinkle.v1.Event without a cursor.
   payload BLOB NOT NULL,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, outbox_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- Uploaded blobs, by uploader. The bytes are in object storage under the
+-- blob id. A blob is used once a profile, sticker or message refers to it;
+-- unused ones are deleted a day after their upload slot was made, and a
+-- blob no longer referred to goes back to unused.
+CREATE TABLE upload (
+  user_id BINARY(16) NOT NULL,
+  blob_id BINARY(16) NOT NULL,
+  -- avatar, sticker, attachment.
+  purpose VARCHAR(16) NOT NULL,
+  media_type VARCHAR(100) NOT NULL,
+  size BIGINT UNSIGNED NOT NULL,
+  used BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (user_id, blob_id),
+  KEY upload_unused (used, created_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
