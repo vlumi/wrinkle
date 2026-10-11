@@ -18,29 +18,29 @@ Three ideas carry the design:
 
 ```mermaid
 flowchart TB
-  devices(["📱 Devices<br/><small>web · iOS</small>"])
+  devices(["Devices"])
   lb["Load balancer"]
-  gw["Gateways<br/><small>WebSocket connections</small>"]
+  gw["Gateways"]
   subgraph services ["Services"]
-    conv["Conversation service<br/><small>send · read marks</small>"]
-    sync["Sync service<br/><small>sign-in · sync · lists</small>"]
+    conv["Conversation"]
+    sync["Sync"]
   end
-  convdb[("Conversation DB<br/><small>messages + outbox<br/>by conversation</small>")]
-  userdb[("User DB<br/><small>event logs · lists<br/>by user</small>")]
+  convdb[("Conversation DB")]
+  userdb[("User DB")]
   kafka[["Kafka"]]
-  fanout["Fan-out workers"]
-  valkey[("Valkey<br/><small>presence ·<br/>a channel per user</small>")]
-  apns["APNs<br/><small>to iOS devices<br/>not connected</small>"]
+  fanout["Fan-out"]
+  valkey[("Valkey")]
+  apns["APNs"]
 
   devices <-- "WebSocket" --> lb <--> gw
   gw -- "gRPC or in-process" --> services
-  conv -- "one transaction" --> convdb
+  conv -- "message + outbox" --> convdb
   sync --> userdb
-  convdb -- "CDC (Debezium)" --> kafka --> fanout
-  fanout -- "append" --> userdb
+  convdb -- "CDC" --> kafka --> fanout
+  fanout -- "event logs" --> userdb
   fanout -- "publish" --> valkey
   valkey -- "push" --> gw
-  fanout --> apns
+  fanout -- "offline iOS" --> apns
 
   classDef user fill:#2f7d4a,stroke:#2f7d4a,color:#fff,font-weight:bold
   class devices user
@@ -53,6 +53,7 @@ Components:
 - **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction.
 - **Sync service:** sign-in and devices, incremental sync, conversation lists, push token registration.
 - **Fan-out workers:** read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
+- **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.
 - **Presence:** which device is connected to which gateway node, and one push channel per user, in Valkey.
 
 Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, and Prometheus with Grafana for the metrics every backend exposes under the same names.
