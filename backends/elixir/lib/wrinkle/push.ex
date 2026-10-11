@@ -3,19 +3,27 @@ defmodule Wrinkle.Push do
   Pushes from fan-out workers through Valkey: one channel per user, subscribed
   while this node holds one of the user's connections, delivered to every
   connection process of that user.
+
+  This process keeps the desired state, the connections of each user, and is
+  the only subscriber. Redix.PubSub applies it in call order without waiting
+  on Valkey, so an unsubscribe racing a new attach ends subscribed, and after
+  a reconnection it resubscribes every channel still wanted. A connection
+  that attaches gets `{:subscribed, user_id}` once Valkey has confirmed the
+  channel, before any push for the user.
   """
   use GenServer
   import Bitwise
 
+  @pubsub Wrinkle.ValkeyPubSub
   @channel_prefix "push:"
 
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
-  @doc "A connection of the user is open on this node, registered in Wrinkle.Connections."
-  def attach(user_id), do: GenServer.call(__MODULE__, {:attach, user_id})
+  @doc "Attaches the calling connection process to the user's pushes."
+  def attach(user_id), do: GenServer.cast(__MODULE__, {:attach, self(), user_id})
 
-  @doc "A connection of the user closed; unsubscribes after the last."
-  def detach(user_id), do: GenServer.cast(__MODULE__, {:detach, user_id})
+  @doc "Detaches the calling connection process; the last one unsubscribes."
+  def detach, do: GenServer.cast(__MODULE__, {:detach, self()})
 
   @doc "Wraps an already serialized Event in a Frame without decoding it: Frame.event is field 3."
   def event_frame(payload) do
@@ -25,31 +33,41 @@ defmodule Wrinkle.Push do
   defp varint(n) when n < 128, do: <<n>>
   defp varint(n), do: <<1::1, n &&& 0x7F::7, varint(n >>> 7)::binary>>
 
+  # users: user id -> %{pids, confirmed}, present while subscribed;
+  # conns: connection pid -> {monitor, user id}.
   @impl true
   def init(_) do
-    {:ok, %{refs: %{}}}
+    # Subscriptions live in the Redix.PubSub process; if it restarts, so does
+    # this one, and the connections close.
+    {:ok, %{users: %{}, conns: %{}, pubsub: Process.monitor(@pubsub)}}
   end
 
   @impl true
-  def handle_call({:attach, user_id}, _from, state) do
-    if Map.has_key?(state.refs, user_id) do
-      {:reply, :ok, state}
-    else
-      {:ok, ref} = Redix.PubSub.subscribe(Wrinkle.ValkeyPubSub, channel(user_id), self())
-      {:reply, :ok, %{state | refs: Map.put(state.refs, user_id, ref)}}
-    end
+  def handle_cast({:attach, pid, user_id}, %{conns: conns} = state)
+      when not is_map_key(conns, pid) do
+    user =
+      case state.users do
+        %{^user_id => user} ->
+          user
+
+        _ ->
+          {:ok, _} = Redix.PubSub.subscribe(@pubsub, channel(user_id), self())
+          %{pids: MapSet.new(), confirmed: false}
+      end
+
+    if user.confirmed, do: send(pid, {:subscribed, user_id})
+
+    {:noreply,
+     %{
+       state
+       | users: Map.put(state.users, user_id, %{user | pids: MapSet.put(user.pids, pid)}),
+         conns: Map.put(conns, pid, {Process.monitor(pid), user_id})
+     }}
   end
 
-  @impl true
-  def handle_cast({:detach, user_id}, state) do
-    if Registry.count_match(Wrinkle.Connections, user_id, :_) == 0 and
-         Map.has_key?(state.refs, user_id) do
-      Redix.PubSub.unsubscribe(Wrinkle.ValkeyPubSub, channel(user_id), self())
-      {:noreply, %{state | refs: Map.delete(state.refs, user_id)}}
-    else
-      {:noreply, state}
-    end
-  end
+  def handle_cast({:attach, _pid, _user_id}, state), do: {:noreply, state}
+
+  def handle_cast({:detach, pid}, state), do: {:noreply, remove(state, pid)}
 
   @impl true
   def handle_info(
@@ -57,16 +75,83 @@ defmodule Wrinkle.Push do
          %{channel: @channel_prefix <> id, payload: payload}},
         state
       ) do
-    frame = event_frame(payload)
-
-    Registry.dispatch(Wrinkle.Connections, String.to_integer(id), fn entries ->
-      for {pid, _} <- entries, do: send(pid, {:push, frame})
-    end)
+    with %{pids: pids} <- state.users[String.to_integer(id)] do
+      frame = event_frame(payload)
+      for pid <- pids, do: send(pid, {:push, frame})
+    end
 
     {:noreply, state}
   end
 
+  def handle_info(
+        {:redix_pubsub, _pid, _ref, :subscribed, %{channel: @channel_prefix <> id}},
+        state
+      ) do
+    user_id = String.to_integer(id)
+
+    case state.users do
+      %{^user_id => %{confirmed: false} = user} ->
+        for pid <- user.pids, do: send(pid, {:subscribed, user_id})
+        {:noreply, put_in(state.users[user_id], %{user | confirmed: true})}
+
+      _ ->
+        {:noreply, state}
+    end
+  end
+
+  # Redix resubscribes after reconnecting and confirms each channel again.
+  def handle_info({:redix_pubsub, _pid, _ref, :disconnected, _}, state) do
+    {:noreply,
+     %{state | users: Map.new(state.users, fn {id, u} -> {id, %{u | confirmed: false}} end)}}
+  end
+
   def handle_info({:redix_pubsub, _pid, _ref, _kind, _}, state), do: {:noreply, state}
+
+  def handle_info({:DOWN, ref, :process, _pid, reason}, %{pubsub: ref} = state) do
+    {:stop, {:pubsub_down, reason}, state}
+  end
+
+  def handle_info({:DOWN, _ref, :process, pid, _reason}, state) do
+    {:noreply, remove(state, pid)}
+  end
+
+  defp remove(state, pid) do
+    case Map.pop(state.conns, pid) do
+      {nil, _} ->
+        state
+
+      {{ref, user_id}, conns} ->
+        Process.demonitor(ref, [:flush])
+        user = state.users[user_id]
+        pids = MapSet.delete(user.pids, pid)
+
+        users =
+          if MapSet.size(pids) == 0 do
+            unsubscribe(user_id)
+            Map.delete(state.users, user_id)
+          else
+            Map.put(state.users, user_id, %{user | pids: pids})
+          end
+
+        %{state | users: users, conns: conns}
+    end
+  end
+
+  defp unsubscribe(user_id) do
+    channel = channel(user_id)
+    :ok = Redix.PubSub.unsubscribe(@pubsub, channel, self())
+    # A confirmation Redix sent before the unsubscribe is for the subscription
+    # it ended; it must not confirm a subscription that follows.
+    flush_subscribed(channel)
+  end
+
+  defp flush_subscribed(channel) do
+    receive do
+      {:redix_pubsub, _pid, _ref, :subscribed, %{channel: ^channel}} -> flush_subscribed(channel)
+    after
+      0 -> :ok
+    end
+  end
 
   defp channel(user_id), do: @channel_prefix <> Integer.to_string(user_id)
 end

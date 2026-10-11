@@ -1,9 +1,9 @@
 defmodule Wrinkle.Socket do
   @moduledoc """
   One device's WebSocket connection: a process. Frames in are decoded and
-  requests forwarded to the services in a task each, so a slow request does
-  not block pushes; responses and pushes are written from this process, so
-  its mailbox is the outbound queue.
+  requests forwarded to the services in a supervised task each, so a slow
+  request does not block pushes; responses and pushes are written from this
+  process, so its mailbox is the outbound queue.
   """
   @behaviour WebSock
   require Logger
@@ -13,6 +13,7 @@ defmodule Wrinkle.Socket do
   alias Wrinkle.V1.Error, as: WireError
 
   @connect_deadline 5_000
+  @subscribe_timeout 10_000
   @max_in_flight 32
   @outbound_queue 32
   # Only pushes close a connection that does not keep up. Responses wait in
@@ -32,9 +33,12 @@ defmodule Wrinkle.Socket do
   @doc "The number of open connections on this node."
   def count, do: Registry.count(Wrinkle.Sockets)
 
-  # device is nil until Connect succeeds, then {user_id, device_id}; seen_at
-  # is when a frame last arrived, in monotonic milliseconds; ack is the
-  # AckWriter state.
+  # device is nil until Connect succeeds, then {user_id, device_id}; connect
+  # is :none, :pending while a Connect is forwarded, {:subscribing, ...} while
+  # its response waits for the push subscription, then :done; tasks maps each
+  # task's monitor to {:request, id, type, started} or :ack; seen_at is when a
+  # frame last arrived, in monotonic milliseconds; ack is the AckWriter state;
+  # push monitors Wrinkle.Push once attached.
   @impl true
   def init(_opts) do
     Metrics.connection(+1)
@@ -45,6 +49,9 @@ defmodule Wrinkle.Socket do
     {:ok,
      %{
        device: nil,
+       connect: :none,
+       tasks: %{},
+       push: nil,
        bucket: TokenBucket.new(now),
        in_flight: 0,
        ack: nil,
@@ -81,15 +88,31 @@ defmodule Wrinkle.Socket do
   end
 
   @impl true
-  def handle_info({:response, {response, connected}}, state) do
-    state = attach(%{state | in_flight: state.in_flight - 1}, connected)
-    frame = encode({:response, response})
+  def handle_info({ref, result}, %{tasks: tasks} = state) when is_map_key(tasks, ref) do
+    Process.demonitor(ref, [:flush])
+    {task, tasks} = Map.pop(tasks, ref)
+    finished(task, result, %{state | tasks: tasks})
+  end
 
-    if state.draining and state.in_flight == 0 do
-      {:stop, :normal, @shutting_down, frame, state}
-    else
-      {:push, frame, state}
-    end
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{tasks: tasks} = state)
+      when is_map_key(tasks, ref) do
+    {task, tasks} = Map.pop(tasks, ref)
+    crashed(task, %{state | tasks: tasks})
+  end
+
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{push: ref} = state) do
+    {:stop, :normal, {1011, "push subscriptions lost"}, state}
+  end
+
+  def handle_info(
+        {:subscribed, _user_id},
+        %{connect: {:subscribing, id, response, started}} = state
+      ) do
+    respond({id, "connect", started}, response, %{state | connect: :done})
+  end
+
+  def handle_info(:subscribe_deadline, %{connect: {:subscribing, _, _, _}} = state) do
+    {:stop, :normal, {1011, "push subscription unavailable"}, state}
   end
 
   def handle_info({:push, frame}, state) do
@@ -99,12 +122,6 @@ defmodule Wrinkle.Socket do
       Metrics.pushed()
       {:push, {:binary, frame}, state}
     end
-  end
-
-  def handle_info(:ack_done, state) do
-    {action, ack} = AckWriter.done(state.ack)
-    write_ack(action, state.device)
-    {:ok, %{state | ack: ack}}
   end
 
   def handle_info(:connect_deadline, %{device: nil} = state) do
@@ -139,8 +156,7 @@ defmodule Wrinkle.Socket do
     Registry.unregister(Wrinkle.Sockets, :socket)
 
     with {user_id, device_id} <- state.device do
-      Registry.unregister(Wrinkle.Connections, user_id)
-      Push.detach(user_id)
+      Push.detach()
       Presence.delete(user_id, device_id)
     end
 
@@ -153,49 +169,117 @@ defmodule Wrinkle.Socket do
     _ -> :error
   end
 
-  defp inbound({:request, request}, :empty, state), do: reject(request, "rate limited", state)
+  defp inbound({:request, request}, :empty, state) do
+    refuse(request, :ERROR_CODE_RESOURCE_EXHAUSTED, "rate limited", state)
+  end
+
   defp inbound(_body, :empty, state), do: {:ok, state}
 
-  defp inbound({:request, %Request{id: id}}, :ok, %{draining: true} = state) do
-    {:push, encode({:response, error(id, :ERROR_CODE_UNAVAILABLE, "shutting down")}), state}
+  defp inbound({:request, request}, :ok, %{draining: true} = state) do
+    refuse(request, :ERROR_CODE_UNAVAILABLE, "shutting down", state)
   end
 
   defp inbound({:request, request}, :ok, %{in_flight: n} = state) when n >= @max_in_flight do
-    reject(request, "too many requests in flight", state)
+    refuse(request, :ERROR_CODE_RESOURCE_EXHAUSTED, "too many requests in flight", state)
   end
 
-  defp inbound({:request, request}, :ok, state) do
-    socket = self()
+  # One Connect per connection, also while the first is still forwarded.
+  defp inbound({:request, %Request{body: {:connect, _}} = request}, :ok, %{connect: c} = state)
+       when c != :none do
+    refuse(request, :ERROR_CODE_FAILED_PRECONDITION, "already connected", state)
+  end
+
+  defp inbound({:request, %Request{id: id} = request}, :ok, state) do
     device = state.device
-    Task.start(fn -> send(socket, {:response, handle_request(device, request)}) end)
-    {:ok, %{state | in_flight: state.in_flight + 1}}
+    task = Task.Supervisor.async_nolink(Wrinkle.Tasks, fn -> dispatch(device, request) end)
+    type = request_type(request)
+    entry = {:request, id, type, System.monotonic_time()}
+    connect = if type == "connect", do: :pending, else: state.connect
+
+    {:ok,
+     %{
+       state
+       | tasks: Map.put(state.tasks, task.ref, entry),
+         in_flight: state.in_flight + 1,
+         connect: connect
+     }}
   end
 
   defp inbound({:ack, ack}, :ok, %{device: {_, _}} = state) do
     {action, acks} = AckWriter.ack(state.ack, ack.cursor)
-    write_ack(action, state.device)
-    {:ok, %{state | ack: acks}}
+    {:ok, write_ack(action, %{state | ack: acks})}
   end
 
   defp inbound({:ack, _}, :ok, state), do: {:ok, state}
   defp inbound({:ping, _}, :ok, state), do: {:push, encode({:pong, %Pong{}}), state}
   defp inbound({:pong, _}, :ok, state), do: {:ok, state}
 
-  defp reject(%Request{id: id} = request, message, state) do
-    response = error(id, :ERROR_CODE_RESOURCE_EXHAUSTED, message)
+  # Answered at once, without the services; counted with a duration of zero.
+  defp refuse(%Request{id: id} = request, code, message, state) do
+    response = error(id, code, message)
     Metrics.request(request_type(request), response_code(response), 0)
     {:push, encode({:response, response}), state}
   end
 
-  defp write_ack(:none, _device), do: :ok
+  # A successful Connect binds the connection to the device; its response
+  # waits until the user's push channel is subscribed.
+  defp finished({:request, id, _type, started}, {response, {user_id, device_id} = device}, state) do
+    Push.attach(user_id)
+    Presence.put(user_id, device_id)
+    Process.send_after(self(), :subscribe_deadline, @subscribe_timeout)
 
-  defp write_ack({:write, cursor}, {user_id, device_id}) do
-    socket = self()
+    {:ok,
+     %{
+       state
+       | device: device,
+         connect: {:subscribing, id, response, started},
+         push: Process.monitor(Push)
+     }}
+  end
 
-    Task.start(fn ->
-      Backend.ack(user_id, device_id, cursor)
-      send(socket, :ack_done)
-    end)
+  defp finished({:request, id, type, started}, {response, nil}, state) do
+    respond({id, type, started}, response, connect_failed(type, state))
+  end
+
+  defp finished(:ack, _result, state), do: ack_done(state)
+
+  # A task that crashed: its request is answered, an ack write is done.
+  defp crashed({:request, id, type, started}, state) do
+    response = error(id, :ERROR_CODE_INTERNAL, "internal error")
+    respond({id, type, started}, response, connect_failed(type, state))
+  end
+
+  defp crashed(:ack, state), do: ack_done(state)
+
+  defp connect_failed("connect", state), do: %{state | connect: :none}
+  defp connect_failed(_type, state), do: state
+
+  defp respond({_id, type, started}, response, state) do
+    Metrics.request(type, response_code(response), System.monotonic_time() - started)
+    state = %{state | in_flight: state.in_flight - 1}
+    frame = encode({:response, response})
+
+    if state.draining and state.in_flight == 0 do
+      {:stop, :normal, @shutting_down, frame, state}
+    else
+      {:push, frame, state}
+    end
+  end
+
+  defp ack_done(state) do
+    {action, ack} = AckWriter.done(state.ack)
+    {:ok, write_ack(action, %{state | ack: ack})}
+  end
+
+  defp write_ack(:none, state), do: state
+
+  defp write_ack({:write, cursor}, %{device: {user_id, device_id}} = state) do
+    task =
+      Task.Supervisor.async_nolink(Wrinkle.Tasks, fn ->
+        Backend.ack(user_id, device_id, cursor)
+      end)
+
+    %{state | tasks: Map.put(state.tasks, task.ref, :ack)}
   end
 
   defp too_slow? do
@@ -205,44 +289,13 @@ defmodule Wrinkle.Socket do
 
   defp encode(kind), do: {:binary, Frame.encode(%Frame{kind: kind})}
 
-  # A connection binds to the first device that connects on it.
-  defp attach(state, nil), do: state
-  defp attach(%{device: {_, _}} = state, _connected), do: state
-
-  defp attach(state, {user_id, device_id} = device) do
-    {:ok, _} = Registry.register(Wrinkle.Connections, user_id, device_id)
-    Push.attach(user_id)
-    Presence.put(user_id, device_id)
-    %{state | device: device}
-  end
-
-  # Returns the response and, after a successful Connect, the device to attach.
-  defp handle_request(device, %Request{} = request) do
-    started = System.monotonic_time()
-    {response, connected} = dispatch(device, request)
-
-    Metrics.request(
-      request_type(request),
-      response_code(response),
-      System.monotonic_time() - started
-    )
-
-    {response, connected}
-  end
-
+  # Runs in the task: the response and, after a successful Connect, the
+  # device to bind to.
   defp dispatch(device, %Request{id: id} = request) do
     case {request.body, device} do
-      {{:connect, _}, {_, _}} ->
-        {error(id, :ERROR_CODE_FAILED_PRECONDITION, "already connected"), nil}
-
-      {{:connect, _}, nil} ->
-        forward({0, 0}, request)
-
-      {_, nil} ->
-        {error(id, :ERROR_CODE_UNAUTHENTICATED, "connect first"), nil}
-
-      {_, device} ->
-        forward(device, request)
+      {{:connect, _}, _} -> forward({0, 0}, request)
+      {_, nil} -> {error(id, :ERROR_CODE_UNAUTHENTICATED, "connect first"), nil}
+      {_, device} -> forward(device, request)
     end
   end
 

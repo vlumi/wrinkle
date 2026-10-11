@@ -9,12 +9,11 @@ defmodule Wrinkle.Application do
   @impl true
   def start(_type, _args) do
     Wrinkle.Metrics.init()
-    port = Application.fetch_env!(:wrinkle, :port)
+    {ip, port} = Application.fetch_env!(:wrinkle, :listen)
     valkey = valkey_options()
     instance = Wrinkle.Presence.new_instance(Application.fetch_env!(:wrinkle, :node))
 
     children = [
-      {Registry, keys: :duplicate, name: Wrinkle.Connections},
       {Registry, keys: :duplicate, name: Wrinkle.Sockets, partitions: System.schedulers_online()},
       {Redix, valkey ++ [name: Wrinkle.Valkey]},
       %{
@@ -25,8 +24,10 @@ defmodule Wrinkle.Application do
       Wrinkle.Backend,
       Wrinkle.Push,
       Wrinkle.Keepalive,
+      {Task.Supervisor, name: Wrinkle.Tasks},
       {Bandit,
        plug: Wrinkle.Router,
+       ip: ip,
        port: port,
        http_options: [log_protocol_errors: false],
        thousand_island_options: [
@@ -37,7 +38,7 @@ defmodule Wrinkle.Application do
     ]
 
     Logger.info(
-      "gateway #{instance} listening on #{port}, services at #{Application.fetch_env!(:wrinkle, :services)}"
+      "gateway #{instance} listening on #{:inet.ntoa(ip)}:#{port}, services at #{Application.fetch_env!(:wrinkle, :services)}"
     )
 
     Supervisor.start_link(children, strategy: :one_for_one, name: Wrinkle.Supervisor)

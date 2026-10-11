@@ -215,7 +215,7 @@ NEEDS_go-mono := build-go
 NEEDS_go-gw := build-go
 NEEDS_java-mono := build-java
 NEEDS_java-gw := build-java
-NEEDS_elixir-gw := build-go elixir-deps
+NEEDS_elixir-gw := build-go build-elixir
 NEEDS_rust-gw := build-go build-rust
 
 .PHONY: $(SHAPES:%=conformance-%)
