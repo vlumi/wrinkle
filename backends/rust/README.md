@@ -74,16 +74,16 @@ The pieces, all in [conn.rs](src/conn.rs):
 - Each request runs in its own `tokio::spawn`ed task. `dispatch` applies the state rules (before Connect, only Register, SignIn and Connect are forwarded, with an empty user id, and anything else is `UNAUTHENTICATED` "connect first"; after it, Register, SignIn and Connect are `FAILED_PRECONDITION` "already connected"), then calls `BackendService.Call` with the bound user and device. A Connect response without a 16-byte user id answers `INTERNAL`. A call taking over 10 seconds, or failing, answers `UNAVAILABLE` with the request's id. A successful Connect response binds the connection and is sent once the user's push channel is subscribed; if another Connect bound it first, this one gets `FAILED_PRECONDITION` instead, and if the subscription is not in place within 5 seconds, the binding is undone and the Connect answers `UNAVAILABLE`, and may be retried.
 - Responses wait for room in the queue, which holds back the device's own requests; pushes do not wait (see Push delivery).
 
-Limits, as the contract in `proto/wrinkle/v1/frame.proto` sets them:
+The limits and their values are the contract's ([frame.proto](../../proto/wrinkle/v1/frame.proto)); this is how the gateway enforces them:
 
 | Limit | How |
 |---|---|
-| 64 KiB per frame | axum's `max_message_size` and `max_frame_size`; close 1009 |
-| 50 frames/s, bursts of 100 | a `TokenBucket` per connection, owned by the read loop; every decoded frame takes a token. A request without one fails with `RESOURCE_EXHAUSTED`; an ack or ping without one is dropped |
-| 32 requests in flight | an atomic counter per connection; beyond it, `RESOURCE_EXHAUSTED` |
-| Connect within 5 s | a timer in the read loop, restarted when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; if the connection is not bound when it fires, close 1008 |
+| Frame size | axum's `max_message_size` and `max_frame_size`; close 1009 |
+| Rate | a `TokenBucket` per connection, owned by the read loop; every decoded protobuf frame takes a token, WebSocket control frames none. A request without one fails with `RESOURCE_EXHAUSTED`; an ack or ping without one is dropped |
+| Requests in flight | an atomic counter per connection; beyond it, `RESOURCE_EXHAUSTED` |
+| Connect deadline | a timer in the read loop, restarted when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; if the connection is not bound when it fires, close 1008 |
 | One ack write at a time | `Acks`: one task writes `BackendService.Ack`; acks arriving meanwhile collapse into the highest cursor, written next |
-| Pings every 30 s, idle after 90 s | the gateway-wide sweep runs every 10 s, closes connections idle for 90 s with 1001, and every third sweep queues a WebSocket ping (skipped if the queue is full) |
+| Pings and the idle timeout | the gateway-wide sweep runs every 10 s, closes connections idle for 90 s with 1001, and every third sweep queues a WebSocket ping (skipped if the queue is full) |
 | Keeping up with events | a full queue on push closes with 1013 |
 
 Application-level `Ping` frames get a `Pong`; client `Pong` frames are ignored. Rejected requests are still counted in the request metrics.
@@ -131,11 +131,12 @@ The unit tests are small: the listen address, the token bucket's burst and refil
 
 ## Measured
 
-On 2026-10-11, at commit 0b06d92, before the limits and drain were added ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), raw runs in [2026-10-11-rust.jsonl](../../docs/results/2026-10-11-rust.jsonl)): 4000 idle connections in 78 MiB resident, against about 167 MiB for the Go gateway; at 500 messages per second over 1000 connections, 84 ms p50 and 246 ms p99 end to end, and 277 ms of gateway CPU per 1000 messages. The current code has not been measured.
+The figures predate accounts, groups and encryption (commit 0b06d92) and the limits and drain; the current code has not been measured, and the next round of results replaces them. On 2026-10-11 ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), raw runs in [2026-10-11-rust.jsonl](../../docs/results/2026-10-11-rust.jsonl)): 4000 idle connections in 78 MiB resident, against about 167 MiB for the Go gateway; at 500 messages per second over 1000 connections, 84 ms p50 and 246 ms p99 end to end, and 277 ms of gateway CPU per 1000 messages.
 
 ## Gaps
 
-- Gateway only: services and fan-out in Rust are open in ROADMAP.md. Pushes to devices that are not connected depend on the services beside it, which only the Go ones send.
+- Gateway only: services and fan-out in Rust are open in [ROADMAP.md](../../ROADMAP.md). Pushes to devices that are not connected depend on the services beside it, which only the Go ones send.
 - No live-memory figure and no profiling endpoints; `/debug/gc` exists only so the load generator can call it.
-- Acks are forwarded as they come, one write at a time; coalescing them over time, as the design intends, is open in ROADMAP.md for every gateway.
+- Acks are forwarded as they come, one write at a time; coalescing them over time, as the design intends, is open in [ROADMAP.md](../../ROADMAP.md) for every gateway.
+- No limits per user or per address, as in every gateway; they need shared state.
 - A Valkey restart loses the presence entries of devices that stay connected; they are written again only when each device reconnects. The instance key comes back with the next heartbeat.

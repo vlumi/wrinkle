@@ -1,6 +1,6 @@
 # Elixir gateway
 
-The Elixir implementation is a gateway only: it holds the devices' WebSocket connections and forwards every request to a Go or Java services process over the internal RPC (`proto/wrinkle/backend/v1`), with pushes arriving through Valkey. It runs beside one services process for conformance and measurement ([run.sh](run.sh)), or as one of any number of gateways behind the balancers, natively or in the cluster. It runs on the BEAM with Bandit for HTTP and WebSocket, elixir-grpc over Mint for the RPC, and Redix for Valkey. A gateway came first in Elixir because connection handling is where the languages differ most; the services are SQL and a Kafka consumer, where they differ least, so they were left out (ROADMAP.md, phase 7). The architecture common to every backend, the data model, the flows and the failure handling, is in [docs/architecture.md](../../docs/architecture.md); this page covers how the Elixir code realizes the gateway's part.
+The Elixir implementation is a gateway only: it holds the devices' WebSocket connections and forwards every request to a Go or Java services process over the internal RPC (`proto/wrinkle/backend/v1`), with pushes arriving through Valkey. It runs beside one services process for conformance and measurement ([run.sh](run.sh)), or as one of any number of gateways behind the balancers, natively or in the cluster. It runs on the BEAM with Bandit for HTTP and WebSocket, elixir-grpc over Mint for the RPC, and Redix for Valkey. A gateway came first in Elixir because connection handling is where the languages differ most; the services are SQL and a Kafka consumer, where they differ least, so they were left out ([ROADMAP.md](../../ROADMAP.md), Open). The architecture common to every backend, the data model, the flows and the failure handling, is in [docs/architecture.md](../../docs/architecture.md); this page covers how the Elixir code realizes the gateway's part.
 
 ## Layout
 
@@ -86,16 +86,17 @@ Request dispatch: a request is run in a task under `Wrinkle.Tasks`, started with
 
 Writing and the outbound queue: only the socket process writes, by returning `{:push, frame, state}` from a callback. Its mailbox is the outbound queue. `Wrinkle.Push` counts the pushes it has sent to each connection in an atomic that the socket decrements as it takes one; a push taken while 32 more wait behind it closes the connection with 1013, the same bound of 32 queued pushes as the other gateways. Responses are not counted: at most the in-flight cap of them wait in the mailbox. Bandit's socket send timeout of 10 s bounds a write to a device that does not read.
 
-The limits from the contract ([frame.proto](../../proto/wrinkle/v1/frame.proto)):
+The limits and their values are the contract's ([frame.proto](../../proto/wrinkle/v1/frame.proto)); this is how the gateway enforces them:
 
 | Limit | Where |
 |---|---|
-| Frame at most 64 KiB, else 1009 | Bandit's `max_frame_size` (64 KiB plus the 14-byte header) and `max_fragmented_message_size`, set in [router.ex](lib/wrinkle/router.ex) |
-| Connect within 5 s, else 1008 | a `{:connect_deadline, ref}` message sent to itself at `init`, and again with a new ref when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; only the latest ref counts. The 5 s wait for the push subscription is a `{:subscribe_deadline, ref}` message the same way, its ref kept with the Connect it bounds |
-| 50 frames a second, bursts of 100 | [token_bucket.ex](lib/wrinkle/token_bucket.ex), in thousandths of a token; a request over it gets `ERROR_CODE_RESOURCE_EXHAUSTED`, an ack, ping or pong is dropped |
-| 32 requests in flight | the in-flight count, a Connect until its response is sent; beyond it, `ERROR_CODE_RESOURCE_EXHAUSTED` |
+| Frame size, 1009 | Bandit's `max_frame_size` (the limit plus the 14-byte header) and `max_fragmented_message_size`, set in [router.ex](lib/wrinkle/router.ex) |
+| Connect deadline, 1008 | a `{:connect_deadline, ref}` message sent to itself at `init`, and again with a new ref when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; only the latest ref counts. The 5 s wait for the push subscription is a `{:subscribe_deadline, ref}` message the same way, its ref kept with the Connect it bounds |
+| Rate | [token_bucket.ex](lib/wrinkle/token_bucket.ex), in thousandths of a token; every protobuf frame takes one, WebSocket control frames none; a request over it gets `ERROR_CODE_RESOURCE_EXHAUSTED`, an ack, ping or pong is dropped |
+| Requests in flight | the in-flight count, a Connect until its response is sent; beyond it, `ERROR_CODE_RESOURCE_EXHAUSTED` |
 | One ack write at a time | [ack_writer.ex](lib/wrinkle/ack_writer.ex): acks arriving during a write are coalesced to the highest cursor and written when it finishes |
-| Ping every 30 s, close after 90 s idle with 1001 | [keepalive.ex](lib/wrinkle/keepalive.ex): one process broadcasts to every socket every 30 s instead of a timer per connection; a socket that has seen any frame, control frames included, since the idle bound sends a WebSocket ping, otherwise closes |
+| Pings and the idle timeout, 1001 | [keepalive.ex](lib/wrinkle/keepalive.ex): one process broadcasts to every socket every 30 s instead of a timer per connection; a socket that has seen any frame, control frames included, since the idle bound sends a WebSocket ping, otherwise closes |
+| Keeping up with events, 1013 | the push count in the mailbox (Writing, above) |
 | Internal error, 1011 | Bandit, when a socket process fails |
 
 Application-level pings are answered with a pong from the socket process. Bandit's read timeout of 150 s is only a backstop for a peer that never completes the closing handshake.
@@ -139,7 +140,7 @@ The unit tests run with `mix test --no-start`, without the application, Valkey o
 
 ## Measured
 
-On 2026-10-11 ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), raw runs in [2026-10-11-elixir.jsonl](../../docs/results/2026-10-11-elixir.jsonl)), beside the same Go services process as the Go and Rust gateways: 79 / 141 ms p50 / p99 at 100 messages a second and 110 / 437 ms at 500, 470 ms of gateway CPU per thousand messages, and 4000 idle connections in about 180 MiB, with a baseline above 100 MiB and the highest live memory slope of the gateways (37 KiB per connection, counting allocator carriers). The same run found grpc-go's default of 100 concurrent streams per connection failing the Elixir client's calls; the services now allow 2^20.
+The figures predate accounts, groups and encryption (commit 0b06d92) and the limits and drain; the current code has not been measured, and the next round of results replaces them. On 2026-10-11 ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), raw runs in [2026-10-11-elixir.jsonl](../../docs/results/2026-10-11-elixir.jsonl)), beside the same Go services process as the Go and Rust gateways: 79 / 141 ms p50 / p99 at 100 messages a second and 110 / 437 ms at 500, 470 ms of gateway CPU per thousand messages, and 4000 idle connections in about 180 MiB, with a baseline above 100 MiB and the highest live memory slope of the gateways (37 KiB per connection, counting allocator carriers). The same run found grpc-go's default of 100 concurrent streams per connection failing the Elixir client's calls; the services now allow 2^20.
 
 ## Gaps
 
@@ -147,4 +148,4 @@ On 2026-10-11 ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.m
 - Every attach and detach goes through the one `Wrinkle.Push` process, as does every push; it is a single serialization point per gateway, though it never waits on Valkey.
 - A services channel that drops is reconnected by the Mint adapter with its own backoff, which grows to two minutes between attempts after a few minutes of outage, so recovery from a long services outage can lag.
 - No resident memory metric and no release build; the gateway runs under `mix run`.
-- As for every gateway: no limits per user or per address, which need shared state (ROADMAP.md, Hardening).
+- As for every gateway: no limits per user or per address, which need shared state, and acks written as they come rather than coalesced over time ([ROADMAP.md](../../ROADMAP.md)).
