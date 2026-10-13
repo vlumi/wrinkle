@@ -103,6 +103,11 @@ services:
       - "127.0.0.1:9090:9090"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/ready"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     deploy:
       resources:
         limits:
@@ -120,6 +125,11 @@ services:
       - "${TLS_BIND:-0.0.0.0}:8443:8443"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "socat", "-u", "/dev/null", "TCP:127.0.0.1:8443"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
 
   # Only with the lb profile (make lb-up): one address in front of the
   # side-by-side gateways, facing the network like a gateway does, and one
@@ -136,6 +146,11 @@ services:
       - "127.0.0.1:8404:8404" # statistics
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "socat", "-u", "/dev/null", "TCP:127.0.0.1:8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     deploy:
       resources:
         limits:
@@ -145,7 +160,7 @@ services:
     image: grafana/grafana:13.2.3
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_AUTH_DISABLE_LOGIN_FORM: "true"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_NEWS_NEWS_FEED_ENABLED: "false"
@@ -156,6 +171,11 @@ services:
       - "${GRAFANA_BIND:-127.0.0.1}:3000:3000"
     depends_on:
       - prometheus
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     deploy:
       resources:
         limits:
@@ -201,10 +221,15 @@ services:
     depends_on:
       garage:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "socat", "-u", "/dev/null", "TCP:127.0.0.1:9200"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     deploy:
       resources:
         limits:
-          memory: 64M
+          memory: 128M
 
 volumes:
   prometheus-data:

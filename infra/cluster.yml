@@ -27,6 +27,11 @@ services:
       # On loopback: devices on the network come through the TLS edge.
       - "${LB_BIND:-127.0.0.1}:8080:8080"
       - "127.0.0.1:8404:8404" # statistics
+    healthcheck:
+      test: ["CMD", "socat", "-u", "/dev/null", "TCP:127.0.0.1:8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
     restart: unless-stopped
 
   go-services:
@@ -37,6 +42,7 @@ services:
       <<: [*infra, *push]
       WRINKLE_BLOB_URL: http://blobs:9200
     volumes:
+      # /dev/null stands in when there is no key; the key setting stays empty then.
       - ${APNS_KEY_FILE:-/dev/null}:/run/apns/key.p8:ro
     restart: unless-stopped
 
@@ -55,7 +61,9 @@ services:
     command: [--roles, gateway]
     environment:
       <<: *gateway
-    depends_on: [cluster-lb]
+    depends_on:
+      cluster-lb:
+        condition: service_healthy
     restart: unless-stopped
 
   java-gw:
@@ -64,7 +72,9 @@ services:
     command: [--roles, gateway]
     environment:
       <<: *gateway
-    depends_on: [cluster-lb]
+    depends_on:
+      cluster-lb:
+        condition: service_healthy
     restart: unless-stopped
 
   elixir-gw:
@@ -72,7 +82,9 @@ services:
     image: wrinkle/elixir:dev
     environment:
       <<: *gateway
-    depends_on: [cluster-lb]
+    depends_on:
+      cluster-lb:
+        condition: service_healthy
     restart: unless-stopped
 
   rust-gw:
@@ -80,5 +92,7 @@ services:
     image: wrinkle/rust:dev
     environment:
       <<: *gateway
-    depends_on: [cluster-lb]
+    depends_on:
+      cluster-lb:
+        condition: service_healthy
     restart: unless-stopped
