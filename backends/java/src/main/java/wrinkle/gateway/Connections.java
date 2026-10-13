@@ -74,18 +74,16 @@ final class Connections {
    * network call happens on the caller's thread.
    */
   CompletableFuture<Void> attach(Conn c) {
-    // A detach may remove the set it finds before it is locked.
-    while (true) {
-      Set<Conn> conns = byUser.computeIfAbsent(c.userId(), k -> ConcurrentHashMap.newKeySet());
-      synchronized (conns) {
-        if (byUser.get(c.userId()) == conns) {
-          conns.add(c);
-          break;
-        }
-      }
-    }
-    CompletableFuture<Void> subscribed = subscriptions.add(c.userId());
-    presence.deviceConnected(c.userId(), c.deviceId());
+    Uuid userId = c.userId();
+    byUser.compute(
+        userId,
+        (k, conns) -> {
+          Set<Conn> set = conns == null ? ConcurrentHashMap.newKeySet() : conns;
+          set.add(c);
+          return set;
+        });
+    CompletableFuture<Void> subscribed = subscriptions.add(userId);
+    presence.deviceConnected(userId, c.deviceId());
     return subscribed;
   }
 
@@ -97,18 +95,16 @@ final class Connections {
 
   /** Undoes an attach: of a connection that has left, or of a Connect that did not complete. */
   void release(Conn c) {
-    Set<Conn> conns = byUser.get(c.userId());
-    if (conns != null) {
-      synchronized (conns) {
-        conns.remove(c);
-        if (conns.isEmpty()) {
-          byUser.remove(c.userId(), conns);
-        }
-      }
-    }
-    subscriptions.remove(c.userId());
+    Uuid userId = c.userId();
+    byUser.computeIfPresent(
+        userId,
+        (k, conns) -> {
+          conns.remove(c);
+          return conns.isEmpty() ? null : conns;
+        });
+    subscriptions.remove(userId);
     try {
-      presence.deviceDisconnected(c.userId(), c.deviceId());
+      presence.deviceDisconnected(userId, c.deviceId());
     } catch (RuntimeException e) {
       log.warn("presence update failed", e);
     }

@@ -43,12 +43,22 @@ final class Conn {
   private static final byte[] PONG =
       Frame.newBuilder().setPong(Pong.getDefaultInstance()).build().toByteArray();
 
+  /**
+   * Where the connection is in its life: before Connect, or after one was undone; connected as a
+   * device; a Connect being undone, still bound until the release is done; or left, the client's
+   * side having ended, with whatever identity it had.
+   */
+  private enum State {
+    PENDING,
+    BOUND,
+    RELEASING,
+    GONE
+  }
+
   private final Backend backend;
   private final Connections connections;
   private final WebSocketWriter out;
   private final String remote;
-  private final long openedAt;
-  private volatile long connectBy;
   // Touched only by the inbound stream, which delivers one frame at a time.
   private final TokenBucket tokens;
   private final AckCoalescer acks;
@@ -60,36 +70,42 @@ final class Conn {
   private volatile long lastReceived;
   // Touched only by the sweep.
   private long lastPing;
-  private volatile boolean connected;
-  // Guarded by this.
-  private boolean left;
-  private boolean releasing;
-  private volatile Uuid userId;
-  private volatile long deviceId;
+  // Guarded by this: the state, the identity Connect established, null while pending, and the
+  // connect deadline.
+  private State state = State.PENDING;
+  private Identity identity;
+  private long connectBy;
+
+  private record Identity(Uuid userId, long deviceId) {}
 
   Conn(Backend backend, Connections connections, WebSocketWriter out, String remote) {
     this.backend = backend;
     this.connections = connections;
     this.out = out;
     this.remote = remote;
-    this.openedAt = System.nanoTime();
-    this.connectBy = openedAt + CONNECT_DEADLINE_NANOS;
-    this.lastReceived = openedAt;
-    this.lastPing = openedAt;
-    this.tokens = new TokenBucket(RATE_BURST, RATE_PER_SECOND, openedAt);
+    long now = System.nanoTime();
+    this.connectBy = now + CONNECT_DEADLINE_NANOS;
+    this.lastReceived = now;
+    this.lastPing = now;
+    this.tokens = new TokenBucket(RATE_BURST, RATE_PER_SECOND, now);
     this.acks = new AckCoalescer(Thread::startVirtualThread, this::writeAck);
   }
 
-  boolean isConnected() {
-    return connected;
+  /** The user and device Connect established, or null before it. */
+  private synchronized Identity identity() {
+    return identity;
   }
 
+  /** The user Connect established; null before it. */
   Uuid userId() {
-    return userId;
+    Identity id = identity();
+    return id == null ? null : id.userId();
   }
 
+  /** The device Connect established; 0 before it. */
   long deviceId() {
-    return deviceId;
+    Identity id = identity();
+    return id == null ? 0 : id.deviceId();
   }
 
   void receive(WebSocketFrame frame) {
@@ -106,12 +122,9 @@ final class Conn {
     switch (frame.type()) {
       case BINARY -> receive(frame.array(), now);
       case TEXT -> close(WebSocketCloseStatus.INVALID_MESSAGE_TYPE, "frames are binary protobuf");
-      case PING -> {
-        if (tokens.take(now)) {
-          send(WebSocketFrame.ofPong(frame.array()));
-        }
-      }
-      case PONG -> tokens.take(now);
+      // Keepalive takes no tokens: only protobuf frames count against the rate.
+      case PING -> send(WebSocketFrame.ofPong(frame.array()));
+      case PONG -> {}
       // Close frames end the inbound stream; continuations arrive aggregated.
       default -> {}
     }
@@ -129,7 +142,7 @@ final class Conn {
     switch (f.getKindCase()) {
       case REQUEST -> request(f.getRequest(), allowed);
       case ACK -> {
-        if (allowed && connected) {
+        if (allowed && identity() != null) {
           acks.offer(f.getAck().getCursor());
         }
       }
@@ -252,7 +265,7 @@ final class Conn {
     if (closed.get()) {
       return;
     }
-    if (!connected && now - connectBy >= 0) {
+    if (connectOverdue(now)) {
       close(WebSocketCloseStatus.POLICY_VIOLATION, "connect first");
     } else if (now - lastReceived >= IDLE_TIMEOUT_NANOS) {
       close(WebSocketCloseStatus.ENDPOINT_UNAVAILABLE, "idle");
@@ -262,18 +275,35 @@ final class Conn {
     }
   }
 
-  /** True the first time the connection leaves if it had connected, so its presence must go. */
+  private synchronized boolean connectOverdue(long now) {
+    return state == State.PENDING && now - connectBy >= 0;
+  }
+
+  /** Connect gets this long again: after a Register or SignIn, or when one was undone. */
+  private synchronized void restartConnectDeadline() {
+    connectBy = System.nanoTime() + CONNECT_DEADLINE_NANOS;
+  }
+
+  /**
+   * The connection has left. True the first time, if it was connected and not being released, so
+   * its presence must go.
+   */
   synchronized boolean leave() {
-    if (left) {
+    if (state == State.GONE) {
       return false;
     }
-    left = true;
-    return connected && !releasing;
+    boolean release = state == State.BOUND;
+    state = State.GONE;
+    return release;
   }
 
   private void writeAck(long cursor) {
+    Identity id = identity();
+    if (id == null) {
+      return;
+    }
     try {
-      backend.ack(userId, deviceId, cursor);
+      backend.ack(id.userId(), id.deviceId(), cursor);
     } catch (Exception e) {
       log.warn("ack failed", e);
     }
@@ -300,24 +330,18 @@ final class Conn {
           case REGISTER, SIGN_IN, CONNECT -> true;
           default -> false;
         };
-    // Read together, so a Connect completing meanwhile is seen whole.
-    Uuid user;
-    long device;
-    synchronized (this) {
-      user = connected ? userId : null;
-      device = deviceId;
-    }
-    if (beforeConnect && user != null) {
+    Identity id = identity();
+    if (beforeConnect && id != null) {
       return ApiError.response(req, ApiError.failedPrecondition("already connected"));
     }
-    if (!beforeConnect && user == null) {
+    if (!beforeConnect && id == null) {
       return ApiError.response(req, ApiError.unauthenticated("connect first"));
     }
     Response resp;
     try {
-      resp = backend.call(user, device, req);
+      resp = backend.call(id == null ? null : id.userId(), id == null ? 0 : id.deviceId(), req);
     } catch (Exception e) {
-      log.error("backend call for request {} failed", req.getId(), e);
+      log.warn("backend call for request {} failed: {}", req.getId(), e.toString());
       return ApiError.response(req, ApiError.unavailable("services unavailable"));
     }
     if (resp.hasConnect()) {
@@ -338,14 +362,14 @@ final class Conn {
         unattached();
         return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
       } catch (ExecutionException | TimeoutException e) {
-        log.warn("push subscription of user {} not ready: {}", userId, e.toString());
+        log.warn("push subscription of user {} not ready: {}", connectedAs, e.toString());
         unattached();
         return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
       }
     }
     if (req.hasRegister() || req.hasSignIn()) {
-      // Hashing the password may have taken a while; Connect gets a fresh deadline.
-      connectBy = System.nanoTime() + CONNECT_DEADLINE_NANOS;
+      // Hashing the password may have taken a while.
+      restartConnectDeadline();
     }
     return resp;
   }
@@ -355,12 +379,11 @@ final class Conn {
    * connection has left, otherwise completes once the user's push channel is subscribed.
    */
   private synchronized CompletableFuture<Void> attached(Uuid user, long device) {
-    if (connected || left) {
+    if (state != State.PENDING) {
       return null;
     }
-    userId = user;
-    deviceId = device;
-    connected = true;
+    identity = new Identity(user, device);
+    state = State.BOUND;
     return connections.attach(this);
   }
 
@@ -370,22 +393,23 @@ final class Conn {
    */
   private void unattached() {
     synchronized (this) {
-      if (left) {
+      if (state == State.GONE) {
         return;
       }
-      // Still connected meanwhile, so a second Connect is refused until the release is done.
-      releasing = true;
+      state = State.RELEASING;
     }
     connections.release(this);
     synchronized (this) {
-      releasing = false;
-      connected = false;
-      connectBy = System.nanoTime() + CONNECT_DEADLINE_NANOS;
+      if (state == State.RELEASING) {
+        state = State.PENDING;
+        restartConnectDeadline();
+      }
+      identity = null;
     }
   }
 
   @Override
   public String toString() {
-    return "conn " + remote + " user " + userId + " device " + deviceId;
+    return "conn " + remote + " " + identity();
   }
 }
