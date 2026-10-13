@@ -9,30 +9,15 @@ final class StoreTests: XCTestCase {
     private let me = Data(repeating: 1, count: 16)
     private let bob = Data(repeating: 2, count: 16)
 
-    private func makeStore() throws -> Store {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        return Store(context: ModelContext(container), keys: TestSealing.keys(conv7))
-    }
-
     func testMessageEventUpdatesConversation() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         conv.peer.userID = bob
         conv.peer.name = "bob"
         _ = store.upsert(conv)
 
-        var event = Wrinkle_V1_Event()
-        event.cursor = 1
-        event.message.message = .with {
-            $0.conversationID = conv7
-            $0.seq = 1
-            $0.senderUserID = bob
-            $0.clientMessageID = "m1"
-            $0.sentAt = .init(date: Date())
-            $0.seal("hello")
-        }
+        let event = Wrinkle_V1_Event.message(1, in: conv7, from: bob, "hello")
         let touched = store.apply(event, me: me.hex)
         XCTAssertEqual(touched?.lastSeq, 1)
         XCTAssertEqual(touched?.lastText, "hello")
@@ -43,27 +28,19 @@ final class StoreTests: XCTestCase {
     }
 
     func testOwnMessageIsRead() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         conv.peer.userID = bob
         let stored = store.upsert(conv)
 
-        var event = Wrinkle_V1_Event()
-        event.message.message = .with {
-            $0.conversationID = conv7
-            $0.seq = 1
-            $0.senderUserID = me
-            $0.clientMessageID = "m1"
-            $0.seal("sent from another device")
-        }
-        _ = store.apply(event, me: me.hex)
+        _ = store.apply(.message(1, in: conv7, from: me, "sent from another device"), me: me.hex)
         XCTAssertEqual(stored.readSeq, 1)
         XCTAssertEqual(stored.unread, 0)
     }
 
     func testReadEventsTellReaderFromPeer() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         conv.lastSeq = 3
@@ -95,7 +72,7 @@ final class StoreTests: XCTestCase {
     }
 
     func testOnlyANewerMessageBecomesTheLatest() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         let stored = store.upsert(conv)
@@ -117,7 +94,7 @@ final class StoreTests: XCTestCase {
     }
 
     func testProfileEventRenamesPeerEverywhere() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         conv.peer.userID = bob
@@ -142,7 +119,7 @@ final class StoreTests: XCTestCase {
     }
 
     func testResetForgetsEverything() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         _ = store.upsert(conv)
@@ -170,7 +147,7 @@ final class StoreTests: XCTestCase {
 
 extension StoreTests {
     func testPeerAvatarAndDeletedAccount() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = Data(repeating: 8, count: 16)
         conv.peer.userID = Data(repeating: 3, count: 16)
@@ -201,10 +178,8 @@ final class SealedStoreTests: XCTestCase {
     private let bob = Data(repeating: 2, count: 16)
 
     func testLockedUntilTheKeyArrives() throws {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let keys = EpochKeys(vault: MemoryVault())
-        let store = Store(context: ModelContext(container), keys: keys)
+        let store = try Store.inMemory(keys: keys)
         _ = store.upsert(
             .with {
                 $0.conversationID = conv7
@@ -235,11 +210,9 @@ final class SealedStoreTests: XCTestCase {
     }
 
     func testWrongKeyStaysLocked() throws {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
         let keys = EpochKeys(vault: MemoryVault())
         keys.put(conv7, epoch: 1, key: Data(repeating: 9, count: 32))
-        let store = Store(context: ModelContext(container), keys: keys)
+        let store = try Store.inMemory(keys: keys)
         var m = Wrinkle_V1_Message.with {
             $0.conversationID = conv7
             $0.seq = 1

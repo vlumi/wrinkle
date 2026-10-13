@@ -1,4 +1,3 @@
-import SwiftData
 import XCTest
 
 @testable import WrinkleCore
@@ -12,9 +11,7 @@ final class ReactionsTests: XCTestCase {
     private let bob = Data(repeating: 2, count: 16)
 
     private func makeStore(keys: EpochKeys? = nil) throws -> Store {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let store = Store(context: ModelContext(container), keys: keys ?? TestSealing.keys(conv7))
+        let store = try Store.inMemory(keys: keys ?? TestSealing.keys(conv7))
         var conv = Wrinkle_V1_Conversation()
         conv.conversationID = conv7
         conv.peer.userID = bob
@@ -24,16 +21,7 @@ final class ReactionsTests: XCTestCase {
     }
 
     private func message(_ seq: UInt64) -> Wrinkle_V1_Event {
-        var event = Wrinkle_V1_Event()
-        event.message.message = .with {
-            $0.conversationID = conv7
-            $0.seq = seq
-            $0.senderUserID = bob
-            $0.clientMessageID = "m\(seq)"
-            $0.sentAt = .init(date: Date())
-            $0.seal("hi")
-        }
-        return event
+        .message(seq, in: conv7, from: bob, "hi")
     }
 
     private func sealed(_ emoji: [String], by user: Data, seq: UInt64 = 1, epoch: UInt32 = 1)

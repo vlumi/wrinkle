@@ -2,10 +2,25 @@ import Foundation
 import Security
 import os
 
+/// A secret that could not be stored, with the Keychain's status.
+public struct VaultError: Error, CustomStringConvertible {
+    public let status: OSStatus
+
+    public var description: String {
+        (SecCopyErrorMessageString(status, nil) as String?) ?? "OSStatus \(status)"
+    }
+}
+
+extension Logger {
+    /// Secrets not kept: a failed save shows later as a sign-out, or an extension without keys.
+    public static let keychain = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "wrinkle", category: "keychain")
+}
+
 /// Where the device keeps secrets: named blobs of bytes.
 public protocol Vault: Sendable {
     func get(_ account: String) -> Data?
-    func set(_ account: String, _ data: Data)
+    func set(_ account: String, _ data: Data) throws(VaultError)
     func delete(_ account: String)
     /// Every stored account name.
     func accounts() -> [String]
@@ -60,7 +75,7 @@ public struct KeychainVault: Vault {
         return item as? Data
     }
 
-    public func set(_ account: String, _ data: Data) {
+    public func set(_ account: String, _ data: Data) throws(VaultError) {
         let update = [kSecValueData as String: data]
         if SecItemUpdate(query(account) as CFDictionary, update as CFDictionary) == errSecSuccess {
             return
@@ -68,7 +83,8 @@ public struct KeychainVault: Vault {
         var q = query(account)
         q[kSecValueData as String] = data
         q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemAdd(q as CFDictionary, nil)
+        let status = SecItemAdd(q as CFDictionary, nil)
+        if status != errSecSuccess { throw VaultError(status: status) }
     }
 
     public func delete(_ account: String) {

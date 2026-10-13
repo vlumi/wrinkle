@@ -10,11 +10,20 @@ public enum Vaults {
         Bundle.main.object(forInfoDictionaryKey: "WrinkleAppGroup") as? String
     }
 
+    /// The stem of the Keychain services, the same in the app and the extension: the app
+    /// group without its "group." prefix, or the bundle id where there is no group.
+    public static var identity: String {
+        if let appGroup, appGroup.hasPrefix("group.") {
+            return String(appGroup.dropFirst("group.".count))
+        }
+        return Bundle.main.bundleIdentifier ?? "wrinkle"
+    }
+
     public static func device() -> Vault {
-        KeychainVault(service: "fi.misaki.wrinkle.device", accessGroup: nil)
+        KeychainVault(service: identity + ".device", accessGroup: nil)
     }
 
     public static func shared() -> Vault {
-        KeychainVault(service: "fi.misaki.wrinkle.shared", accessGroup: appGroup)
+        KeychainVault(service: identity + ".shared", accessGroup: appGroup)
     }
 }

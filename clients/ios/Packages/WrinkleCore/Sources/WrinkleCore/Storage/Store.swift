@@ -326,14 +326,6 @@ public struct Store {
         return true
     }
 
-    public func oldestSeq(in conversationID: IDHex) -> Int64? {
-        var d = FetchDescriptor<StoredMessage>(
-            predicate: #Predicate { $0.conversationID == conversationID },
-            sortBy: [SortDescriptor(\.seq)])
-        d.fetchLimit = 1
-        return try? context.fetch(d).first?.seq
-    }
-
     /// Shows a peer's new profile, or their deleted account, in every conversation with them.
     public func updatePeer(_ user: Wrinkle_V1_User) {
         let peer = user.userID.hex

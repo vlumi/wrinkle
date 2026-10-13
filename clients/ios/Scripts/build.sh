@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Build the iOS app for the simulator, unsigned. Assumes the project is generated.
 set -euo pipefail
 cd "$(dirname "$0")/.."

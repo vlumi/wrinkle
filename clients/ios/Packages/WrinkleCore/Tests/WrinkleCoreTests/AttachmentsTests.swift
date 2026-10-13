@@ -1,4 +1,3 @@
-import SwiftData
 import XCTest
 
 @testable import WrinkleCore
@@ -59,7 +58,7 @@ final class AttachmentsTests: XCTestCase {
             try E2EE.decryptBlob(fresh.blob, key: fresh.key, digest: fresh.digest), file)
     }
 
-    func testPushBody() throws {
+    func testAttachmentPushBody() throws {
         var m = Wrinkle_V1_Message.with {
             $0.conversationID = conv7
             $0.senderUserID = bob
@@ -95,9 +94,7 @@ final class AttachmentsTests: XCTestCase {
     }
 
     func testAttachmentMessageOpens() throws {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        let store = Store(context: ModelContext(container), keys: TestSealing.keys(conv7))
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         _ = store.upsert(
             .with {
                 $0.conversationID = conv7

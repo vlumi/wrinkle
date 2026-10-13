@@ -10,12 +10,6 @@ final class GroupsTests: XCTestCase {
     private let bob = Data(repeating: 2, count: 16)
     private let carol = Data(repeating: 3, count: 16)
 
-    private func makeStore() throws -> Store {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        return Store(context: ModelContext(container), keys: TestSealing.keys(group))
-    }
-
     private func user(_ id: Data, _ name: String) -> Wrinkle_V1_User {
         .with {
             $0.userID = id
@@ -37,18 +31,6 @@ final class GroupsTests: XCTestCase {
         return e
     }
 
-    private func text(_ seq: UInt64, from sender: Data, _ text: String) -> Wrinkle_V1_Event {
-        var e = Wrinkle_V1_Event()
-        e.message.message = .with {
-            $0.conversationID = group
-            $0.seq = seq
-            $0.senderUserID = sender
-            $0.clientMessageID = "m\(seq)"
-            $0.seal(text)
-        }
-        return e
-    }
-
     /// A group bob created with me and carol, as the list first shows it.
     private func listed(_ store: Store) -> StoredConversation {
         store.upsert(
@@ -62,7 +44,7 @@ final class GroupsTests: XCTestCase {
     }
 
     func testListedGroup() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(group))
         let c = listed(store)
         XCTAssertTrue(c.isGroup)
         XCTAssertFalse(c.isFormer)
@@ -73,7 +55,7 @@ final class GroupsTests: XCTestCase {
     }
 
     func testNoticesFollowMembershipAndTopic() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(group))
         let c = listed(store)
         let created = Wrinkle_V1_Notice.OneOf_Kind.groupCreated(
             .with {
@@ -93,7 +75,7 @@ final class GroupsTests: XCTestCase {
         // The creator's name is not in the notice.
         XCTAssertNil(store.name(of: bob.hex, in: c.id))
 
-        _ = store.apply(text(2, from: bob, "hi"), me: me.hex)
+        _ = store.apply(.message(2, in: group, from: bob, "hi"), me: me.hex)
         XCTAssertNil(c.lastNotice)
         XCTAssertEqual(c.lastText, "hi")
 
@@ -134,7 +116,7 @@ final class GroupsTests: XCTestCase {
     }
 
     func testOlderNoticeDoesNotUndoNewerState() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(group))
         let c = listed(store)
         _ = store.apply(
             notice(5, from: bob, .topicChanged(.with { $0.topic = "New" })), me: me.hex)
@@ -154,7 +136,7 @@ final class GroupsTests: XCTestCase {
     }
 
     func testPromotionOnLeave() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(group))
         let c = listed(store)
         _ = store.apply(
             notice(2, from: bob, .memberLeft(.with { $0.promoted = user(me, "me") })), me: me.hex)
@@ -163,7 +145,7 @@ final class GroupsTests: XCTestCase {
     }
 
     func testMembersAndGroupReadPositions() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(group))
         let c = listed(store)
         store.replaceMembers(
             [

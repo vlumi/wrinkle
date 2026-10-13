@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Regenerate Wrinkle.xcodeproj from project.yml, with the team from the
 # repository's .env (WRINKLE_TEAM_ID); without one, only simulator builds work.
 set -euo pipefail

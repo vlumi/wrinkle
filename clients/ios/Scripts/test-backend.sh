@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Runs the package tests against a backend started by the given command.
 # Usage: test-backend.sh <backend command...>
 set -euo pipefail

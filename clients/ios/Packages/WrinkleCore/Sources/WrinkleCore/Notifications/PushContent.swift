@@ -1,5 +1,6 @@
 import Foundation
 import SwiftData
+import os
 
 /// What the notification service extension needs beyond the epoch keys to word a decrypted
 /// push: which conversations are groups and the names of the people in them. The app writes it
@@ -24,7 +25,11 @@ public struct SharedNames: Codable, Equatable, Sendable {
         guard SharedNames.load(from: vault) != self,
             let data = try? JSONEncoder().encode(self)
         else { return }
-        vault.set(Self.account, data)
+        do {
+            try vault.set(Self.account, data)
+        } catch {
+            Logger.keychain.error("Shared names not saved: \(error)")
+        }
     }
 
     public static func forget(in vault: Vault) { vault.delete(account) }

@@ -3,6 +3,7 @@ import Foundation
 import SwiftData
 import SwiftUI
 import WrinkleCore
+import os
 
 /// Signing in, or creating an account.
 public enum AccountMode: Hashable, Sendable {
@@ -146,7 +147,11 @@ public final class AppState {
         let saved = Credentials(
             userID: creds.userID, deviceID: creds.deviceID, deviceToken: creds.deviceToken,
             serverURL: url)
-        saved.save()
+        do {
+            try saved.save()
+        } catch {
+            Logger.keychain.error("Credentials not saved: \(error)")
+        }
         SavedSession.setLastURL(url)
         credentials = saved
         cursor = 0
@@ -240,7 +245,8 @@ public final class AppState {
             await conn.close()
             state = .offline
             if Task.isCancelled { break }
-            try? await Task.sleep(for: backoff)
+            // Jittered, so the devices a failed gateway held do not return in lockstep.
+            try? await Task.sleep(for: backoff * Double.random(in: 0.5...1.5))
             backoff = min(backoff * 2, .seconds(10))
         }
     }

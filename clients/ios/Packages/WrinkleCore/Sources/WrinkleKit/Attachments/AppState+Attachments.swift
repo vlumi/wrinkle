@@ -102,14 +102,4 @@ extension AppState {
             throw AccountError("The attachment could not be downloaded.")
         }
     }
-
-    /// An attachment's bytes; see attachmentFile.
-    public func attachmentData(_ a: Wrinkle_V1_Attachment) async throws -> Data {
-        guard let base = blobBase else { throw AccountError("This server has no blob address.") }
-        do {
-            return try await AttachmentFiles.shared.data(a, base: base)
-        } catch {
-            throw AccountError("The attachment could not be downloaded.")
-        }
-    }
 }

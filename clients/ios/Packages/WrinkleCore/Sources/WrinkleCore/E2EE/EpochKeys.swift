@@ -32,7 +32,11 @@ public struct EpochKeys: Sendable {
             var keys = all(conversationID)
             guard keys[epoch] != key else { return }
             keys[epoch] = key
-            vault.set(Self.account(conversationID), Self.encode(keys))
+            do {
+                try vault.set(Self.account(conversationID), Self.encode(keys))
+            } catch {
+                Logger.keychain.error("Epoch key not saved: \(error)")
+            }
         }
     }
 

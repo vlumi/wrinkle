@@ -19,7 +19,9 @@ extension BackendTests {
         return try await work()
     }
 
-    private func listed(_ c: Connection, _ id: Data) async throws -> Wrinkle_V1_Conversation? {
+    private func conversation(_ c: Connection, _ id: Data) async throws
+        -> Wrinkle_V1_Conversation?
+    {
         try await c.listConversations().first { $0.conversationID == id }
     }
 
@@ -103,12 +105,12 @@ extension BackendTests {
             let got = try await next(conn.events) { $0.message.message.seq == 4 }
             XCTAssertEqual(got.message.message.notice.topicChanged.topic, "Holiday")
         }
-        let renamed = try await eventually({ try await self.listed(t.alice, id) }) {
+        let renamed = try await eventually({ try await self.conversation(t.alice, id) }) {
             $0?.topic == "Holiday"
         }
         XCTAssertEqual(renamed?.memberCount, 3)
         XCTAssertEqual(renamed?.admin, true)
-        let bobs = try await listed(t.bob, id)
+        let bobs = try await conversation(t.bob, id)
         XCTAssertEqual(bobs?.admin, false)
         XCTAssertEqual(bobs?.hasPeer, false)
     }
@@ -156,7 +158,7 @@ extension BackendTests {
         XCTAssertNil(unreadable)
         let history = try await t.carol.getMessages(conversationID: id, beforeSeq: 0, limit: 10)
         XCTAssertEqual(history.map(\.seq), [5, 4, 3, 2])
-        let former = try await eventually({ try await self.listed(t.carol, id) }) {
+        let former = try await eventually({ try await self.conversation(t.carol, id) }) {
             $0?.member == false
         }
         XCTAssertEqual(former?.admin, false)

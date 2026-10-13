@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Build, install and launch the app in an iPhone simulator.
 #   Usage: run-ios.sh [device-name-substring]
 # Reuses a booted iPhone if there is one, else the newest available.

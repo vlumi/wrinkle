@@ -2,14 +2,8 @@ import XCTest
 
 @testable import WrinkleCore
 
-/// Against a live backend at ws://localhost:8080/v1/ws: accounts, a message each way, a read
-/// receipt, a rename reaching the peer, an avatar upload, devices and remote sign-out, account
-/// deletion, a group of three (GroupBackendTests.swift), deleting a message
-/// (DeletionBackendTests.swift), end-to-end encryption (E2EEBackendTests.swift), reactions
-/// (ReactionBackendTests.swift), stickers (StickerBackendTests.swift), attachments
-/// (AttachmentBackendTests.swift). Every message
-/// is sealed on the sending device and opened on the receiving ones. Skipped when nothing listens, unless
-/// WRINKLE_TEST_REQUIRES_BACKEND is set.
+/// Against a live backend at ws://localhost:8080/v1/ws, with each feature's tests in its own
+/// *BackendTests.swift. Skipped when nothing listens, unless WRINKLE_TEST_REQUIRES_BACKEND is set.
 final class BackendTests: XCTestCase {
     let url = URL(
         string: ProcessInfo.processInfo.environment["WRINKLE_URL"] ?? "ws://localhost:8080/v1/ws")!

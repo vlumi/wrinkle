@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # Build, install and launch the app on a connected iPhone, signed with the
 # team in the repository's .env. Usage: run-device.sh [device-name-substring]
 # The phone needs Developer Mode on (Settings, Privacy & Security) and must

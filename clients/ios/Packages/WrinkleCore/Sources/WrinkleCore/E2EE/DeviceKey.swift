@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import os
 
 /// This device's X25519 key pair; the private key never leaves the vault.
 public enum DeviceKey {
@@ -19,7 +20,11 @@ public enum DeviceKey {
     {
         if let key = load(deviceID: deviceID, from: vault) { return (key, false) }
         let key = Curve25519.KeyAgreement.PrivateKey()
-        vault.set(account(deviceID), key.rawRepresentation)
+        do {
+            try vault.set(account(deviceID), key.rawRepresentation)
+        } catch {
+            Logger.keychain.error("Device key not saved: \(error)")
+        }
         return (key, true)
     }
 

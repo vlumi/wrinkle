@@ -1,5 +1,4 @@
 import CoreGraphics
-import SwiftData
 import XCTest
 
 @testable import WrinkleCore
@@ -10,12 +9,6 @@ final class StickersTests: XCTestCase {
     private let me = Data(repeating: 1, count: 16)
     private let bob = Data(repeating: 2, count: 16)
     private let sticker = Data(repeating: 0x5a, count: 16)
-
-    private func makeStore() throws -> Store {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        return Store(context: ModelContext(container), keys: TestSealing.keys(conv7))
-    }
 
     private func stickerEvent(seq: UInt64, id: Data) -> Wrinkle_V1_Event {
         .with {
@@ -32,7 +25,7 @@ final class StickersTests: XCTestCase {
     }
 
     func testStickerMessageOpens() throws {
-        let store = try makeStore()
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
         _ = store.upsert(
             .with {
                 $0.conversationID = conv7
@@ -55,9 +48,7 @@ final class StickersTests: XCTestCase {
     }
 
     func testLockedStickerOpensWithTheKey() throws {
-        let container = try ModelContainer(
-            for: Store.schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true))
-        var store = Store(context: ModelContext(container))
+        var store = try Store.inMemory()
         _ = store.upsert(
             .with {
                 $0.conversationID = conv7
