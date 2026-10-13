@@ -1,0 +1,15 @@
+{
+  "name": "Wrinkle",
+  "short_name": "Wrinkle",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2f7d4a",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

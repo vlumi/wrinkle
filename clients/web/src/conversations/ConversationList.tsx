@@ -73,7 +73,7 @@ function OpenConversation() {
               setPeer("");
               setError(null);
             })
-            .catch((err) =>
+            .catch((err: unknown) =>
               setError(
                 errorText(err, {
                   [ErrorCode.NOT_FOUND]: `No one is called ${name}.`,
@@ -113,7 +113,7 @@ function ConversationRow({
   users: Users;
   texts: Texts;
   current: boolean;
-  onClick(): void;
+  onClick: () => void;
 }) {
   const n = unread(c);
   const group = isGroup(c);

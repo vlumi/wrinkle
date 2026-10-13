@@ -33,12 +33,12 @@ const PKCS8_X25519 = Uint8Array.of(
 
 export const NONCE_BYTES = 12;
 export const KEY_BYTES = 32;
-export const WRAPPED_BYTES = NONCE_BYTES + KEY_BYTES + 16;
+const WRAPPED_BYTES = NONCE_BYTES + KEY_BYTES + 16;
 
 /** Whether this page can use the cryptography: WebCrypto exists only in secure contexts. */
 export const available = (): boolean => typeof crypto !== "undefined" && !!crypto.subtle;
 
-export function concat(...parts: Uint8Array[]): Bytes {
+function concat(...parts: Uint8Array[]): Bytes {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let i = 0;
   for (const p of parts) {
@@ -48,13 +48,13 @@ export function concat(...parts: Uint8Array[]): Bytes {
   return out;
 }
 
-export function u32(n: number): Bytes {
+function u32(n: number): Bytes {
   const b = new Uint8Array(4);
   new DataView(b.buffer).setUint32(0, n);
   return b;
 }
 
-export function u64(n: bigint): Bytes {
+function u64(n: bigint): Bytes {
   const b = new Uint8Array(8);
   new DataView(b.buffer).setBigUint64(0, n);
   return b;

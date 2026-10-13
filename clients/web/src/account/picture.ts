@@ -2,10 +2,10 @@
 // pixels a side, encoded under the contract's 512 KiB limit. Stickers are
 // drawn the same way.
 
-export const AVATAR_SIDE = 512;
-export const AVATAR_MAX_BYTES = 512 * 1024;
+const AVATAR_SIDE = 512;
+const AVATAR_MAX_BYTES = 512 * 1024;
 /** Encoding qualities to try, best first, until one fits. */
-export const QUALITIES = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
+const QUALITIES = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4];
 
 export interface Crop {
   /** The source square's top left corner and side. */

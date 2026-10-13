@@ -6,7 +6,7 @@ import { useSession } from "../session/session";
 import { namesProblem, parseNames, topicProblem } from "./model";
 
 /** Creates a group: a topic and, optionally, members by name. */
-export function NewGroup({ onDone }: { onDone(): void }) {
+export function NewGroup({ onDone }: { onDone: () => void }) {
   const createGroup = useSession((s) => s.createGroup);
   const [topic, setTopic] = useState("");
   const [names, setNames] = useState("");
@@ -23,7 +23,10 @@ export function NewGroup({ onDone }: { onDone(): void }) {
         const t = topic.trim();
         const members = parseNames(names);
         const problem = topicProblem(t) ?? namesProblem(members);
-        if (problem) return setError(problem);
+        if (problem) {
+          setError(problem);
+          return;
+        }
         attempt.current ??= newMessageId();
         setBusy(true);
         createGroup(t, members, attempt.current)
@@ -34,7 +37,7 @@ export function NewGroup({ onDone }: { onDone(): void }) {
             setError(null);
             onDone();
           })
-          .catch((err) =>
+          .catch((err: unknown) =>
             setError(
               errorText(err, {
                 [ErrorCode.NOT_FOUND]: "Someone in the list does not exist.",

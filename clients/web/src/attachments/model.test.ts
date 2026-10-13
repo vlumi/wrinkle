@@ -45,7 +45,7 @@ test("thumbnails share what the content leaves", () => {
 test("names lose control characters and are cut", () => {
   expect(cleanName(" a\nb.txt ")).toBe("ab.txt");
   expect(cleanName("")).toBe("file");
-  expect([...cleanName("x".repeat(500))].length).toBe(200);
+  expect(Array.from(cleanName("x".repeat(500))).length).toBe(200);
 });
 
 test("what a message with attachments reads as", () => {

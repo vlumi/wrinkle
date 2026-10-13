@@ -17,7 +17,7 @@ export const CONTENT_BUDGET = 46 * 1024;
 /** What an attachment takes besides its name, media type and thumbnail: ids, key, digest, sizes, tags. */
 const ITEM_OVERHEAD = 128;
 /** Longer names are cut to this many characters. */
-export const MAX_NAME = 200;
+const MAX_NAME = 200;
 
 const encoder = new TextEncoder();
 const utf8 = (s: string) => encoder.encode(s).length;
@@ -48,7 +48,7 @@ export function thumbnailBudget(caption: string, items: { name: string; mediaTyp
 export function cleanName(name: string): string {
   // eslint-disable-next-line no-control-regex
   const clean = name.replace(/[\u0000-\u001f\u007f]/g, "").trim();
-  return [...clean].slice(0, MAX_NAME).join("") || "file";
+  return Array.from(clean).slice(0, MAX_NAME).join("") || "file";
 }
 
 /** What a message with attachments reads as in the list: its caption, or what it holds. */

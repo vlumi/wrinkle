@@ -15,7 +15,7 @@ export function SecurityBanners() {
     setBusy(true);
     setError(null);
     decideSharing(share)
-      .catch((err) => setError(errorText(err)))
+      .catch((err: unknown) => setError(errorText(err)))
       .finally(() => setBusy(false));
   };
 

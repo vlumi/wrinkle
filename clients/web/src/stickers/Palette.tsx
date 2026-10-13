@@ -24,7 +24,7 @@ export function Palette() {
     setDone(null);
     return work
       .then(() => setDone(outcome ?? null))
-      .catch((err) => setError(errorText(err, { [ErrorCode.FAILED_PRECONDITION]: FULL })));
+      .catch((err: unknown) => setError(errorText(err, { [ErrorCode.FAILED_PRECONDITION]: FULL })));
   }
 
   const ids = palette ?? [];
@@ -99,7 +99,7 @@ export function Palette() {
           e.target.value = "";
           if (!file) return;
           setBusy(true);
-          run(prepareSticker(file).then(createSticker), "Sticker made and saved to your palette.").finally(() =>
+          void run(prepareSticker(file).then(createSticker), "Sticker made and saved to your palette.").finally(() =>
             setBusy(false),
           );
         }}

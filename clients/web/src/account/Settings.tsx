@@ -10,7 +10,7 @@ import { preparePicture } from "./picture";
 import { nameProblem, passwordProblem } from "./rules";
 
 /** The signed-in user's profile and account. */
-export function Settings({ onClose }: { onClose(): void }) {
+export function Settings({ onClose }: { onClose: () => void }) {
   const me = useSession((s) => s.me);
   const signOut = useSession((s) => s.signOut);
 
@@ -68,13 +68,18 @@ function NameForm({ current }: { current: string }) {
       onSubmit={(e) => {
         e.preventDefault();
         const problem = nameProblem(name);
-        if (problem) return setOutcome({ error: problem });
+        if (problem) {
+          setOutcome({ error: problem });
+          return;
+        }
         updateProfile({ name })
           .then(() => {
             setName("");
             setOutcome({ done: "Name changed." });
           })
-          .catch((err) => setOutcome({ error: errorText(err, { [ErrorCode.ALREADY_EXISTS]: "That name is taken." }) }));
+          .catch((err: unknown) =>
+            setOutcome({ error: errorText(err, { [ErrorCode.ALREADY_EXISTS]: "That name is taken." }) }),
+          );
       }}
     >
       <label>
@@ -110,7 +115,7 @@ function PictureForm({ hasPicture }: { hasPicture: boolean }) {
     setOutcome(null);
     work
       .then(() => setOutcome({ done }))
-      .catch((err) => setOutcome({ error: errorText(err) }))
+      .catch((err: unknown) => setOutcome({ error: errorText(err) }))
       .finally(() => setBusy(false));
   }
 
@@ -170,7 +175,7 @@ function IconPicker({ current }: { current: string }) {
             onClick={() =>
               updateProfile({ icon })
                 .then(() => setError(null))
-                .catch((err) => setError(errorText(err)))
+                .catch((err: unknown) => setError(errorText(err)))
             }
           >
             {icon ? emoji : "–"}
@@ -194,7 +199,10 @@ function PasswordForm() {
       onSubmit={(e) => {
         e.preventDefault();
         const problem = passwordProblem(next) ?? (next !== confirm ? "The new passwords differ." : null);
-        if (problem) return setOutcome({ error: problem });
+        if (problem) {
+          setOutcome({ error: problem });
+          return;
+        }
         changePassword(current, next)
           .then(() => {
             setCurrent("");
@@ -202,7 +210,7 @@ function PasswordForm() {
             setConfirm("");
             setOutcome({ done: "Password changed. Your other devices were signed out." });
           })
-          .catch((err) =>
+          .catch((err: unknown) =>
             setOutcome({ error: errorText(err, { [ErrorCode.UNAUTHENTICATED]: "The current password is wrong." }) }),
           );
       }}
@@ -263,7 +271,7 @@ function DeleteAccount() {
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        deleteAccount(password).catch((err) =>
+        deleteAccount(password).catch((err: unknown) =>
           setOutcome({ error: errorText(err, { [ErrorCode.UNAUTHENTICATED]: "The password is wrong." }) }),
         );
       }}

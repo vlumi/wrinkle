@@ -179,7 +179,7 @@ export class Keys {
 
   /** The user's fingerprint over their devices in the directory. */
   async fingerprint(userId: Uint8Array, fresh = false): Promise<Uint8Array> {
-    const devices = (await this.devicesOf([userId], fresh)).get(hex(userId)) ?? new Map();
+    const devices = (await this.devicesOf([userId], fresh)).get(hex(userId)) ?? new Map<bigint, Uint8Array>();
     return crypto.fingerprint(
       userId,
       [...devices].map(([id, publicKey]) => ({ deviceId: id, publicKey })),
@@ -194,7 +194,7 @@ export class Keys {
 
   private keep(conversationId: string, epoch: number, key: CryptoKey): void {
     let epochs = this.epochs.get(conversationId);
-    if (!epochs) this.epochs.set(conversationId, (epochs = new Map()));
+    if (!epochs) this.epochs.set(conversationId, (epochs = new Map<number, CryptoKey>()));
     epochs.set(epoch, key);
   }
 

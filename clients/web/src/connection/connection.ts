@@ -22,7 +22,8 @@ export class BackendError extends Error {
 
 /** A message for the user: the one given for the error's code, or else the error's own. */
 export function errorText(err: unknown, byCode: Partial<Record<ErrorCode, string>> = {}): string {
-  if (err instanceof BackendError && byCode[err.code]) return byCode[err.code]!;
+  const given = err instanceof BackendError ? byCode[err.code] : undefined;
+  if (given) return given;
   return err instanceof Error ? err.message : String(err);
 }
 
@@ -41,7 +42,7 @@ export interface Handlers {
 }
 
 /** The close code of a signed-out device or deleted account: no reconnecting. */
-export const CLOSE_SIGNED_OUT = 4001;
+const CLOSE_SIGNED_OUT = 4001;
 
 const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 10_000;
@@ -82,7 +83,8 @@ export class Connection {
       if (signedOut) {
         this.handlers.signedOut();
       } else if (!this.closed) {
-        this.retry = setTimeout(() => this.open(), this.backoff);
+        // Jittered, so the devices a failed gateway held do not reconnect in lockstep.
+        this.retry = setTimeout(() => this.open(), this.backoff * (0.5 + Math.random()));
         this.backoff = Math.min(this.backoff * 2, RECONNECT_MAX_MS);
       }
     };
@@ -125,7 +127,7 @@ export class Connection {
         this.send({ kind: { case: "request", value: { id, body } } });
       } catch (err) {
         this.pending.delete(id);
-        reject(err as Error);
+        reject(err instanceof Error ? err : new Error(String(err)));
       }
     });
     if (response.body.case === "error") {

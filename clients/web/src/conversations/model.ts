@@ -112,7 +112,7 @@ export const REMOVED = "Message removed";
 export const isDeleted = (m: Message): boolean => m.deletedAt !== undefined;
 
 /** The message as deleted: its content gone. */
-export const tombstone = (m: Message, deletedAt: Timestamp | undefined): Message => ({
+const tombstone = (m: Message, deletedAt: Timestamp | undefined): Message => ({
   ...m,
   content: { case: undefined },
   blobIds: [],
@@ -302,7 +302,7 @@ export function applyEvent(data: Data, event: Event, me: Uint8Array): Applied {
 }
 
 /** Updates the user's name and icon in the conversations with them. */
-export function withPeer(data: Data, user: User): Data {
+function withPeer(data: Data, user: User): Data {
   let next = data.users[hex(user.userId)] ? withUsers(data, [user]) : data;
   for (const c of Object.values(data.conversations)) {
     if (sameId(c.peer?.userId, user.userId)) next = withConversation(next, { ...c, peer: user });

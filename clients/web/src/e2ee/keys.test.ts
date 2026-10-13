@@ -6,7 +6,7 @@
 import { create } from "@bufbuild/protobuf";
 import { BackendError } from "../connection/connection";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
-import type { Device, Message } from "../gen/wrinkle/v1/model_pb";
+import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { DeviceSchema, MessageSchema } from "../gen/wrinkle/v1/model_pb";
 import { hex, sameId } from "../ids";
 import type { DeviceRef } from "./crypto";
@@ -45,7 +45,7 @@ class Backend {
     const fail = (code: ErrorCode) => {
       throw new BackendError(code, ErrorCode[code]);
     };
-    const call = async (_: string, body: { case: string; value: Record<string, unknown> }) => {
+    const handle = (body: { case: string; value: Record<string, unknown> }) => {
       const v = body.value;
       switch (body.case) {
         case "setDeviceKey": {
@@ -116,13 +116,15 @@ class Backend {
       }
       throw new Error("unexpected " + body.case);
     };
+    const call = (_: string, body: { case: string; value: Record<string, unknown> }) =>
+      Promise.resolve().then(() => handle(body));
     return call as unknown as Call;
   }
 
   async device(userId: Uint8Array, id: bigint, members?: (c: Uint8Array) => Uint8Array[]) {
     const self = { userId, deviceId: id };
     const keys = new Keys(this.callFor(self), self, memoryStore(), {
-      members: async (c) => members?.(c) ?? this.members.get(hex(c))!,
+      members: (c) => Promise.resolve(members?.(c) ?? this.members.get(hex(c))!),
       directoryChanged: () => {},
     });
     expect(await keys.start()).toBe(true);
@@ -201,7 +203,7 @@ test("a new device opens nothing until another device of its user shares the his
   expect(await opened(b1, m)).toBe("before");
   const b2 = await b.device(bob, 22n);
   expect(await opened(b2, m)).toBeNull();
-  const event = create(DeviceSchema, { deviceId: 22n, publicKey: b.keys.get(deviceId(bob, 22n)) }) as Device;
+  const event = create(DeviceSchema, { deviceId: 22n, publicKey: b.keys.get(deviceId(bob, 22n)) });
   expect(b1.deviceChanged(bob, event, false)).toBe(true);
   expect(await b1.share({ deviceId: 22n, publicKey: event.publicKey })).toBe(1);
   await b1.markKnown(22n);
@@ -223,7 +225,7 @@ test("a new device of a member, or a membership change, makes a new epoch", asyn
   await send(a1, "one");
   await b.device(carol, 32n);
   // The directory learns of it from the device event.
-  const added = create(DeviceSchema, { deviceId: 32n, publicKey: b.keys.get(deviceId(carol, 32n)) }) as Device;
+  const added = create(DeviceSchema, { deviceId: 32n, publicKey: b.keys.get(deviceId(carol, 32n)) });
   expect(a1.deviceChanged(carol, added, false)).toBe(false);
   const two = await send(a1, "two");
   expect(two.content.case === "sealed" && two.content.value.epoch).toBe(2);

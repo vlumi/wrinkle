@@ -21,7 +21,7 @@ export function AttachmentsView({ attachments }: { attachments: Attachments }) {
   const images = attachments.items.filter(isImage);
   const others = attachments.items.filter((a) => !isImage(a));
   return (
-    <span className="attachments" onClick={(e) => e.stopPropagation()}>
+    <span className="attachments">
       {images.length > 0 && (
         <span className={images.length === 1 ? "attachment-grid single" : "attachment-grid"}>
           {images.map((a) => (
@@ -37,7 +37,15 @@ export function AttachmentsView({ attachments }: { attachments: Attachments }) {
   );
 }
 
-function ImageThumb({ attachment: a, single, onOpen }: { attachment: Attachment; single: boolean; onOpen(): void }) {
+function ImageThumb({
+  attachment: a,
+  single,
+  onOpen,
+}: {
+  attachment: Attachment;
+  single: boolean;
+  onOpen: () => void;
+}) {
   const url = thumbnailURL(a);
   const scale = single ? Math.min(1, SINGLE_SIDE / Math.max(a.width, a.height)) : 0;
   const style = single ? { width: Math.round(a.width * scale), aspectRatio: `${a.width} / ${a.height}` } : undefined;
@@ -93,7 +101,7 @@ function FileRow({ attachment: a }: { attachment: Attachment }) {
 }
 
 /** An image full screen: downloaded, checked, decrypted and shown. */
-function Viewer({ attachment: a, onClose }: { attachment: Attachment; onClose(): void }) {
+function Viewer({ attachment: a, onClose }: { attachment: Attachment; onClose: () => void }) {
   const address = useAddress();
   const [url, setUrl] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -124,9 +132,10 @@ function Viewer({ attachment: a, onClose }: { attachment: Attachment; onClose():
   }, [onClose]);
 
   return (
-    <div className="viewer" role="dialog" aria-label={a.name} data-testid="viewer" onClick={onClose}>
+    <div className="viewer" role="dialog" aria-label={a.name} data-testid="viewer">
+      <button type="button" className="viewer-backdrop" aria-label="Close" onClick={onClose} />
       {url ? (
-        <img src={url} alt={a.name} data-testid="viewer-image" onClick={(e) => e.stopPropagation()} />
+        <img src={url} alt={a.name} data-testid="viewer-image" />
       ) : failed ? (
         <p className="viewer-status">Could not load the picture.</p>
       ) : (
@@ -135,7 +144,7 @@ function Viewer({ attachment: a, onClose }: { attachment: Attachment; onClose():
           <p className="viewer-status">Loading…</p>
         </>
       )}
-      <span className="viewer-actions" onClick={(e) => e.stopPropagation()}>
+      <span className="viewer-actions">
         {url && (
           <button
             type="button"

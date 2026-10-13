@@ -52,6 +52,15 @@ function entry(old: Entry | undefined, sealed: Sealed, updatedAt: Timestamp | un
   return { sealed, updatedAt, emoji: known };
 }
 
+function without<T>(record: Record<string, T>, key: string): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([k]) => k !== key));
+}
+
+/** A message's reactions set, or the message dropped when there are none. */
+function withUsers(reactions: Reactions, messageKey: string, users: Record<string, Entry>): Reactions {
+  return Object.keys(users).length === 0 ? without(reactions, messageKey) : { ...reactions, [messageKey]: users };
+}
+
 /** Sets or, without sealed, removes a user's reactions to a message. */
 export function withReaction(
   reactions: Reactions,
@@ -62,13 +71,13 @@ export function withReaction(
   emoji?: string[],
 ): Reactions {
   const u = hex(userId);
-  const users = { ...(reactions[messageKey] ?? {}) };
-  if (sealed) users[u] = entry(users[u], sealed, updatedAt, emoji);
-  else if (users[u]) delete users[u];
-  else return reactions;
-  const next = { ...reactions, [messageKey]: users };
-  if (Object.keys(users).length === 0) delete next[messageKey];
-  return next;
+  const old = reactions[messageKey] ?? {};
+  if (!sealed && !old[u]) return reactions;
+  return withUsers(
+    reactions,
+    messageKey,
+    sealed ? { ...old, [u]: entry(old[u], sealed, updatedAt, emoji) } : without(old, u),
+  );
 }
 
 /** Replaces a message's reactions with those listed by the backend. */
@@ -80,17 +89,12 @@ export function withListed(reactions: Reactions, messageKey: string, listed: Rea
     users[hex(r.userId)] = entry(old[hex(r.userId)], r.sealed, r.updatedAt);
   }
   if (Object.keys(users).length === 0 && !reactions[messageKey]) return reactions;
-  const next = { ...reactions, [messageKey]: users };
-  if (Object.keys(users).length === 0) delete next[messageKey];
-  return next;
+  return withUsers(reactions, messageKey, users);
 }
 
 /** Forgets a message's reactions, as when it is deleted. */
 export function withoutMessage(reactions: Reactions, messageKey: string): Reactions {
-  if (!reactions[messageKey]) return reactions;
-  const next = { ...reactions };
-  delete next[messageKey];
-  return next;
+  return reactions[messageKey] ? without(reactions, messageKey) : reactions;
 }
 
 /** Records the emoji found by opening a set, if it is still the user's current one. */

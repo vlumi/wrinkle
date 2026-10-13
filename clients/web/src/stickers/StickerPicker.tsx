@@ -2,7 +2,7 @@ import { useSession } from "../session/session";
 import { StickerImage } from "./StickerImage";
 
 /** The composer's palette: a tap sends the sticker. */
-export function StickerPicker({ onPick, onClose }: { onPick(id: string): void; onClose(): void }) {
+export function StickerPicker({ onPick, onClose }: { onPick: (id: string) => void; onClose: () => void }) {
   const palette = useSession((s) => s.palette);
   const showSettings = useSession((s) => s.showSettings);
 

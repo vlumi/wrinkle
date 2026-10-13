@@ -14,7 +14,7 @@ export function Devices() {
 
   // Listed again on every connect; device events keep the list current in between.
   useEffect(() => {
-    if (status === "connected") loadDevices().catch((err) => setError(errorText(err)));
+    if (status === "connected") loadDevices().catch((err: unknown) => setError(errorText(err)));
   }, [status, loadDevices]);
 
   return (
@@ -37,7 +37,15 @@ export function Devices() {
   );
 }
 
-function DeviceItem({ device: d, current, onError }: { device: Device; current: boolean; onError(e: string): void }) {
+function DeviceItem({
+  device: d,
+  current,
+  onError,
+}: {
+  device: Device;
+  current: boolean;
+  onError: (e: string) => void;
+}) {
   const renameDevice = useSession((s) => s.renameDevice);
   const signOutDevice = useSession((s) => s.signOutDevice);
   const [editing, setEditing] = useState(false);
@@ -77,7 +85,7 @@ function DeviceItem({ device: d, current, onError }: { device: Device; current: 
               type="button"
               className="signout"
               data-testid="signout-device"
-              onClick={() => signOutDevice(d.deviceId).catch((err) => onError(errorText(err)))}
+              onClick={() => signOutDevice(d.deviceId).catch((err: unknown) => onError(errorText(err)))}
             >
               Sign out
             </button>
@@ -90,10 +98,13 @@ function DeviceItem({ device: d, current, onError }: { device: Device; current: 
           onSubmit={(e) => {
             e.preventDefault();
             const problem = deviceNameProblem(name.trim());
-            if (problem) return onError(problem);
+            if (problem) {
+              onError(problem);
+              return;
+            }
             renameDevice(d.deviceId, name.trim())
               .then(() => setEditing(false))
-              .catch((err) => onError(errorText(err)));
+              .catch((err: unknown) => onError(errorText(err)));
           }}
         >
           <input

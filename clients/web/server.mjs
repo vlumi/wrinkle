@@ -52,8 +52,13 @@ const handler = async (req, res) => {
   }
   if (await monitor(req, res, url.pathname)) return;
   const rel = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, "");
-  // One page: anything that is not a file gets index.html.
-  const path = (await existingFile(join(root, rel))) ?? join(root, "index.html");
+  // One page: anything that is not a file gets index.html; a missing file does not.
+  const file = await existingFile(join(root, rel));
+  if (!file && extname(rel)) {
+    res.writeHead(404).end();
+    return;
+  }
+  const path = file ?? join(root, "index.html");
   if (!path.startsWith(root)) {
     res.writeHead(403).end();
     return;

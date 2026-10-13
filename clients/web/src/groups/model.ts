@@ -11,7 +11,7 @@ import { hex, sameId } from "../ids";
 /** Users seen so far, by hex id: members, peers and the users in notices. */
 export type Users = Record<string, User>;
 
-export const MAX_MEMBERS = 256;
+const MAX_MEMBERS = 256;
 
 export const isGroup = (c: Conversation | undefined): boolean => c?.kind === ConversationKind.GROUP;
 

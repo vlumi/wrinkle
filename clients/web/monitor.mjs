@@ -52,7 +52,7 @@ const services = [
       backend("Backend or load balancer :8080", 8080, "make run-go-mono, run-java-mono or lb-up"),
       ...[1, 2, 3, 4].map((n) =>
         backend(
-          `Services instance ${n} :${9100 + n}`,
+          `Services instance ${n} :${8190 + n} (RPC :${9100 + n})`,
           8190 + n,
           n === 1 ? "make run-go-services or run-java-services" : `INSTANCE=${n}`,
         ),

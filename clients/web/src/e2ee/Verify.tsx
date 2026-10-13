@@ -8,7 +8,7 @@ import { useSession } from "../session/session";
 import { changedSinceVerified } from "./verified";
 
 /** A contact's safety number, to compare with theirs, and marking them verified. */
-export function Verify({ user, onClose }: { user: User; onClose(): void }) {
+export function Verify({ user, onClose }: { user: User; onClose: () => void }) {
   const safetyNumber = useSession((s) => s.safetyNumber);
   const markVerified = useSession((s) => s.markVerified);
   const id = hex(user.userId);
@@ -24,7 +24,7 @@ export function Verify({ user, onClose }: { user: User; onClose(): void }) {
     let current = true;
     safetyNumber(user.userId).then(
       (n) => current && setNumber(n),
-      (err) => current && setError(errorText(err)),
+      (err: unknown) => current && setError(errorText(err)),
     );
     return () => {
       current = false;
@@ -73,7 +73,7 @@ export function Verify({ user, onClose }: { user: User; onClose(): void }) {
           <button
             data-testid="mark-verified"
             disabled={!number}
-            onClick={() => markVerified(user.userId).catch((err) => setError(errorText(err)))}
+            onClick={() => markVerified(user.userId).catch((err: unknown) => setError(errorText(err)))}
           >
             Mark as verified
           </button>

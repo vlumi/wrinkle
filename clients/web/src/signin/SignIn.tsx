@@ -57,7 +57,7 @@ export function SignIn() {
           if (p) return;
           setBusy(true);
           authenticate(mode, name, password, url.trim())
-            .catch((err) =>
+            .catch((err: unknown) =>
               setError(
                 errorText(err, {
                   [ErrorCode.ALREADY_EXISTS]: "That name is taken.",
@@ -135,7 +135,7 @@ export function SignIn() {
   );
 }
 
-function RememberedGateways({ chosen, onPick }: { chosen: string; onPick(url: string): void }) {
+function RememberedGateways({ chosen, onPick }: { chosen: string; onPick: (url: string) => void }) {
   const [gateways, setGateways] = useState(loadGateways);
   if (gateways.length === 0) return null;
 

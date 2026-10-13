@@ -12,7 +12,7 @@ export function FingerprintWarning({
 }: {
   users: User[];
   me: Uint8Array | undefined;
-  onVerify(): void;
+  onVerify: () => void;
 }) {
   const verified = useSession((s) => s.verified);
   const fingerprints = useSession((s) => s.fingerprints);

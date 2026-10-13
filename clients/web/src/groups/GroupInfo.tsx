@@ -11,7 +11,7 @@ import { GroupAvatar } from "./GroupAvatar";
 import { namesProblem, parseNames, topicProblem } from "./model";
 
 /** A group's topic and members, and the changes the user may make to them. */
-export function GroupInfo({ id, onClose }: { id: string; onClose(): void }) {
+export function GroupInfo({ id, onClose }: { id: string; onClose: () => void }) {
   const conversation = useSession((s) => s.conversations[id]);
   const members = useSession((s) => s.members[id]);
   const me = useSession((s) => s.me);
@@ -85,7 +85,7 @@ export function GroupInfo({ id, onClose }: { id: string; onClose(): void }) {
   );
 }
 
-function TopicForm({ onError, onDone }: { onError(err: unknown): void; onDone(): void }) {
+function TopicForm({ onError, onDone }: { onError: (err: unknown) => void; onDone: () => void }) {
   const setTopic = useSession((s) => s.setTopic);
   const [topic, setText] = useState("");
 
@@ -95,7 +95,10 @@ function TopicForm({ onError, onDone }: { onError(err: unknown): void; onDone():
         e.preventDefault();
         const t = topic.trim();
         const problem = topicProblem(t);
-        if (problem) return onError(new Error(problem));
+        if (problem) {
+          onError(new Error(problem));
+          return;
+        }
         setTopic(t)
           .then(() => {
             setText("");
@@ -133,8 +136,8 @@ function MemberItem({
   member: Member;
   self: boolean;
   canManage: boolean;
-  onError(err: unknown): void;
-  onVerify(): void;
+  onError: (err: unknown) => void;
+  onVerify: () => void;
 }) {
   const setAdmin = useSession((s) => s.setAdmin);
   const removeMember = useSession((s) => s.removeMember);
@@ -187,7 +190,7 @@ function MemberItem({
   );
 }
 
-function AddMembers({ onError, onDone }: { onError(err: unknown): void; onDone(): void }) {
+function AddMembers({ onError, onDone }: { onError: (err: unknown) => void; onDone: () => void }) {
   const addMembers = useSession((s) => s.addMembers);
   const [names, setNames] = useState("");
 
@@ -197,7 +200,10 @@ function AddMembers({ onError, onDone }: { onError(err: unknown): void; onDone()
         e.preventDefault();
         const list = parseNames(names);
         const problem = namesProblem(list);
-        if (problem) return onError(new Error(problem));
+        if (problem) {
+          onError(new Error(problem));
+          return;
+        }
         addMembers(list)
           .then(() => {
             setNames("");
@@ -226,7 +232,7 @@ function AddMembers({ onError, onDone }: { onError(err: unknown): void; onDone()
 }
 
 /** Leaving, behind an in-page confirmation. */
-function Leave({ onError, onLeft }: { onError(err: unknown): void; onLeft(): void }) {
+function Leave({ onError, onLeft }: { onError: (err: unknown) => void; onLeft: () => void }) {
   const leaveGroup = useSession((s) => s.leaveGroup);
   const [confirming, setConfirming] = useState(false);
 
@@ -247,7 +253,7 @@ function Leave({ onError, onLeft }: { onError(err: unknown): void; onLeft(): voi
           onClick={() =>
             leaveGroup()
               .then(onLeft)
-              .catch((err) => {
+              .catch((err: unknown) => {
                 setConfirming(false);
                 onError(err);
               })

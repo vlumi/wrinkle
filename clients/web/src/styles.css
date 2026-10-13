@@ -604,6 +604,11 @@ button:disabled {
   color: var(--muted);
 }
 
+.reaction.who {
+  padding: 1px 6px;
+  color: var(--muted);
+}
+
 .reacted-by {
   display: flex;
   flex-direction: column;
@@ -939,6 +944,19 @@ button:disabled {
   gap: 12px;
   padding: calc(env(safe-area-inset-top) + 12px) 12px calc(env(safe-area-inset-bottom) + 12px);
   background: rgb(0 0 0 / 0.88);
+}
+
+.viewer-backdrop {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: default;
+}
+
+.viewer > :not(.viewer-backdrop) {
+  position: relative;
 }
 
 .viewer img {
