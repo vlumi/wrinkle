@@ -8,14 +8,14 @@ In rough order; each step assumes the ones before it.
 
 ### 1. Hardening
 
-Done (ROADMAP.md, "Hardening"): limits on frames, requests and rates per connection, a deadline for Connect, keepalive and idle timeouts, close codes, presence that expires with its gateway, outbox rows deleted once streamed, and gateways that drain on shutdown. Still open for a public service: limits per user across devices and per address.
+Done (ROADMAP.md, Done, "Hardening"): limits on frames, requests and rates per connection, a deadline for Connect, keepalive and idle timeouts, close codes, presence that expires with its gateway, outbox rows deleted in the transaction that inserts them (the binlog carries the event, the table stays empty), and gateways that drain on shutdown. Still open for a public service: limits per user across devices and per address.
 
 ### 2. Encryption in transit
 
 - **Devices to the edge**: TLS at the device balancer, `wss://` only, certificates from Let's Encrypt (HAProxy or Caddy renew them; a cloud load balancer manages its own). HTTP Strict Transport Security for the web client. Locally this is already in place, with a certificate from mkcert ([local-network.md](local-network.md)).
 - **Inside**: start on a private network that only the edge is exposed from; then TLS with client certificates (mTLS) between gateways, services and the infrastructure, which all support it.
 - **At rest**: encrypted disks and backups. Managed databases do it by default; on own hardware, full-disk encryption.
-- **End to end**: a separate feature with consequences for the whole design, [#6](https://github.com/vlumi/wrinkle/issues/6).
+- **End to end**: done ([architecture](architecture.md#end-to-end-encryption)): a key per conversation and epoch, wrapped for every member device, with the services relaying only ciphertext. What a public service would add is forward secrecy between rotations, which MLS (RFC 9420) gives behind the same requests.
 
 ### 3. Authentication
 
@@ -48,7 +48,7 @@ The services already refuse requests about conversations the user is not in. Mis
 - Secrets (database credentials, the production APNs key) in the platform's secret store, not in files on the host.
 - Metrics scraped from every process, alerts on error rates, latency, consumer lag and disk, logs collected, and an outside uptime check.
 - Schema changes applied as versioned migrations, compatible with the running version, not loaded at startup.
-- The change-data path's fragility on a Vitess restart (ROADMAP.md, "Later") resolved, or Vitess replaced as below.
+- The prototype's Vitess test server, which starts empty when its container restarts and strands Debezium's offsets ([local-network.md](local-network.md#troubleshooting); ROADMAP.md, Open, Operations), replaced by a real Vitess topology or by plain MySQL as below, whose binlog survives a restart.
 
 ### 7. Clients
 
@@ -57,7 +57,7 @@ The services already refuse requests about conversations the user is not in. Mis
 
 ## Simplifying the infrastructure
 
-The prototype's infrastructure is shaped for the scale the design was sized for ([capacity.md](capacity.md)), not for a first deployment:
+The prototype's infrastructure is shaped for the scale the design was sized for ([architecture.md, Choices](architecture.md#choices); the figures in [capacity.md](capacity.md)), not for a first deployment:
 
 - **Vitess**: managed clouds offer plain MySQL, not Vitess. The schema runs unsharded on one MySQL; Debezium would use its MySQL connector, reading the binlog, instead of the Vitess one. Managed Vitess exists (PlanetScale, on AWS or GCP) and keeps the sharding path open.
 - **Kafka**: managed Kafka has a high floor (below). A single broker, or Redpanda as one binary, carries a small service; it is the simplest piece to move to a managed service later.
@@ -65,13 +65,13 @@ The prototype's infrastructure is shaped for the scale the design was sized for 
 
 ## Deployment options
 
-Prices are list prices read in October 2026, mostly from third-party price trackers, without tax, outbound traffic or support plans; check the providers' calculators before committing. Hetzner raised its cloud prices twice in 2026 (April and June) because of memory costs, and more may follow. The figures are monthly.
+Prices are list prices read in October 2026, mostly from third-party price trackers, without tax, outbound traffic or support plans; check the providers' calculators before committing. Hetzner raised its cloud prices twice in 2026 (April and June) because of memory costs. The figures are monthly.
 
 Every option needs a domain (about €1 a month) and an Apple developer account for push and distribution (99 USD a year), whatever the hosting.
 
 ### A. One server, everything in containers
 
-The cluster's Compose files on one machine, HAProxy terminating TLS, nightly backups to storage elsewhere. The whole stack needs about 8 GB as measured locally; 16 GB leaves room.
+The cluster's Compose files on one machine, HAProxy terminating TLS, nightly backups to storage elsewhere. Locally the infrastructure runs in 8 GB of Docker memory and the cluster with the backends in 12; 16 GB leaves room.
 
 | Item | Cost |
 |---|---|
@@ -106,7 +106,7 @@ A small computer at home or in an office, reached through Cloudflare Tunnel (fre
 | Off-site backup storage | about €4 |
 | **Monthly** | **about €10**, plus the hardware |
 
-Pays back against option A in two to three years, but the home connection and power are the availability, and Cloudflare terminates TLS, so it sees the traffic, unlike option A. With end-to-end encryption that no longer includes message text, but still who talks to whom, profiles and group topics.
+Pays back against option A in two to three years, but the home connection and power are the availability, and Cloudflare terminates TLS, so it sees the traffic, unlike option A: not message content, which is encrypted end to end, but who talks to whom, profiles and group topics.
 
 ### D. AWS
 

@@ -4,16 +4,36 @@
 
 Wrinkle is a prototype backend for text messaging, one-to-one and in groups, across multiple devices per user: real-time delivery to connected devices, incremental sync for the rest, and read receipts. The same architecture is implemented in several languages, with shared clients and a load generator, to see how each implementation behaves as load grows.
 
-It is an experiment, not a product. Nothing here is production-hardened; [docs/production.md](docs/production.md) lists what that would take, with deployment options and their costs.
+It is an experiment, not a product. Solid:
 
-**Status:** Go and Java backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements and the four-way comparison are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
+- the contract, and the conformance tests that hold every backend to it;
+- per-connection limits, keepalive, close codes and drain in every gateway;
+- accounts with argon2id passwords and a token per device, and TLS to devices;
+- end-to-end encryption, with test vectors shared by Go, TypeScript and Swift;
+- a fan-out that delivers at least once without duplicates;
+- the measurement protocol.
+
+Prototype:
+
+- one Vitess process rather than a topology, whose change stream does not survive a restart;
+- no limits per user or per address, and no password recovery;
+- no blocking, reporting or moderation;
+- no forward secrecy between key rotations;
+- push notifications from the Go fan-out only;
+- monitoring of the native processes only.
+
+[docs/production.md](docs/production.md) lists what a public deployment would take, with deployment options and their costs.
+
+**Status:** Go and Java backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements comparing the three gateways and the two monoliths are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
+
+Users register with a name and a password, sign in on any number of devices, each with its own token, and manage their profile (name, icon, picture), their devices and their account, which they can delete. Conversations are direct, between two users, or groups of up to 256 members with a topic and admins. Messages carry text, a sticker or attachments (images and files, with thumbnails); their sender can delete them for everyone, anyone can react to them with up to three emoji, and every participant's read position is shared. Content is encrypted end to end: the servers see who talks to whom and when, group topics and membership, profiles and avatars, and sizes, but no text, sticker, attachment or reaction.
 
 ## How it works
 
 Three ideas carry the design:
 
 - **Per-conversation sequence.** Every message gets a sequence number from a counter owned by its conversation, assigned in the transaction that stores it. Every device orders a conversation by it, so all participants converge on the same order, and a device can tell when it is missing a message.
-- **Per-user event log.** Everything a user's devices need to know (messages in any of their conversations, read receipts, delivery failures) is appended to that user's log. A device keeps one cursor into it, and sync returns what came after.
+- **Per-user event log.** Everything a user's devices need to know (messages, read receipts, deletions and reactions in any of their conversations, and changes to their profile, devices and sticker palette) is appended to that user's log. A device keeps one cursor into it, and sync returns what came after.
 - **Push is an optimization, sync is the guarantee.** Connected devices get events over WebSocket as they happen. A device that misses a push gets the same events from its log on the next sync.
 
 ```mermaid
@@ -51,15 +71,15 @@ The diagram shows the split shape, which scales by adding gateways and services 
 
 Components:
 
-- **Load balancers:** one terminates TLS for devices and spreads their connections over the gateways and moves them off one that stops; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. HAProxy.
+- **Load balancers:** one sends each device's connection to the gateway with the fewest and stops sending to a gateway that fails its check; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. Both are HAProxy. TLS ends at the edge: locally a separate HAProxy on port 8443 in front of the device balancer, which a deployment folds into the balancer.
 - **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`). It enforces the limits the contract sets per connection and drains on shutdown, closing connections so devices reconnect elsewhere.
-- **Conversation service:** sending and read marks; stores each change with an outbox row in one transaction. Message content is encrypted end to end: the services store and relay ciphertext and the keys devices wrap for each other.
-- **Sync service:** accounts (registration and sign-in with passwords, a token per device, profiles), incremental sync, conversation lists, push token registration.
-- **Fan-out workers:** run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
-- **Conversation DB and user DB:** messages and the outbox, sharded by conversation; event logs, conversation lists and devices, sharded by user.
+- **Conversation service:** everything on the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs; each change is stored with an outbox row in one transaction. Message content is encrypted end to end: the services store and relay ciphertext and the keys devices wrap for each other.
+- **Sync service:** everything on the user keyspace: accounts (registration and sign-in with passwords, a token per device, profiles, devices), incremental sync, conversation lists, uploads, stickers and push token registration.
+- **Fan-out workers** (the `fanout` role): run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
+- **Conversation DB and user DB:** messages, reactions, wrapped keys and the outbox, sharded by conversation; event logs, conversation lists, devices, uploads and stickers, sharded by user.
 - **Presence:** which device is connected to which gateway process, kept only while that process keeps announcing itself, and one push channel per user, in Valkey.
 
-Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, Garage for blobs (pictures), and Prometheus with Grafana for the metrics every backend exposes under the same names.
+Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, Garage for blobs (avatars, stickers and attachments), and Prometheus with Grafana for the metrics every backend exposes under the same names.
 
 ## Implementations
 
@@ -83,41 +103,31 @@ The load generator simulates devices and reports, per backend on the same machin
 - the highest sustained message rate before p99 latency breaks;
 - CPU time per thousand messages.
 
-Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. In the latest runs ([2026-10-11](docs/results/2026-10-11-gateways.md)), every implementation sustained 500 messages per second with 75 to 110 ms median latency end to end; the Rust gateway was the leanest, holding 4000 idle connections in 78 MiB against 150 to 400 MiB for the others. Above 500 per second the shared database, not a backend, sets the limit on a laptop. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md), and the capacity the design was sized for, with the measurements against it, in [docs/capacity.md](docs/capacity.md).
+Absolute numbers depend on the machine and say little about production. Comparisons between backends under identical conditions are the point. In the latest runs ([2026-10-11](docs/results/2026-10-11-gateways.md), before accounts, groups and encryption), every implementation sustained 500 messages per second with 75 to 110 ms median latency end to end; the Rust gateway was the leanest, holding 4000 idle connections in 78 MiB against 150 to 400 MiB for the others. Above 500 per second the shared database, not a backend, sets the limit on a laptop. The protocol is in [docs/measuring.md](docs/measuring.md), results in [docs/results/](docs/results/), metric names in [docs/metrics.md](docs/metrics.md), and the capacity the design was sized for, with the measurements against it, in [docs/capacity.md](docs/capacity.md).
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), Go, Node 22 or later, JDK 25 (found through `java_home`), Elixir, Rust, Xcode 26, mkcert for TLS on the local network, and `make tools` once for the code generators and linters. The cluster alone needs only Docker. Plain `make` lists every routine operation, grouped; the common ones:
+Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client, and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
 
-```sh
-make infra-up          # the shared stack: Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana
-make run-go-mono       # a whole backend on ws://localhost:8080/v1/ws; also run-java-mono
-make lb-up             # or side by side: balancers, then run-go-services or run-java-services, and gateways run-*-gw
-make cluster-up        # or all of that in containers, any number of each: GO_GW=3 JAVA_SERVICES=0 ...
-make tls-up            # TLS for phones and other computers: wss://<host>:8443/v1/ws (mkcert; docs/local-network.md)
-make web               # the web client, built and served on port 8081, over HTTPS with make certs
-make ios-sim           # the iOS app in a simulator; ios-device on a paired iPhone
-make load              # a quick load run against the running backend
-make ci                # the gate before every push: lint, tests, conformance against every backend
-make measure-go-mono   # the measurement protocol for one backend; measure-all for every one
-make infra-down        # stop and discard all data
-```
+1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana).
+2. `make cluster-up`: the whole backend in containers, two Go and one Java services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono` or `make run-java-mono`; `mono` in a target name is the monolith, `gw` a gateway.
+3. `make tls-up`: the TLS edge on port 8443 in front of whatever serves port 8080, making the certificate with mkcert (`make certs`) if there is none yet.
+4. `make web`: the web client, built and served on port 8081, over HTTPS since the certificate exists.
+5. Open `https://localhost:8081/` on the Mac. Phones and other computers on the network open the Mac's address instead and must trust the certificate first: [docs/local-network.md](docs/local-network.md), which also covers the iOS app, push notifications and running the backends natively.
 
-Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090. With `make web` running, http://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer; like them, it is served only on the host.
-
-To run it on one Mac and connect from phones and other computers on the same network, see [docs/local-network.md](docs/local-network.md).
+Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090, and http://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer. `make ci` is the gate before every push: lint, tests, conformance against every backend. `make measure-go-mono` runs the measurement protocol for one backend, `make measure-all` for every one. `make infra-down` stops the stack and discards all data; `make infra-reset` recreates it empty, which is also the fix when the Vitess container has restarted and no event is delivered any more. Plain `make` lists every routine operation, grouped.
 
 ## Layout
 
 ```text
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
-infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana, HAProxy for the side-by-side setup, and the cluster; the arm64 Vitess image
+infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana, HAProxy for the TLS edge and the side-by-side setup, and the cluster; the arm64 Vitess image
 backends/     go/, java/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)
 conformance/  backend-agnostic tests against the contract
-docs/         architecture, measuring, metrics, capacity, running on a local network, toward production, and results
+docs/         architecture, measuring, metrics, capacity, running on a local network, toward production, history, and results
 ```
 
 Local settings that are not committed, the Apple team and the APNs key, go in `.env` at the root; see `.env.example`.
