@@ -3,6 +3,9 @@ import { blobAddress, blobURL } from "../blobs/blobs";
 import { fromHex } from "../ids";
 import { useSession } from "../session/session";
 
+/** A sticker's side in a conversation, in pixels. */
+export const STICKER_SIZE = 144;
+
 /** A sticker by its id in hex, read from the blob address; the browser caches it by its address. */
 export function StickerImage({ id, size }: { id: string; size: number }) {
   const gateway = useSession((s) => s.credentials?.url);
