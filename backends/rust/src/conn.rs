@@ -38,6 +38,7 @@ const SWEEP_INTERVAL: Duration = Duration::from_secs(10);
 /// How long a close frame may take to write before the socket is dropped.
 const CLOSE_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
+const NORMAL: u16 = 1000;
 const GOING_AWAY: u16 = 1001;
 const UNSUPPORTED_DATA: u16 = 1003;
 const POLICY_VIOLATION: u16 = 1008;
@@ -277,7 +278,13 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
                         break;
                     }
                     Some(Ok(Message::Ping(_) | Message::Pong(_))) => {}
-                    Some(Ok(Message::Close(_))) | None => break,
+                    Some(Ok(Message::Close(_))) => {
+                        // Completes the closing handshake: the writer flushes
+                        // the echo of the device's close frame.
+                        link.close(NORMAL, "");
+                        break;
+                    }
+                    None => break,
                     Some(Err(e)) => {
                         if too_big(&e) {
                             link.close(MESSAGE_TOO_BIG, "frame too large");
@@ -430,7 +437,7 @@ impl Conn {
         self.app.conns.in_flight.fetch_sub(1, Ordering::SeqCst);
     }
 
-    async fn reply(&self, kind: &str, started: Instant, response: WireResponse) -> bool {
+    async fn reply(&self, kind: &'static str, started: Instant, response: WireResponse) -> bool {
         let code = match &response.body {
             Some(response::Body::Error(e)) => e.code().as_str_name(),
             _ => "ok",

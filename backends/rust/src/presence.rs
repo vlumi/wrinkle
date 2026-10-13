@@ -6,13 +6,15 @@
 use std::hash::{BuildHasher, Hasher, RandomState};
 use std::time::Duration;
 
-use redis::aio::ConnectionManager;
+use redis::aio::{ConnectionManager, ConnectionManagerConfig};
 use redis::{AsyncCommands, Script};
 
 use crate::user_id::{self, UserId};
 
 const INSTANCE_TTL: Duration = Duration::from_secs(90);
 const HEARTBEAT: Duration = Duration::from_secs(30);
+/// How long one command, or one connection attempt, may take.
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Removes the device's field only while it still names this instance, so a
 /// device that reconnected elsewhere keeps its new entry.
@@ -27,7 +29,10 @@ pub struct Presence {
 
 impl Presence {
     pub async fn connect(client: &redis::Client, node: &str) -> redis::RedisResult<Self> {
-        let valkey = ConnectionManager::new(client.clone()).await?;
+        let config = ConnectionManagerConfig::new()
+            .set_response_timeout(Some(COMMAND_TIMEOUT))
+            .set_connection_timeout(Some(COMMAND_TIMEOUT));
+        let valkey = ConnectionManager::new_with_config(client.clone(), config).await?;
         let presence = Self {
             valkey,
             instance: instance_id(node),
@@ -97,14 +102,17 @@ impl Presence {
     }
 
     /// Runs `op` once more if the connection had dropped; the manager
-    /// reconnects after the first failure.
+    /// reconnects after the first failure. A timeout is not retried, so a
+    /// stalled Valkey costs a write at most `COMMAND_TIMEOUT`.
     async fn retrying<T, F, Fut>(&self, op: F) -> redis::RedisResult<T>
     where
         F: Fn(ConnectionManager) -> Fut,
         Fut: Future<Output = redis::RedisResult<T>>,
     {
         match op(self.valkey.clone()).await {
-            Err(e) if e.is_connection_dropped() || e.is_io_error() => op(self.valkey.clone()).await,
+            Err(e) if !e.is_timeout() && (e.is_connection_dropped() || e.is_io_error()) => {
+                op(self.valkey.clone()).await
+            }
             result => result,
         }
     }

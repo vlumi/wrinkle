@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     tokio::select! {
-        () = shutdown_signal() => {}
+        result = shutdown_signal() => result?,
         result = &mut server => {
             result??;
             return Ok(());
@@ -127,11 +127,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn shutdown_signal() {
-    let mut terminate = signal(SignalKind::terminate()).expect("SIGTERM handler");
+async fn shutdown_signal() -> std::io::Result<()> {
+    let mut terminate = signal(SignalKind::terminate())?;
     tokio::select! {
-        _ = tokio::signal::ctrl_c() => {}
-        _ = terminate.recv() => {}
+        result = tokio::signal::ctrl_c() => result,
+        _ = terminate.recv() => Ok(()),
     }
 }
 
@@ -200,13 +200,16 @@ fn env(key: &str, fallback: &str) -> String {
         .unwrap_or_else(|| fallback.to_string())
 }
 
+/// The host name as the C library reports it, like Go's `os.Hostname`.
 fn hostname() -> String {
-    std::process::Command::new("hostname")
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "localhost".to_string())
+    let mut name = [0u8; 256];
+    // SAFETY: gethostname writes at most name.len() bytes into name.
+    let rc = unsafe { libc::gethostname(name.as_mut_ptr().cast(), name.len()) };
+    let end = name.iter().position(|&b| b == 0).unwrap_or(name.len());
+    match rc {
+        0 if end > 0 => String::from_utf8_lossy(&name[..end]).into_owned(),
+        _ => "localhost".to_string(),
+    }
 }
 
 #[cfg(test)]

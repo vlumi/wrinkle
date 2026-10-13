@@ -28,13 +28,13 @@ There are no roles to choose: the binary is always a gateway. [main.rs](src/main
 | `WRINKLE_LISTEN` | `:8080` | `host:port` to listen on; `:port` means every interface |
 | `WRINKLE_SERVICES` | `localhost:9000` | The services RPC, or the services balancer |
 | `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
-| `WRINKLE_NODE` | output of `hostname` | The node part of the instance id |
+| `WRINKLE_NODE` | the host name | The node part of the instance id |
 | `RUST_LOG` | `info` | The `tracing` filter, used as given when set |
 
 Startup, in order:
 
 1. One tonic `Channel` to the services, made with `connect_lazy`: it connects on the first request and again after losing the connection, each attempt bounded at 3 seconds, so the gateway starts and serves while the services are not up yet, and requests answer `UNAVAILABLE` until they are. Every request clones the channel, which multiplexes them over one HTTP/2 connection.
-2. A presence handle on a Valkey `ConnectionManager`, which writes the instance key once before going on, so Valkey has to be up at startup (see Presence below).
+2. A presence handle on a Valkey `ConnectionManager`, which writes the instance key once before going on, so Valkey has to be up at startup (see Presence below). Every command on it, and every connection attempt, is bounded at 5 seconds, like the pub/sub connection's.
 3. A push handle and its task, which makes the dedicated pub/sub connection itself.
 4. Two background tasks: the keepalive sweep and the presence heartbeat.
 5. The axum server, with graceful shutdown wired to the drain.
@@ -70,7 +70,7 @@ The pieces, all in [conn.rs](src/conn.rs):
 
 - `Link` is what other tasks hold: the sender of the bounded outbound queue (32 entries), a one-shot close signal, the connection id and when it last received anything. `Conns` keeps every `Link` by id for the sweep and the drain, and counts requests in flight across the gateway.
 - The read loop is a `select!` over the next WebSocket message, the Connect deadline and the writer ending. Any message refreshes the last-seen time. Binary messages are decoded as `Frame`; text closes with 1003, a frame over the limit (tungstenite's capacity error) with 1009, a malformed frame or a server-side frame kind with 1008.
-- The writer task drains the queue to the socket. When the close signal fires it stops writing and sends the close frame, giving it 3 seconds; the first close wins, later ones are ignored. A failed socket write ends it with a 1011 close frame, given the same 3 seconds. When the read loop ends without a close, `Link::finish` drops the signal so the writer stops without a frame.
+- The writer task drains the queue to the socket. When the close signal fires it stops writing and sends the close frame, giving it 3 seconds; the first close wins, later ones are ignored. A failed socket write ends it with a 1011 close frame, given the same 3 seconds. A close frame from the device signals a 1000 close the same way, which makes the writer flush the echo tungstenite has queued, completing the handshake. When the read loop ends without a close, `Link::finish` drops the signal so the writer stops without a frame.
 - Each request runs in its own `tokio::spawn`ed task. `dispatch` applies the state rules (before Connect, only Register, SignIn and Connect are forwarded, with an empty user id, and anything else is `UNAUTHENTICATED` "connect first"; after it, Register, SignIn and Connect are `FAILED_PRECONDITION` "already connected"), then calls `BackendService.Call` with the bound user and device. A Connect response without a 16-byte user id answers `INTERNAL`. A call taking over 10 seconds, or failing, answers `UNAVAILABLE` with the request's id. A successful Connect response binds the connection and is sent once the user's push channel is subscribed; if another Connect bound it first, this one gets `FAILED_PRECONDITION` instead, and if the subscription is not in place within 5 seconds, the binding is undone and the Connect answers `UNAVAILABLE`, and may be retried.
 - Responses wait for room in the queue, which holds back the device's own requests; pushes do not wait (see Push delivery).
 
@@ -96,11 +96,11 @@ If the pub/sub connection drops (the message stream ends, or a command fails or 
 
 ### Presence
 
-[presence.rs](src/presence.rs) keeps the hash `presence:<hex of the user id>`, device id to instance id. The instance id is `<node>/<16 random hex digits>`, so a restarted process is a new instance. The key `gateway:<instance>` is set with a 90 second expiry at startup and refreshed every 30 seconds; the services treat entries whose instance key is gone as not connected. A bound connection sets its field; on detach a Lua script deletes the field only if it still names this instance, so a device that has reconnected elsewhere keeps its entry. The `ConnectionManager` reconnects after a dropped connection; a write that fails on one is retried once, and a write that still fails is logged as a warning. Binding and the end of a connection can race; `Binding` (`Pending`, `Bound`, `Gone`) makes sure that whichever comes second undoes the push registration and the presence entry.
+[presence.rs](src/presence.rs) keeps the hash `presence:<hex of the user id>`, device id to instance id. The instance id is `<node>/<16 random hex digits>`, so a restarted process is a new instance. The key `gateway:<instance>` is set with a 90 second expiry at startup and refreshed every 30 seconds; the services treat entries whose instance key is gone as not connected. A bound connection sets its field; on detach a Lua script deletes the field only if it still names this instance, so a device that has reconnected elsewhere keeps its entry. The `ConnectionManager` reconnects after a dropped connection; a write that fails on one is retried once, a write that times out (5 seconds) is not, and a write that still fails is logged as a warning, so a stalled Valkey delays a Connect by at most 5 seconds. Binding and the end of a connection can race; `Binding` (`Pending`, `Bound`, `Gone`) makes sure that whichever comes second undoes the push registration and the presence entry.
 
 ### Drain
 
-On SIGTERM or SIGINT [main.rs](src/main.rs) stops the sweep and the heartbeat, then `Conns::drain` marks the gateway draining (health check and upgrades answer 503) and closes every connection with 1001. It waits up to 5 seconds for every connection to detach and every request in flight to finish, deletes the instance key, and gives the HTTP server 3 seconds to stop.
+On SIGTERM or SIGINT [main.rs](src/main.rs) stops the sweep and the heartbeat, then `Conns::drain` marks the gateway draining (health check and upgrades answer 503) and closes every connection with 1001. It waits up to 5 seconds for every connection to detach and every request in flight to finish, deletes the instance key, and gives the HTTP server 3 seconds to stop. A request still running when the grace ends is not cancelled: its task lives on until the services answer or the 10 second call timeout passes, and its response is dropped since the connection is gone; this is intended, so the drain need not track those tasks.
 
 ## Metrics and debug endpoints
 

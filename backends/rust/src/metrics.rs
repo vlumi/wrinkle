@@ -36,8 +36,8 @@ impl Histogram {
 pub struct Metrics {
     connections: AtomicI64,
     pushed: AtomicU64,
-    requests: Mutex<BTreeMap<(String, String), u64>>,
-    durations: Mutex<BTreeMap<String, Histogram>>,
+    requests: Mutex<BTreeMap<(&'static str, &'static str), u64>>,
+    durations: Mutex<BTreeMap<&'static str, Histogram>>,
 }
 
 impl Metrics {
@@ -49,17 +49,17 @@ impl Metrics {
         self.pushed.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn request(&self, kind: &str, code: &str, duration: Duration) {
+    pub fn request(&self, kind: &'static str, code: &'static str, duration: Duration) {
         *self
             .requests
             .lock()
             .unwrap()
-            .entry((kind.to_string(), code.to_string()))
+            .entry((kind, code))
             .or_default() += 1;
         self.durations
             .lock()
             .unwrap()
-            .entry(kind.to_string())
+            .entry(kind)
             .or_default()
             .observe(duration.as_secs_f64());
     }
