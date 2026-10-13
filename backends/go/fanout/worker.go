@@ -60,12 +60,26 @@ type Worker struct {
 	listed        listedCache
 }
 
-// New makes a worker that delivers up to concurrency conversations or users
-// at a time, into the user keyspace db.
-func New(ctx context.Context, brokers []string, group string, concurrency int, db, conversations *sql.DB, pub Publisher, notifier Notifier, log *slog.Logger) (*Worker, error) {
+// Config is what a worker needs: the brokers and consumer group, the user
+// keyspace it delivers into and the conversation keyspace it reads groups
+// from, where to publish and, optionally, whom to notify.
+type Config struct {
+	Brokers []string
+	Group   string
+	// Concurrency is how many conversations or users are delivered at a time.
+	Concurrency   int
+	DB            *sql.DB
+	Conversations *sql.DB
+	Publisher     Publisher
+	Notifier      Notifier
+	Log           *slog.Logger
+}
+
+// New connects the worker to the brokers.
+func New(ctx context.Context, cfg Config) (*Worker, error) {
 	client, err := kgo.NewClient(
-		kgo.SeedBrokers(brokers...),
-		kgo.ConsumerGroup(group),
+		kgo.SeedBrokers(cfg.Brokers...),
+		kgo.ConsumerGroup(cfg.Group),
 		kgo.ConsumeTopics(Topics...),
 		kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()),
 		kgo.DisableAutoCommit(),
@@ -80,9 +94,12 @@ func New(ctx context.Context, brokers []string, group string, concurrency int, d
 	}
 	if err := client.Ping(ctx); err != nil {
 		client.Close()
-		return nil, fmt.Errorf("kafka at %v: %w", brokers, err)
+		return nil, fmt.Errorf("kafka at %v: %w", cfg.Brokers, err)
 	}
-	return &Worker{db: db, conversations: conversations, kafka: client, pub: pub, notifier: notifier, log: log, concurrency: max(concurrency, 1)}, nil
+	return &Worker{
+		db: cfg.DB, conversations: cfg.Conversations, kafka: client, pub: cfg.Publisher, notifier: cfg.Notifier,
+		log: cfg.Log, concurrency: max(cfg.Concurrency, 1),
+	}, nil
 }
 
 // Close leaves the consumer group. Polling blocks rebalances until the
@@ -109,7 +126,11 @@ func (w *Worker) Run(ctx context.Context) error {
 		}
 		w.kafka.AllowRebalance()
 		if !ok {
-			time.Sleep(time.Second)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
 			continue
 		}
 		if err := w.kafka.CommitUncommittedOffsets(ctx); err != nil && ctx.Err() == nil {

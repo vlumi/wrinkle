@@ -221,7 +221,14 @@ func (s *Subscription) Receive(ctx context.Context, timeout time.Duration) (Noti
 	return Notice{Kind: Other}, nil
 }
 
-func (s *Subscription) Close() error { return s.ps.Close() }
+// Close ends the subscription; one never opened, as tests make, has nothing
+// to close.
+func (s *Subscription) Close() error {
+	if s.ps == nil {
+		return nil
+	}
+	return s.ps.Close()
+}
 
 func channels(userIDs []ids.UUID) []string {
 	list := make([]string, len(userIDs))

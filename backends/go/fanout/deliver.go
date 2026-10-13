@@ -8,40 +8,44 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	backendv1 "github.com/vlumi/wrinkle/proto/go/wrinkle/backend/v1"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
-
-// MySQL error for a unique key violation.
-const duplicateKey = 1062
 
 // listUpdate changes the user's conversation list in the transaction that
 // appends the event.
 type listUpdate func(ctx context.Context, tx *sql.Tx, event *pb.Event) error
 
+// listEntry is a recipient's place in the conversation list for the row
+// being delivered.
+type listEntry struct {
+	userID ids.UUID
+	o      *outboxRow
+	// peerID is the other user of a direct conversation; peer is their
+	// profile when the entry may be new, nil otherwise.
+	peerID ids.UUID
+	peer   *pb.User
+}
+
 // deliver appends a conversation's event to one recipient's log, then
 // pushes it.
 func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) error {
-	var peerID ids.UUID
-	var peer *pb.User
+	entry := listEntry{userID: userID, o: o}
 	if o.direct() {
-		peerID = o.peerOf(userID)
+		entry.peerID = o.peerOf(userID)
 		if o.event.GetMessage() != nil {
 			var err error
-			if peer, err = w.peerForNewEntry(ctx, userID, o.conversationID, peerID); err != nil {
+			if entry.peer, err = w.peerForNewEntry(ctx, userID, o.conversationID, entry.peerID); err != nil {
 				return err
 			}
 		}
 	}
-	update := func(ctx context.Context, tx *sql.Tx, event *pb.Event) error {
-		return updateConversationList(ctx, tx, userID, peerID, peer, o, event)
-	}
-	event, err := w.append(ctx, userID, o.conversationID, o.outboxID, o.event, update)
+	event, err := w.append(ctx, userID, o.conversationID, o.outboxID, o.event, entry.update)
 	if err != nil || event == nil {
 		return err
 	}
@@ -161,8 +165,7 @@ func appendEvent(ctx context.Context, tx *sql.Tx, userID, sourceID ids.UUID, out
 		INSERT INTO user_event (user_id, position, source_id, outbox_id, payload, occurred_at)
 		VALUES (?, ?, ?, ?, ?, ?)`,
 		userID, event.Cursor, sourceID, outboxID, payload, event.GetOccurredAt().AsTime()); err != nil {
-		var mysqlErr *mysql.MySQLError
-		if errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey {
+		if vtdb.IsDuplicate(err) {
 			return false, nil
 		}
 		return false, err
@@ -173,14 +176,14 @@ func appendEvent(ctx context.Context, tx *sql.Tx, userID, sourceID ids.UUID, out
 	return true, nil
 }
 
-func updateConversationList(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, peer *pb.User, o *outboxRow, event *pb.Event) error {
+func (e listEntry) update(ctx context.Context, tx *sql.Tx, event *pb.Event) error {
 	switch body := event.GetBody().(type) {
 	case *pb.Event_Message:
-		return recordMessage(ctx, tx, userID, peerID, peer, o, body.Message.GetMessage(), event.GetOccurredAt().AsTime())
+		return e.recordMessage(ctx, tx, body.Message.GetMessage(), event.GetOccurredAt().AsTime())
 	case *pb.Event_Read:
-		return recordRead(ctx, tx, userID, o, body.Read)
+		return e.recordRead(ctx, tx, body.Read)
 	case *pb.Event_MessageDeleted:
-		return recordDeletion(ctx, tx, userID, o, body.MessageDeleted)
+		return e.recordDeletion(ctx, tx, body.MessageDeleted)
 	}
 	return nil
 }
@@ -227,14 +230,15 @@ func membership(userID ids.UUID, msg *pb.Message) (member, admin flag) {
 // The sender's own read position moves to the message. A new direct entry
 // takes the peer's profile; an existing one keeps what profile changes put
 // there.
-func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, peer *pb.User, o *outboxRow, msg *pb.Message, occurredAt time.Time) error {
+func (e listEntry) recordMessage(ctx context.Context, tx *sql.Tx, msg *pb.Message, occurredAt time.Time) error {
+	userID, peer, o := e.userID, e.peer, e.o
 	var ownSeq uint64
 	if bytes.Equal(msg.GetSenderUserId(), userID[:]) {
 		ownSeq = msg.GetSeq()
 	}
 	var peerColumn any
 	if o.direct() {
-		peerColumn = peerID
+		peerColumn = e.peerID
 	}
 	body, err := proto.Marshal(&pb.Message{Content: msg.GetContent(), BlobIds: msg.GetBlobIds()})
 	if err != nil {
@@ -261,7 +265,7 @@ func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, pee
 			last_sent_at = IF(? >= last_seq, ?, last_sent_at),
 			read_seq = GREATEST(read_seq, ?),
 			updated_at = GREATEST(updated_at, ?)`,
-		userID, o.conversationID, o.conversationKind, peerColumn, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(),
+		userID, o.conversationID, o.conversationKind, peerColumn, peer.GetName(), peer.GetIcon(), vtdb.NullBytes(peer.GetAvatar()), peer.GetDeleted(),
 		o.topic, o.memberCount, !member.set || member.value, admin.value, seq,
 		msg.GetSenderUserId(), msg.GetClientMessageId(), body, msg.GetSentAt().AsTime(),
 		ownSeq, occurredAt,
@@ -281,18 +285,18 @@ func recordMessage(ctx context.Context, tx *sql.Tx, userID, peerID ids.UUID, pee
 
 // recordRead moves the user's own read position or, in a direct
 // conversation, the peer's, whichever the event is about.
-func recordRead(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxRow, read *pb.ReadEvent) error {
+func (e listEntry) recordRead(ctx context.Context, tx *sql.Tx, read *pb.ReadEvent) error {
 	column := "peer_read_seq"
 	switch {
-	case bytes.Equal(read.GetUserId(), userID[:]):
+	case bytes.Equal(read.GetUserId(), e.userID[:]):
 		column = "read_seq"
-	case !o.direct():
+	case !e.o.direct():
 		return nil
 	}
 	_, err := tx.ExecContext(ctx, `
 		UPDATE user_conversation SET `+column+` = GREATEST(`+column+`, ?)
 		WHERE user_id = ? AND conversation_id = ?`,
-		read.GetSeq(), userID, o.conversationID)
+		read.GetSeq(), e.userID, e.o.conversationID)
 	return err
 }
 
@@ -300,7 +304,8 @@ func recordRead(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxRow, 
 // user's log, so that a sync from before it never returns the content, and
 // from the list entry when it is the last message, keeping the entry's
 // place in the list.
-func recordDeletion(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxRow, deleted *pb.MessageDeletedEvent) error {
+func (e listEntry) recordDeletion(ctx context.Context, tx *sql.Tx, deleted *pb.MessageDeletedEvent) error {
+	userID, o := e.userID, e.o
 	var position uint64
 	var payload []byte
 	err := tx.QueryRowContext(ctx, `
@@ -337,12 +342,4 @@ func recordDeletion(ctx context.Context, tx *sql.Tx, userID ids.UUID, o *outboxR
 		WHERE user_id = ? AND conversation_id = ? AND last_seq = ?`,
 		body, userID, o.conversationID, deleted.GetSeq())
 	return err
-}
-
-// nullBytes stores an empty id as NULL.
-func nullBytes(b []byte) any {
-	if len(b) == 0 {
-		return nil
-	}
-	return b
 }

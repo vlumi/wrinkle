@@ -10,6 +10,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -73,7 +74,7 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 	if msg.GetDeletedAt() != nil {
 		return tx.Commit()
 	}
-	now := s.now()
+	now := vtdb.Now()
 	deletedAt := timestamppb.New(now)
 	if body, err = encodeBody(&pb.Message{DeletedAt: deletedAt}); err != nil {
 		return err
@@ -98,8 +99,11 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 			ConversationId: conversationID.Bytes(), Seq: seq, DeletedAt: deletedAt,
 		}},
 	}
-	target := sql.Null[uint64]{V: outboxID, Valid: true}
-	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), recipients, st, "message_deleted", target, event, now); err != nil {
+	row := outboxRow{
+		conversationID: conversationID, outboxID: ids.Random(), recipients: recipients, st: st, kind: "message_deleted",
+		target: sql.Null[uint64]{V: outboxID, Valid: true}, event: event, at: now,
+	}
+	if err := row.insert(ctx, tx); err != nil {
 		return err
 	}
 	if err := tx.Commit(); err != nil {

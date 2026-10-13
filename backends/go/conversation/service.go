@@ -13,11 +13,11 @@ import (
 	"slices"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -31,6 +31,7 @@ const (
 	// readSendersWindow bounds the messages a group read event looks at
 	// for the senders to tell.
 	readSendersWindow = 1000
+	releaseTimeout    = 5 * time.Second
 )
 
 // Profiles reads users' current profiles from the user keyspace, for the
@@ -51,11 +52,10 @@ type Service struct {
 	profiles    Profiles
 	keys        DeviceKeys
 	attachments Attachments
-	now         func() time.Time
 }
 
 func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments) *Service {
-	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments, now: func() time.Time { return time.Now().UTC() }}
+	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments}
 }
 
 // Open finds or creates the direct conversation between two users, user_a
@@ -70,9 +70,9 @@ func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, er
 		conversationID = ids.New()
 		_, err := s.db.ExecContext(ctx, `
 			INSERT INTO conversation_pair (user_a, user_b, conversation_id, created_at) VALUES (?, ?, ?, ?)`,
-			userA, userB, conversationID, s.now())
+			userA, userB, conversationID, vtdb.Now())
 		if err != nil {
-			if !isDuplicate(err) {
+			if !vtdb.IsDuplicate(err) {
 				return conversationID, err
 			}
 			if conversationID, found, err = s.pair(ctx, userA, userB); err != nil {
@@ -83,7 +83,7 @@ func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, er
 			}
 		}
 	}
-	now := s.now()
+	now := vtdb.Now()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT IGNORE INTO conversation (conversation_id, kind, topic, members, last_seq, created_at)
 		VALUES (?, ?, '', ?, 0, ?)`,
@@ -108,21 +108,14 @@ func (s *Service) pair(ctx context.Context, userA, userB ids.UUID) (ids.UUID, bo
 	return conversationID, err == nil, err
 }
 
-// MySQL error for a unique key violation.
-const duplicateKey = 1062
-
-func isDuplicate(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	return errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey
-}
-
 // Send stores a sealed message, assigning the next sequence number.
 // Resending with the same client message id returns the message stored the
 // first time; otherwise the content must be sealed with the current key
 // epoch, and none is current while the conversation needs a new one. The
-// attachments' uploads are taken into use first; a send that fails after
-// that leaves them used. An upload goes with one message only.
-func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, sealed *pb.Sealed, blobIDs [][]byte) (*pb.Message, error) {
+// attachments' uploads are taken into use first, in the user keyspace, and
+// released again if the send then fails. An upload goes with one message
+// only.
+func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, sealed *pb.Sealed, blobIDs [][]byte) (msg *pb.Message, err error) {
 	if clientMessageID == "" || len(clientMessageID) > maxClientMessageID {
 		return nil, apierror.InvalidArgument("client_message_id must be 1 to %d bytes", maxClientMessageID)
 	}
@@ -137,8 +130,16 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 		return nil, err
 	}
 	if len(blobs) > 0 {
-		if err := s.useAttachments(ctx, userID, conversationID, clientMessageID, blobs); err != nil {
+		used, err := s.useAttachments(ctx, userID, conversationID, clientMessageID, blobs)
+		if err != nil {
 			return nil, err
+		}
+		if used {
+			defer func() {
+				if err != nil {
+					s.releaseAttachments(ctx, userID, blobs)
+				}
+			}()
 		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -151,7 +152,7 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	if err != nil {
 		return nil, err
 	}
-	msg := &pb.Message{
+	msg = &pb.Message{
 		ConversationId:  conversationID.Bytes(),
 		SenderUserId:    userID.Bytes(),
 		ClientMessageId: clientMessageID,
@@ -183,7 +184,11 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 		msg.BlobIds = append(msg.BlobIds, id.Bytes())
 	}
 	st.lastSeq++
-	if err := s.store(ctx, tx, conversationID, st, msg, st.members, false); err != nil {
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE conversation SET last_seq = ? WHERE conversation_id = ?`, st.lastSeq, conversationID); err != nil {
+		return nil, err
+	}
+	if err := storeMessage(ctx, tx, conversationID, st, msg, st.members); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -213,19 +218,32 @@ func parseBlobIDs(blobIDs [][]byte) ([]ids.UUID, error) {
 }
 
 // useAttachments takes the attachments' uploads into use, unless the
-// message is a resend of one already stored.
-func (s *Service) useAttachments(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, blobIDs []ids.UUID) error {
+// message is a resend of one already stored, and reports whether it did.
+func (s *Service) useAttachments(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, blobIDs []ids.UUID) (bool, error) {
 	var one int
 	err := s.db.QueryRowContext(ctx, `
 		SELECT 1 FROM message WHERE conversation_id = ? AND sender_user_id = ? AND client_message_id = ?`,
 		conversationID, userID, clientMessageID).Scan(&one)
 	if err == nil {
-		return nil
+		return false, nil
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
-		return err
+		return false, err
 	}
-	return s.attachments.UseAttachments(ctx, userID, blobIDs)
+	if err := s.attachments.UseAttachments(ctx, userID, blobIDs); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// releaseAttachments gives the uploads back after a failed send, on its own
+// deadline, since the send may have failed on the request's. A release
+// that fails leaves them used; the send's own error is what the device
+// hears.
+func (s *Service) releaseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	_ = s.attachments.ReleaseAttachments(ctx, userID, blobIDs)
 }
 
 // MarkRead moves the user's read position forward. Moving it backwards or
@@ -258,7 +276,7 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 	if current >= seq {
 		return nil
 	}
-	now := s.now()
+	now := vtdb.Now()
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO read_mark (conversation_id, user_id, seq, updated_at) VALUES (?, ?, ?, ?)
 		ON DUPLICATE KEY UPDATE seq = ?, updated_at = ?`,
@@ -277,7 +295,8 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 			ConversationId: conversationID.Bytes(), UserId: userID.Bytes(), Seq: seq,
 		}},
 	}
-	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), recipients, st, "read", sql.Null[uint64]{}, event, now); err != nil {
+	row := outboxRow{conversationID: conversationID, outboxID: ids.Random(), recipients: recipients, st: st, kind: "read", event: event, at: now}
+	if err := row.insert(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -363,6 +382,7 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+	// Closed before the next query, which frees the connection for it.
 	rows.Close()
 	if err := addReactions(ctx, s.db, conversationID, messages); err != nil {
 		return nil, err

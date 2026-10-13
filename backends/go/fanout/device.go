@@ -2,6 +2,7 @@ package fanout
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	backendv1 "github.com/vlumi/wrinkle/proto/go/wrinkle/backend/v1"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -75,6 +77,13 @@ func (w *Worker) deliverDevice(ctx context.Context, o *userOutboxRow) error {
 	}
 }
 
+// listedEntry is a user_conversation row of a direct conversation, with
+// the peer, or of a group, without one.
+type listedEntry struct {
+	conversationID ids.UUID
+	peer           []byte
+}
+
 // contacts returns the users of a page of the user's conversations after
 // the given one, in id order: direct partners, and the current members of
 // groups the user is in. last is the page's last conversation, zero after
@@ -88,28 +97,20 @@ func (w *Worker) contacts(ctx context.Context, userID, after ids.UUID) (users []
 	if err != nil {
 		return nil, last, err
 	}
-	var groups []any
-	n := 0
-	for rows.Next() {
-		var conversationID ids.UUID
-		var peer []byte
-		if err := rows.Scan(&conversationID, &peer); err != nil {
-			rows.Close()
-			return nil, last, err
-		}
-		n++
-		last = conversationID
-		if id, ok := ids.Parse(peer); ok {
-			users = append(users, id)
-		} else {
-			groups = append(groups, conversationID)
-		}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	entries, err := vtdb.Collect(rows, func(rows *sql.Rows) (e listedEntry, err error) { return e, rows.Scan(&e.conversationID, &e.peer) })
+	if err != nil {
 		return nil, last, err
 	}
-	if n < profilePage {
+	var groups []any
+	for _, e := range entries {
+		last = e.conversationID
+		if id, ok := ids.Parse(e.peer); ok {
+			users = append(users, id)
+		} else {
+			groups = append(groups, e.conversationID)
+		}
+	}
+	if len(entries) < profilePage {
 		last = ids.UUID{}
 	}
 	if len(groups) == 0 {

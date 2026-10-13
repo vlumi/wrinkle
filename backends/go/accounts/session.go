@@ -8,6 +8,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -54,7 +55,7 @@ func (s *Service) Connect(ctx context.Context, req *pb.ConnectRequest) (*pb.Conn
 	resp.User = user
 	if _, err := s.db.ExecContext(ctx, `
 		UPDATE device SET last_seen_at = ? WHERE user_id = ? AND device_id = ?`,
-		s.now(), token.userID, token.deviceID); err != nil {
+		vtdb.Now(), token.userID, token.deviceID); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -101,7 +102,7 @@ func (s *Service) ChangePassword(ctx context.Context, userID ids.UUID, deviceID 
 		return err
 	}
 	defer tx.Rollback()
-	o, err := lockOutbox(ctx, tx, userID, s.now())
+	o, err := lockOutbox(ctx, tx, userID, vtdb.Now())
 	if err != nil {
 		return err
 	}

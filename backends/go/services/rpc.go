@@ -52,6 +52,10 @@ func (s *Server) Ack(ctx context.Context, req *backendv1.AckRequest) (*backendv1
 	return &backendv1.AckResponse{}, nil
 }
 
+// stopGrace is how long a stopping server lets the calls in flight finish
+// before dropping them, within the process's shutdown budget.
+const stopGrace = 5 * time.Second
+
 // Serve listens until the context ends.
 func (s *Server) Serve(ctx context.Context, addr string) error {
 	lis, err := net.Listen("tcp", addr)
@@ -65,7 +69,16 @@ func (s *Server) Serve(ctx context.Context, addr string) error {
 	backendv1.RegisterBackendServiceServer(srv, s)
 	go func() {
 		<-ctx.Done()
-		srv.GracefulStop()
+		stopped := make(chan struct{})
+		go func() {
+			srv.GracefulStop()
+			close(stopped)
+		}()
+		select {
+		case <-stopped:
+		case <-time.After(stopGrace):
+			srv.Stop()
+		}
 	}()
 	return srv.Serve(lis)
 }

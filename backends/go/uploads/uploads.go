@@ -14,6 +14,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/blobs"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -37,11 +38,10 @@ var limits = map[pb.BlobPurpose]limit{
 type Service struct {
 	db    *sql.DB
 	blobs *blobs.Store
-	now   func() time.Time
 }
 
 func New(db *sql.DB, blobs *blobs.Store) *Service {
-	return &Service{db: db, blobs: blobs, now: func() time.Time { return time.Now().UTC() }}
+	return &Service{db: db, blobs: blobs}
 }
 
 // CreateUpload records an upload slot and returns the signed PUT for it.
@@ -61,7 +61,7 @@ func (s *Service) CreateUpload(ctx context.Context, userID ids.UUID, req *pb.Cre
 		return nil, apierror.InvalidArgument("size must be 1 to %d bytes for %s", l.maxSize, l.purpose)
 	}
 	blobID := ids.New()
-	now := s.now()
+	now := vtdb.Now()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO upload (user_id, blob_id, purpose, media_type, size, used, created_at)
 		VALUES (?, ?, ?, ?, ?, FALSE, ?)`,
@@ -136,13 +136,9 @@ func (s *Service) UseAttachments(ctx context.Context, userID ids.UUID, blobIDs [
 	return tx.Commit()
 }
 
-type querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}
-
 // attachmentUploads checks that the query finds the given number of
 // attachment uploads, and tells whether any of them is used.
-func attachmentUploads(ctx context.Context, q querier, query string, args []any, want int) (bool, error) {
+func attachmentUploads(ctx context.Context, q vtdb.Querier, query string, args []any, want int) (bool, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return false, err

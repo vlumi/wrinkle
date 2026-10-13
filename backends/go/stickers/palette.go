@@ -11,6 +11,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -21,17 +22,8 @@ func (s *Service) Palette(ctx context.Context, userID ids.UUID) ([]*pb.Sticker, 
 	if err != nil {
 		return nil, err
 	}
-	var order []ids.UUID
-	for rows.Next() {
-		var id ids.UUID
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		order = append(order, id)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	order, err := vtdb.Collect(rows, func(rows *sql.Rows) (id ids.UUID, err error) { return id, rows.Scan(&id) })
+	if err != nil {
 		return nil, err
 	}
 	return s.load(ctx, order)
@@ -136,6 +128,12 @@ func (s *Service) Move(ctx context.Context, userID ids.UUID, sticker, before []b
 }
 
 // palette is a user's palette as read in a change's transaction.
+// savedSticker is a palette_sticker row.
+type savedSticker struct {
+	id       ids.UUID
+	position int
+}
+
 type palette struct {
 	tx        *sql.Tx
 	now       time.Time
@@ -162,25 +160,19 @@ func (s *Service) change(ctx context.Context, userID ids.UUID, edit func(*palett
 	if deletedAt.Valid {
 		return apierror.Unauthenticated("the account is deleted")
 	}
-	p := &palette{tx: tx, now: s.now()}
+	p := &palette{tx: tx, now: vtdb.Now()}
 	rows, err := tx.QueryContext(ctx, `
 		SELECT sticker_id, position FROM palette_sticker WHERE user_id = ? ORDER BY position`, userID)
 	if err != nil {
 		return err
 	}
-	for rows.Next() {
-		var id ids.UUID
-		var position int
-		if err := rows.Scan(&id, &position); err != nil {
-			rows.Close()
-			return err
-		}
-		p.order = append(p.order, id)
-		p.positions = append(p.positions, position)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	saved, err := vtdb.Collect(rows, func(rows *sql.Rows) (e savedSticker, err error) { return e, rows.Scan(&e.id, &e.position) })
+	if err != nil {
 		return err
+	}
+	for _, e := range saved {
+		p.order = append(p.order, e.id)
+		p.positions = append(p.positions, e.position)
 	}
 	changed, err := edit(p)
 	if err != nil || !changed {

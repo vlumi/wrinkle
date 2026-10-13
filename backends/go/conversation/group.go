@@ -14,6 +14,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/label"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -79,7 +80,7 @@ func (s *Service) CreateGroup(ctx context.Context, creatorID ids.UUID, topic, cl
 	if apierror.Code(err) != pb.ErrorCode_ERROR_CODE_NOT_FOUND {
 		return nil, err
 	}
-	now := s.now()
+	now := vtdb.Now()
 	st := state{kind: kindGroup, topic: topic, members: append([]ids.UUID{creatorID}, invitees...), lastSeq: 1}
 	st.members = slices.SortedFunc(slices.Values(st.members), compareIDs)
 	if _, err := tx.ExecContext(ctx, `
@@ -100,7 +101,7 @@ func (s *Service) CreateGroup(ctx context.Context, creatorID ids.UUID, topic, cl
 		return nil, err
 	}
 	notice := &pb.Notice{Kind: &pb.Notice_GroupCreated{GroupCreated: &pb.GroupCreated{Topic: topic, Members: profiles}}}
-	if err := s.notice(ctx, tx, conversationID, st, creatorID, notice, st.members); err != nil {
+	if err := storeNotice(ctx, tx, conversationID, st, creatorID, notice, st.members); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -129,11 +130,11 @@ func (s *Service) claimGroup(ctx context.Context, creatorID ids.UUID, clientGrou
 	id = ids.New()
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO group_claim (creator_user_id, client_group_id, conversation_id, created_at) VALUES (?, ?, ?, ?)`,
-		creatorID, clientGroupID, id, s.now())
+		creatorID, clientGroupID, id, vtdb.Now())
 	if err == nil {
 		return id, nil
 	}
-	if !isDuplicate(err) {
+	if !vtdb.IsDuplicate(err) {
 		return id, err
 	}
 	if id, found, err = find(); err == nil && !found {
@@ -171,7 +172,7 @@ func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUI
 		return apierror.FailedPrecondition("a group has at most %d members", MaxMembers)
 	}
 	st.lastSeq++
-	now := s.now()
+	now := vtdb.Now()
 	snapshots := make([]*pb.User, 0, len(added))
 	for _, id := range added {
 		if _, err := tx.ExecContext(ctx, `
@@ -186,7 +187,7 @@ func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUI
 	st.members = slices.SortedFunc(slices.Values(append(st.members, added...)), compareIDs)
 	st.membershipChanged()
 	notice := &pb.Notice{Kind: &pb.Notice_MembersAdded{MembersAdded: &pb.MembersAdded{Users: snapshots}}}
-	if err := s.notice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
+	if err := storeNotice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -224,7 +225,7 @@ func (s *Service) RemoveMember(ctx context.Context, userID, conversationID, targ
 	st.members = without(st.members, targetID)
 	st.membershipChanged()
 	notice := &pb.Notice{Kind: &pb.Notice_MemberRemoved{MemberRemoved: &pb.MemberRemoved{User: profiles[targetID]}}}
-	if err := s.notice(ctx, tx, conversationID, st, userID, notice, before); err != nil {
+	if err := storeNotice(ctx, tx, conversationID, st, userID, notice, before); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -260,7 +261,7 @@ func (s *Service) Leave(ctx context.Context, userID, conversationID ids.UUID) er
 		}
 	}
 	notice := &pb.Notice{Kind: &pb.Notice_MemberLeft{MemberLeft: left}}
-	if err := s.notice(ctx, tx, conversationID, st, userID, notice, before); err != nil {
+	if err := storeNotice(ctx, tx, conversationID, st, userID, notice, before); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -317,7 +318,7 @@ func (s *Service) SetTopic(ctx context.Context, userID, conversationID ids.UUID,
 	st.topic = topic
 	st.lastSeq++
 	notice := &pb.Notice{Kind: &pb.Notice_TopicChanged{TopicChanged: &pb.TopicChanged{Topic: topic}}}
-	if err := s.notice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
+	if err := storeNotice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -370,7 +371,7 @@ func (s *Service) SetAdmin(ctx context.Context, userID, conversationID, targetID
 	}
 	st.lastSeq++
 	notice := &pb.Notice{Kind: &pb.Notice_AdminChanged{AdminChanged: &pb.AdminChanged{User: profiles[targetID], Admin: admin}}}
-	if err := s.notice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
+	if err := storeNotice(ctx, tx, conversationID, st, userID, notice, st.members); err != nil {
 		return err
 	}
 	return tx.Commit()

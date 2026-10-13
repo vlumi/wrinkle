@@ -9,6 +9,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -59,7 +60,9 @@ func (s *Service) UpdateProfile(ctx context.Context, userID ids.UUID, req *pb.Up
 	if user.GetName() != oldName {
 		// The change is committed; a claim left behind is stale and is
 		// taken over by the next claimant.
-		_ = s.release(ctx, userID, oldName, user.GetName())
+		if err := s.release(ctx, userID, oldName, user.GetName()); err != nil {
+			s.log.Warn("releasing the old name failed", "user", userID, "err", err)
+		}
 	}
 	return user, nil
 }
@@ -89,7 +92,7 @@ func (s *Service) checkAvatar(ctx context.Context, userID ids.UUID, avatar []byt
 
 // avatarUpload checks that the user made an avatar upload slot for the
 // blob, optionally locking it against the sweeper.
-func avatarUpload(ctx context.Context, q queryer, userID, blobID ids.UUID, lock bool) error {
+func avatarUpload(ctx context.Context, q vtdb.RowQuerier, userID, blobID ids.UUID, lock bool) error {
 	query := `SELECT 1 FROM upload WHERE user_id = ? AND blob_id = ? AND purpose = 'avatar'`
 	if lock {
 		query += ` FOR UPDATE`
@@ -112,7 +115,7 @@ func (s *Service) storeProfile(ctx context.Context, userID ids.UUID, req *pb.Upd
 	defer tx.Rollback()
 
 	user := &pb.User{UserId: userID.Bytes()}
-	o := &outbox{tx: tx, userID: userID, now: s.now()}
+	o := &outbox{tx: tx, userID: userID, now: vtdb.Now()}
 	var deletedAt sql.NullTime
 	if err := tx.QueryRowContext(ctx, `
 		SELECT name, icon, avatar, deleted_at, last_outbox_id FROM user WHERE user_id = ? FOR UPDATE`,

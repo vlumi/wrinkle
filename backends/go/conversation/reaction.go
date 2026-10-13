@@ -13,6 +13,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -98,7 +99,7 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 		return nil
 	}
 	// The column keeps microseconds; the event carries the stored time.
-	now := s.now().Truncate(time.Microsecond)
+	now := vtdb.Now()
 	if sealed == nil {
 		_, err = tx.ExecContext(ctx, `
 			DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`,
@@ -119,20 +120,17 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 			ConversationId: conversationID.Bytes(), Seq: seq, UserId: userID.Bytes(), Sealed: sealed, UpdatedAt: updatedAt,
 		}},
 	}
-	if err := insertOutbox(ctx, tx, conversationID, ids.Random(), st.members, st, "reaction", sql.Null[uint64]{}, event, now); err != nil {
+	row := outboxRow{conversationID: conversationID, outboxID: ids.Random(), recipients: st.members, st: st, kind: "reaction", event: event, at: now}
+	if err := row.insert(ctx, tx); err != nil {
 		return err
 	}
 	return tx.Commit()
 }
 
-type queryer interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}
-
 // addReactions fills in the reactions of the messages, which are of one
 // conversation and sorted by seq, newest first, with one query over their
 // range.
-func addReactions(ctx context.Context, q queryer, conversationID ids.UUID, messages []*pb.Message) error {
+func addReactions(ctx context.Context, q vtdb.Querier, conversationID ids.UUID, messages []*pb.Message) error {
 	bySeq := make(map[uint64]*pb.Message, len(messages))
 	for _, msg := range messages {
 		if msg.GetDeletedAt() == nil && msg.GetNotice() == nil {

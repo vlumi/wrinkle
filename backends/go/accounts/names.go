@@ -5,21 +5,12 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/go-sql-driver/mysql"
-
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 )
 
-// MySQL error for a unique key violation.
-const duplicateKey = 1062
-
 const claimAttempts = 3
-
-func isDuplicate(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	return errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey
-}
 
 // A name claim in user_name is valid while its owner's row still has that
 // name. Names are compared by MySQL, under the claim table's collation,
@@ -54,11 +45,11 @@ func (s *Service) claim(ctx context.Context, name string, userID ids.UUID) error
 	for range claimAttempts {
 		_, err := s.db.ExecContext(ctx, `
 			INSERT INTO user_name (name, user_id, created_at) VALUES (?, ?, ?)`,
-			name, userID, s.now())
+			name, userID, vtdb.Now())
 		if err == nil {
 			return nil
 		}
-		if !isDuplicate(err) {
+		if !vtdb.IsDuplicate(err) {
 			return err
 		}
 		owner, found, err := s.claimOwner(ctx, name)

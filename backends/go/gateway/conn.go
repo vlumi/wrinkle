@@ -38,7 +38,9 @@ var frameEvent = (&pb.Frame{}).ProtoReflect().Descriptor().Fields().ByName("even
 type conn struct {
 	server *Server
 	ws     *websocket.Conn
-	log    *slog.Logger
+	// log gains the identity once connected, from the request goroutine,
+	// while the read loop and the registry log through it too.
+	log atomic.Pointer[slog.Logger]
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -67,15 +69,17 @@ func newConn(s *Server, remoteAddr string) *conn {
 	now := time.Now()
 	c := &conn{
 		server: s,
-		log:    s.log.With("remote", remoteAddr),
 		ctx:    ctx,
 		cancel: cancel,
 		out:    make(chan []byte, outboundQueue),
 		bucket: newTokenBucket(now),
 	}
+	c.log.Store(s.log.With("remote", remoteAddr))
 	c.lastSeen.Store(now.UnixNano())
 	return c
 }
+
+func (c *conn) logger() *slog.Logger { return c.log.Load() }
 
 func (c *conn) identity() (userID ids.UUID, deviceID uint64, ok bool) {
 	c.mu.Lock()
@@ -90,16 +94,30 @@ func (c *conn) idleSince() time.Time { return time.Unix(0, c.lastSeen.Load()) }
 // close starts the closing handshake with the code, once, without waiting
 // for it.
 func (c *conn) close(code websocket.StatusCode, reason string) {
-	c.mu.Lock()
-	closing := c.closing
-	c.closing = true
-	c.mu.Unlock()
-	if !closing {
+	if c.startClosing() {
 		if code == websocket.StatusTryAgainLater {
-			c.log.Warn("outbound queue full, closing")
+			c.logger().Warn("outbound queue full, closing")
 		}
 		go func() { _ = c.ws.Close(code, reason) }()
 	}
+}
+
+// fail is close for the read loop, which has nothing more to read and so
+// runs the handshake itself.
+func (c *conn) fail(code websocket.StatusCode, reason string) {
+	if c.startClosing() {
+		c.ws.Close(code, reason)
+	}
+}
+
+// startClosing marks the connection closing and reports whether the caller
+// is the first to.
+func (c *conn) startClosing() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	closing := c.closing
+	c.closing = true
+	return !closing
 }
 
 // serve runs the read loop until the connection ends.
@@ -120,19 +138,19 @@ func (c *conn) serve() {
 		typ, data, err := c.ws.Read(ctx)
 		if err != nil {
 			if status := websocket.CloseStatus(err); status == -1 && ctx.Err() == nil && !errors.Is(err, context.Canceled) {
-				c.log.Debug("read ended", "err", err)
+				c.logger().Debug("read ended", "err", err)
 			}
 			return
 		}
 		now := time.Now()
 		c.lastSeen.Store(now.UnixNano())
 		if typ != websocket.MessageBinary {
-			c.ws.Close(websocket.StatusUnsupportedData, "frames are binary protobuf")
+			c.fail(websocket.StatusUnsupportedData, "frames are binary protobuf")
 			return
 		}
 		frame := &pb.Frame{}
 		if err := proto.Unmarshal(data, frame); err != nil {
-			c.ws.Close(websocket.StatusPolicyViolation, "malformed frame")
+			c.fail(websocket.StatusPolicyViolation, "malformed frame")
 			return
 		}
 		allowed := c.bucket.take(now)
@@ -149,17 +167,22 @@ func (c *conn) serve() {
 			}
 		case *pb.Frame_Pong:
 		default:
-			c.ws.Close(websocket.StatusPolicyViolation, "unexpected frame")
+			c.fail(websocket.StatusPolicyViolation, "unexpected frame")
 			return
 		}
 	}
 }
 
 // startConnectTimer closes the connection if Connect has not completed
-// within connectTimeout.
+// within connectTimeout. A connection that has ended gets no timer: serve
+// stops the timer on its way out, and a request finishing later must not
+// start another.
 func (c *conn) startConnectTimer() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.ctx.Err() != nil {
+		return
+	}
 	c.connectTimer = time.AfterFunc(connectTimeout, func() {
 		if _, _, ok := c.identity(); !ok {
 			c.close(websocket.StatusPolicyViolation, "connect first")
@@ -275,7 +298,7 @@ func (c *conn) sendWaiting(data []byte) bool {
 func (c *conn) reply(frame *pb.Frame) {
 	data, err := proto.Marshal(frame)
 	if err != nil {
-		c.log.Error("marshal frame", "err", err)
+		c.logger().Error("marshal frame", "err", err)
 		return
 	}
 	c.send(data, true)
@@ -301,7 +324,7 @@ func (c *conn) writeAcks(userID ids.UUID, deviceID uint64) {
 		err := c.server.backend.Ack(ctx, userID, deviceID, cursor)
 		cancel()
 		if err != nil {
-			c.log.Warn("ack failed", "err", err)
+			c.logger().Warn("ack failed", "err", err)
 		}
 	}
 }
@@ -338,7 +361,7 @@ func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 		err = ctx.Err()
 	}
 	if err != nil {
-		c.log.Error("backend call failed", "request", req.GetId(), "err", err)
+		c.logger().Error("backend call failed", "request", req.GetId(), "err", err)
 		return apierror.Response(req.GetId(), apierror.Unavailable("services unavailable"))
 	}
 	if connectResp := resp.GetConnect(); connectResp != nil {
@@ -386,6 +409,6 @@ func (c *conn) identify(ctx context.Context, resp *pb.ConnectResponse) error {
 		c.server.detach(c)
 		return apierror.Unavailable("connection closed")
 	}
-	c.log = c.log.With("user", c.userID, "device", c.deviceID)
+	c.log.Store(c.logger().With("user", userID, "device", resp.GetDeviceId()))
 	return nil
 }

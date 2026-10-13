@@ -16,6 +16,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -70,12 +71,8 @@ const (
 	selectStateForUpdate = selectState + ` FOR UPDATE`
 )
 
-type rowQuerier interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
 // load reads the conversation's row with the given query.
-func load(ctx context.Context, q rowQuerier, query string, conversationID ids.UUID) (state, error) {
+func load(ctx context.Context, q vtdb.RowQuerier, query string, conversationID ids.UUID) (state, error) {
 	var st state
 	var members []byte
 	err := q.QueryRowContext(ctx, query, conversationID).Scan(&st.kind, &st.topic, &members, &st.lastSeq, &st.keyEpoch, &st.rotate)
@@ -91,7 +88,7 @@ func load(ctx context.Context, q rowQuerier, query string, conversationID ids.UU
 
 // member locks the conversation's row and checks that the user is a
 // current member.
-func member(ctx context.Context, q rowQuerier, conversationID, userID ids.UUID) (state, error) {
+func member(ctx context.Context, q vtdb.RowQuerier, conversationID, userID ids.UUID) (state, error) {
 	st, err := load(ctx, q, selectStateForUpdate, conversationID)
 	if err != nil {
 		return st, err
@@ -104,7 +101,7 @@ func member(ctx context.Context, q rowQuerier, conversationID, userID ids.UUID) 
 
 // group loads a group with the given query and checks that the user is a
 // current member.
-func group(ctx context.Context, q rowQuerier, query string, conversationID, userID ids.UUID) (state, error) {
+func group(ctx context.Context, q vtdb.RowQuerier, query string, conversationID, userID ids.UUID) (state, error) {
 	st, err := load(ctx, q, query, conversationID)
 	if err != nil {
 		return st, err
@@ -167,25 +164,14 @@ func decodeBody(body []byte, msg *pb.Message) error {
 	return nil
 }
 
-// store saves a message at st.lastSeq, moves the conversation's counter to
-// it, with the topic, members and rotate of st when withState, moves the sender's
-// read mark to it, and writes the outbox row for the recipients.
-func (s *Service) store(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, st state, msg *pb.Message, recipients []ids.UUID, withState bool) error {
-	sentAt := s.now()
+// storeMessage saves the message at st.lastSeq, moves the sender's read
+// mark to it and writes the outbox row for the recipients; the caller has
+// moved the conversation's counter.
+func storeMessage(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, st state, msg *pb.Message, recipients []ids.UUID) error {
+	sentAt := vtdb.Now()
 	msg.Seq = st.lastSeq
 	msg.SentAt = timestamppb.New(sentAt)
 	body, err := encodeBody(msg)
-	if err != nil {
-		return err
-	}
-	if withState {
-		_, err = tx.ExecContext(ctx, `
-			UPDATE conversation SET topic = ?, members = ?, last_seq = ?, rotate = ? WHERE conversation_id = ?`,
-			st.topic, encodeMembers(st.members), st.lastSeq, st.rotate, conversationID)
-	} else {
-		_, err = tx.ExecContext(ctx, `
-			UPDATE conversation SET last_seq = ? WHERE conversation_id = ?`, st.lastSeq, conversationID)
-	}
 	if err != nil {
 		return err
 	}
@@ -204,18 +190,27 @@ func (s *Service) store(ctx context.Context, tx *sql.Tx, conversationID ids.UUID
 		conversationID, msg.GetSenderUserId(), msg.Seq, sentAt, msg.Seq, sentAt); err != nil {
 		return err
 	}
-	event := &pb.Event{
-		OccurredAt: msg.SentAt,
-		Body:       &pb.Event_Message{Message: &pb.MessageEvent{Message: msg}},
-	}
-	return insertOutbox(ctx, tx, conversationID, outboxID, recipients, st, "message", sql.Null[uint64]{}, event, sentAt)
+	return outboxRow{
+		conversationID: conversationID, outboxID: outboxID, recipients: recipients, st: st, kind: "message",
+		event: &pb.Event{
+			OccurredAt: msg.SentAt,
+			Body:       &pb.Event_Message{Message: &pb.MessageEvent{Message: msg}},
+		},
+		at: sentAt,
+	}.insert(ctx, tx)
 }
 
-// notice stores a change to a group, made by the sender, as the message at
-// st.lastSeq, with st as the group after the change.
-func (s *Service) notice(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, st state, senderID ids.UUID, notice *pb.Notice, recipients []ids.UUID) error {
+// storeNotice stores a change to a group, made by the sender, as the
+// message at st.lastSeq, with st as the group after the change, which the
+// conversation row takes on.
+func storeNotice(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, st state, senderID ids.UUID, notice *pb.Notice, recipients []ids.UUID) error {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		UPDATE conversation SET topic = ?, members = ?, last_seq = ?, rotate = ? WHERE conversation_id = ?`,
+		st.topic, encodeMembers(st.members), st.lastSeq, st.rotate, conversationID); err != nil {
 		return err
 	}
 	msg := &pb.Message{
@@ -224,30 +219,43 @@ func (s *Service) notice(ctx context.Context, tx *sql.Tx, conversationID ids.UUI
 		ClientMessageId: "notice-" + hex.EncodeToString(b[:]),
 		Content:         &pb.Message_Notice{Notice: notice},
 	}
-	return s.store(ctx, tx, conversationID, st, msg, recipients, true)
+	return storeMessage(ctx, tx, conversationID, st, msg, recipients)
 }
 
-// insertOutbox writes the outbox row of a change; target is the outbox row
-// of the message a deletion is about.
-func insertOutbox(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, outboxID uint64, recipients []ids.UUID, st state, kind string, target sql.Null[uint64], event *pb.Event, at time.Time) error {
-	payload, err := proto.Marshal(event)
+// outboxRow is a change on its way to the fan-out: the event, who gets it,
+// and the conversation as it is after the change.
+type outboxRow struct {
+	conversationID ids.UUID
+	outboxID       uint64
+	recipients     []ids.UUID
+	st             state
+	kind           string
+	// target is the outbox row of the message a deletion is about.
+	target sql.Null[uint64]
+	event  *pb.Event
+	at     time.Time
+}
+
+// insert writes the row. The insert reaches the binlog, which is all the
+// fan-out reads; deleting the row in the same transaction keeps the table
+// empty.
+func (r outboxRow) insert(ctx context.Context, tx *sql.Tx) error {
+	payload, err := proto.Marshal(r.event)
 	if err != nil {
 		return fmt.Errorf("marshal outbox event: %w", err)
 	}
-	to := make([]byte, 0, 16*len(recipients))
-	for _, id := range recipients {
+	to := make([]byte, 0, 16*len(r.recipients))
+	for _, id := range r.recipients {
 		to = append(to, id[:]...)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, target_outbox_id, payload, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		conversationID, outboxID, to, st.kind, st.topic, len(st.members), kind, target, payload, at); err != nil {
+		r.conversationID, r.outboxID, to, r.st.kind, r.st.topic, len(r.st.members), r.kind, r.target, payload, r.at); err != nil {
 		return err
 	}
-	// The insert reaches the binlog, which is all the fan-out reads; deleting
-	// the row in the same transaction keeps the table empty.
 	_, err = tx.ExecContext(ctx, `
 		DELETE FROM outbox WHERE conversation_id = ? AND outbox_id = ?`,
-		conversationID, outboxID)
+		r.conversationID, r.outboxID)
 	return err
 }

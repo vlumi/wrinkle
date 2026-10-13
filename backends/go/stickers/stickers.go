@@ -10,34 +10,27 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/blobs"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 const (
-	maxPalette   = 200
-	maxGetIDs    = 100
-	duplicateKey = 1062
+	maxPalette = 200
+	maxGetIDs  = 100
 )
 
 type Service struct {
 	db    *sql.DB
 	blobs *blobs.Store
-	now   func() time.Time
 }
 
 func New(db *sql.DB, blobs *blobs.Store) *Service {
-	return &Service{db: db, blobs: blobs, now: func() time.Time { return time.Now().UTC().Truncate(time.Microsecond) }}
-}
-
-func isDuplicate(err error) bool {
-	var mysqlErr *mysql.MySQLError
-	return errors.As(err, &mysqlErr) && mysqlErr.Number == duplicateKey
+	return &Service{db: db, blobs: blobs}
 }
 
 func parseID(b []byte, field string) (ids.UUID, error) {
@@ -88,12 +81,12 @@ func (s *Service) Create(ctx context.Context, userID ids.UUID, blob []byte) (*pb
 		CreatorUserId: userID.Bytes(),
 		MediaType:     mediaType,
 	}
-	now := s.now()
+	now := vtdb.Now()
 	sticker.CreatedAt = timestamppb.New(now)
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO sticker (sticker_id, creator_user_id, media_type, created_at) VALUES (?, ?, ?, ?)`,
 		blobID, userID, mediaType, now); err != nil {
-		if !isDuplicate(err) {
+		if !vtdb.IsDuplicate(err) {
 			return nil, err
 		}
 		existing, err := s.load(ctx, []ids.UUID{blobID})

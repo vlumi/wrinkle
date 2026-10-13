@@ -10,14 +10,11 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
 const deviceColumns = `SELECT device_id, name, created_at, last_seen_at, push_token IS NOT NULL, public_key FROM device`
-
-type queryer interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
 
 func scanDevice(scan func(...any) error) (*pb.Device, error) {
 	d := &pb.Device{}
@@ -30,7 +27,7 @@ func scanDevice(scan func(...any) error) (*pb.Device, error) {
 	return d, nil
 }
 
-func loadDevice(ctx context.Context, q queryer, userID ids.UUID, deviceID uint64) (*pb.Device, error) {
+func loadDevice(ctx context.Context, q vtdb.RowQuerier, userID ids.UUID, deviceID uint64) (*pb.Device, error) {
 	return scanDevice(q.QueryRowContext(ctx, deviceColumns+` WHERE user_id = ? AND device_id = ?`, userID, deviceID).Scan)
 }
 
@@ -58,7 +55,7 @@ func noSuchDevice() error { return apierror.NotFound("no such signed-in device")
 // lockSignedIn locks the user row for the outbox, then reports whether the
 // device is the user's and signed in.
 func (s *Service) lockSignedIn(ctx context.Context, tx *sql.Tx, userID ids.UUID, deviceID uint64) (*outbox, error) {
-	o, err := lockOutbox(ctx, tx, userID, s.now())
+	o, err := lockOutbox(ctx, tx, userID, vtdb.Now())
 	if err != nil {
 		return nil, err
 	}

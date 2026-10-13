@@ -19,7 +19,7 @@ fanout/           Kafka consumer: both outboxes to the recipients' logs and conv
 push/             APNs client (token auth, HTTP/2) and the notifier for devices not connected
 presence/         Valkey: device-to-instance hash, instance liveness keys, per-user push channels
 internal/ids      UUIDs for users and conversations (16 bytes, BINARY(16), hex in Valkey); random 63-bit ids
-internal/vtdb     a database/sql pool for one Vitess keyspace
+internal/vtdb     a database/sql pool for one Vitess keyspace, and what the services share for it: the stored time, duplicate keys, row collection
 internal/blobs    the blob storage: SigV4 presigned requests, HEAD and DELETE through the blob proxy
 internal/apierror contract error codes carried on Go errors
 internal/metrics  the shared Prometheus metrics
@@ -165,7 +165,7 @@ The gateway adds `GET /v1/ws`. A services instance in the side-by-side setup lis
 
 [split.sh](split.sh) runs a Go gateway beside a Go services process through [beside-services.sh](../beside-services.sh) (services on `127.0.0.1:9000`, metrics on `:8090`; the gateway is stopped first so it drains while the services answer). The same services process runs beside the Elixir and Rust gateways in their conformance and measurement, and the web and iOS client tests run against the Go monolith.
 
-`make ci` runs golangci-lint on the module and the unit tests: the shared argon2id vector, password hashing and malformed hashes, the device token layout, name and icon validation, the token bucket and ack coalescing, the push registry's reconciliation, request type labels, Debezium records of both outboxes, list membership flags from notices, hex Valkey keys, APNs signing, addressing, unregistered tokens and token reuse against a local server, the sealed content in message alerts and its omission when too large, key ids from file names, UUIDs and 63-bit ids, `.env` parsing and numeric variables, and the loopback check. Everything that needs the infrastructure is covered by the conformance tests instead.
+`make ci` runs golangci-lint on the module and the unit tests, with the race detector: the shared argon2id vector, password hashing and malformed hashes, the device token layout, name and icon validation, the token bucket and ack coalescing, the push registry's reconciliation, the connections against a fake backend (the rules before and after Connect, the in-flight limit, acks coalesced while one is written, a slow consumer closed with 1013, a drain letting a request finish), request type labels, Debezium records of both outboxes, list membership flags from notices, hex Valkey keys, APNs signing, addressing, unregistered tokens and token reuse against a local server, the sealed content in message alerts and its omission when too large, key ids from file names, UUIDs and 63-bit ids, `.env` parsing and numeric variables, and the loopback check. Everything that needs the infrastructure is covered by the conformance tests instead.
 
 ## Measured
 

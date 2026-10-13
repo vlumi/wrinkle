@@ -11,6 +11,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -103,18 +104,13 @@ func (s *Service) DeviceKeys(ctx context.Context, userIDs [][]byte) ([]*pb.UserD
 	if err != nil {
 		return nil, err
 	}
-	live := map[ids.UUID]*pb.UserDevices{}
-	for rows.Next() {
-		var id ids.UUID
-		if err := rows.Scan(&id); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		live[id] = &pb.UserDevices{UserId: id.Bytes()}
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	liveIDs, err := vtdb.Collect(rows, func(rows *sql.Rows) (id ids.UUID, err error) { return id, rows.Scan(&id) })
+	if err != nil {
 		return nil, err
+	}
+	live := make(map[ids.UUID]*pb.UserDevices, len(liveIDs))
+	for _, id := range liveIDs {
+		live[id] = &pb.UserDevices{UserId: id.Bytes()}
 	}
 	rows, err = s.db.QueryContext(ctx, `
 		SELECT user_id, device_id, public_key FROM device

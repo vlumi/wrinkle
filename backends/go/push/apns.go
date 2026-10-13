@@ -26,8 +26,8 @@ import (
 
 // APNs endpoints; the tests point both at a local server.
 const (
-	ProductionURL = "https://api.push.apple.com"
-	SandboxURL    = "https://api.sandbox.push.apple.com"
+	productionURL = "https://api.push.apple.com"
+	sandboxURL    = "https://api.sandbox.push.apple.com"
 )
 
 // APNsConfig is a token-based provider: a .p8 key from the developer
@@ -85,10 +85,10 @@ func NewAPNs(cfg APNsConfig) (*APNs, error) {
 		return nil, errors.New("apns: key id, team id and topic are all required")
 	}
 	if cfg.ProductionURL == "" {
-		cfg.ProductionURL = ProductionURL
+		cfg.ProductionURL = productionURL
 	}
 	if cfg.SandboxURL == "" {
-		cfg.SandboxURL = SandboxURL
+		cfg.SandboxURL = sandboxURL
 	}
 	client := cfg.HTTPClient
 	if client == nil {

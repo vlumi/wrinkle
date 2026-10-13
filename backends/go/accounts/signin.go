@@ -9,6 +9,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -43,7 +44,7 @@ func (s *Service) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.De
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT INTO user (user_id, name, icon, password_hash, log_head, last_outbox_id, created_at)
 		VALUES (?, ?, '', ?, 0, 0, ?)`,
-		userID, req.GetName(), hash, s.now()); err != nil {
+		userID, req.GetName(), hash, vtdb.Now()); err != nil {
 		return nil, err
 	}
 	if err := s.claim(ctx, req.GetName(), userID); err != nil {
@@ -112,7 +113,7 @@ func (s *Service) newDevice(ctx context.Context, userID ids.UUID, name string) (
 		return nil, err
 	}
 	defer tx.Rollback()
-	o, err := lockOutbox(ctx, tx, userID, s.now())
+	o, err := lockOutbox(ctx, tx, userID, vtdb.Now())
 	if err != nil {
 		return nil, err
 	}

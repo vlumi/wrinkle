@@ -7,9 +7,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"log/slog"
 	"slices"
 	"strings"
-	"time"
 	"unicode/utf8"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
@@ -32,11 +32,11 @@ var icons = []string{"cat", "dog", "fox", "owl", "bear", "frog", "panda", "rabbi
 type Service struct {
 	db    *sql.DB
 	blobs *blobs.Store
-	now   func() time.Time
+	log   *slog.Logger
 }
 
-func New(db *sql.DB, blobs *blobs.Store) *Service {
-	return &Service{db: db, blobs: blobs, now: func() time.Time { return time.Now().UTC() }}
+func New(db *sql.DB, blobs *blobs.Store, log *slog.Logger) *Service {
+	return &Service{db: db, blobs: blobs, log: log}
 }
 
 // ValidName reports whether a user name is acceptable: valid UTF-8 of 1 to

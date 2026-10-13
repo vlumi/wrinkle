@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -102,7 +102,8 @@ func (s *Service) PublishKeys(ctx context.Context, userID ids.UUID, deviceID uin
 	default:
 		return notNext
 	}
-	if err := insertWraps(ctx, tx, conversationID, epoch, userID, deviceID, senderKey, wraps, s.now()); err != nil {
+	p := publication{conversationID: conversationID, epoch: epoch, userID: userID, deviceID: deviceID, senderKey: senderKey, wraps: wraps}
+	if err := p.insert(ctx, tx); err != nil {
 		return err
 	}
 	if epoch > st.keyEpoch {
@@ -142,13 +143,25 @@ func madeBy(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, epoch uint
 	return senderUserID == userID && senderDeviceID == deviceID, nil
 }
 
-// insertWraps stores the wraps, keeping those a recipient already has.
-func insertWraps(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, epoch uint32, userID ids.UUID, deviceID uint64, senderKey []byte, wraps []wrap, now time.Time) error {
-	values := make([]string, len(wraps))
-	args := make([]any, 0, 9*len(wraps))
-	for i, w := range wraps {
+// publication is one device's wraps of an epoch's key.
+type publication struct {
+	conversationID ids.UUID
+	epoch          uint32
+	// The publishing device and its key.
+	userID    ids.UUID
+	deviceID  uint64
+	senderKey []byte
+	wraps     []wrap
+}
+
+// insert stores the wraps, keeping those a recipient already has.
+func (p publication) insert(ctx context.Context, tx *sql.Tx) error {
+	now := vtdb.Now()
+	values := make([]string, len(p.wraps))
+	args := make([]any, 0, 9*len(p.wraps))
+	for i, w := range p.wraps {
 		values[i] = "(?, ?, ?, ?, ?, ?, ?, ?, ?)"
-		args = append(args, conversationID, w.userID, w.deviceID, epoch, userID, deviceID, senderKey, w.wrapped, now)
+		args = append(args, p.conversationID, w.userID, w.deviceID, p.epoch, p.userID, p.deviceID, p.senderKey, w.wrapped, now)
 	}
 	_, err := tx.ExecContext(ctx, `
 		INSERT IGNORE INTO conversation_key

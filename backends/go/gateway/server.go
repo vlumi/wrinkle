@@ -14,6 +14,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
+	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 	"github.com/vlumi/wrinkle/backends/go/services"
@@ -29,6 +30,16 @@ const (
 	detachGrace = time.Second
 )
 
+// presenceClient is what the server needs from presence; the registry
+// holds the client itself, for its subscription.
+type presenceClient interface {
+	Announce(ctx context.Context) error
+	Withdraw(ctx context.Context) error
+	Instance() string
+	DeviceConnected(ctx context.Context, userID ids.UUID, deviceID uint64) error
+	DeviceDisconnected(ctx context.Context, userID ids.UUID, deviceID uint64) error
+}
+
 type Server struct {
 	// ctx is the connections' base context, ended once the gateway drained;
 	// requestCtx is the requests', ended once the drain stops waiting for
@@ -39,7 +50,7 @@ type Server struct {
 	cancelRequests context.CancelFunc
 
 	backend  services.Backend
-	presence *presence.Client
+	presence presenceClient
 	registry *registry
 	log      *slog.Logger
 
@@ -112,7 +123,9 @@ func (s *Server) serveWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // track records an open connection; one opened as the drain began is
-// closed at once.
+// closed at once. A connection may be added while Drain already waits on
+// open, which is fine: it sees draining under the same lock and closes, so
+// the wait only grows by one closing handshake.
 func (s *Server) track(c *conn) {
 	s.connsMu.Lock()
 	defer s.connsMu.Unlock()

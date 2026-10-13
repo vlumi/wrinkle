@@ -12,6 +12,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -49,8 +50,8 @@ func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*
 			(user_id, conversation_id, kind, peer_user_id, peer_name, peer_icon, peer_avatar, peer_deleted,
 			 member, last_seq, read_seq, peer_read_seq, updated_at)
 		VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, TRUE, 0, 0, 0, ?)`,
-		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), nullBytes(peer.GetAvatar()), peer.GetDeleted(),
-		s.now()); err != nil {
+		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), vtdb.NullBytes(peer.GetAvatar()), peer.GetDeleted(),
+		vtdb.Now()); err != nil {
 		return nil, err
 	}
 	return s.listed(ctx, userID, conversationID)
@@ -135,12 +136,4 @@ func scanConversations(rows *sql.Rows) ([]*pb.Conversation, error) {
 		list = append(list, c)
 	}
 	return list, rows.Err()
-}
-
-// nullBytes stores an empty id as NULL.
-func nullBytes(b []byte) any {
-	if len(b) == 0 {
-		return nil
-	}
-	return b
 }

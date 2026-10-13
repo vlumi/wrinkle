@@ -95,11 +95,12 @@ func run() error {
 			return err
 		}
 		defer userDB.Close()
-		accts := accounts.New(userDB, store)
+		servicesLog := log.With("role", "services")
+		accts := accounts.New(userDB, store, servicesLog)
 		uploadService := uploads.New(userDB, store)
 		conversations := conversation.New(conversationDB, accts, accts, uploadService)
 		users := devicesync.New(userDB, accts, conversations)
-		local = services.NewLocal(accts, conversations, users, uploadService, stickers.New(userDB, store), log.With("role", "services"))
+		local = services.NewLocal(accts, conversations, users, uploadService, stickers.New(userDB, store), servicesLog)
 	}
 	// Valkey carries presence and pushes, from fan-out to gateways.
 	var pres *presence.Client
@@ -155,7 +156,10 @@ func run() error {
 			notifier = n
 			log.Info("push notifications on", "topic", *apnsTop)
 		}
-		worker, err := fanout.New(ctx, strings.Split(*brokers, ","), "wrinkle-fanout", *fanoutN, userDB, conversationDB, pres, notifier, log.With("role", "fanout"))
+		worker, err := fanout.New(ctx, fanout.Config{
+			Brokers: strings.Split(*brokers, ","), Group: "wrinkle-fanout", Concurrency: *fanoutN,
+			DB: userDB, Conversations: conversationDB, Publisher: pres, Notifier: notifier, Log: log.With("role", "fanout"),
+		})
 		if err != nil {
 			return err
 		}

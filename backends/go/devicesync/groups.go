@@ -2,11 +2,13 @@ package devicesync
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/vlumi/wrinkle/backends/go/accounts"
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -39,7 +41,7 @@ func (s *Service) CreateGroup(ctx context.Context, userID ids.UUID, req *pb.Crea
 		INSERT IGNORE INTO user_conversation
 			(user_id, conversation_id, kind, topic, member_count, member, admin, last_seq, read_seq, peer_read_seq, updated_at)
 		VALUES (?, ?, 'group', ?, ?, TRUE, TRUE, 0, 0, 0, ?)`,
-		userID, conversationID, c.GetTopic(), c.GetMemberCount(), s.now()); err != nil {
+		userID, conversationID, c.GetTopic(), c.GetMemberCount(), vtdb.Now()); err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -100,17 +102,8 @@ func (s *Service) LeaveGroups(ctx context.Context, userID ids.UUID) error {
 		if err != nil {
 			return err
 		}
-		var page []ids.UUID
-		for rows.Next() {
-			var id ids.UUID
-			if err := rows.Scan(&id); err != nil {
-				rows.Close()
-				return err
-			}
-			page = append(page, id)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
+		page, err := vtdb.Collect(rows, func(rows *sql.Rows) (id ids.UUID, err error) { return id, rows.Scan(&id) })
+		if err != nil {
 			return err
 		}
 		for _, id := range page {

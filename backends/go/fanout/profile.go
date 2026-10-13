@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	backendv1 "github.com/vlumi/wrinkle/proto/go/wrinkle/backend/v1"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -42,7 +43,7 @@ func (w *Worker) deliverProfile(ctx context.Context, o *userOutboxRow) error {
 					_, err := tx.ExecContext(ctx, `
 						UPDATE user_conversation SET peer_name = ?, peer_icon = ?, peer_avatar = ?, peer_deleted = ?
 						WHERE user_id = ? AND conversation_id = ?`,
-						user.GetName(), user.GetIcon(), nullBytes(user.GetAvatar()), user.GetDeleted(), p.peerID, p.conversationID)
+						user.GetName(), user.GetIcon(), vtdb.NullBytes(user.GetAvatar()), user.GetDeleted(), p.peerID, p.conversationID)
 					return err
 				}
 				if _, err := w.append(gctx, p.peerID, o.userID, o.outboxID, o.event, update); err != nil {

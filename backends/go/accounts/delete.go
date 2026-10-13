@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -27,7 +28,7 @@ func (s *Service) DeleteAccount(ctx context.Context, userID ids.UUID, req *pb.De
 		return err
 	}
 	defer tx.Rollback()
-	o, err := lockOutbox(ctx, tx, userID, s.now())
+	o, err := lockOutbox(ctx, tx, userID, vtdb.Now())
 	if err != nil {
 		return err
 	}
@@ -59,7 +60,9 @@ func (s *Service) DeleteAccount(ctx context.Context, userID ids.UUID, req *pb.De
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	_, _ = s.db.ExecContext(ctx, `
-		DELETE FROM user_name WHERE name = ? AND user_id = ?`, name, userID)
+	if _, err := s.db.ExecContext(ctx, `
+		DELETE FROM user_name WHERE name = ? AND user_id = ?`, name, userID); err != nil {
+		s.log.Warn("releasing the deleted account's name failed", "user", userID, "err", err)
+	}
 	return nil
 }

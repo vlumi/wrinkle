@@ -8,6 +8,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/blobs"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 )
 
 const (
@@ -24,11 +25,10 @@ type Sweeper struct {
 	db    *sql.DB
 	blobs *blobs.Store
 	log   *slog.Logger
-	now   func() time.Time
 }
 
 func NewSweeper(db *sql.DB, blobs *blobs.Store, log *slog.Logger) *Sweeper {
-	return &Sweeper{db: db, blobs: blobs, log: log, now: func() time.Time { return time.Now().UTC() }}
+	return &Sweeper{db: db, blobs: blobs, log: log}
 }
 
 // Run sweeps a minute after starting, then every ten minutes, until the
@@ -56,24 +56,15 @@ type unused struct{ userID, blobID ids.UUID }
 // Sweep deletes one page of unused uploads and returns how many blobs it
 // deleted.
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
-	now := s.now()
+	now := vtdb.Now()
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT user_id, blob_id FROM upload WHERE used = FALSE AND created_at < ? LIMIT ?`,
 		now.Add(-unusedFor), sweepPage)
 	if err != nil {
 		return 0, err
 	}
-	var page []unused
-	for rows.Next() {
-		var u unused
-		if err := rows.Scan(&u.userID, &u.blobID); err != nil {
-			rows.Close()
-			return 0, err
-		}
-		page = append(page, u)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
+	page, err := vtdb.Collect(rows, func(rows *sql.Rows) (u unused, err error) { return u, rows.Scan(&u.userID, &u.blobID) })
+	if err != nil {
 		return 0, err
 	}
 	deleted := 0
@@ -87,7 +78,7 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 			// Taken into use meanwhile, or another sweeper got it.
 			continue
 		}
-		if err := s.blobs.Delete(ctx, u.blobID, s.now()); err != nil {
+		if err := s.blobs.Delete(ctx, u.blobID, vtdb.Now()); err != nil {
 			// The row is gone; the blob stays behind unreferenced.
 			s.log.Warn("deleting blob failed", "blob", u.blobID, "err", err)
 			continue

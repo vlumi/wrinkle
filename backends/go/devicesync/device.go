@@ -5,6 +5,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -15,7 +16,7 @@ func (s *Service) Ack(ctx context.Context, userID ids.UUID, deviceID, cursor uin
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE device SET acked_position = GREATEST(acked_position, ?), last_seen_at = ?
 		WHERE user_id = ? AND device_id = ?`,
-		cursor, s.now(), userID, deviceID)
+		cursor, vtdb.Now(), userID, deviceID)
 	return err
 }
 

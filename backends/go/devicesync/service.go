@@ -4,7 +4,6 @@ package devicesync
 
 import (
 	"database/sql"
-	"time"
 
 	"github.com/vlumi/wrinkle/backends/go/accounts"
 	"github.com/vlumi/wrinkle/backends/go/conversation"
@@ -14,9 +13,8 @@ type Service struct {
 	db            *sql.DB
 	accounts      *accounts.Service
 	conversations *conversation.Service
-	now           func() time.Time
 }
 
 func New(db *sql.DB, accounts *accounts.Service, conversations *conversation.Service) *Service {
-	return &Service{db: db, accounts: accounts, conversations: conversations, now: func() time.Time { return time.Now().UTC() }}
+	return &Service{db: db, accounts: accounts, conversations: conversations}
 }
