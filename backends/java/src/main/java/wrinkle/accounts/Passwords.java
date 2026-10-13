@@ -32,18 +32,18 @@ final class Passwords {
   // exhaust memory.
   private static final Semaphore SLOTS = new Semaphore(Runtime.getRuntime().availableProcessors());
 
-  /** A stored hash that cannot be read. */
-  static final class MalformedHashException extends Exception {
+  /** A stored hash that cannot be read: an internal error, since the backends wrote it. */
+  static final class MalformedHashException extends RuntimeException {
     MalformedHashException() {
       super("malformed password hash", null, false, false);
     }
   }
 
   /** The argon2id hash of the password with a fresh salt. */
-  static String hash(String password) throws InterruptedException {
+  static String hash(String password) {
     byte[] salt = new byte[SALT_LENGTH];
     RANDOM.nextBytes(salt);
-    SLOTS.acquire();
+    SLOTS.acquireUninterruptibly();
     try {
       return encode(password, salt, MEMORY_KIB, ITERATIONS, PARALLELISM);
     } finally {
@@ -68,8 +68,7 @@ final class Passwords {
   }
 
   /** Whether the password matches the PHC string. */
-  static boolean verify(String password, String encoded)
-      throws MalformedHashException, InterruptedException {
+  static boolean verify(String password, String encoded) {
     String[] parts = encoded.split("\\$", -1);
     if (parts.length != 6
         || !parts[0].isEmpty()
@@ -108,7 +107,7 @@ final class Passwords {
     if (want.length < 16 || want.length > 64) {
       throw new MalformedHashException();
     }
-    SLOTS.acquire();
+    SLOTS.acquireUninterruptibly();
     byte[] got;
     try {
       got = derive(password, salt, (int) memory, (int) iterations, (int) parallelism, want.length);

@@ -55,31 +55,7 @@ public final class Main {
   public static void main(String[] args) throws Exception {
     Config cfg = Config.parse(args);
     Metrics.init();
-
-    DataSource userDb = null;
-    DataSource conversationDb = null;
-    LocalBackend local = null;
-    Blobs blobs =
-        new Blobs(
-            cfg.blobUrl(), new Presigner(cfg.blobKeyId(), cfg.blobSecret(), cfg.blobRegion()));
-    if (cfg.needsDatabase()) {
-      conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
-      userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
-      UploadService uploads = new UploadService(userDb, blobs);
-      ConversationService conversations = new ConversationService(conversationDb, uploads);
-      AccountService accounts = new AccountService(userDb, uploads);
-      local =
-          new LocalBackend(
-              accounts,
-              new Devices(userDb),
-              uploads,
-              conversations,
-              new GroupService(conversationDb, userDb, accounts),
-              new ConversationKeys(conversationDb, userDb),
-              new DeviceSyncService(userDb, accounts, conversations),
-              new StickerService(userDb, uploads));
-    }
-    Presence presence = cfg.needsValkey() ? new Presence(cfg.valkey(), cfg.node()) : null;
+    Shared shared = new Shared(cfg);
 
     AtomicBoolean draining = new AtomicBoolean();
     ServerBuilder sb =
@@ -88,8 +64,8 @@ public final class Main {
 
     Gateway gateway = null;
     if (cfg.runsGateway()) {
-      Backend backend = cfg.forwardsToServices() ? new RpcClient(cfg.services()) : local;
-      gateway = new Gateway(backend, presence);
+      Backend backend = cfg.forwardsToServices() ? new RpcClient(cfg.services()) : shared.local();
+      gateway = new Gateway(backend, shared.presence());
       gateway.register(sb, draining::get);
       if (cfg.forwardsToServices()) {
         log.info("gateway forwarding to services at {}", cfg.services());
@@ -99,15 +75,21 @@ public final class Main {
       // The RPC on its own port, as in the Go backend.
       sb.http(cfg.servicesListen());
       sb.virtualHost(cfg.servicesListen().getPort())
-          .service(GrpcService.builder().addService(new RpcServer(local)).build());
+          .service(GrpcService.builder().addService(new RpcServer(shared.local())).build());
       log.info("services listening on {}", cfg.servicesListen());
     }
     FanoutWorker fanout = null;
     if (cfg.runsFanout()) {
-      fanout = new FanoutWorker(cfg.kafka(), FANOUT_GROUP, userDb, conversationDb, presence);
+      fanout =
+          new FanoutWorker(
+              cfg.kafka(),
+              FANOUT_GROUP,
+              shared.userDb(),
+              shared.conversationDb(),
+              shared.presence());
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
-      new UploadSweeper(userDb, blobs).start();
+      new UploadSweeper(shared.userDb(), shared.blobs()).start();
     }
 
     Server server = sb.build();
@@ -121,9 +103,80 @@ public final class Main {
     FanoutWorker f = fanout;
     Runtime.getRuntime()
         .addShutdownHook(
-            Thread.ofPlatform().unstarted(() -> shutDown(draining, server, g, f, presence)));
+            Thread.ofPlatform().unstarted(() -> shutDown(draining, server, g, f, shared)));
     // Until the shutdown hook halts the process.
     new CountDownLatch(1).await();
+  }
+
+  /**
+   * What the roles share, opened when the first role asks: the pools of the two keyspaces and the
+   * services on them, and Valkey. So a gateway that forwards opens no pool, and a services-only
+   * process never connects to Valkey.
+   */
+  private static final class Shared {
+    private final Config cfg;
+    private final Blobs blobs;
+    private DataSource userDb;
+    private DataSource conversationDb;
+    private LocalBackend local;
+    private Presence presence;
+
+    Shared(Config cfg) {
+      this.cfg = cfg;
+      this.blobs =
+          new Blobs(
+              cfg.blobUrl(), new Presigner(cfg.blobKeyId(), cfg.blobSecret(), cfg.blobRegion()));
+    }
+
+    Blobs blobs() {
+      return blobs;
+    }
+
+    DataSource userDb() {
+      if (userDb == null) {
+        userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
+      }
+      return userDb;
+    }
+
+    DataSource conversationDb() {
+      if (conversationDb == null) {
+        conversationDb = Db.open(cfg.mysql(), "conversation", cfg.dbConns());
+      }
+      return conversationDb;
+    }
+
+    LocalBackend local() {
+      if (local == null) {
+        UploadService uploads = new UploadService(userDb(), blobs);
+        ConversationService conversations = new ConversationService(conversationDb(), uploads);
+        AccountService accounts = new AccountService(userDb(), uploads);
+        local =
+            new LocalBackend(
+                accounts,
+                new Devices(userDb()),
+                uploads,
+                conversations,
+                new GroupService(conversationDb(), userDb(), accounts),
+                new ConversationKeys(conversationDb(), userDb()),
+                new DeviceSyncService(userDb(), accounts, conversations),
+                new StickerService(userDb(), uploads));
+      }
+      return local;
+    }
+
+    Presence presence() {
+      if (presence == null) {
+        presence = new Presence(cfg.valkey(), cfg.node());
+      }
+      return presence;
+    }
+
+    void close() {
+      if (presence != null) {
+        presence.close();
+      }
+    }
   }
 
   private static void addOperationalEndpoints(ServerBuilder sb, AtomicBoolean draining) {
@@ -155,11 +208,7 @@ public final class Main {
    * stops alongside the rest and is waited for, so it leaves its group before the exit.
    */
   private static void shutDown(
-      AtomicBoolean draining,
-      Server server,
-      Gateway gateway,
-      FanoutWorker fanout,
-      Presence presence) {
+      AtomicBoolean draining, Server server, Gateway gateway, FanoutWorker fanout, Shared shared) {
     log.info("shutting down");
     long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SHUTDOWN_LIMIT_MILLIS);
     draining.set(true);
@@ -190,9 +239,7 @@ public final class Main {
           log.warn("fanout consumer did not stop in time");
         }
       }
-      if (presence != null) {
-        presence.close();
-      }
+      shared.close();
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     } catch (RuntimeException e) {

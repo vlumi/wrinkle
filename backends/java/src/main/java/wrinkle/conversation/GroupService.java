@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
+import wrinkle.Kinds;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
@@ -25,6 +26,7 @@ import wrinkle.v1.AdminChanged;
 import wrinkle.v1.Conversation;
 import wrinkle.v1.ConversationKind;
 import wrinkle.v1.CreateGroupRequest;
+import wrinkle.v1.ErrorCode;
 import wrinkle.v1.GroupCreated;
 import wrinkle.v1.Member;
 import wrinkle.v1.MemberLeft;
@@ -55,25 +57,6 @@ public final class GroupService {
     this.db = conversationDb;
     this.userDb = userDb;
     this.accounts = accounts;
-  }
-
-  @FunctionalInterface
-  private interface Work<T> {
-    T run(Connection c) throws SQLException;
-  }
-
-  private <T> T inTransaction(Work<T> work) throws SQLException {
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        T result = work.run(c);
-        c.commit();
-        return result;
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
   }
 
   /** Whether a topic is acceptable: as a name, but up to 200 bytes. */
@@ -209,7 +192,7 @@ public final class GroupService {
             .setNotice(notice)
             .setSentAt(Timestamps.toProto(now))
             .build();
-    Rows.storeMessage(c, msg, recipients, Rows.GROUP, topic, members.size());
+    Rows.storeMessage(c, msg, recipients, Kinds.GROUP, topic, members.size());
   }
 
   /**
@@ -232,7 +215,8 @@ public final class GroupService {
     }
     Uuid conversationId = claim(userId, clientGroupId);
     Map<Uuid, User> profiles = accounts.profiles(invitees);
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           try (PreparedStatement ps =
                   Sql.prepare(
@@ -253,7 +237,7 @@ public final class GroupService {
               "INSERT INTO conversation (conversation_id, kind, topic, members, last_seq,"
                   + " created_at) VALUES (?, ?, ?, ?, 0, ?)",
               conversationId,
-              Rows.GROUP,
+              Kinds.GROUP,
               topic,
               Uuid.join(members),
               now);
@@ -274,7 +258,7 @@ public final class GroupService {
           notice(
               c,
               conversationId,
-              new Header(Rows.GROUP, topic, List.copyOf(members), 0, 0, false),
+              new Header(Kinds.GROUP, topic, List.copyOf(members), 0, 0, false),
               userId,
               Notice.newBuilder().setGroupCreated(created).build(),
               members,
@@ -291,7 +275,7 @@ public final class GroupService {
               + " member_count, member, admin, updated_at) VALUES (?, ?, ?, ?, ?, TRUE, TRUE, ?)",
           userId,
           conversationId,
-          Rows.GROUP,
+          Kinds.GROUP,
           conversation.getTopic(),
           conversation.getMemberCount(),
           Timestamps.now());
@@ -392,7 +376,8 @@ public final class GroupService {
   public void addMembers(Uuid userId, Uuid conversationId, List<String> names) throws SQLException {
     List<Uuid> resolved = resolve(userId, names);
     Map<Uuid, User> profiles = accounts.profiles(resolved);
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           Header h = groupHeader(c, conversationId, userId);
           List<Uuid> added = new ArrayList<>();
@@ -443,7 +428,8 @@ public final class GroupService {
   /** Removes a member; only admins may, and not themselves. */
   public void removeMember(Uuid userId, Uuid conversationId, Uuid target) throws SQLException {
     User profile = accounts.profiles(List.of(target)).get(target);
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           Header h = groupHeader(c, conversationId, userId);
           requireAdmin(c, conversationId, userId);
@@ -488,7 +474,8 @@ public final class GroupService {
    * group with members always has an admin.
    */
   public void leave(Uuid userId, Uuid conversationId) throws SQLException {
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           Header h = groupHeader(c, conversationId, userId);
           MemberRow row = memberRow(c, conversationId, userId);
@@ -544,7 +531,8 @@ public final class GroupService {
   /** Changes the topic; any member may. The same topic again changes nothing. */
   public void setTopic(Uuid userId, Uuid conversationId, String topic) throws SQLException {
     checkTopic(topic);
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           Header h = groupHeader(c, conversationId, userId);
           if (h.topic().equals(topic)) {
@@ -570,7 +558,8 @@ public final class GroupService {
   public void setAdmin(Uuid userId, Uuid conversationId, Uuid target, boolean admin)
       throws SQLException {
     User profile = accounts.profiles(List.of(target)).get(target);
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           Header h = groupHeader(c, conversationId, userId);
           requireAdmin(c, conversationId, userId);
@@ -674,7 +663,7 @@ public final class GroupService {
                   "SELECT conversation_id FROM user_conversation WHERE user_id = ? AND kind = ?"
                       + " AND member AND conversation_id > ? ORDER BY conversation_id LIMIT ?",
                   userId,
-                  Rows.GROUP,
+                  Kinds.GROUP,
                   after == null ? new byte[Uuid.LENGTH] : after.bytes(),
                   LEAVE_PAGE);
           ResultSet rs = ps.executeQuery()) {
@@ -686,7 +675,11 @@ public final class GroupService {
         try {
           leave(userId, conversationId);
         } catch (ApiError e) {
-          // Left already; the list has not caught up.
+          // Left already, the list not showing it yet, is fine.
+          if (e.code() != ErrorCode.ERROR_CODE_PERMISSION_DENIED
+              && e.code() != ErrorCode.ERROR_CODE_NOT_FOUND) {
+            throw e;
+          }
         }
       }
       if (page.size() < LEAVE_PAGE) {

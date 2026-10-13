@@ -42,16 +42,6 @@ public record Config(
     return runsGateway() && !services.isEmpty();
   }
 
-  /** Gateways hold push subscriptions and presence; fan-out publishes pushes. */
-  public boolean needsValkey() {
-    return runsGateway() || runsFanout();
-  }
-
-  /** The services, in-process or as a role, and fan-out work on the database. */
-  public boolean needsDatabase() {
-    return runsServices() || runsFanout() || (runsGateway() && !forwardsToServices());
-  }
-
   public static Config parse(String[] args) {
     String roles = env("WRINKLE_ROLES", "gateway,fanout");
     String listen = env("WRINKLE_LISTEN", ":8080");

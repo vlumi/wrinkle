@@ -46,7 +46,7 @@ final class UserLog {
   private final DataSource db;
   private final Presence presence;
   // Conversation list entries known to exist; entries are never removed, so one stays true.
-  private final Set<ListKey> listed = ConcurrentHashMap.newKeySet();
+  private final Set<ListKey> listedCache = ConcurrentHashMap.newKeySet();
 
   UserLog(DataSource db, Presence presence) {
     this.db = db;
@@ -74,7 +74,7 @@ final class UserLog {
               switch (e.getBodyCase()) {
                 case MESSAGE -> recordMessage(c, userId, peerId, peer, o, e);
                 case READ -> recordRead(c, userId, o, e.getRead());
-                case MESSAGE_DELETED -> recordDeleted(c, userId, o, e.getMessageDeleted());
+                case MESSAGE_DELETED -> recordDeletion(c, userId, o, e.getMessageDeleted());
                 default -> {}
               }
             });
@@ -84,10 +84,10 @@ final class UserLog {
   }
 
   private void remember(Uuid userId, Uuid conversationId) {
-    if (listed.size() >= MAX_LISTED) {
-      listed.clear();
+    if (listedCache.size() >= MAX_LISTED) {
+      listedCache.clear();
     }
-    listed.add(new ListKey(userId, conversationId));
+    listedCache.add(new ListKey(userId, conversationId));
   }
 
   /**
@@ -95,7 +95,7 @@ final class UserLog {
    * entry a message creates; null once the entry is known to exist.
    */
   private User peerForNewEntry(Uuid userId, Uuid conversationId, Uuid peerId) throws SQLException {
-    if (listed.contains(new ListKey(userId, conversationId))) {
+    if (listedCache.contains(new ListKey(userId, conversationId))) {
       return null;
     }
     try (Connection c = db.getConnection()) {
@@ -133,74 +133,75 @@ final class UserLog {
    */
   Event append(Uuid userId, Uuid sourceId, long outboxId, Event source, ListUpdate update)
       throws SQLException {
-    Event event;
-    byte[] payload;
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Long head = lockHead(c, userId);
-        if (head == null) {
-          c.rollback();
-          return null;
-        }
-        event = source.toBuilder().setCursor(head + 1).build();
-        payload = event.toByteArray();
-        try {
-          Sql.update(
-              c,
-              "INSERT INTO user_event (user_id, position, source_id, outbox_id, payload,"
-                  + " occurred_at) VALUES (?, ?, ?, ?, ?, ?)",
-              userId,
-              event.getCursor(),
-              sourceId,
-              outboxId,
-              payload,
-              Timestamps.fromProto(event.getOccurredAt()));
-        } catch (SQLException e) {
-          if (!Sql.isDuplicate(e)) {
-            throw e;
-          }
-          // The unique key on the source outbox row: this is a redelivery.
-          c.rollback();
-          return null;
-        }
-        Sql.update(c, "UPDATE user SET log_head = ? WHERE user_id = ?", event.getCursor(), userId);
-        if (update != null) {
-          update.apply(c, event);
-        }
-        c.commit();
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
+    Stored stored =
+        Sql.inTransaction(
+            db,
+            c -> {
+              Head head = lockHead(c, userId);
+              if (head.gone()) {
+                return null;
+              }
+              Event event = source.toBuilder().setCursor(head.position() + 1).build();
+              byte[] payload = event.toByteArray();
+              try {
+                Sql.update(
+                    c,
+                    "INSERT INTO user_event (user_id, position, source_id, outbox_id, payload,"
+                        + " occurred_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    userId,
+                    event.getCursor(),
+                    sourceId,
+                    outboxId,
+                    payload,
+                    Timestamps.fromProto(event.getOccurredAt()));
+              } catch (SQLException e) {
+                if (!Sql.isDuplicate(e)) {
+                  throw e;
+                }
+                // The unique key on the source outbox row: this is a redelivery.
+                return null;
+              }
+              Sql.update(
+                  c, "UPDATE user SET log_head = ? WHERE user_id = ?", event.getCursor(), userId);
+              if (update != null) {
+                update.apply(c, event);
+              }
+              return new Stored(event, payload);
+            });
+    if (stored == null) {
+      return null;
     }
-    LocalDateTime occurredAt = Timestamps.fromProto(event.getOccurredAt());
+    LocalDateTime occurredAt = Timestamps.fromProto(stored.event().getOccurredAt());
     Metrics.FANOUT_DELIVERIES.inc();
     Metrics.FANOUT_LAG.observe(Duration.between(occurredAt, Timestamps.now()).toNanos() / 1e9);
     presence.publish(
-        userId, Push.newBuilder().setEvent(UnsafeByteOperations.unsafeWrap(payload)).build());
-    return event;
+        userId,
+        Push.newBuilder().setEvent(UnsafeByteOperations.unsafeWrap(stored.payload())).build());
+    return stored.event();
   }
+
+  /** An event as appended, and its bytes as stored, which the push carries. */
+  private record Stored(Event event, byte[] payload) {}
 
   /** Tells the gateways to close the connections of devices signed out. */
   void pushSignedOut(Uuid userId, SignedOut signedOut) {
     presence.publish(userId, Push.newBuilder().setSignedOut(signedOut).build());
   }
 
-  /**
-   * The user's log head, locked for the transaction, or null if there is no such user or the
-   * account was deleted.
-   */
-  private static Long lockHead(Connection c, Uuid userId) throws SQLException {
+  /** The user's log head; gone when there is no such user or the account was deleted. */
+  private record Head(long position, boolean gone) {}
+
+  /** The user's log head, locked for the transaction. */
+  private static Head lockHead(Connection c, Uuid userId) throws SQLException {
     try (PreparedStatement ps =
             Sql.prepare(
                 c, "SELECT log_head, deleted_at FROM user WHERE user_id = ? FOR UPDATE", userId);
         ResultSet rs = ps.executeQuery()) {
       if (!rs.next()) {
         log.warn("no such user {}, dropping event", userId);
-        return null;
+        return new Head(0, true);
       }
-      return rs.getObject(2) == null ? rs.getLong(1) : null;
+      return new Head(rs.getLong(1), rs.getObject(2) != null);
     }
   }
 
@@ -326,7 +327,7 @@ final class UserLog {
    * Takes the content out of the user's copy of the deleted message, so a device syncing from
    * before it never receives the content, and out of the list when the message is the last.
    */
-  private static void recordDeleted(
+  private static void recordDeletion(
       Connection c, Uuid userId, OutboxRecord o, MessageDeletedEvent deleted) throws SQLException {
     if (o.targetOutboxId() != null) {
       long position = 0;

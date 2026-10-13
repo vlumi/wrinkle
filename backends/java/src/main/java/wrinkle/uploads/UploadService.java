@@ -18,7 +18,6 @@ import wrinkle.ApiError;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
-import wrinkle.accounts.Devices;
 import wrinkle.v1.CreateUploadRequest;
 import wrinkle.v1.CreateUploadResponse;
 
@@ -99,7 +98,7 @@ public final class UploadService {
    * The avatar a profile may refer to: an avatar upload of the user's, already uploaded. Fails with
    * INVALID_ARGUMENT for a malformed id, FAILED_PRECONDITION otherwise.
    */
-  public Uuid checkAvatar(Uuid userId, ByteString avatar) throws Exception {
+  public Uuid checkAvatar(Uuid userId, ByteString avatar) throws SQLException {
     Uuid blobId = Uuid.parse(avatar);
     if (blobId == null) {
       throw ApiError.invalidArgument("avatar must be 16 bytes or empty");
@@ -141,7 +140,7 @@ public final class UploadService {
    * The media type of the user's sticker upload, already uploaded. Fails with FAILED_PRECONDITION
    * otherwise.
    */
-  public String checkSticker(Uuid userId, Uuid blobId) throws Exception {
+  public String checkSticker(Uuid userId, Uuid blobId) throws SQLException {
     String mediaType;
     try (Connection c = db.getConnection();
         PreparedStatement ps =
@@ -168,7 +167,7 @@ public final class UploadService {
    * sweeper took it first.
    */
   public void useSticker(Uuid userId, Uuid blobId) throws SQLException {
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           try (PreparedStatement ps =
@@ -193,7 +192,7 @@ public final class UploadService {
    * Marks the user's attachment uploads used, once each is found to be theirs, uploaded and not
    * attached to another message; fails with FAILED_PRECONDITION otherwise.
    */
-  public void useAttachments(Uuid userId, List<Uuid> blobIds) throws Exception {
+  public void useAttachments(Uuid userId, List<Uuid> blobIds) throws SQLException {
     if (blobIds.isEmpty()) {
       return;
     }
@@ -209,7 +208,7 @@ public final class UploadService {
         throw ApiError.failedPrecondition("not uploaded");
       }
     }
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           // Locking the rows again keeps the sweeper from taking them meanwhile. A used one is

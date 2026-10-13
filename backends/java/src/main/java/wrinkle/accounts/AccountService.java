@@ -190,7 +190,7 @@ public final class AccountService {
    * Creates an account and a device for it. The user row comes before the name claim, so an
    * interruption leaves at worst a user nobody can reach, never a claim without its user.
    */
-  public DeviceCredentials register(RegisterRequest req) throws Exception {
+  public DeviceCredentials register(RegisterRequest req) throws SQLException {
     checkName(req.getName());
     checkPassword(req.getPassword());
     checkDeviceName(req.getDeviceName());
@@ -223,7 +223,7 @@ public final class AccountService {
    * Checks the password and creates a device. A wrong name and a wrong password fail alike, in
    * about the same time.
    */
-  public DeviceCredentials signIn(SignInRequest req) throws Exception {
+  public DeviceCredentials signIn(SignInRequest req) throws SQLException {
     checkDeviceName(req.getDeviceName());
     Credentials found = passwordOf(req.getName());
     String password = req.getPassword();
@@ -267,7 +267,7 @@ public final class AccountService {
   private DeviceCredentials newDevice(Uuid userId, String name) throws SQLException {
     DeviceToken token = DeviceToken.create(userId);
     LocalDateTime now = Timestamps.now();
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           Sql.update(
@@ -346,7 +346,7 @@ public final class AccountService {
    * Fails with UNAUTHENTICATED unless the password is the user's, in about the same time; returns
    * the hash it was checked against.
    */
-  private String verifyPassword(Uuid userId, String password) throws Exception {
+  private String verifyPassword(Uuid userId, String password) throws SQLException {
     String hash;
     try (Connection c = db.getConnection();
         PreparedStatement ps =
@@ -388,11 +388,11 @@ public final class AccountService {
    * gateways close when the sign-out is pushed.
    */
   public void changePassword(Uuid userId, long deviceId, ChangePasswordRequest req)
-      throws Exception {
+      throws SQLException {
     String verified = verifyPassword(userId, req.getCurrentPassword());
     checkPassword(req.getNewPassword());
     String newHash = Passwords.hash(req.getNewPassword());
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           lockUnchanged(c, userId, verified);
@@ -426,7 +426,7 @@ public final class AccountService {
   /** What deleting an account does first, once the password is checked: leaving its groups. */
   @FunctionalInterface
   public interface BeforeDelete {
-    void run() throws Exception;
+    void run() throws SQLException;
   }
 
   /**
@@ -436,11 +436,11 @@ public final class AccountService {
    * valid only while the user's name matches it.
    */
   public void deleteAccount(Uuid userId, DeleteAccountRequest req, BeforeDelete beforeDelete)
-      throws Exception {
+      throws SQLException {
     String verified = verifyPassword(userId, req.getPassword());
     beforeDelete.run();
     String oldName =
-        Devices.inTransaction(
+        Sql.inTransaction(
             db,
             c -> {
               lockUnchanged(c, userId, verified);
@@ -495,7 +495,7 @@ public final class AccountService {
    * its outbox row are one transaction on the user's shard; the old claim is released last. An
    * interruption leaves at worst a stale claim, which the next claimant takes over.
    */
-  public User updateProfile(Uuid userId, UpdateProfileRequest req) throws Exception {
+  public User updateProfile(Uuid userId, UpdateProfileRequest req) throws SQLException {
     if (!req.hasName() && !req.hasIcon() && !req.hasAvatar()) {
       return existingProfile(userId);
     }
@@ -546,7 +546,7 @@ public final class AccountService {
    */
   private Change storeProfile(Uuid userId, UpdateProfileRequest req, Uuid avatar)
       throws SQLException {
-    return Devices.inTransaction(db, c -> storeProfile(c, userId, req, avatar));
+    return Sql.inTransaction(db, c -> storeProfile(c, userId, req, avatar));
   }
 
   /**

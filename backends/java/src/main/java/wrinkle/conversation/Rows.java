@@ -12,6 +12,7 @@ import java.util.HexFormat;
 import java.util.List;
 import wrinkle.ApiError;
 import wrinkle.Ids;
+import wrinkle.Kinds;
 import wrinkle.MessageBody;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
@@ -24,8 +25,6 @@ import wrinkle.v1.MessageEvent;
 final class Rows {
   private Rows() {}
 
-  static final String DIRECT = "direct";
-  static final String GROUP = "group";
   static final int MAX_MEMBERS = 256;
 
   private static final SecureRandom RANDOM = new SecureRandom();
@@ -41,7 +40,7 @@ final class Rows {
     }
 
     boolean group() {
-      return GROUP.equals(kind);
+      return Kinds.GROUP.equals(kind);
     }
   }
 

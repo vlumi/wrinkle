@@ -12,7 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.util.HexFormat;
+import java.util.concurrent.CompletionStage;
 import java.util.function.BiConsumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import wrinkle.Uuid;
 import wrinkle.backend.v1.Push;
 
@@ -22,6 +25,7 @@ import wrinkle.backend.v1.Push;
  * instance, which counts as alive while its own key exists.
  */
 public final class Presence implements AutoCloseable {
+  private static final Logger log = LoggerFactory.getLogger(Presence.class);
   private static final String CHANNEL_PREFIX = "push:";
   private static final String INSTANCE_PREFIX = "gateway:";
   private static final long INSTANCE_TTL_SECONDS = 90;
@@ -78,9 +82,18 @@ public final class Presence implements AutoCloseable {
     return Uuid.fromHex(s.substring(CHANNEL_PREFIX.length()));
   }
 
-  /** Publishes on the user's push channel. */
+  /** Publishes on the user's push channel; a failure is logged, not retried. */
   public void publish(Uuid userId, Push push) {
-    commands.async().publish(channel(userId), push.toByteArray());
+    logged("publish", commands.async().publish(channel(userId), push.toByteArray()));
+  }
+
+  /** Logs a command's failure instead of dropping it with the future. */
+  private static void logged(String command, CompletionStage<?> result) {
+    result.exceptionally(
+        e -> {
+          log.warn("{} failed: {}", command, e.toString());
+          return null;
+        });
   }
 
   /** Delivers pushes for subscribed users to the listener, as serialized Push messages. */
@@ -108,19 +121,23 @@ public final class Presence implements AutoCloseable {
   }
 
   public void deviceConnected(Uuid userId, long deviceId) {
-    commands.async().hset(presenceKey(userId), bytes(Long.toString(deviceId)), instance);
+    logged(
+        "presence update",
+        commands.async().hset(presenceKey(userId), bytes(Long.toString(deviceId)), instance));
   }
 
   /** Removes the device's entry unless it has since connected to another instance. */
   public void deviceDisconnected(Uuid userId, long deviceId) {
-    commands
-        .async()
-        .eval(
-            REMOVE_OWN,
-            ScriptOutputType.INTEGER,
-            new byte[][] {presenceKey(userId)},
-            bytes(Long.toString(deviceId)),
-            instance);
+    logged(
+        "presence removal",
+        commands
+            .async()
+            .eval(
+                REMOVE_OWN,
+                ScriptOutputType.INTEGER,
+                new byte[][] {presenceKey(userId)},
+                bytes(Long.toString(deviceId)),
+                instance));
   }
 
   private static byte[] presenceKey(Uuid userId) {

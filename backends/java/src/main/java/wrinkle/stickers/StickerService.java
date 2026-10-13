@@ -6,7 +6,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -17,7 +16,6 @@ import wrinkle.ApiError;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
-import wrinkle.accounts.Devices;
 import wrinkle.accounts.UserOutbox;
 import wrinkle.uploads.UploadService;
 import wrinkle.v1.Event;
@@ -44,7 +42,7 @@ public final class StickerService {
    * Makes the user's uploaded sticker blob a sticker, and saves it to the user's palette unless
    * that is full. The same blob again returns the sticker as it is.
    */
-  public Sticker create(Uuid userId, ByteString blob) throws Exception {
+  public Sticker create(Uuid userId, ByteString blob) throws SQLException {
     Uuid blobId = Uuid.parse(blob);
     if (blobId == null) {
       throw ApiError.invalidArgument("blob_id must be 16 bytes");
@@ -56,8 +54,7 @@ public final class StickerService {
     }
     // Used first, so the sweeper never deletes a sticker's blob.
     uploads.useSticker(userId, blobId);
-    // As stored, so the response matches later reads.
-    LocalDateTime now = Timestamps.now().truncatedTo(ChronoUnit.MICROS);
+    LocalDateTime now = Timestamps.now();
     try (Connection c = db.getConnection()) {
       Sql.update(
           c,
@@ -117,7 +114,7 @@ public final class StickerService {
 
   /** As save, but a full palette is left as it is unless failWhenFull. */
   private void save(Uuid userId, Uuid stickerId, boolean failWhenFull) throws SQLException {
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           List<Uuid> order = order(c, userId, " FOR UPDATE");
@@ -159,7 +156,7 @@ public final class StickerService {
   /** Takes the sticker off the user's palette, if it is there. */
   public void remove(Uuid userId, ByteString stickerId) throws SQLException {
     Uuid id = stickerId(stickerId, "sticker_id");
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           List<Uuid> order = order(c, userId, " FOR UPDATE");
@@ -177,7 +174,7 @@ public final class StickerService {
   public void move(Uuid userId, ByteString stickerId, ByteString before) throws SQLException {
     Uuid id = stickerId(stickerId, "sticker_id");
     Uuid beforeId = before.isEmpty() ? null : stickerId(before, "before_sticker_id");
-    Devices.inTransaction(
+    Sql.inTransaction(
         db,
         c -> {
           List<Uuid> order = order(c, userId, " FOR UPDATE");

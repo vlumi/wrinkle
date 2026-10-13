@@ -53,7 +53,7 @@ public final class ConversationKeys {
       throw ApiError.invalidArgument("keys must have 1 to " + MAX_KEYS + " entries");
     }
     List<Wrap> wraps = new ArrayList<>(keys.size());
-    boolean self = false;
+    boolean forSelf = false;
     for (WrappedKey k : keys) {
       Uuid recipient = Uuid.parse(k.getRecipientUserId());
       if (recipient == null) {
@@ -66,8 +66,9 @@ public final class ConversationKeys {
         throw ApiError.invalidArgument("wrapped must be " + WRAPPED_BYTES + " bytes");
       }
       wraps.add(new Wrap(recipient, k.getRecipientDeviceId(), k.getWrapped().toByteArray()));
-      self |= recipient.equals(userId) && k.getRecipientDeviceId() == deviceId;
+      forSelf |= recipient.equals(userId) && k.getRecipientDeviceId() == deviceId;
     }
+    boolean self = forSelf;
     try (Connection c = db.getConnection()) {
       // Members are told apart before the device's key is looked up in the other keyspace.
       Rows.memberHeader(c, conversationId, userId, false);
@@ -76,44 +77,40 @@ public final class ConversationKeys {
     if (publicKey == null) {
       throw ApiError.failedPrecondition("this device has no key");
     }
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Header h = Rows.memberHeader(c, conversationId, userId, true);
-        long current = h.keyEpoch();
-        ApiError notNext = ApiError.failedPrecondition("epoch is not next");
-        if (epoch == current + 1) {
-          requireMembers(h, wraps);
-          insert(c, conversationId, epoch, userId, deviceId, publicKey, wraps);
-          Sql.update(
-              c,
-              "UPDATE conversation SET key_epoch = ?, rotate = FALSE WHERE conversation_id = ?",
-              epoch,
-              conversationId);
-        } else if (epoch >= 1 && epoch <= current) {
-          if (epoch == current) {
+    Sql.inTransaction(
+        db,
+        c -> {
+          Header h = Rows.memberHeader(c, conversationId, userId, true);
+          long current = h.keyEpoch();
+          ApiError notNext = ApiError.failedPrecondition("epoch is not next");
+          if (epoch == current + 1) {
             requireMembers(h, wraps);
-          } else {
-            for (Wrap w : wraps) {
-              if (!w.userId().equals(userId)) {
-                throw ApiError.permissionDenied(
-                    "keys of an earlier epoch go only to the user's own devices");
+            insert(c, conversationId, epoch, userId, deviceId, publicKey, wraps);
+            Sql.update(
+                c,
+                "UPDATE conversation SET key_epoch = ?, rotate = FALSE WHERE conversation_id = ?",
+                epoch,
+                conversationId);
+          } else if (epoch >= 1 && epoch <= current) {
+            if (epoch == current) {
+              requireMembers(h, wraps);
+            } else {
+              for (Wrap w : wraps) {
+                if (!w.userId().equals(userId)) {
+                  throw ApiError.permissionDenied(
+                      "keys of an earlier epoch go only to the user's own devices");
+                }
               }
             }
-          }
-          if (self && !madeBy(c, conversationId, epoch, userId, deviceId)) {
+            if (self && !madeBy(c, conversationId, epoch, userId, deviceId)) {
+              throw notNext;
+            }
+            insert(c, conversationId, epoch, userId, deviceId, publicKey, wraps);
+          } else {
             throw notNext;
           }
-          insert(c, conversationId, epoch, userId, deviceId, publicKey, wraps);
-        } else {
-          throw notNext;
-        }
-        c.commit();
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
+          return null;
+        });
   }
 
   private static void requireMembers(Header h, List<Wrap> wraps) {

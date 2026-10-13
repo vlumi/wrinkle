@@ -94,7 +94,8 @@ public final class Devices {
   /** Renames one of the user's signed-in devices. */
   public Device rename(Uuid userId, long deviceId, String name) throws SQLException {
     checkName(name, "name");
-    return inTransaction(
+    return Sql.inTransaction(
+        db,
         c -> {
           lockSignedIn(c, userId, deviceId);
           Sql.update(
@@ -116,7 +117,8 @@ public final class Devices {
     if (publicKey.size() != PUBLIC_KEY_BYTES) {
       throw ApiError.invalidArgument("public_key must be " + PUBLIC_KEY_BYTES + " bytes");
     }
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           byte[] stored;
           try (PreparedStatement ps =
@@ -221,7 +223,8 @@ public final class Devices {
     if (deviceId == ownDeviceId) {
       throw ApiError.invalidArgument("this device; use SignOut");
     }
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           lockSignedIn(c, userId, deviceId);
           signOut(c, userId, deviceId);
@@ -231,7 +234,8 @@ public final class Devices {
 
   /** Signs this device out. */
   public void signOut(Uuid userId, long deviceId) throws SQLException {
-    inTransaction(
+    Sql.inTransaction(
+        db,
         c -> {
           signOut(c, userId, deviceId);
           return null;
@@ -263,28 +267,5 @@ public final class Devices {
         throw ApiError.notFound("no such device");
       }
     }
-  }
-
-  public interface Work<T> {
-    T run(Connection c) throws SQLException;
-  }
-
-  /** Runs the work in one transaction, rolled back on any failure. */
-  public static <T> T inTransaction(DataSource db, Work<T> work) throws SQLException {
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        T result = work.run(c);
-        c.commit();
-        return result;
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
-  }
-
-  private <T> T inTransaction(Work<T> work) throws SQLException {
-    return inTransaction(db, work);
   }
 }

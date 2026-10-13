@@ -14,6 +14,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import javax.sql.DataSource;
+import wrinkle.Kinds;
 import wrinkle.Sql;
 import wrinkle.Uuid;
 import wrinkle.backend.v1.SignedOut;
@@ -64,10 +65,9 @@ final class DeviceFanout {
                             .setPublicKey(d.getDevice().getPublicKey()))
                     .setSignedOut(d.getSignedOut()))
             .build();
-    Set<Uuid> others = others(o.userId());
     Semaphore slots = new Semaphore(CONCURRENCY);
     List<Future<?>> running = new ArrayList<>();
-    for (Uuid other : others) {
+    for (Uuid other : contacts(o.userId())) {
       slots.acquire();
       running.add(
           tasks.submit(
@@ -94,8 +94,8 @@ final class DeviceFanout {
   }
 
   /** The user's direct partners and the current members of the user's groups, but the user. */
-  private Set<Uuid> others(Uuid userId) throws SQLException {
-    Set<Uuid> others = new LinkedHashSet<>();
+  private Set<Uuid> contacts(Uuid userId) throws SQLException {
+    Set<Uuid> contacts = new LinkedHashSet<>();
     byte[] after = new byte[Uuid.LENGTH];
     while (true) {
       List<Uuid> groups = new ArrayList<>();
@@ -116,21 +116,21 @@ final class DeviceFanout {
           after = rs.getBytes(1);
           byte[] peer = rs.getBytes(2);
           if (peer != null) {
-            others.add(Uuid.of(peer));
-          } else if ("group".equals(rs.getString(3)) && rs.getBoolean(4)) {
+            contacts.add(Uuid.of(peer));
+          } else if (Kinds.GROUP.equals(rs.getString(3)) && rs.getBoolean(4)) {
             groups.add(Uuid.of(after));
           }
         }
       }
       if (!groups.isEmpty()) {
-        others.addAll(members(groups));
+        contacts.addAll(members(groups));
       }
       if (read < PAGE) {
         break;
       }
     }
-    others.remove(userId);
-    return others;
+    contacts.remove(userId);
+    return contacts;
   }
 
   /** The groups' current members, from the conversation keyspace. */

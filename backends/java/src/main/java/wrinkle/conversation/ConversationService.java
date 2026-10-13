@@ -20,6 +20,7 @@ import java.util.Set;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Ids;
+import wrinkle.Kinds;
 import wrinkle.MessageBody;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
@@ -93,7 +94,7 @@ public final class ConversationService {
           "INSERT IGNORE INTO conversation (conversation_id, kind, topic, members, last_seq,"
               + " created_at) VALUES (?, ?, '', ?, 0, ?)",
           conversationId,
-          Rows.DIRECT,
+          Kinds.DIRECT,
           Uuid.join(List.of(userA, userB)),
           now);
       Sql.update(
@@ -126,7 +127,7 @@ public final class ConversationService {
    * Stores a message, assigning the next sequence number. Resending with the same client message id
    * returns the message stored the first time. The content must be sealed with the current key
    * epoch, and not while the conversation waits for a new one. The attachments must be the sender's
-   * uploads, already uploaded; they become used.
+   * uploads, already uploaded; they become used, and unused again should the send fail.
    */
   public Message send(
       Uuid userId,
@@ -134,7 +135,7 @@ public final class ConversationService {
       String clientMessageId,
       Sealed sealed,
       List<ByteString> blobIdBytes)
-      throws Exception {
+      throws SQLException {
     if (clientMessageId.isEmpty()
         || clientMessageId.getBytes(StandardCharsets.UTF_8).length > MAX_CLIENT_MESSAGE_ID) {
       throw ApiError.invalidArgument(
@@ -159,49 +160,65 @@ public final class ConversationService {
           return stored;
         }
       }
-      // A send failing after this leaves the uploads used with nothing referring to them.
       uploads.useAttachments(userId, blobIds);
     }
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Header h = Rows.memberHeader(c, conversationId, userId, true);
-        Message stored = findSent(c, userId, conversationId, clientMessageId);
-        if (stored != null) {
-          c.rollback();
-          return stored;
+    try {
+      return store(userId, conversationId, clientMessageId, sealed, blobIdBytes);
+    } catch (SQLException | RuntimeException e) {
+      // Theirs again, for a retry or the sweeper.
+      if (!blobIds.isEmpty()) {
+        try {
+          uploads.releaseAttachments(userId, blobIds);
+        } catch (SQLException r) {
+          e.addSuppressed(r);
         }
-        if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
-          throw ApiError.failedPrecondition("stale key epoch");
-        }
-        if (h.rotate()) {
-          throw ApiError.failedPrecondition("keys must rotate");
-        }
-        LocalDateTime sentAt = Timestamps.now();
-        long seq = h.lastSeq() + 1;
-        Message msg =
-            Message.newBuilder()
-                .setConversationId(conversationId.toByteString())
-                .setSeq(seq)
-                .setSenderUserId(userId.toByteString())
-                .setClientMessageId(clientMessageId)
-                .setSealed(sealed)
-                .setSentAt(Timestamps.toProto(sentAt))
-                .addAllBlobIds(blobIdBytes)
-                .build();
-        Sql.update(
-            c,
-            "UPDATE conversation SET last_seq = ? WHERE conversation_id = ?",
-            seq,
-            conversationId);
-        Rows.storeMessage(c, msg, h.members(), h.kind(), h.topic(), h.members().size());
-        c.commit();
-        return msg;
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
       }
+      throw e;
     }
+  }
+
+  /** Stores the message under the conversation row's lock, or returns the one already stored. */
+  private Message store(
+      Uuid userId,
+      Uuid conversationId,
+      String clientMessageId,
+      Sealed sealed,
+      List<ByteString> blobIdBytes)
+      throws SQLException {
+    return Sql.inTransaction(
+        db,
+        c -> {
+          Header h = Rows.memberHeader(c, conversationId, userId, true);
+          Message stored = findSent(c, userId, conversationId, clientMessageId);
+          if (stored != null) {
+            return stored;
+          }
+          if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
+            throw ApiError.failedPrecondition("stale key epoch");
+          }
+          if (h.rotate()) {
+            throw ApiError.failedPrecondition("keys must rotate");
+          }
+          LocalDateTime sentAt = Timestamps.now();
+          long seq = h.lastSeq() + 1;
+          Message msg =
+              Message.newBuilder()
+                  .setConversationId(conversationId.toByteString())
+                  .setSeq(seq)
+                  .setSenderUserId(userId.toByteString())
+                  .setClientMessageId(clientMessageId)
+                  .setSealed(sealed)
+                  .setSentAt(Timestamps.toProto(sentAt))
+                  .addAllBlobIds(blobIdBytes)
+                  .build();
+          Sql.update(
+              c,
+              "UPDATE conversation SET last_seq = ? WHERE conversation_id = ?",
+              seq,
+              conversationId);
+          Rows.storeMessage(c, msg, h.members(), h.kind(), h.topic(), h.members().size());
+          return msg;
+        });
   }
 
   /** The attachment ids: at most MAX_ATTACHMENTS, 16 bytes each, distinct. */
@@ -240,82 +257,76 @@ public final class ConversationService {
   /** Deletes the message, returning the attachment ids it had. */
   private List<Uuid> deleteMessageRow(Uuid userId, Uuid conversationId, long seq)
       throws SQLException {
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Header h = Rows.header(c, conversationId, true);
-        Readable r = readable(c, conversationId, userId);
-        Message msg;
-        long targetOutboxId;
-        try (PreparedStatement ps =
-                Sql.prepare(
-                    c,
-                    "SELECT "
-                        + Rows.MESSAGE_COLUMNS
-                        + ", outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR"
-                        + " UPDATE",
-                    conversationId,
-                    seq);
-            ResultSet rs = ps.executeQuery()) {
-          if (!rs.next() || !r.covers(seq)) {
-            throw ApiError.notFound("message " + seq + " does not exist");
+    return Sql.inTransaction(
+        db,
+        c -> {
+          Header h = Rows.header(c, conversationId, true);
+          Readable r = readable(c, conversationId, userId);
+          Message msg;
+          long targetOutboxId;
+          try (PreparedStatement ps =
+                  Sql.prepare(
+                      c,
+                      "SELECT "
+                          + Rows.MESSAGE_COLUMNS
+                          + ", outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR"
+                          + " UPDATE",
+                      conversationId,
+                      seq);
+              ResultSet rs = ps.executeQuery()) {
+            if (!rs.next() || !r.covers(seq)) {
+              throw ApiError.notFound("message " + seq + " does not exist");
+            }
+            msg = Rows.message(conversationId, rs);
+            targetOutboxId = rs.getLong(Rows.MESSAGE_COLUMN_COUNT + 1);
           }
-          msg = Rows.message(conversationId, rs);
-          targetOutboxId = rs.getLong(Rows.MESSAGE_COLUMN_COUNT + 1);
-        }
-        if (msg.hasNotice()) {
-          throw ApiError.invalidArgument("a notice cannot be deleted");
-        }
-        if (!userId.matches(msg.getSenderUserId())) {
-          throw ApiError.permissionDenied("message " + seq + " was sent by someone else");
-        }
-        if (msg.hasDeletedAt()) {
-          c.commit();
-          return List.of();
-        }
-        LocalDateTime at = Timestamps.now();
-        Message deleted = Message.newBuilder().setDeletedAt(Timestamps.toProto(at)).build();
-        Sql.update(
-            c,
-            "UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?",
-            MessageBody.encode(deleted),
-            conversationId,
-            seq);
-        // The deleted event tells the members to drop the reactions too.
-        Sql.update(
-            c, "DELETE FROM reaction WHERE conversation_id = ? AND seq = ?", conversationId, seq);
-        Event event =
-            Event.newBuilder()
-                .setOccurredAt(deleted.getDeletedAt())
-                .setMessageDeleted(
-                    MessageDeletedEvent.newBuilder()
-                        .setConversationId(conversationId.toByteString())
-                        .setSeq(seq)
-                        .setDeletedAt(deleted.getDeletedAt()))
-                .build();
-        List<Uuid> recipients = new ArrayList<>(h.members());
-        if (!h.includes(userId)) {
-          recipients.add(userId);
-        }
-        Rows.insertOutbox(
-            c,
-            conversationId,
-            Ids.random(),
-            recipients,
-            h.kind(),
-            h.topic(),
-            h.members().size(),
-            "message_deleted",
-            event,
-            at,
-            targetOutboxId);
-        c.commit();
-        return msg.getBlobIdsList().stream().map(Uuid::parse).toList();
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
+          if (msg.hasNotice()) {
+            throw ApiError.invalidArgument("a notice cannot be deleted");
+          }
+          if (!userId.matches(msg.getSenderUserId())) {
+            throw ApiError.permissionDenied("message " + seq + " was sent by someone else");
+          }
+          if (msg.hasDeletedAt()) {
+            return List.of();
+          }
+          LocalDateTime at = Timestamps.now();
+          Message deleted = Message.newBuilder().setDeletedAt(Timestamps.toProto(at)).build();
+          Sql.update(
+              c,
+              "UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?",
+              MessageBody.encode(deleted),
+              conversationId,
+              seq);
+          // The deleted event tells the members to drop the reactions too.
+          Sql.update(
+              c, "DELETE FROM reaction WHERE conversation_id = ? AND seq = ?", conversationId, seq);
+          Event event =
+              Event.newBuilder()
+                  .setOccurredAt(deleted.getDeletedAt())
+                  .setMessageDeleted(
+                      MessageDeletedEvent.newBuilder()
+                          .setConversationId(conversationId.toByteString())
+                          .setSeq(seq)
+                          .setDeletedAt(deleted.getDeletedAt()))
+                  .build();
+          List<Uuid> recipients = new ArrayList<>(h.members());
+          if (!h.includes(userId)) {
+            recipients.add(userId);
+          }
+          Rows.insertOutbox(
+              c,
+              conversationId,
+              Ids.random(),
+              recipients,
+              h.kind(),
+              h.topic(),
+              h.members().size(),
+              "message_deleted",
+              event,
+              at,
+              targetOutboxId);
+          return msg.getBlobIdsList().stream().map(Uuid::parse).toList();
+        });
   }
 
   /**
@@ -338,106 +349,104 @@ public final class ConversationService {
             "sealed.ciphertext must be 1 to " + MAX_REACTION_CIPHERTEXT_BYTES + " bytes");
       }
     }
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Header h = Rows.memberHeader(c, conversationId, userId, true);
-        Readable r = readable(c, conversationId, userId);
-        Message msg;
-        try (PreparedStatement ps =
-                Sql.prepare(
-                    c,
-                    "SELECT "
-                        + Rows.MESSAGE_COLUMNS
-                        + " FROM message WHERE conversation_id = ? AND seq = ?",
-                    conversationId,
-                    seq);
-            ResultSet rs = ps.executeQuery()) {
-          if (!rs.next() || !r.covers(seq)) {
-            throw ApiError.notFound("message " + seq + " does not exist");
+    Sql.inTransaction(
+        db,
+        c -> {
+          Header h = Rows.memberHeader(c, conversationId, userId, true);
+          Readable r = readable(c, conversationId, userId);
+          Message msg;
+          try (PreparedStatement ps =
+                  Sql.prepare(
+                      c,
+                      "SELECT "
+                          + Rows.MESSAGE_COLUMNS
+                          + " FROM message WHERE conversation_id = ? AND seq = ?",
+                      conversationId,
+                      seq);
+              ResultSet rs = ps.executeQuery()) {
+            if (!rs.next() || !r.covers(seq)) {
+              throw ApiError.notFound("message " + seq + " does not exist");
+            }
+            msg = Rows.message(conversationId, rs);
           }
-          msg = Rows.message(conversationId, rs);
-        }
-        if (msg.hasNotice()) {
-          throw ApiError.invalidArgument("a notice cannot be reacted to");
-        }
-        if (msg.hasDeletedAt()) {
-          throw ApiError.failedPrecondition("message " + seq + " was deleted");
-        }
-        if (sealed != null) {
-          if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
-            throw ApiError.failedPrecondition("stale key epoch");
+          if (msg.hasNotice()) {
+            throw ApiError.invalidArgument("a notice cannot be reacted to");
           }
-          if (h.rotate()) {
-            throw ApiError.failedPrecondition("keys must rotate");
+          if (msg.hasDeletedAt()) {
+            throw ApiError.failedPrecondition("message " + seq + " was deleted");
           }
-        }
-        byte[] previous;
-        try (PreparedStatement ps =
-                Sql.prepare(
-                    c,
-                    "SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?"
-                        + " FOR UPDATE",
-                    conversationId,
-                    seq,
-                    userId);
-            ResultSet rs = ps.executeQuery()) {
-          previous = rs.next() ? rs.getBytes(1) : null;
-        }
-        byte[] body = sealed == null ? null : sealed.toByteArray();
-        if (Arrays.equals(previous, body)) {
-          c.rollback();
-          return;
-        }
-        LocalDateTime at = Timestamps.now();
-        if (body == null) {
-          Sql.update(
+          if (sealed != null) {
+            if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
+              throw ApiError.failedPrecondition("stale key epoch");
+            }
+            if (h.rotate()) {
+              throw ApiError.failedPrecondition("keys must rotate");
+            }
+          }
+          byte[] previous;
+          try (PreparedStatement ps =
+                  Sql.prepare(
+                      c,
+                      "SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?"
+                          + " FOR UPDATE",
+                      conversationId,
+                      seq,
+                      userId);
+              ResultSet rs = ps.executeQuery()) {
+            previous = rs.next() ? rs.getBytes(1) : null;
+          }
+          byte[] body = sealed == null ? null : sealed.toByteArray();
+          if (Arrays.equals(previous, body)) {
+            return null;
+          }
+          LocalDateTime at = Timestamps.now();
+          if (body == null) {
+            Sql.update(
+                c,
+                "DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?",
+                conversationId,
+                seq,
+                userId);
+          } else {
+            Sql.update(
+                c,
+                "INSERT INTO reaction (conversation_id, seq, user_id, body, updated_at) VALUES (?, ?,"
+                    + " ?, ?, ?) ON DUPLICATE KEY UPDATE body = ?, updated_at = ?",
+                conversationId,
+                seq,
+                userId,
+                body,
+                at,
+                body,
+                at);
+          }
+          ReactionEvent.Builder reaction =
+              ReactionEvent.newBuilder()
+                  .setConversationId(conversationId.toByteString())
+                  .setSeq(seq)
+                  .setUserId(userId.toByteString())
+                  .setUpdatedAt(Timestamps.toProto(at));
+          if (sealed != null) {
+            reaction.setSealed(sealed);
+          }
+          Event event =
+              Event.newBuilder()
+                  .setOccurredAt(Timestamps.toProto(at))
+                  .setReaction(reaction)
+                  .build();
+          Rows.insertOutbox(
               c,
-              "DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?",
               conversationId,
-              seq,
-              userId);
-        } else {
-          Sql.update(
-              c,
-              "INSERT INTO reaction (conversation_id, seq, user_id, body, updated_at) VALUES (?, ?,"
-                  + " ?, ?, ?) ON DUPLICATE KEY UPDATE body = ?, updated_at = ?",
-              conversationId,
-              seq,
-              userId,
-              body,
-              at,
-              body,
+              Ids.random(),
+              h.members(),
+              h.kind(),
+              h.topic(),
+              h.members().size(),
+              "reaction",
+              event,
               at);
-        }
-        ReactionEvent.Builder reaction =
-            ReactionEvent.newBuilder()
-                .setConversationId(conversationId.toByteString())
-                .setSeq(seq)
-                .setUserId(userId.toByteString())
-                .setUpdatedAt(Timestamps.toProto(at));
-        if (sealed != null) {
-          reaction.setSealed(sealed);
-        }
-        Event event =
-            Event.newBuilder().setOccurredAt(Timestamps.toProto(at)).setReaction(reaction).build();
-        Rows.insertOutbox(
-            c,
-            conversationId,
-            Ids.random(),
-            h.members(),
-            h.kind(),
-            h.topic(),
-            h.members().size(),
-            "reaction",
-            event,
-            at);
-        c.commit();
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
+          return null;
+        });
   }
 
   /** The message the user already sent with this client message id, or null. */
@@ -463,58 +472,53 @@ public final class ConversationService {
     if (seq <= 0) {
       throw ApiError.invalidArgument("seq must be positive");
     }
-    try (Connection c = db.getConnection()) {
-      c.setAutoCommit(false);
-      try {
-        Header h = Rows.memberHeader(c, conversationId, userId, true);
-        if (seq > h.lastSeq()) {
-          throw ApiError.invalidArgument(
-              "seq " + seq + " is beyond the last message " + h.lastSeq());
-        }
-        long previous = lockReadMark(c, userId, conversationId);
-        if (previous >= seq) {
-          c.rollback();
-          return;
-        }
-        LocalDateTime at = Timestamps.now();
-        Sql.update(
-            c,
-            "INSERT INTO read_mark (conversation_id, user_id, seq, updated_at) VALUES (?, ?, ?, ?)"
-                + " ON DUPLICATE KEY UPDATE seq = ?, updated_at = ?",
-            conversationId,
-            userId,
-            seq,
-            at,
-            seq,
-            at);
-        Event event =
-            Event.newBuilder()
-                .setOccurredAt(Timestamps.toProto(at))
-                .setRead(
-                    ReadEvent.newBuilder()
-                        .setConversationId(conversationId.toByteString())
-                        .setUserId(userId.toByteString())
-                        .setSeq(seq))
-                .build();
-        Collection<Uuid> recipients =
-            h.group() ? readRecipients(c, h, userId, conversationId, previous, seq) : h.members();
-        Rows.insertOutbox(
-            c,
-            conversationId,
-            Ids.random(),
-            recipients,
-            h.kind(),
-            h.topic(),
-            h.members().size(),
-            "read",
-            event,
-            at);
-        c.commit();
-      } catch (SQLException | RuntimeException e) {
-        c.rollback();
-        throw e;
-      }
-    }
+    Sql.inTransaction(
+        db,
+        c -> {
+          Header h = Rows.memberHeader(c, conversationId, userId, true);
+          if (seq > h.lastSeq()) {
+            throw ApiError.invalidArgument(
+                "seq " + seq + " is beyond the last message " + h.lastSeq());
+          }
+          long previous = lockReadMark(c, userId, conversationId);
+          if (previous >= seq) {
+            return null;
+          }
+          LocalDateTime at = Timestamps.now();
+          Sql.update(
+              c,
+              "INSERT INTO read_mark (conversation_id, user_id, seq, updated_at) VALUES (?, ?, ?, ?)"
+                  + " ON DUPLICATE KEY UPDATE seq = ?, updated_at = ?",
+              conversationId,
+              userId,
+              seq,
+              at,
+              seq,
+              at);
+          Event event =
+              Event.newBuilder()
+                  .setOccurredAt(Timestamps.toProto(at))
+                  .setRead(
+                      ReadEvent.newBuilder()
+                          .setConversationId(conversationId.toByteString())
+                          .setUserId(userId.toByteString())
+                          .setSeq(seq))
+                  .build();
+          Collection<Uuid> recipients =
+              h.group() ? readRecipients(c, h, userId, conversationId, previous, seq) : h.members();
+          Rows.insertOutbox(
+              c,
+              conversationId,
+              Ids.random(),
+              recipients,
+              h.kind(),
+              h.topic(),
+              h.members().size(),
+              "read",
+              event,
+              at);
+          return null;
+        });
   }
 
   /**

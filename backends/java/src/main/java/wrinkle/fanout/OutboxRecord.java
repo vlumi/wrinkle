@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.List;
+import wrinkle.Kinds;
 import wrinkle.Uuid;
 import wrinkle.v1.Event;
 
@@ -46,7 +47,7 @@ record OutboxRecord(
   }
 
   boolean group() {
-    return "group".equals(conversationKind);
+    return Kinds.GROUP.equals(conversationKind);
   }
 
   /** In a direct conversation, the other recipient; null in a group. */

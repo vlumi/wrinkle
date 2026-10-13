@@ -1,6 +1,7 @@
 package wrinkle.services;
 
 import com.google.protobuf.ByteString;
+import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.ApiError;
@@ -94,11 +95,11 @@ public final class LocalBackend implements Backend {
   }
 
   @Override
-  public void ack(Uuid userId, long deviceId, long cursor) throws Exception {
+  public void ack(Uuid userId, long deviceId, long cursor) throws SQLException {
     users.ack(userId, deviceId, cursor);
   }
 
-  private Response.Builder dispatch(Uuid userId, long deviceId, Request req) throws Exception {
+  private Response.Builder dispatch(Uuid userId, long deviceId, Request req) throws SQLException {
     Response.Builder resp = Response.newBuilder();
     switch (req.getBodyCase()) {
       case REGISTER, SIGN_IN, CONNECT -> {
@@ -291,7 +292,7 @@ public final class LocalBackend implements Backend {
   }
 
   /** The requests allowed before Connect. */
-  private Response.Builder signIn(Request req, Response.Builder resp) throws Exception {
+  private Response.Builder signIn(Request req, Response.Builder resp) throws SQLException {
     return switch (req.getBodyCase()) {
       case REGISTER ->
           resp.setRegister(

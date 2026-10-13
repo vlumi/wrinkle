@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
+import wrinkle.Kinds;
 import wrinkle.MessageBody;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
@@ -148,10 +149,10 @@ public final class DeviceSyncService {
           c,
           "INSERT IGNORE INTO user_conversation (user_id, conversation_id, kind, peer_user_id,"
               + " peer_name, peer_icon, peer_avatar, peer_deleted, member, last_seq, read_seq,"
-              + " peer_read_seq, updated_at) VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, TRUE, 0, 0, 0,"
-              + " ?)",
+              + " peer_read_seq, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE, 0, 0, 0, ?)",
           userId,
           conversationId,
+          Kinds.DIRECT,
           peerId,
           peer.getName(),
           peer.getIcon(),
@@ -201,7 +202,7 @@ public final class DeviceSyncService {
         Conversation.newBuilder()
             .setConversationId(conversationId)
             .setKind(
-                "group".equals(rs.getString(14))
+                Kinds.GROUP.equals(rs.getString(14))
                     ? ConversationKind.CONVERSATION_KIND_GROUP
                     : ConversationKind.CONVERSATION_KIND_DIRECT)
             .setLastSeq(lastSeq)

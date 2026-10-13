@@ -45,6 +45,10 @@ public final class FanoutWorker {
   public static final List<String> TOPICS = List.of(CONVERSATION_TOPIC, USER_TOPIC);
   private static final Logger log = LoggerFactory.getLogger(FanoutWorker.class);
   private static final int ATTEMPTS = 5;
+  // A key's records retry in turn, up to 3 seconds each; a poll's worth is bounded and given the
+  // time, so the group does not take a working consumer for dead.
+  private static final int MAX_POLL_RECORDS = 200;
+  private static final long MAX_POLL_INTERVAL_MILLIS = 15 * 60 * 1000;
   // How many recipients of one outbox row are delivered to at a time.
   private static final int RECIPIENT_CONCURRENCY = 16;
   private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(3);
@@ -70,6 +74,8 @@ public final class FanoutWorker {
     p.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
     p.put(ConsumerConfig.SESSION_TIMEOUT_MS_CONFIG, "10000");
     p.put(ConsumerConfig.HEARTBEAT_INTERVAL_MS_CONFIG, "3000");
+    p.put(ConsumerConfig.MAX_POLL_RECORDS_CONFIG, Integer.toString(MAX_POLL_RECORDS));
+    p.put(ConsumerConfig.MAX_POLL_INTERVAL_MS_CONFIG, Long.toString(MAX_POLL_INTERVAL_MILLIS));
     p.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     this.consumer = new KafkaConsumer<>(p);
@@ -171,7 +177,9 @@ public final class FanoutWorker {
       try {
         handle(rec);
         return;
-      } catch (SQLException | RuntimeException e) {
+      } catch (InterruptedException e) {
+        throw e;
+      } catch (Exception e) {
         last = e;
         log.warn("delivery failed, attempt {}: {}", attempt, e.toString());
         Thread.sleep(200L * attempt);

@@ -27,7 +27,7 @@ public final class UploadSweeper {
   private static final Duration FIRST_RUN = Duration.ofMinutes(1);
   private static final Duration INTERVAL = Duration.ofMinutes(10);
   private static final Duration UNUSED_FOR = Duration.ofHours(24);
-  private static final int BATCH = 500;
+  private static final int SWEEP_PAGE = 500;
 
   record Upload(Uuid userId, Uuid blobId) {}
 
@@ -42,7 +42,7 @@ public final class UploadSweeper {
   /** Where the bytes are. */
   interface Remover {
     /** Deletes the blob and returns the HTTP status. */
-    int delete(Uuid blobId) throws Exception;
+    int delete(Uuid blobId);
   }
 
   private final Store store;
@@ -72,15 +72,15 @@ public final class UploadSweeper {
   private void run() {
     try {
       sweep(Timestamps.now().minus(UNUSED_FOR));
-    } catch (Exception e) {
+    } catch (SQLException | RuntimeException e) {
       log.warn("upload sweep failed", e);
     }
   }
 
   /** One batch of the unused uploads made before the cutoff; returns how many blobs went. */
-  int sweep(LocalDateTime cutoff) throws Exception {
+  int sweep(LocalDateTime cutoff) throws SQLException {
     int deleted = 0;
-    for (Upload u : store.unused(cutoff, BATCH)) {
+    for (Upload u : store.unused(cutoff, SWEEP_PAGE)) {
       // Another sweeper, or a profile that started using it meanwhile, may have got there first.
       if (!store.remove(u)) {
         continue;

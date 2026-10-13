@@ -26,7 +26,7 @@ final class ProfileFanout {
   // How many partners of one user are delivered to at a time.
   private static final int CONCURRENCY = 16;
   // Rows removed per statement when purging a deleted account.
-  private static final int PURGE_BATCH = 1000;
+  private static final int PURGE_PAGE = 1000;
 
   private final UserLog userLog;
   private final ExecutorService tasks;
@@ -106,8 +106,8 @@ final class ProfileFanout {
     try (Connection c = userLog.db().getConnection()) {
       for (String table : List.of("user_event", "user_conversation", "device", "palette_sticker")) {
         while (Sql.update(
-                c, "DELETE FROM " + table + " WHERE user_id = ? LIMIT ?", userId, PURGE_BATCH)
-            == PURGE_BATCH) {
+                c, "DELETE FROM " + table + " WHERE user_id = ? LIMIT ?", userId, PURGE_PAGE)
+            == PURGE_PAGE) {
           // Until a batch comes up short.
         }
       }

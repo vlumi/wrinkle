@@ -1,6 +1,8 @@
 package wrinkle.uploads;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -10,7 +12,10 @@ import java.time.Instant;
 import java.util.Map;
 import wrinkle.Uuid;
 
-/** The object storage behind the blob address: blobs by id under /blobs/, as the proxy serves. */
+/**
+ * The object storage behind the blob address: blobs by id under /blobs/, as the proxy serves. A
+ * request that fails is an UncheckedIOException, an internal error to the request it served.
+ */
 public final class Blobs {
   private static final Duration TIMEOUT = Duration.ofSeconds(5);
   private static final long DELETE_EXPIRES_SECONDS = 60;
@@ -42,21 +47,32 @@ public final class Blobs {
   }
 
   /** Whether the blob has been uploaded. */
-  public boolean exists(Uuid blobId) throws IOException, InterruptedException {
+  public boolean exists(Uuid blobId) {
     HttpRequest req =
         HttpRequest.newBuilder(URI.create(url + path(blobId)))
             .timeout(TIMEOUT)
             .method("HEAD", HttpRequest.BodyPublishers.noBody())
             .build();
-    return http.send(req, HttpResponse.BodyHandlers.discarding()).statusCode() == 200;
+    return status(req) == 200;
   }
 
   /** Deletes the blob; returns the HTTP status (200 or 204, or 404 when there was none). */
-  public int delete(Uuid blobId) throws IOException, InterruptedException {
+  public int delete(Uuid blobId) {
     String signed =
         presigner.presign("DELETE", path(blobId), Map.of(), Instant.now(), DELETE_EXPIRES_SECONDS);
     HttpRequest req =
         HttpRequest.newBuilder(URI.create(url + signed)).timeout(TIMEOUT).DELETE().build();
-    return http.send(req, HttpResponse.BodyHandlers.discarding()).statusCode();
+    return status(req);
+  }
+
+  private int status(HttpRequest req) {
+    try {
+      return http.send(req, HttpResponse.BodyHandlers.discarding()).statusCode();
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new UncheckedIOException(new InterruptedIOException("interrupted"));
+    }
   }
 }
