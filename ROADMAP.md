@@ -1,199 +1,74 @@
 # Roadmap
 
-Each phase leaves something that runs on its own.
+What is done, what is open and why, and the gaps that are known and accepted for now. How it got here, the questions settled on the way and the figures since superseded are in [docs/history.md](docs/history.md); what a public deployment would need, and its cost, in [docs/production.md](docs/production.md). Features are tracked as issues; the number follows the name.
 
-## 1. Contract and infrastructure
+## Done
 
-- [x] Protobuf contract: WebSocket frames (request, response, event, ack, ping), requests and responses, the event types.
-- [x] SQL schemas and Vitess keyspaces: conversations by conversation id, users by user id, with vschemas.
-- [x] Docker Compose: Vitess, Kafka (KRaft, single broker), Debezium on Kafka Connect, Valkey. Heaps capped so the whole stack fits in ~4 GB.
-- [x] Smoke test of the change-data path: an outbox insert appears on the Kafka topic.
-- [x] `make ci`: the local CI entry point. Each later phase adds its checks to it (format, lint, unit tests, conformance against every backend).
+- **Contract and infrastructure.** The Protobuf contract for devices (`proto/wrinkle/v1`) and between gateway and services (`proto/wrinkle/backend/v1`); SQL schemas and two Vitess keyspaces; Docker Compose with Vitess, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana; the outbox streamed from the binlog, each row deleted in the transaction that inserts it; `make ci` as the local gate. [Architecture: Processes](docs/architecture.md#processes), [Data model](docs/architecture.md#data-model).
+- **Backends.** Go and Java implement everything, as a monolith or split into gateways and services instances over the internal RPC; Elixir and Rust implement the gateway and run beside Go or Java services. All four pass the conformance tests. [Implementations](docs/architecture.md#implementations).
+- **Clients and measurement.** A web client (React, TypeScript), an iOS client (SwiftUI, local storage), a Go client library, and a load generator with the measurement protocol in [docs/measuring.md](docs/measuring.md); every backend exposes the same metric names ([docs/metrics.md](docs/metrics.md)).
+- **Scaling out.** Services instances and gateways in any number and language behind two HAProxy balancers, natively (`make lb-up`) or as a cluster of containers (`make cluster-up`); the services balancer spreads requests, not connections. [Shapes](docs/architecture.md#shapes), [Scaling](docs/architecture.md#scaling).
+- **Hardening.** Per-connection limits, a Connect deadline, keepalive and close codes in every gateway, from the contract; graceful drain; debug endpoints only on the host; presence that expires with its process. [Connections](docs/architecture.md#connections).
+- **Accounts and profiles (#1).** Passwords, a token per device, random UUIDs for users and conversations, names unique ignoring case, profiles with icons and avatars, devices listed and signed out remotely, account deletion; TLS for devices on the network through an HAProxy edge; object storage for blobs. [Accounts](docs/architecture.md#accounts), [Blobs](docs/architecture.md#blobs).
+- **Groups (#2).** Topic, admins, up to 256 members, every change a notice in the group's sequence, read events to the senders of the messages read. [Groups](docs/architecture.md#groups).
+- **Deleting one's own messages (#4).** A tombstone that keeps the seq; copies in members' logs and the list preview scrubbed by the fan-out; a background push so iOS withdraws a shown notification. [Deleting a message](docs/architecture.md#deleting-a-message).
+- **End-to-end encryption (#6).** A key per conversation and epoch, wrapped for every member device; rotation on membership and device changes; history shared to a new device with the user's approval; safety numbers. Test vectors shared by Go, TypeScript and Swift. [End-to-end encryption](docs/architecture.md#end-to-end-encryption).
+- **Reactions (#3).** One sealed set per user and message, replaced as a whole. [Reactions](docs/architecture.md#reactions).
+- **Stickers (#5).** Public, permanent blobs made from a user's images; a palette of up to 200 per user, synced across devices. [Stickers](docs/architecture.md#stickers).
+- **Attachments (#7).** Images and files encrypted on the device with a key per file, thumbnails made on the device, blob ids in clear for their lifecycle; the load generator can include them. [Attachments](docs/architecture.md#attachments).
+- **Push notifications.** `RegisterPushToken` in every backend; APNs from the Go fan-out to devices that are not connected, with the sealed content for the iOS notification service extension to decrypt. [Sending a message](docs/architecture.md#sending-a-message).
 
-Resolved:
+## Open
 
-- Vitess publishes x86 images only ([vitessio/vitess#17225](https://github.com/vitessio/vitess/issues/17225), [#15034](https://github.com/vitessio/vitess/issues/15034)). `infra/vitess/` builds `vttestserver` natively from the Vitess sources at a release tag, with MySQL 8.4 LTS from the multi-arch `mysql` image since there are no arm64 MySQL packages for Debian. The first build takes a few minutes; Compose caches it.
-- Debezium's Vitess connector streams from `vttestserver` (vtcombo) over VStream. Its initial snapshot, a VStream copy, fails against vtcombo with duplicate BEGIN events, so the connector runs with `snapshot.mode=never`; the outbox only needs streaming. `BIGINT UNSIGNED` columns arrive as decimal strings in the JSON records.
+### Backends
 
-Resolved later:
+- **Services in Elixir and Rust.** Left out because the services are SQL and a Kafka consumer, where the languages differ least; a gateway is where they differ most. A full implementation in each would complete the matrix.
+- **Pushes from the Java fan-out.** The Java backend stores push tokens but sends nothing to APNs, so in a pool of Go and Java services instances the partitions a Java instance consumes get no notifications.
+- **A second Go gateway without a goroutine per connection**, on a poller-driven WebSocket library, to see how far the idle memory per connection falls when the model changes; see [docs/results/2026-10-10-idle-memory.md](docs/results/2026-10-10-idle-memory.md).
 
-- Outbox rows are deleted in the transaction that inserts them, as in Debezium's outbox pattern: the connector streams the insert and skips the delete, so the table stays empty.
-- Debezium kept over a relay in the services that produces to Kafka itself. A relay gives the same guarantee with fewer moving parts, but it loses the order of a conversation's events unless it polls each shard in order, has to be written in every services language, and must follow resharding by itself. Reading the change log keeps commit order for free, which at the scale the design aims for outweighs the extra process.
+### Contract
 
-## 2. Go backend
+- **Coalesced acks.** The design forwards a device's acks at most once a minute per device; every gateway writes them as they come, one write at a time per connection, keeping only the highest cursor that arrived meanwhile. Acks are about 30 % of the database's transactions (see Database ceiling).
+- **`MessageFailedEvent` has no producer.** Sends are answered synchronously and the fan-out retries until an append succeeds, so there is no asynchronous failure to report, and no backend produces it ([Connect and sync](docs/architecture.md#connect-and-sync)). Drop it from the contract, or give it a producer when one appears.
 
-- [x] One binary, roles chosen by configuration: gateway, conversation service, sync service, fan-out worker.
-- [x] Conformance tests in `conformance/`, run against any backend through the contract.
+### Features
 
-Notes:
+- **Messages:** editing (a replacement body by the same path), and deleting only on one's own devices.
+- **Stickers:** packs and the sticker editor (#8); animated stickers (GIF and WebP upload, but clients redraw them as still images); moderation, reporting and takedown.
+- **Attachments:** video thumbnails and playback; downloads served through a CDN.
+- **Public channels (#9):** rooms with thousands of readers need a read path per room instead of a log append per member.
+- **Encryption:** no forward secrecy between rotations, and a stolen device key reads every epoch it was given; MLS (RFC 9420) would add both, with a library on each client. A new device learns that history was shared only when it opens a conversation or reconnects; a notice event would let it fetch at once. The web client needs a secure context (HTTPS) for WebCrypto, so a page served over plain HTTP on the network cannot send.
+- **Presence after a Valkey restart:** devices that stayed connected have no presence entry until they reconnect, so they may get notifications while connected. Gateways could rewrite their devices' entries when they reconnect to Valkey.
 
-- The roles are `gateway`, `services` and `fanout`. By default the gateway runs the conversation and sync services in-process; with `--services` it forwards to a `services` process over the internal RPC added in phase 7.
-- Push goes from fan-out workers to gateways through Valkey pub/sub, one channel per user; a gateway subscribes to a user's channel while it holds one of that user's connections. The presence hash (device to node) tells the push notifier which devices are not connected.
-- Ids were derived, not allocated: user id from the name, conversation id from the user pair, both within 63 bits, so sign-in and opening a conversation needed no lookup table. Replaced by random UUIDs with accounts; see Accounts.
-- `MessageFailedEvent` is in the contract but nothing produces it yet; the synchronous path has no asynchronous failure to report.
+### Operations
 
-## 3. Web client
+- **Limits per user across devices and per address**, including sign-in attempts per account and per address, need shared state (Valkey, or the balancer's stick tables); with password recovery, left for a public deployment ([docs/production.md](docs/production.md)).
+- **The change-data path does not survive a restart of the Vitess container.** The test server starts an empty database whenever its container restarts (rebuilding the image after a change under `infra/vitess/` does it; so does Docker Desktop restarting), and Debezium's stored offsets then point into history that no longer exists: both connectors retry forever ("failed to find a PRIMARY tablet for VStream"), no event is delivered, and every conformance run fails at the readiness probe with "no event delivered". `make infra-reset` is the fix. `make infra-up` could detect the state (a connector task failing on VStream against an empty database) and say so, or reset the connectors' offsets itself.
+- **Attachment uploads that stay used.** A send releases its uploads on any failure after marking them used, but the release itself can fail, and a retried `DeleteMessage` has nothing to release, since the delete erases the blob ids from the row; in both cases the sweeper never deletes the blobs. The fix keeps the blob ids on the tombstone and hides them in reads, in both backends.
+- **Load-generator attachments are never deleted**, so blob storage grows with each run until `make infra-reset`.
+- **Images are not built by `make ci`**, to keep it quick; a broken Dockerfile shows at `make cluster-up`.
+- **Prometheus scrapes only port 8080.** Neither the side-by-side processes nor the cluster are scraped; the monitoring page links the native processes' metrics.
 
-- [x] Sign in by name, conversation list, conversation view, read marks, connection state; first as one page of plain JavaScript, then in React.
+### Database ceiling
 
-Notes:
+Above about 500 messages per second the shared database limits every backend on a laptop. It is the Vitess layer in one process: at 1000 messages per second, about 3400 transactions and 15000 statements per second, vtcombo uses about 2.7 cores and mysqld 1.7, and the fan-out consumes about 700 records per second whatever its pool size or concurrency. Disk, Debezium and Kafka were ruled out ([history](docs/history.md)). Options, cheapest first:
 
-- Rewritten in React and TypeScript with Vite after the first version, plain JavaScript, proved hard to use on a phone: one pane at a time on narrow screens, both side by side on wide ones. The contract is generated by buf with protoc-gen-es, so ids are `bigint`; Zustand holds the session; `server.mjs` serves the build with no dependencies.
-- `make web-test` drives the built app in headless Chrome over the DevTools protocol: two users in separate browser contexts, one at phone width, loaded from a host name that is not a secure context, as on a LAN. Vitest covers the conversation model; ESLint and `tsc` the rest. All of it is in `make ci`.
+- Fewer statements per message: coalesce acks in the gateways (above) and fold the fan-out's statements.
+- A plain MySQL profile of the infrastructure, same schema, no sharding, to measure Vitess's share and give the backends headroom.
+- A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes.
 
-## 4. Load generator and metrics
+### Measurements
 
-- [x] Load generator in Go: simulated devices, configurable connection count, message rate, devices per user.
-- [x] Prometheus and Grafana in Compose; the same metric names in every backend.
-- [x] Measurement protocol in `docs/`: warm-up, run length, repetitions, how results are recorded (date, commit, machine, configuration).
-- [x] First results for the Go backend.
+- **Re-measure every shape** after encryption, groups, reactions, stickers and attachments: the results in [docs/results/](docs/results/) predate them (commit 0b06d92), and the figures quoted in the README, the architecture, the capacity page and the backend READMEs come from those runs. The write-up for a public repository follows the re-measurement.
 
-Notes:
+## Known gaps
 
-- `docs/measuring.md` is the protocol, `loadgen/protocol.sh` runs it, `docs/results/` holds the write-ups with the raw JSON lines. Metric names are in `docs/metrics.md`.
-- The first run found the fan-out worker serial and the protocol leaking Kafka backlog between runs; both fixed the same day. The second run: 500/s sustained with 66 ms p50 end to end, about 46 KiB per idle connection.
-- The Vitess container saturates between 500 and 1000 messages per second on this machine, so backends can only be compared below that; see "Database ceiling" below.
-- Idle memory scatters by about 20 MiB between runs; quote medians of repetitions (`REPS=3`).
+Behavior that is understood and accepted for now; each would be a change to a flow, not a fix.
 
-## 5. Java backend
-
-- [x] Same contract and conformance tests. Java 25 (virtual threads without pinning on `synchronized`), Netty and Armeria.
-- [x] Go vs. Java comparison.
-
-Notes:
-
-- Armeria's WebSocket service over Netty; request handling and fan-out on virtual threads; HikariCP over Connector/J, the Kafka consumer, Lettuce for Valkey. Gradle with a JDK 25 toolchain, google-java-format through Spotless as the format check, `-Xlint:all -Werror`.
-- Ids were computed by an own xxhash64 matching the Go backend bit for bit, so both backends ran on one database; since accounts, ids are random UUIDs and the shared vectors are the password and token formats.
-- The JVM exporter reports no resident memory on macOS; the load generator reads it with `ps` instead.
-- First comparison in `docs/results/2026-10-10-go-vs-java.md`: both sustain 500/s, Go's tail is tighter, baselines differ by 200 MiB, CPU per message within 10 %. The per-connection memory figures need repetitions and a fixed JVM heap before they mean anything.
-- Later split like Go, into a services role over the internal RPC (gRPC through Armeria) and a gateway that forwards to it; `services.Local` holds the request handling behind the same `Backend` interface as in Go.
-
-## 6. iOS client
-
-- [x] SwiftUI, `URLSessionWebSocketTask`, SwiftProtobuf; local storage, so a device syncs only what it is missing.
-
-Notes:
-
-- The logic is a Swift package, `clients/ios/Packages/WrinkleCore`: `WrinkleCore` has the generated contract, the connection actor and the SwiftData store; `WrinkleKit` the session and the screens. `Sources/iOS` is the shell. The Xcode project is generated by xcodegen from `project.yml` and not committed, in the style of the sibling SwiftUI projects.
-- The package compiles for the Mac too, so `swift test` runs headless: store tests, and a backend test over a real connection to `localhost:8080`. `make ios-test` runs them against the Go backend; `make ios-build` builds the app unsigned for the simulator; both are in `make ci`. `make ios-lint` is swiftlint and swift-format, strict.
-- iOS 26 is the floor. The device keeps its device id and cursor per user in UserDefaults and conversations and messages in SwiftData; after a reconnect it syncs from the cursor and acks.
-- `make ios-sim` builds, installs and launches the app in an iPhone simulator, which reaches the host's backend as `localhost`; `make ios-device` does the same on a paired iPhone, signed with the team in `.env`.
-
-## 7. Elixir and Rust
-
-- [x] Gateway first in each, since connection handling is where they differ most; then the full backend if worthwhile.
-- [x] Four-way comparison.
-- [ ] Open: services in Elixir and Rust. They were left out because the services are SQL and a Kafka consumer, where the languages differ least; a full implementation in each would complete the matrix.
-
-Notes:
-
-- An internal RPC between gateway and services (`proto/wrinkle/backend/v1`): the gateway forwards a device's request with its identity and gets back the response as it goes to the device; pushes keep going through Valkey. The Go and Java backends have a `services` role and a forwarding mode for their gateways (`split.sh` in each runs the pair for conformance and measurement). The Elixir and Rust implementations are gateways only, run beside Go or Java services (`run.sh` in each runs one beside a Go services process for conformance and measurement).
-- Elixir: Bandit, a process per connection, requests in a task each, elixir-grpc over Mint. Rust: axum over tokio, a task per connection, tonic. Both pass the conformance tests.
-- Comparison in `docs/results/2026-10-11-gateways.md`: all three gateways within 15 ms at p50; Rust a fifth of Go's memory at 4000 connections and 60 % of its CPU per message, with the tightest tail; Elixir's per-connection memory the highest, its baseline above 100 MiB.
-- Two protocol flaws found: the stack degrades as it grows (1.4 s against 94 ms p50 at 500/s), so each backend now runs from a fresh stack; and grpc-go's default of 100 concurrent streams per connection broke the Elixir client under a connect storm.
-
-## Scaling out
-
-- [x] Side by side, the shape the design scales in: services instances and gateways in any number and language behind two HAProxy balancers (`make lb-up`). Devices' connections go to the gateway with the fewest; each gateway keeps one HTTP/2 connection to the services balancer, which spreads requests, not connections, over the instances. Go and Java instances share one pool and one fan-out consumer group.
-- [x] The same in containers (`make cluster-up`): an image per backend, counts per language and role, replicas found by HAProxy through Docker's DNS, rescaled in place. For trying the scaled shape; measurements stay native.
-
-Notes:
-
-- A plain connection balancer in front of the services would pin each gateway's one gRPC connection to one instance; HAProxy in HTTP/2 mode balances per request instead. Client-side balancing in each gateway would save the hop but needs doing in three gRPC clients of uneven support.
-- The services balancer checks an instance by connecting to its RPC port: a stopped instance drops out, a hung one does not.
-- In the cluster, HAProxy keeps a removed replica's address only a second, since Docker hands addresses to new containers: with the default holds, a slot of a kind scaled to zero kept passing checks against a container of another kind.
-- Kubernetes was considered and left out: its Services balance connections too, so it would not replace HAProxy for the RPC, and it would add image builds and networking layers to a project whose point is comparing processes measured natively.
-- [ ] Images are not built by `make ci`, to keep it quick; a broken Dockerfile shows at `make cluster-up`.
-- [ ] Neither the side-by-side processes nor the cluster are scraped by Prometheus; the monitoring page links the native processes' metrics.
-
-## Hardening
-
-- [x] Limits and liveness in every gateway, the same everywhere and documented in the contract: frame size, a deadline for Connect, a rate and an in-flight limit per connection (`ERROR_CODE_RESOURCE_EXHAUSTED`), one ack write at a time, pings and an idle timeout, close codes for every way a connection ends. The conformance tests cover the limits that show within seconds.
-- [x] Graceful drain: on SIGTERM a gateway fails its health check, refuses new connections, closes the open ones with 1001 so the devices reconnect elsewhere, and exits.
-- [x] The debug endpoints (profiles, forced garbage collection) answer only on the host; the device balancer passes only the WebSocket endpoint.
-- [ ] Limits per user across devices and per address need shared state (Valkey, or the balancer's stick tables); left for a public deployment.
-
-## Accounts
-
-- [x] Accounts with passwords: Register and SignIn return a device token, and Connect carries the token. Names are unique ignoring case and can change; ids are random UUIDs, for users and conversations both, so groups (#2) fit later. Profiles have a name and one of a fixed set of icons, and changes reach the user's devices and conversation partners through a second outbox, in the user keyspace, and its own Debezium connector.
-- [x] TLS for devices on the network: an HAProxy edge with a certificate from mkcert, in front of whatever serves port 8080, which listens on loopback only. The web client is served over HTTPS likewise.
-- [x] Devices listed, renamed and signed out from another device; a signed-out device's connections close at once (4001), through a sign-out on the user's push channel. Account deletion frees the name, signs every device out and removes the user's data; partners see a deleted account.
-- [x] Object storage for blobs: Garage behind a proxy on loopback 9200 and at `/blobs/` on the TLS edge (MinIO no longer publishes images). Uploads are signed by the services; avatars are the first use.
-- [ ] No limit on sign-in attempts per account or per address, no password recovery; both needed for a public service (`docs/production.md`).
 - A conversation list entry the fan-out creates while the peer renames may keep the old name until the peer's next change: the entry reads the peer's profile when it is created, and the rename's fan-out pages through the lists that exist when it runs.
-- Hashing a password takes about 19 MiB and tens of milliseconds, so the services run at most as many hashes at once as they have cores. A burst of sign-ins, as the load generator makes before a run, raises the services' resident memory; measurements force a garbage collection before sampling.
-
-## Groups
-
-- [x] Group conversations: a kind fixed at creation, a topic, admins, members added by anyone and removed by admins, leaving with promotion of the earliest member, at most 256 members. Changes are notices in the group's sequence; outbox rows carry their recipients. Read events go to the senders of the messages read, so clients show "read by n" without a fan-out to every member per read. Go and Java implement it; the web and iOS clients create groups, show members and sender names; the load generator can send a share of its messages to groups (`--group-share`, `--group-size`).
 - Profile changes reach direct partners only; a group's member names refresh when a client opens the group.
 - A user deleted right after being added to a group, before the fan-out has put the group in their list, stays a member.
-
-## Deleting messages
-
-- [x] Senders delete their own messages for everyone: a tombstone that keeps the seq, the copies in members' logs and the list preview scrubbed by the fan-out, and a background push so iOS withdraws a notification already shown. Go and Java implement it; both clients delete from a message's menu and show "Message removed".
-- [ ] Editing a message (a replacement body by the same path) and deleting only on one's own devices.
-
-## End-to-end encryption
-
-- [x] A key per conversation and epoch, wrapped for every member device's X25519 key; content sealed with AES-256-GCM; the services store and relay ciphertext and wrapped keys. Membership changes force a new epoch; device changes make senders rotate; a new device gets history from the user's other devices after the user approves. Safety numbers with a warning when a verified contact's devices change. Go and Java serve it, both clients and the load generator encrypt, the iOS notification service extension decrypts pushes. Test vectors shared by Go, TypeScript and Swift.
-- [ ] No forward secrecy between rotations, and a stolen device key reads every epoch it was given; MLS (RFC 9420) would add both, with a library on each client.
-- [ ] A new device learns that history was shared only when it opens a conversation or reconnects; a notice event would let it fetch at once.
-- [ ] A key wrapped by a device that has since signed out, and whose key a device never saw, is refused as unverifiable.
-- [ ] The web client needs a secure context (HTTPS) for WebCrypto, so a page served over plain HTTP on the network cannot send.
-
-## Reactions
-
-- [x] Reactions as one sealed set per user and message, replaced as a whole: relayed as `ReactionEvent`s and returned with `GetMessages`, removed with the message. Go and Java implement it; both clients show chips with counts and react from a picker.
-- No push to the message's sender for a reaction: the services cannot say what the reaction was.
-
-## Stickers
-
-- [x] Users make stickers from their own images; stickers are public, permanent and read like any blob; anyone saves any sticker to a palette of up to 200, reordered and synced across devices. Sending one is sealed content naming it. Go and Java implement it; both clients send from the palette, save received stickers and manage the palette.
-- [ ] No moderation or reporting of stickers, and no way to take one down.
-- [ ] Packs, and the sticker editor (#8).
-- [ ] Animated stickers: GIF and WebP upload, but clients redraw them as still images.
-
-## Attachments
-
-- [x] Images and files, encrypted on the device with a key per file, uploaded through the blob proxy, with keys, digests, names and thumbnails in the sealed content and the blob ids in clear for their lifecycle. Images are scaled and thumbnailed on the device. Go and Java check and keep the blobs; both clients send, show thumbnails, open a full-screen viewer and download files; the load generator can include attachments (`--attachment-share`, `--attachment-size`).
-- [ ] A send that fails after its uploads were marked used leaves them used with nothing referring to them, so the sweeper never deletes them.
-- [ ] Load-generator attachments are never deleted, so blob storage grows with each run until `make infra-reset`.
-- [ ] Video thumbnails and playback; downloads served through a CDN.
-
-## Push notifications
-
-- [x] `RegisterPushToken` in the contract; every backend stores the token.
-- [x] APNs from the Go fan-out to devices that are not connected; the iOS app registers, closes its connection in the background and opens a tapped conversation.
-- [ ] After a Valkey restart, devices that stayed connected have no presence entry until they reconnect, so they may get notifications while connected. Gateways could rewrite their devices' entries when they reconnect to Valkey.
-- [ ] Pending: the Java backend's fan-out sends no pushes yet. In a pool of Go and Java services instances, the partitions a Java instance consumes get no pushes.
-- Presence entries name the gateway process holding the device, and each process keeps a key with a 90 s expiry alive while it runs; the push notifier ignores entries of processes whose key has expired, so devices of a gateway that died get pushes again within 90 s.
-
-## Database ceiling
-
-Above about 500 messages per second the shared database limits every backend on a laptop. Investigated on 2026-10-11:
-
-- Not disk: the test server commits without fsync. The InnoDB buffer pool was the test server's 32 MB, which a day of runs outgrew; it is 512 MB now, and sends keep up at 1000 per second.
-- Not Debezium or Kafka: the topic keeps pace with outbox inserts.
-- It is the Vitess layer in one process: at 1000 messages per second, about 3400 transactions and 15000 statements per second, vtcombo uses about 2.7 cores and mysqld 1.7, and the fan-out consumes about 700 records per second whatever its pool size or concurrency.
-
-Options, cheapest first:
-
-- [ ] Fewer statements per message: coalesce acks in the gateways (the design forwards them at most once a minute per device; they are about 30 % of the transactions) and fold the fan-out's statements.
-- [ ] A plain MySQL profile of the infrastructure, same schema, no sharding, to measure Vitess's share and give the backends headroom.
-- [ ] A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes.
-
-## Features
-
-Tracked as issues: user accounts and profiles (#1, done), group conversations (#2, done), reactions (#3, done), deleting one's own messages (#4, done), stickers (#5, done), end-to-end encryption (#6, done), image and file attachments (#7, done), a sticker editor (#8), public channels (#9). What a public deployment would need, and its cost, is in `docs/production.md`.
-
-## Later
-
-- [ ] The change-data path does not survive a restart of the Vitess container on its existing data: vtcombo comes back without a primary tablet for streaming, and Debezium retries forever. `make infra-reset` recovers. Rebuilding the image (a change under `infra/vitess/`) restarts it; so does Docker Desktop restarting.
-
-- [ ] A second Go gateway beside the current one, without a goroutine per connection (a poller-driven WebSocket library), to see how far the idle memory per connection falls when the model changes; see `docs/results/2026-10-10-idle-memory.md`.
-
-## Before making the repository public
-
-- [x] Choose a license: MIT.
-- [ ] Results write-up in `docs/`.
+- No push notification to a message's sender for a reaction: the services cannot say what the reaction was.
+- A key wrapped by a device that has since signed out, and whose key a device never saw, is refused as unverifiable.
+- The services balancer checks an instance by connecting to its RPC port: a stopped instance drops out, a hung one does not.
+- Hashing a password takes about 19 MiB and tens of milliseconds, so the services run at most as many hashes at once as they have cores; a burst of sign-ins, as the load generator makes before a run, raises the services' resident memory, and measurements force a garbage collection before sampling.
