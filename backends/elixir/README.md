@@ -56,7 +56,7 @@ The order matters: Valkey, presence and the push subscriber are up before Bandit
 
 ## Connections
 
-Each connection is one BEAM process: Bandit's connection process, running the `WebSock` callbacks in [socket.ex](lib/wrinkle/socket.ex). Its state is the device (`nil` until Connect succeeds), where the Connect stands (none, forwarded, waiting for the push subscription, done), the running tasks by monitor, the token bucket, the in-flight count, the ack writer state, when a frame last arrived, and whether it is draining.
+Each connection is one BEAM process: Bandit's connection process, running the `WebSock` callbacks in [socket.ex](lib/wrinkle/socket.ex). Its state is a `Wrinkle.Socket` struct: the device (`nil` until Connect succeeds), where the Connect stands (none, forwarded, waiting for the push subscription, done), the running tasks by monitor, the token bucket, the in-flight count, the ack writer state, when a frame last arrived, the count of pushes queued in the mailbox, and whether it is draining.
 
 ```mermaid
 flowchart TB
@@ -84,14 +84,14 @@ Reading: Bandit decodes WebSocket frames and calls `handle_in`. Each binary fram
 
 Request dispatch: a request is run in a task under `Wrinkle.Tasks`, started with `Task.Supervisor.async_nolink`, which forwards it with the connection's device and returns the response to the socket process, so a slow request never blocks pushes or other requests. The socket monitors each task: one that crashes is answered `ERROR_CODE_INTERNAL` and its in-flight slot released, and an ack write that crashes counts as finished. Before Connect, only Register, SignIn and Connect are forwarded, with an empty user id; any other request is answered `ERROR_CODE_UNAUTHENTICATED` "connect first". Register, SignIn and Connect are forwarded only while no Connect is: one sent while a Connect is forwarded or after it succeeded gets `ERROR_CODE_FAILED_PRECONDITION` "already connected" at once, and a Connect that failed may be retried. A Connect response without a 16-byte user id is answered `ERROR_CODE_INTERNAL`. User ids are 16-byte binaries; Valkey names a user by their lowercase hex. When a Connect succeeds, the socket binds to that device: it attaches to `Wrinkle.Push` for the user's channel, writes its presence entry, and holds the response until `Wrinkle.Push` reports the channel subscribed, so no push after the response is missed; if that takes over 5 s (Valkey unreachable), it detaches, removes its presence entry and answers `ERROR_CODE_UNAVAILABLE`, and Connect may be retried within a fresh 5 s deadline. An RPC failure or timeout (10 s) answers `ERROR_CODE_UNAVAILABLE`; every request is answered. Durations are measured in the socket process, from reading the request to queueing its response.
 
-Writing and the outbound queue: only the socket process writes, by returning `{:push, frame, state}` from a callback. Its mailbox is the outbound queue. When a push arrives and the mailbox holds more than 64 messages (32 pushes plus up to 32 pending responses), the connection is closed with 1013. Bandit's socket send timeout of 10 s bounds a write to a device that does not read.
+Writing and the outbound queue: only the socket process writes, by returning `{:push, frame, state}` from a callback. Its mailbox is the outbound queue. `Wrinkle.Push` counts the pushes it has sent to each connection in an atomic that the socket decrements as it takes one; a push taken while 32 more wait behind it closes the connection with 1013, the same bound of 32 queued pushes as the other gateways. Responses are not counted: at most the in-flight cap of them wait in the mailbox. Bandit's socket send timeout of 10 s bounds a write to a device that does not read.
 
 The limits from the contract ([frame.proto](../../proto/wrinkle/v1/frame.proto)):
 
 | Limit | Where |
 |---|---|
 | Frame at most 64 KiB, else 1009 | Bandit's `max_frame_size` (64 KiB plus the 14-byte header) and `max_fragmented_message_size`, set in [router.ex](lib/wrinkle/router.ex) |
-| Connect within 5 s, else 1008 | a `{:connect_deadline, ref}` message sent to itself at `init`, and again with a new ref when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; only the latest ref counts |
+| Connect within 5 s, else 1008 | a `{:connect_deadline, ref}` message sent to itself at `init`, and again with a new ref when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; only the latest ref counts. The 5 s wait for the push subscription is a `{:subscribe_deadline, ref}` message the same way, its ref kept with the Connect it bounds |
 | 50 frames a second, bursts of 100 | [token_bucket.ex](lib/wrinkle/token_bucket.ex), in thousandths of a token; a request over it gets `ERROR_CODE_RESOURCE_EXHAUSTED`, an ack, ping or pong is dropped |
 | 32 requests in flight | the in-flight count, a Connect until its response is sent; beyond it, `ERROR_CODE_RESOURCE_EXHAUSTED` |
 | One ack write at a time | [ack_writer.ex](lib/wrinkle/ack_writer.ex): acks arriving during a write are coalesced to the highest cursor and written when it finishes |
@@ -129,7 +129,7 @@ The make targets for this backend:
 | `make cluster-up ELIXIR_GW=n` | n gateways in containers, built from [Dockerfile](Dockerfile) |
 | `make conformance-elixir-gw` | the conformance tests against [run.sh](run.sh) |
 | `make measure-elixir-gw` | the measurement protocol, results labeled `elixir` |
-| `make elixir-lint` | `mix format --check-formatted` and a compile with warnings as errors |
+| `make elixir-lint` | `mix format --check-formatted`, a compile with warnings as errors, and `mix credo --strict` |
 | `make elixir-test` | the unit tests |
 | `make proto` | regenerates `lib/wrinkle/proto` with the other languages |
 

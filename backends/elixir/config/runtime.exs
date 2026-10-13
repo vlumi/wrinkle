@@ -13,7 +13,10 @@ listen = System.get_env("WRINKLE_LISTEN", ":8080")
   end
 
 resolve = fn family ->
-  with {:ok, ip} <- :inet.getaddr(host, family), do: ip, else: (_ -> nil)
+  case :inet.getaddr(host, family) do
+    {:ok, ip} -> ip
+    {:error, _} -> nil
+  end
 end
 
 ip =
@@ -21,8 +24,10 @@ ip =
     do: {0, 0, 0, 0},
     else: resolve.(:inet) || resolve.(:inet6) || raise("WRINKLE_LISTEN: cannot resolve #{host}")
 
+{:ok, hostname} = :inet.gethostname()
+
 config :wrinkle,
   listen: {ip, port},
   services: System.get_env("WRINKLE_SERVICES", "localhost:9000"),
   valkey: System.get_env("WRINKLE_VALKEY", "localhost:6379"),
-  node: System.get_env("WRINKLE_NODE", elem(:inet.gethostname(), 1) |> List.to_string())
+  node: System.get_env("WRINKLE_NODE", List.to_string(hostname))

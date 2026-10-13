@@ -9,17 +9,13 @@ defmodule Wrinkle.Socket do
   require Logger
 
   alias Wrinkle.{AckWriter, Backend, Metrics, Presence, Push, TokenBucket}
-  alias Wrinkle.V1.{Frame, Pong, Request, Response}
   alias Wrinkle.V1.Error, as: WireError
+  alias Wrinkle.V1.{Frame, Pong, Request, Response}
 
   @connect_deadline 5_000
   @subscribe_timeout 5_000
   @max_in_flight 32
   @outbound_queue 32
-  # Only pushes close a connection that does not keep up. Responses wait in
-  # the mailbox too, at most the in-flight cap of them, and pile up there
-  # while this process reads a burst of frames.
-  @max_mailbox @outbound_queue + @max_in_flight
 
   @shutting_down {1001, "shutting down"}
   @signed_out {4001, "signed out"}
@@ -34,14 +30,45 @@ defmodule Wrinkle.Socket do
   @doc "The number of open connections on this node."
   def count, do: Registry.count(Wrinkle.Sockets)
 
-  # device is nil until Connect succeeds, then {user_id, device_id}, the user
-  # id being 16 bytes; connect is :none, :pending while a Connect is
-  # forwarded, {:subscribing, ...} while its response waits for the push
-  # subscription, then :done; deadline names the connect deadline running, so
-  # a restarted one makes the earlier message stale; tasks maps each
-  # task's monitor to {:request, id, type, started} or :ack; seen_at is when a
-  # frame last arrived, in monotonic milliseconds; ack is the AckWriter state;
-  # push monitors Wrinkle.Push once attached.
+  # The connect and subscribe deadlines are messages to self, each with a ref;
+  # only the latest counts, so a restarted deadline makes the earlier message
+  # stale. pushes counts those in the mailbox: up by Wrinkle.Push as it sends
+  # one, down here as it is written.
+  defstruct device: nil,
+            connect: :none,
+            deadline: nil,
+            tasks: %{},
+            push: nil,
+            pushes: nil,
+            bucket: nil,
+            in_flight: 0,
+            ack: nil,
+            seen_at: 0,
+            draining: false
+
+  @type device :: {user_id :: <<_::128>>, device_id :: non_neg_integer()}
+  @type task ::
+          {:request, id :: non_neg_integer(), type :: String.t(), started :: integer()} | :ack
+  @type connect ::
+          :none
+          | :pending
+          | {:subscribing, id :: non_neg_integer(), Response.t(), started :: integer(),
+             reference()}
+          | :done
+  @type t :: %__MODULE__{
+          device: device() | nil,
+          connect: connect(),
+          deadline: reference() | nil,
+          tasks: %{reference() => task()},
+          push: reference() | nil,
+          pushes: :atomics.atomics_ref(),
+          bucket: TokenBucket.t(),
+          in_flight: non_neg_integer(),
+          ack: AckWriter.t(),
+          seen_at: integer(),
+          draining: boolean()
+        }
+
   @impl true
   def init(_opts) do
     Metrics.connection(+1)
@@ -49,29 +76,22 @@ defmodule Wrinkle.Socket do
     now = System.monotonic_time(:millisecond)
 
     {:ok,
-     restart_deadline(%{
-       device: nil,
-       connect: :none,
-       deadline: nil,
-       tasks: %{},
-       push: nil,
+     restart_deadline(%__MODULE__{
+       pushes: :atomics.new(1, []),
        bucket: TokenBucket.new(now),
-       in_flight: 0,
-       ack: nil,
-       seen_at: now,
-       draining: false
+       seen_at: now
      })}
   end
 
   @impl true
-  def handle_in({data, [opcode: :binary]}, state) do
+  def handle_in({data, [opcode: :binary]}, %__MODULE__{} = state) do
     now = System.monotonic_time(:millisecond)
-    state = %{state | seen_at: now}
+    state = %__MODULE__{state | seen_at: now}
 
     case decode(data) do
       {:ok, %Frame{kind: {kind, _} = body}} when kind in [:request, :ack, :ping, :pong] ->
         {result, bucket} = TokenBucket.take(state.bucket, now)
-        inbound(body, result, %{state | bucket: bucket})
+        inbound(body, result, %__MODULE__{state | bucket: bucket})
 
       {:ok, _} ->
         {:stop, :normal, {1008, "unexpected frame"}, state}
@@ -86,21 +106,21 @@ defmodule Wrinkle.Socket do
   end
 
   @impl true
-  def handle_control(_frame, state) do
-    {:ok, %{state | seen_at: System.monotonic_time(:millisecond)}}
+  def handle_control(_frame, %__MODULE__{} = state) do
+    {:ok, %__MODULE__{state | seen_at: System.monotonic_time(:millisecond)}}
   end
 
   @impl true
-  def handle_info({ref, result}, %{tasks: tasks} = state) when is_map_key(tasks, ref) do
+  def handle_info({ref, result}, %__MODULE__{tasks: tasks} = state) when is_map_key(tasks, ref) do
     Process.demonitor(ref, [:flush])
     {task, tasks} = Map.pop(tasks, ref)
-    finished(task, result, %{state | tasks: tasks})
+    finished(task, result, %__MODULE__{state | tasks: tasks})
   end
 
-  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{tasks: tasks} = state)
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %__MODULE__{tasks: tasks} = state)
       when is_map_key(tasks, ref) do
     {task, tasks} = Map.pop(tasks, ref)
-    crashed(task, %{state | tasks: tasks})
+    crashed(task, %__MODULE__{state | tasks: tasks})
   end
 
   def handle_info({:DOWN, ref, :process, _pid, _reason}, %{push: ref} = state) do
@@ -109,27 +129,30 @@ defmodule Wrinkle.Socket do
 
   def handle_info(
         {:subscribed, _user_id},
-        %{connect: {:subscribing, id, response, started}} = state
+        %__MODULE__{connect: {:subscribing, id, response, started, _ref}} = state
       ) do
-    respond({id, "connect", started}, response, %{state | connect: :done})
+    respond({id, "connect", started}, response, %__MODULE__{state | connect: :done})
   end
 
   # Not connected after all: Connect may be retried, within a fresh deadline.
   def handle_info(
-        :subscribe_deadline,
-        %{connect: {:subscribing, id, _, started}, device: {user_id, device_id}} = state
+        {:subscribe_deadline, ref},
+        %__MODULE__{connect: {:subscribing, id, _, started, ref}, device: {user_id, device_id}} =
+          state
       ) do
     Logger.warning("push subscription of user #{Push.hex(user_id)} not ready, connect refused")
     Push.detach()
     Presence.delete(user_id, device_id)
     Process.demonitor(state.push, [:flush])
     response = error(id, :ERROR_CODE_UNAVAILABLE, "push channel unavailable")
-    state = restart_deadline(%{state | device: nil, connect: :none, push: nil})
+    state = restart_deadline(%__MODULE__{state | device: nil, connect: :none, push: nil})
     respond({id, "connect", started}, response, state)
   end
 
+  # Taken from the mailbox and written at once; the count is what is still
+  # queued behind this one.
   def handle_info({:push, frame}, state) do
-    if too_slow?() do
+    if :atomics.sub_get(state.pushes, 1, 1) >= @outbound_queue do
       {:stop, :normal, {1013, "too slow"}, state}
     else
       Metrics.pushed()
@@ -161,9 +184,9 @@ defmodule Wrinkle.Socket do
     {:stop, :normal, @shutting_down, state}
   end
 
-  def handle_info({:drain, grace}, state) do
+  def handle_info({:drain, grace}, %__MODULE__{} = state) do
     Process.send_after(self(), :drain_deadline, grace)
-    {:ok, %{state | draining: true}}
+    {:ok, %__MODULE__{state | draining: true}}
   end
 
   def handle_info(:drain_deadline, state), do: {:stop, :normal, @shutting_down, state}
@@ -211,7 +234,7 @@ defmodule Wrinkle.Socket do
     refuse(request, :ERROR_CODE_FAILED_PRECONDITION, "already connected", state)
   end
 
-  defp inbound({:request, %Request{id: id} = request}, :ok, state) do
+  defp inbound({:request, %Request{id: id} = request}, :ok, %__MODULE__{} = state) do
     device = state.device
     task = Task.Supervisor.async_nolink(Wrinkle.Tasks, fn -> dispatch(device, request) end)
     type = request_type(request)
@@ -219,7 +242,7 @@ defmodule Wrinkle.Socket do
     connect = if type == "connect", do: :pending, else: state.connect
 
     {:ok,
-     %{
+     %__MODULE__{
        state
        | tasks: Map.put(state.tasks, task.ref, entry),
          in_flight: state.in_flight + 1,
@@ -227,9 +250,9 @@ defmodule Wrinkle.Socket do
      }}
   end
 
-  defp inbound({:ack, ack}, :ok, %{device: {_, _}} = state) do
+  defp inbound({:ack, ack}, :ok, %__MODULE__{device: {_, _}} = state) do
     {action, acks} = AckWriter.ack(state.ack, ack.cursor)
-    {:ok, write_ack(action, %{state | ack: acks})}
+    {:ok, write_ack(action, %__MODULE__{state | ack: acks})}
   end
 
   defp inbound({:ack, _}, :ok, state), do: {:ok, state}
@@ -245,16 +268,21 @@ defmodule Wrinkle.Socket do
 
   # A successful Connect binds the connection to the device; its response
   # waits until the user's push channel is subscribed.
-  defp finished({:request, id, _type, started}, {response, {user_id, device_id} = device}, state) do
-    Push.attach(user_id)
+  defp finished(
+         {:request, id, _type, started},
+         {response, {user_id, device_id} = device},
+         %__MODULE__{} = state
+       ) do
+    Push.attach(user_id, state.pushes)
     Presence.put(user_id, device_id)
-    Process.send_after(self(), :subscribe_deadline, @subscribe_timeout)
+    ref = make_ref()
+    Process.send_after(self(), {:subscribe_deadline, ref}, @subscribe_timeout)
 
     {:ok,
-     %{
+     %__MODULE__{
        state
        | device: device,
-         connect: {:subscribing, id, response, started},
+         connect: {:subscribing, id, response, started, ref},
          push: Process.monitor(Push)
      }}
   end
@@ -263,7 +291,10 @@ defmodule Wrinkle.Socket do
     respond({id, type, started}, response, after_request(type, state))
   end
 
-  defp finished(:ack, _result, state), do: ack_done(state)
+  defp finished(:ack, result, state) do
+    with {:error, reason} <- result, do: Logger.warning("ack failed: #{inspect(reason)}")
+    ack_done(state)
+  end
 
   # A task that crashed: its request is answered, an ack write is done.
   defp crashed({:request, id, type, started}, state) do
@@ -275,22 +306,22 @@ defmodule Wrinkle.Socket do
 
   # A Connect that failed may be retried. Hashing a password may have taken
   # a while, so a Register or SignIn answered gives Connect a fresh deadline.
-  defp after_request("connect", state), do: %{state | connect: :none}
+  defp after_request("connect", %__MODULE__{} = state), do: %__MODULE__{state | connect: :none}
 
   defp after_request(type, state) when type in ["register", "sign_in"],
     do: restart_deadline(state)
 
   defp after_request(_type, state), do: state
 
-  defp restart_deadline(state) do
+  defp restart_deadline(%__MODULE__{} = state) do
     ref = make_ref()
     Process.send_after(self(), {:connect_deadline, ref}, @connect_deadline)
-    %{state | deadline: ref}
+    %__MODULE__{state | deadline: ref}
   end
 
-  defp respond({_id, type, started}, response, state) do
+  defp respond({_id, type, started}, response, %__MODULE__{} = state) do
     Metrics.request(type, response_code(response), System.monotonic_time() - started)
-    state = %{state | in_flight: state.in_flight - 1}
+    state = %__MODULE__{state | in_flight: state.in_flight - 1}
     frame = encode({:response, response})
 
     if state.draining and state.in_flight == 0 do
@@ -300,25 +331,20 @@ defmodule Wrinkle.Socket do
     end
   end
 
-  defp ack_done(state) do
+  defp ack_done(%__MODULE__{} = state) do
     {action, ack} = AckWriter.done(state.ack)
-    {:ok, write_ack(action, %{state | ack: ack})}
+    {:ok, write_ack(action, %__MODULE__{state | ack: ack})}
   end
 
   defp write_ack(:none, state), do: state
 
-  defp write_ack({:write, cursor}, %{device: {user_id, device_id}} = state) do
+  defp write_ack({:write, cursor}, %__MODULE__{device: {user_id, device_id}} = state) do
     task =
       Task.Supervisor.async_nolink(Wrinkle.Tasks, fn ->
         Backend.ack(user_id, device_id, cursor)
       end)
 
-    %{state | tasks: Map.put(state.tasks, task.ref, :ack)}
-  end
-
-  defp too_slow? do
-    {:message_queue_len, n} = Process.info(self(), :message_queue_len)
-    n > @max_mailbox
+    %__MODULE__{state | tasks: Map.put(state.tasks, task.ref, :ack)}
   end
 
   defp encode(kind), do: {:binary, Frame.encode(%Frame{kind: kind})}

@@ -15,21 +15,34 @@ defmodule Wrinkle.Push do
   import Bitwise
   require Logger
 
+  alias Wrinkle.Backend.V1.Push, as: PushMessage
+
   @pubsub Wrinkle.ValkeyPubSub
   @channel_prefix "push:"
 
+  @type decoded :: {:event, binary()} | {:signed_out, [non_neg_integer()] | :all} | :error
+
+  @spec start_link(term()) :: GenServer.on_start()
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
-  @doc "Attaches the calling connection process to the user's pushes."
-  def attach(user_id), do: GenServer.cast(__MODULE__, {:attach, self(), user_id})
+  @doc """
+  Attaches the calling connection process to the user's pushes; `pushes` is
+  incremented for each one sent to it, so the connection can tell how many
+  wait in its mailbox.
+  """
+  @spec attach(binary(), :atomics.atomics_ref()) :: :ok
+  def attach(user_id, pushes), do: GenServer.cast(__MODULE__, {:attach, self(), user_id, pushes})
 
   @doc "Detaches the calling connection process; the last one unsubscribes."
+  @spec detach() :: :ok
   def detach, do: GenServer.cast(__MODULE__, {:detach, self()})
 
   @doc "The lowercase hex of a user id, naming the user in Valkey keys and channels."
+  @spec hex(binary()) :: String.t()
   def hex(user_id), do: Base.encode16(user_id, case: :lower)
 
   @doc "Wraps an already serialized Event in a Frame without decoding it: Frame.event is field 3."
+  @spec event_frame(binary()) :: binary()
   def event_frame(payload) do
     <<0x1A, varint(byte_size(payload))::binary, payload::binary>>
   end
@@ -41,6 +54,7 @@ defmodule Wrinkle.Push do
   event differs from the Frame that carries it only in the field number,
   Push.event being field 1, so the common case swaps the tag.
   """
+  @spec decode(binary()) :: decoded()
   def decode(<<0x0A, rest::binary>> = payload) do
     case read_varint(rest, 0, 0) do
       {len, event} when byte_size(event) == len -> {:event, <<0x1A, rest::binary>>}
@@ -51,7 +65,7 @@ defmodule Wrinkle.Push do
   def decode(payload), do: decode_push(payload)
 
   defp decode_push(payload) do
-    case Wrinkle.Backend.V1.Push.decode(payload) do
+    case PushMessage.decode(payload) do
       %{kind: {:event, event}} -> {:event, event_frame(event)}
       %{kind: {:signed_out, %{all_devices: true}}} -> {:signed_out, :all}
       %{kind: {:signed_out, %{device_ids: ids}}} -> {:signed_out, ids}
@@ -70,8 +84,8 @@ defmodule Wrinkle.Push do
   defp varint(n) when n < 128, do: <<n>>
   defp varint(n), do: <<1::1, n &&& 0x7F::7, varint(n >>> 7)::binary>>
 
-  # users: user id -> %{pids, confirmed}, present while subscribed;
-  # conns: connection pid -> {monitor, user id}.
+  # users: user id -> %{pids: pid -> its push count, confirmed}, present while
+  # subscribed; conns: connection pid -> {monitor, user id}.
   @impl true
   def init(_) do
     # Subscriptions live in the Redix.PubSub process; if it restarts, so does
@@ -80,7 +94,7 @@ defmodule Wrinkle.Push do
   end
 
   @impl true
-  def handle_cast({:attach, pid, user_id}, %{conns: conns} = state)
+  def handle_cast({:attach, pid, user_id, pushes}, %{conns: conns} = state)
       when not is_map_key(conns, pid) do
     user =
       case state.users do
@@ -89,7 +103,7 @@ defmodule Wrinkle.Push do
 
         _ ->
           {:ok, _} = Redix.PubSub.subscribe(@pubsub, channel(user_id), self())
-          %{pids: MapSet.new(), confirmed: false}
+          %{pids: %{}, confirmed: false}
       end
 
     if user.confirmed, do: send(pid, {:subscribed, user_id})
@@ -97,12 +111,12 @@ defmodule Wrinkle.Push do
     {:noreply,
      %{
        state
-       | users: Map.put(state.users, user_id, %{user | pids: MapSet.put(user.pids, pid)}),
+       | users: Map.put(state.users, user_id, %{user | pids: Map.put(user.pids, pid, pushes)}),
          conns: Map.put(conns, pid, {Process.monitor(pid), user_id})
      }}
   end
 
-  def handle_cast({:attach, _pid, _user_id}, state), do: {:noreply, state}
+  def handle_cast({:attach, _pid, _user_id, _pushes}, state), do: {:noreply, state}
 
   def handle_cast({:detach, pid}, state), do: {:noreply, remove(state, pid)}
 
@@ -114,16 +128,7 @@ defmodule Wrinkle.Push do
       ) do
     with {:ok, user_id} <- Base.decode16(id, case: :lower),
          %{pids: pids} <- state.users[user_id] do
-      case decode(payload) do
-        {:event, frame} ->
-          for pid <- pids, do: send(pid, {:push, frame})
-
-        {:signed_out, devices} ->
-          for pid <- pids, do: send(pid, {:signed_out, devices})
-
-        :error ->
-          Logger.warning("undecodable push for user #{id} dropped")
-      end
+      deliver(decode(payload), pids, id)
     end
 
     {:noreply, state}
@@ -155,10 +160,23 @@ defmodule Wrinkle.Push do
     {:noreply, remove(state, pid)}
   end
 
+  defp deliver({:event, frame}, pids, _id) do
+    for {pid, pushes} <- pids do
+      :atomics.add(pushes, 1, 1)
+      send(pid, {:push, frame})
+    end
+  end
+
+  defp deliver({:signed_out, devices}, pids, _id) do
+    for pid <- Map.keys(pids), do: send(pid, {:signed_out, devices})
+  end
+
+  defp deliver(:error, _pids, id), do: Logger.warning("undecodable push for user #{id} dropped")
+
   defp confirm(state, user_id) do
     case state.users do
       %{^user_id => %{confirmed: false} = user} ->
-        for pid <- user.pids, do: send(pid, {:subscribed, user_id})
+        for pid <- Map.keys(user.pids), do: send(pid, {:subscribed, user_id})
         {:noreply, put_in(state.users[user_id], %{user | confirmed: true})}
 
       _ ->
@@ -174,10 +192,10 @@ defmodule Wrinkle.Push do
       {{ref, user_id}, conns} ->
         Process.demonitor(ref, [:flush])
         user = state.users[user_id]
-        pids = MapSet.delete(user.pids, pid)
+        pids = Map.delete(user.pids, pid)
 
         users =
-          if MapSet.size(pids) == 0 do
+          if map_size(pids) == 0 do
             unsubscribe(user_id)
             Map.delete(state.users, user_id)
           else

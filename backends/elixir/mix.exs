@@ -28,7 +28,8 @@ defmodule Wrinkle.MixProject do
       {:protobuf, "~> 0.17"},
       {:grpc, "~> 1.0"},
       {:redix, "~> 1.9"},
-      {:mint, "~> 1.11"}
+      {:mint, "~> 1.11"},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false}
     ]
   end
 end

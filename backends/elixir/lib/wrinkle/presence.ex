@@ -18,11 +18,14 @@ defmodule Wrinkle.Presence do
   if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0
   """
 
+  @spec start_link(term()) :: GenServer.on_start()
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
   @doc "This process's instance id, made at startup: `<node>/<16 random hex chars>`."
+  @spec instance() :: String.t()
   def instance, do: :persistent_term.get({__MODULE__, :instance})
 
+  @spec new_instance(String.t()) :: String.t()
   def new_instance(node) do
     id = node <> "/" <> Base.encode16(:crypto.strong_rand_bytes(8), case: :lower)
     :persistent_term.put({__MODULE__, :instance}, id)
@@ -30,11 +33,13 @@ defmodule Wrinkle.Presence do
   end
 
   @doc "Records the device as connected here, without waiting for Valkey."
+  @spec put(binary(), non_neg_integer()) :: :ok
   def put(user_id, device_id) do
     write(user_id, ["HSET", key(user_id), Integer.to_string(device_id), instance()])
   end
 
   @doc "Removes the device's entry if it names this instance, without waiting for Valkey."
+  @spec delete(binary(), non_neg_integer()) :: :ok
   def delete(user_id, device_id) do
     write(user_id, [
       "EVAL",
@@ -52,6 +57,7 @@ defmodule Wrinkle.Presence do
   end
 
   @doc "Stops refreshing this instance's key and deletes it, on drain."
+  @spec stop() :: :ok
   def stop, do: GenServer.call(__MODULE__, :stop)
 
   defp key(user_id), do: "presence:" <> Wrinkle.Push.hex(user_id)
@@ -92,6 +98,9 @@ defmodule Wrinkle.Presence.Writer do
   use GenServer
   require Logger
 
+  # One per scheduler: noreply_command still waits for a round trip (the reply
+  # to its CLIENT REPLY ON), so a single writer would be bound by Valkey's latency.
+  @spec start_link(term()) :: GenServer.on_start()
   def start_link(_), do: GenServer.start_link(__MODULE__, nil)
 
   @impl true

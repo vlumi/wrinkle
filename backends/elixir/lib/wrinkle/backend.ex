@@ -16,6 +16,9 @@ defmodule Wrinkle.Backend do
   # Reconnections of a channel that dropped, by the adapter, with its backoff.
   @reconnects 1_000_000
 
+  @type failure :: {:error, :not_connected | GRPC.RPCError.t() | {atom(), term()}}
+
+  @spec start_link(term()) :: GenServer.on_start()
   def start_link(_), do: GenServer.start_link(__MODULE__, [], name: __MODULE__)
 
   @impl true
@@ -57,6 +60,8 @@ defmodule Wrinkle.Backend do
   device, or an error when the services are not connected, fail or take over
   10 seconds.
   """
+  @spec call(binary(), non_neg_integer(), Wrinkle.V1.Request.t()) ::
+          {:ok, Wrinkle.V1.Response.t()} | failure()
   def call(user_id, device_id, request) do
     req = %CallRequest{user_id: user_id, device_id: device_id, request: request}
 
@@ -68,6 +73,7 @@ defmodule Wrinkle.Backend do
     end)
   end
 
+  @spec ack(binary(), non_neg_integer(), non_neg_integer()) :: :ok | failure()
   def ack(user_id, device_id, cursor) do
     req = %AckRequest{user_id: user_id, device_id: device_id, cursor: cursor}
 

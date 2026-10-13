@@ -310,6 +310,7 @@ elixir-deps:
 elixir-lint: elixir-deps
 	$(MIX) format --check-formatted
 	$(MIX) compile --warnings-as-errors --quiet 2>/dev/null
+	$(MIX) credo --strict
 
 # The unit tests need no services, so the application is not started.
 elixir-test: elixir-deps
