@@ -17,6 +17,7 @@ RUN git clone --depth 1 --branch "${VITESS_VERSION}" https://github.com/vitessio
     && cp -R config /vt/install/
 
 FROM mysql:${MYSQL_VERSION}
+ARG MYSQL_VERSION
 USER root
 RUN microdnf install -y procps-ng && microdnf clean all \
     && groupadd -r vitess && useradd -r -g vitess vitess \
@@ -24,9 +25,9 @@ RUN microdnf install -y procps-ng && microdnf clean all \
 ENV VTROOT=/vt
 ENV VTDATAROOT=/vt/vtdataroot
 ENV PATH=/vt/bin:$PATH
+ENV MYSQL_SERVER_VERSION=${MYSQL_VERSION}-Vitess
 COPY --from=builder --chown=vitess:vitess /vt/install /vt
 COPY --chown=vitess:vitess run.sh /vt/run.sh
 VOLUME /vt/vtdataroot
 USER vitess
 ENTRYPOINT ["/vt/run.sh"]
-CMD ["8.4.9-Vitess"]

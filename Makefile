@@ -34,7 +34,6 @@ IOS_SWIFT = $(shell cd clients/ios && find Packages Sources -name '*.swift' -not
 GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto clients/web/src/gen
 SH_FILES = $(shell git ls-files --cached --others --exclude-standard '*.sh')
 SHFMT := -i 2 -ci
-HAPROXY_CHECK := docker run --rm -v $(CURDIR)/infra/haproxy:/cfg:ro --add-host host.docker.internal:host-gateway haproxy:3.4.6 haproxy -q -c -f
 
 .PHONY: help
 help:
@@ -284,7 +283,7 @@ tools:  ## Install the code generators and linters (Homebrew, go install, mix)
 	mix local.hex --force && mix local.rebar --force && mix escript.install hex protobuf --force
 
 clean:  ## Remove build output (not dependencies, not the stack)
-	rm -rf bin backends/java/build backends/rust/target backends/elixir/_build clients/web/dist clients/ios/.build-xcode clients/ios/Wrinkle.xcodeproj
+	rm -rf bin backends/java/build backends/rust/target backends/elixir/_build clients/web/dist clients/ios/.build-xcode clients/ios/Wrinkle.xcodeproj clients/ios/Packages/WrinkleCore/.build
 
 # Parts the targets above are made of.
 
@@ -346,9 +345,8 @@ shell-lint:
 docker-lint:
 	hadolint $(shell git ls-files --cached --others --exclude-standard '*Dockerfile')
 
-# The Compose files and the balancers' configurations parse.
+# The Compose files and every HAProxy configuration parse.
 infra-lint:
 	$(COMPOSE) config --quiet
 	$(COMPOSE) -f infra/cluster.yml config --quiet
-	$(HAPROXY_CHECK) /cfg/haproxy.cfg
-	$(HAPROXY_CHECK) /cfg/cluster.cfg
+	infra/haproxy-check.sh

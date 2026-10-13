@@ -20,7 +20,7 @@ exec /vt/bin/vttestserver \
   --num_shards "$NUM_SHARDS" \
   --mysql_bind_host "${MYSQL_BIND_HOST:-0.0.0.0}" \
   --vtcombo-bind-host "${VTCOMBO_BIND_HOST:-0.0.0.0}" \
-  --mysql-server-version "${MYSQL_SERVER_VERSION:-$1}" \
+  --mysql-server-version "$MYSQL_SERVER_VERSION" \
   --charset "${CHARSET:-utf8mb4}" \
   --foreign_key_mode "${FOREIGN_KEY_MODE:-disallow}" \
   --enable_online_ddl=false \
