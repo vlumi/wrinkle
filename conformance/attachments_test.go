@@ -71,7 +71,7 @@ func TestSendAttachmentValidation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ten attachments: %v", err)
 	}
-	if !sameIDs(msg.GetBlobIds(), ten) {
+	if !equalIDs(msg.GetBlobIds(), ten) {
 		t.Fatalf("blob ids %x, want %x", msg.GetBlobIds(), ten)
 	}
 	// A blob goes with one message only.
@@ -103,19 +103,19 @@ func TestAttachments(t *testing.T) {
 
 	for _, d := range []*device{a2, b} {
 		m := messageEvent(t, d, conv, sent.GetSeq())
-		if !sameIDs(m.GetBlobIds(), sent.GetBlobIds()) {
+		if !equalIDs(m.GetBlobIds(), sent.GetBlobIds()) {
 			t.Fatalf("%s's blob ids %x, want %x", d.user.GetName(), m.GetBlobIds(), sent.GetBlobIds())
 		}
 	}
 	m := messageEvent(t, a, conv, sent.GetSeq())
-	if !sameIDs(m.GetBlobIds(), sent.GetBlobIds()) {
+	if !equalIDs(m.GetBlobIds(), sent.GetBlobIds()) {
 		t.Fatalf("sender's blob ids %x", m.GetBlobIds())
 	}
 
 	// The recipient opens the content to the attachments and decrypts each
 	// file from its blob.
 	msgs, err := b.GetMessages(ctx(t), conv, 0, 0)
-	if err != nil || len(msgs) != 1 || !sameIDs(msgs[0].GetBlobIds(), sent.GetBlobIds()) {
+	if err != nil || len(msgs) != 1 || !equalIDs(msgs[0].GetBlobIds(), sent.GetBlobIds()) {
 		t.Fatalf("history: %v %v", msgs, err)
 	}
 	content, err := b.OpenMessage(ctx(t), msgs[0])
@@ -145,7 +145,7 @@ func TestAttachments(t *testing.T) {
 			t.Fatalf("attachment %d decrypts to %d bytes, %v", i, len(data), err)
 		}
 	}
-	if last := findConversation(t, b, conv).GetLastMessage(); !sameIDs(last.GetBlobIds(), sent.GetBlobIds()) {
+	if last := findConversation(t, b, conv).GetLastMessage(); !equalIDs(last.GetBlobIds(), sent.GetBlobIds()) {
 		t.Fatalf("listed last message %v", last)
 	}
 
@@ -158,7 +158,7 @@ func TestAttachments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.GetSeq() != sent.GetSeq() || !sameIDs(again.GetBlobIds(), sent.GetBlobIds()) ||
+	if again.GetSeq() != sent.GetSeq() || !equalIDs(again.GetBlobIds(), sent.GetBlobIds()) ||
 		!proto.Equal(again.GetSealed(), sent.GetSealed()) {
 		t.Fatalf("resend %v, want %v", again, sent)
 	}

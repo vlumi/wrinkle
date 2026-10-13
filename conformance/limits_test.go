@@ -98,8 +98,16 @@ func TestRequestFlood(t *testing.T) {
 	}
 
 	// The limits recover; the connection stays usable.
-	time.Sleep(2500 * time.Millisecond)
-	if _, err := d.ListConversations(ctx(t)); err != nil {
-		t.Fatalf("after the flood: %v", err)
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		_, err := d.ListConversations(ctx(t))
+		if err == nil {
+			return
+		}
+		if wrinkleclient.Code(err) != pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED {
+			t.Fatalf("after the flood: %v", err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("still limited after the flood: %v", err)
+		}
 	}
 }

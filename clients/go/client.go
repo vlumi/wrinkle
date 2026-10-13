@@ -24,6 +24,8 @@ type Client struct {
 	Pongs  chan struct{}
 
 	keys atomic.Pointer[Keys]
+	// answer stands in for the connection in tests.
+	answer func(ctx context.Context, req *pb.Request) (*pb.Response, error)
 
 	mu      sync.Mutex
 	pending map[uint64]chan *pb.Response
@@ -122,6 +124,20 @@ func (c *Client) Send(ctx context.Context, frame *pb.Frame) error {
 // returned as *Error.
 func (c *Client) Call(ctx context.Context, req *pb.Request) (*pb.Response, error) {
 	req.Id = c.nextID.Add(1)
+	resp, err := c.roundTrip(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if e := resp.GetError(); e != nil {
+		return resp, &Error{Code: e.GetCode(), Message: e.GetMessage()}
+	}
+	return resp, nil
+}
+
+func (c *Client) roundTrip(ctx context.Context, req *pb.Request) (*pb.Response, error) {
+	if c.answer != nil {
+		return c.answer(ctx, req)
+	}
 	ch := make(chan *pb.Response, 1)
 	c.mu.Lock()
 	c.pending[req.Id] = ch
@@ -137,9 +153,6 @@ func (c *Client) Call(ctx context.Context, req *pb.Request) (*pb.Response, error
 	case resp, ok := <-ch:
 		if !ok {
 			return nil, fmt.Errorf("connection closed: %w", c.Err())
-		}
-		if e := resp.GetError(); e != nil {
-			return resp, &Error{Code: e.GetCode(), Message: e.GetMessage()}
 		}
 		return resp, nil
 	}

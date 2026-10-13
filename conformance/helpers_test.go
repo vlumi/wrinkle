@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -251,6 +252,10 @@ func readEvent(t *testing.T, d *device, conversationID, userID []byte, seq uint6
 }
 
 func isMessage(ev *pb.Event) bool { return ev.GetMessage() != nil }
+
+func equalIDs(a, b [][]byte) bool {
+	return slices.EqualFunc(a, b, bytes.Equal)
+}
 
 // text opens a message's sealed content on the device.
 func text(t *testing.T, d *device, m *pb.Message) string {

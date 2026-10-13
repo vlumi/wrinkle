@@ -199,3 +199,33 @@ func (c *Client) CreateUpload(ctx context.Context, purpose pb.BlobPurpose, media
 	}
 	return resp.GetCreateUpload(), nil
 }
+
+func (c *Client) SetDeviceKey(ctx context.Context, publicKey []byte) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SetDeviceKey{
+		SetDeviceKey: &pb.SetDeviceKeyRequest{PublicKey: publicKey}}})
+	return err
+}
+
+func (c *Client) GetDeviceKeys(ctx context.Context, userIDs [][]byte) ([]*pb.UserDevices, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetDeviceKeys{
+		GetDeviceKeys: &pb.GetDeviceKeysRequest{UserIds: userIDs}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetGetDeviceKeys().GetUsers(), nil
+}
+
+func (c *Client) PublishKeys(ctx context.Context, conversationID []byte, epoch uint32, keys []*pb.WrappedKey) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_PublishKeys{
+		PublishKeys: &pb.PublishKeysRequest{ConversationId: conversationID, Epoch: epoch, Keys: keys}}})
+	return err
+}
+
+func (c *Client) GetConversationKeys(ctx context.Context, conversationID []byte, afterEpoch uint32) (*pb.GetConversationKeysResponse, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetConversationKeys{
+		GetConversationKeys: &pb.GetConversationKeysRequest{ConversationId: conversationID, AfterEpoch: afterEpoch}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetGetConversationKeys(), nil
+}

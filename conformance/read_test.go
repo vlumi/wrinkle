@@ -2,7 +2,6 @@ package conformance
 
 import (
 	"testing"
-	"time"
 
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -23,16 +22,24 @@ func TestMarkRead(t *testing.T) {
 		readEvent(t, d, conv, a.user.GetUserId(), 2)
 	}
 
-	// Going backwards or staying put produces nothing.
+	// Going backwards or staying put produces nothing: a message sent
+	// after them is the next thing the peer gets, since a conversation's
+	// events arrive in order.
 	if err := a.MarkRead(ctx(t), conv, 1); err != nil {
 		t.Fatal(err)
 	}
 	if err := a.MarkRead(ctx(t), conv, 2); err != nil {
 		t.Fatal(err)
 	}
-	noEvent(t, b, 2*time.Second)
+	if _, err := a.SendText(ctx(t), conv, "m3", "seen"); err != nil {
+		t.Fatal(err)
+	}
+	ev := nextEvent(t, b, func(ev *pb.Event) bool { return ev.GetRead() != nil || isMessage(ev) })
+	if ev.GetRead() != nil {
+		t.Fatalf("read event for a mark that did not move: %v", ev)
+	}
 
-	err := a.MarkRead(ctx(t), conv, 3)
+	err := a.MarkRead(ctx(t), conv, 4)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 	err = a.MarkRead(ctx(t), conv, 0)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)

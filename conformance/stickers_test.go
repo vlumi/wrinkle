@@ -33,23 +33,11 @@ func stickerIDs(stickers ...*pb.Sticker) [][]byte {
 	return list
 }
 
-func sameIDs(a, b [][]byte) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if !bytes.Equal(a[i], b[i]) {
-			return false
-		}
-	}
-	return true
-}
-
 // paletteEvent checks that the next palette event has the palette given.
 func paletteEvent(t *testing.T, d *device, want ...*pb.Sticker) {
 	t.Helper()
 	ev := nextEvent(t, d, func(ev *pb.Event) bool { return ev.GetPalette() != nil })
-	if got := ev.GetPalette().GetStickerIds(); !sameIDs(got, stickerIDs(want...)) {
+	if got := ev.GetPalette().GetStickerIds(); !equalIDs(got, stickerIDs(want...)) {
 		t.Fatalf("palette event %x, want %x", got, stickerIDs(want...))
 	}
 }

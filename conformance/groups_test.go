@@ -91,10 +91,6 @@ func usersOf(devices ...*device) [][]byte {
 	return out
 }
 
-func equalIDs(a, b [][]byte) bool {
-	return slices.EqualFunc(a, b, bytes.Equal)
-}
-
 func TestCreateGroup(t *testing.T) {
 	a := newUser(t, "alice")
 	b := newUser(t, "bob")
