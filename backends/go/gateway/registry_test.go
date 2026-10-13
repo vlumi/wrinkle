@@ -54,13 +54,26 @@ func wantAttached(t *testing.T, done <-chan error) {
 	}
 }
 
-func wantWaiting(t *testing.T, done <-chan error) {
+// wantWaiting waits until the background attach is parked on the user's
+// ready channel, then checks that it has not returned.
+func wantWaiting(t *testing.T, r *registry, done <-chan error) {
 	t.Helper()
-	select {
-	case err := <-done:
-		t.Fatalf("attach returned before its channel was confirmed: %v", err)
-	case <-time.After(20 * time.Millisecond):
+	for deadline := time.Now().Add(time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		r.mu.Lock()
+		st := r.users[user1]
+		parked := st != nil && st.ready != nil
+		r.mu.Unlock()
+		if !parked {
+			continue
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("attach returned before its channel was confirmed: %v", err)
+		default:
+		}
+		return
 	}
+	t.Fatal("attach is not waiting for confirmation")
 }
 
 func TestRegistryWaitsForConfirmation(t *testing.T) {
@@ -70,7 +83,7 @@ func TestRegistryWaitsForConfirmation(t *testing.T) {
 	done := attach(r, a)
 	waitQueued(t, r)
 	wantNext(t, r, []ids.UUID{user1}, nil)
-	wantWaiting(t, done)
+	wantWaiting(t, r, done)
 	r.confirm(user1)
 	wantAttached(t, done)
 
@@ -102,7 +115,7 @@ func TestRegistryDetachRacingAttach(t *testing.T) {
 	done = attach(r, c)
 	waitQueued(t, r)
 	r.confirm(user1)
-	wantWaiting(t, done)
+	wantWaiting(t, r, done)
 	wantNext(t, r, []ids.UUID{user1}, nil)
 	r.confirm(user1)
 	wantAttached(t, done)
@@ -120,7 +133,7 @@ func TestRegistryResubscribesOnNewSubscription(t *testing.T) {
 	r.install(&presence.Subscription{})
 	wantNext(t, r, []ids.UUID{user1}, nil)
 	done = attach(r, &conn{userID: user1})
-	wantWaiting(t, done)
+	wantWaiting(t, r, done)
 	r.confirm(user1)
 	wantAttached(t, done)
 }

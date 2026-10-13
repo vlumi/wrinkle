@@ -296,7 +296,7 @@ go-lint:
 	@for m in $(GO_MODULES); do echo "== $$m"; (cd $$m && golangci-lint run ./...) || exit 1; done
 
 go-test:
-	@for m in $(GO_UNIT_MODULES); do echo "== $$m"; (cd $$m && go test ./...) || exit 1; done
+	@for m in $(GO_UNIT_MODULES); do echo "== $$m"; (cd $$m && go test -race ./...) || exit 1; done
 
 java-lint:
 	$(GRADLE) spotlessCheck compileJava

@@ -3,7 +3,10 @@ linters:
   default: standard
   enable:
     - errorlint
+    - gocritic
     - misspell
+    - nilerr
+    - revive
     - unconvert
     - unparam
   settings:
@@ -25,6 +28,12 @@ linters:
         - (*os.File).Close
     misspell:
       locale: US
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
 formatters:
   enable:
     - gofmt
