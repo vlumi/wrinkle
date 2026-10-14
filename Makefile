@@ -239,10 +239,11 @@ $(SHAPES:%=conformance-%): conformance-%: infra-up $$(NEEDS_%)
 CONNECTIONS ?= 1000
 RATE ?= 500
 DURATION ?= 30s
+LOADGEN_ARGS ?=
 
 .PHONY: load measure-all $(SHAPES:%=measure-%)
-load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s)
-	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s
+load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s, LOADGEN_ARGS for any other flag)
+	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s $(LOADGEN_ARGS)
 
 measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape, each from a fresh stack (about an hour)
 
