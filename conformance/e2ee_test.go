@@ -386,6 +386,7 @@ func TestSendNeedsCurrentEpoch(t *testing.T) {
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
 	d := newUser(t, "dave")
+	befriend(t, a, d)
 	id := newGroup(t, a, "Epochs", b, c)
 	send := func(cmid string, epoch uint32) error {
 		_, err := a.SendMessage(ctx(t), id, cmid, junkSealed(epoch))

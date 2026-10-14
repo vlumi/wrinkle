@@ -272,6 +272,7 @@ func TestReactionsInGroup(t *testing.T) {
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
 	d := newUser(t, "dave")
+	befriend(t, a, d)
 	id := newGroup(t, a, "Reactions", b, c)
 	if _, err := c.SendText(ctx(t), id, "m1", "from carol"); err != nil {
 		t.Fatal(err)

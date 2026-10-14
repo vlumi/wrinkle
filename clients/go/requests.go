@@ -229,3 +229,48 @@ func (c *Client) GetConversationKeys(ctx context.Context, conversationID []byte,
 	}
 	return resp.GetGetConversationKeys(), nil
 }
+
+func (c *Client) ListContacts(ctx context.Context) ([]*pb.Contact, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_ListContacts{ListContacts: &pb.ListContactsRequest{}}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetListContacts().GetContacts(), nil
+}
+
+// AddContact asks the named user to be a contact, or accepts their request.
+func (c *Client) AddContact(ctx context.Context, name string) (*pb.Contact, error) {
+	return c.addContact(ctx, &pb.AddContactRequest{User: &pb.AddContactRequest_Name{Name: name}})
+}
+
+// AddContactID is AddContact by user id.
+func (c *Client) AddContactID(ctx context.Context, userID []byte) (*pb.Contact, error) {
+	return c.addContact(ctx, &pb.AddContactRequest{User: &pb.AddContactRequest_UserId{UserId: userID}})
+}
+
+func (c *Client) addContact(ctx context.Context, req *pb.AddContactRequest) (*pb.Contact, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_AddContact{AddContact: req}})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetAddContact().GetContact(), nil
+}
+
+// RemoveContact ends a contact or a request either way.
+func (c *Client) RemoveContact(ctx context.Context, userID []byte) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_RemoveContact{
+		RemoveContact: &pb.RemoveContactRequest{UserId: userID}}})
+	return err
+}
+
+func (c *Client) BlockUser(ctx context.Context, userID []byte) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_BlockUser{
+		BlockUser: &pb.BlockUserRequest{UserId: userID}}})
+	return err
+}
+
+func (c *Client) UnblockUser(ctx context.Context, userID []byte) error {
+	_, err := c.Call(ctx, &pb.Request{Body: &pb.Request_UnblockUser{
+		UnblockUser: &pb.UnblockUserRequest{UserId: userID}}})
+	return err
+}

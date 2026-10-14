@@ -329,3 +329,49 @@ func wantCode(t *testing.T, err error, code pb.ErrorCode) {
 		t.Fatalf("expected %s, got %v", code, err)
 	}
 }
+
+// befriend makes two users contacts, as groups need: a asks, then b
+// accepts, each step's ContactEvents awaited on both, so that the tests
+// see only the events they cause. Users already contacts stay as they are.
+func befriend(t *testing.T, a, b *device) {
+	t.Helper()
+	if contactState(t, a, b) == pb.ContactState_CONTACT_STATE_CONTACT {
+		return
+	}
+	if _, err := a.AddContact(ctx(t), b.user.GetName()); err != nil {
+		t.Fatalf("%s asks %s: %v", a.user.GetName(), b.user.GetName(), err)
+	}
+	contactEvent(t, a, b, pb.ContactState_CONTACT_STATE_OUTGOING)
+	contactEvent(t, b, a, pb.ContactState_CONTACT_STATE_INCOMING)
+	if _, err := b.AddContact(ctx(t), a.user.GetName()); err != nil {
+		t.Fatalf("%s accepts %s: %v", b.user.GetName(), a.user.GetName(), err)
+	}
+	contactEvent(t, a, b, pb.ContactState_CONTACT_STATE_CONTACT)
+	contactEvent(t, b, a, pb.ContactState_CONTACT_STATE_CONTACT)
+}
+
+// contactEvent waits for d's ContactEvent about the other user in the
+// given state.
+func contactEvent(t *testing.T, d, other *device, state pb.ContactState) *pb.Contact {
+	t.Helper()
+	ev := nextEvent(t, d, func(ev *pb.Event) bool {
+		c := ev.GetContact().GetContact()
+		return c != nil && sameUser(c.GetUser(), other) && c.GetState() == state
+	})
+	return ev.GetContact().GetContact()
+}
+
+// contactState is the other user's state in d's contact list.
+func contactState(t *testing.T, d, other *device) pb.ContactState {
+	t.Helper()
+	list, err := d.ListContacts(ctx(t))
+	if err != nil {
+		t.Fatalf("list contacts: %v", err)
+	}
+	for _, c := range list {
+		if sameUser(c.GetUser(), other) {
+			return c.GetState()
+		}
+	}
+	return pb.ContactState_CONTACT_STATE_UNSPECIFIED
+}

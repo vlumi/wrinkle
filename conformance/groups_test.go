@@ -13,12 +13,13 @@ import (
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-// newGroup creates a group of the creator and the members, and waits for
-// every member's GroupCreated event.
+// newGroup makes the members the creator's contacts, creates a group of
+// them, and waits for every member's GroupCreated event.
 func newGroup(t *testing.T, creator *device, topic string, members ...*device) []byte {
 	t.Helper()
 	var names []string
 	for _, m := range members {
+		befriend(t, creator, m)
 		names = append(names, m.user.GetName())
 	}
 	conv, err := creator.CreateGroup(ctx(t), topic, names, uniqueName(t, "group"))
@@ -95,6 +96,8 @@ func TestCreateGroup(t *testing.T) {
 	a := newUser(t, "alice")
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
+	befriend(t, a, b)
+	befriend(t, a, c)
 
 	// The creator and repeats, by any case, are left out.
 	names := []string{b.user.GetName(), c.user.GetName(), a.user.GetName(), strings.ToUpper(b.user.GetName())}
@@ -153,6 +156,7 @@ func TestCreateGroupValidation(t *testing.T) {
 		_, err := a.CreateGroup(ctx(t), topic, names, clientID)
 		return err
 	}
+	befriend(t, a, b)
 	members := []string{b.user.GetName()}
 	wantCode(t, create("Trip", []string{b.user.GetName(), uniqueName(t, "nobody")}, uniqueName(t, "g")), pb.ErrorCode_ERROR_CODE_NOT_FOUND)
 	for _, topic := range []string{"", " lead", "trail ", "line\nbreak", strings.Repeat("t", 201)} {
@@ -175,6 +179,7 @@ func TestAddMembers(t *testing.T) {
 	a := newUser(t, "alice")
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
+	befriend(t, b, c)
 	id := newGroup(t, a, "Book club", b)
 	if _, err := a.SendText(ctx(t), id, "m1", "before carol"); err != nil {
 		t.Fatal(err)
@@ -211,7 +216,7 @@ func TestAddMembers(t *testing.T) {
 		}
 	}
 
-	// Adding members already in does nothing.
+	// Adding members already in does nothing, contacts or not.
 	if err := a.AddMembers(ctx(t), id, []string{b.user.GetName(), c.user.GetName()}); err != nil {
 		t.Fatal(err)
 	}
@@ -252,6 +257,7 @@ func TestRemoveMember(t *testing.T) {
 	a := newUser(t, "alice")
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
+	befriend(t, b, c)
 	id := newGroup(t, a, "Choir", b, c)
 
 	err := b.RemoveMember(ctx(t), id, c.user.GetUserId())
@@ -319,6 +325,7 @@ func TestLeaveGroup(t *testing.T) {
 	a := newUser(t, "alice")
 	b := newUser(t, "bob")
 	c := newUser(t, "carol")
+	befriend(t, a, c)
 	id := newGroup(t, a, "Climbing", b)
 	if err := a.AddMembers(ctx(t), id, []string{c.user.GetName()}); err != nil {
 		t.Fatal(err)
