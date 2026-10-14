@@ -47,15 +47,22 @@ type Attachments interface {
 	ReleaseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error
 }
 
+// Blocks refuses messaging between two users when either blocked the
+// other, from the user keyspace.
+type Blocks interface {
+	CheckMessaging(ctx context.Context, userID, peerID ids.UUID) error
+}
+
 type Service struct {
 	db          *sql.DB
 	profiles    Profiles
 	keys        DeviceKeys
 	attachments Attachments
+	blocks      Blocks
 }
 
-func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments) *Service {
-	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments}
+func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments, blocks Blocks) *Service {
+	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments, blocks: blocks}
 }
 
 // Open finds or creates the direct conversation between two users, user_a
@@ -129,6 +136,9 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	if err != nil {
 		return nil, err
 	}
+	if err := s.checkBlocks(ctx, userID, conversationID); err != nil {
+		return nil, err
+	}
 	if len(blobs) > 0 {
 		used, err := s.useAttachments(ctx, userID, conversationID, clientMessageID, blobs)
 		if err != nil {
@@ -195,6 +205,29 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 		return nil, err
 	}
 	return msg, nil
+}
+
+// checkBlocks refuses a message or reaction in a direct conversation when
+// either user blocked the other. The row is read without a lock, before
+// anything is taken into use; the change's transaction checks membership
+// again.
+func (s *Service) checkBlocks(ctx context.Context, userID, conversationID ids.UUID) error {
+	st, err := load(ctx, s.db, selectState, conversationID)
+	if err != nil {
+		return err
+	}
+	if !st.has(userID) {
+		return apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
+	}
+	if st.kind != kindDirect {
+		return nil
+	}
+	for _, id := range st.members {
+		if id != userID {
+			return s.blocks.CheckMessaging(ctx, userID, id)
+		}
+	}
+	return nil
 }
 
 // parseBlobIDs checks a message's attachment ids: at most ten distinct

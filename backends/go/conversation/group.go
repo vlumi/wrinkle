@@ -110,6 +110,26 @@ func (s *Service) CreateGroup(ctx context.Context, creatorID ids.UUID, topic, cl
 	return s.Describe(ctx, conversationID, creatorID)
 }
 
+// GroupExists reports whether the creator's client group id already names
+// a group, so that a retry returns it as created.
+func (s *Service) GroupExists(ctx context.Context, creatorID ids.UUID, clientGroupID string) (bool, error) {
+	var id ids.UUID
+	err := s.db.QueryRowContext(ctx, `
+		SELECT conversation_id FROM group_claim WHERE creator_user_id = ? AND client_group_id = ?`,
+		creatorID, clientGroupID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	_, err = load(ctx, s.db, selectState, id)
+	if apierror.Code(err) == pb.ErrorCode_ERROR_CODE_NOT_FOUND {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // claimGroup returns the group id claimed for the creator's client id,
 // claiming a new one when there is none.
 func (s *Service) claimGroup(ctx context.Context, creatorID ids.UUID, clientGroupID string) (ids.UUID, error) {
@@ -144,8 +164,17 @@ func (s *Service) claimGroup(ctx context.Context, creatorID ids.UUID, clientGrou
 }
 
 // AddMembers adds the users who are not members yet, any member may. They
-// read the group from the notice that adds them.
-func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUID, users []ids.UUID) error {
+// read the group from the notice that adds them. check vets the users to
+// add, before the group is locked and again for any who left meanwhile.
+func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUID, users []ids.UUID, check func(context.Context, []ids.UUID) error) error {
+	st, err := group(ctx, s.db, selectState, conversationID, userID)
+	if err != nil {
+		return err
+	}
+	checked := notMembers(st, users)
+	if err := check(ctx, checked); err != nil {
+		return err
+	}
 	profiles, err := s.profileMap(ctx, users)
 	if err != nil {
 		return err
@@ -155,18 +184,23 @@ func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUI
 		return err
 	}
 	defer tx.Rollback()
-	st, err := group(ctx, tx, selectStateForUpdate, conversationID, userID)
-	if err != nil {
+	if st, err = group(ctx, tx, selectStateForUpdate, conversationID, userID); err != nil {
 		return err
 	}
-	var added []ids.UUID
-	for _, id := range users {
-		if !st.has(id) && !slices.Contains(added, id) {
-			added = append(added, id)
-		}
-	}
+	added := notMembers(st, users)
 	if len(added) == 0 {
 		return tx.Commit()
+	}
+	var unchecked []ids.UUID
+	for _, id := range added {
+		if !slices.Contains(checked, id) {
+			unchecked = append(unchecked, id)
+		}
+	}
+	if len(unchecked) > 0 {
+		if err := check(ctx, unchecked); err != nil {
+			return err
+		}
 	}
 	if len(st.members)+len(added) > MaxMembers {
 		return apierror.FailedPrecondition("a group has at most %d members", MaxMembers)
@@ -191,6 +225,17 @@ func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUI
 		return err
 	}
 	return tx.Commit()
+}
+
+// notMembers is the users not in the group, each once.
+func notMembers(st state, users []ids.UUID) []ids.UUID {
+	var list []ids.UUID
+	for _, id := range users {
+		if !st.has(id) && !slices.Contains(list, id) {
+			list = append(list, id)
+		}
+	}
+	return list
 }
 
 // RemoveMember removes another member; only admins may.

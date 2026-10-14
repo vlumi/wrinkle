@@ -9,6 +9,7 @@ import (
 	"log/slog"
 
 	"github.com/vlumi/wrinkle/backends/go/accounts"
+	"github.com/vlumi/wrinkle/backends/go/contacts"
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/devicesync"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
@@ -34,11 +35,12 @@ type Local struct {
 	users         *devicesync.Service
 	uploads       *uploads.Service
 	stickers      *stickers.Service
+	contacts      *contacts.Service
 	log           *slog.Logger
 }
 
-func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, uploads *uploads.Service, stickers *stickers.Service, log *slog.Logger) *Local {
-	return &Local{accounts: accounts, conversations: conversations, users: users, uploads: uploads, stickers: stickers, log: log}
+func NewLocal(accounts *accounts.Service, conversations *conversation.Service, users *devicesync.Service, uploads *uploads.Service, stickers *stickers.Service, contacts *contacts.Service, log *slog.Logger) *Local {
+	return &Local{accounts: accounts, conversations: conversations, users: users, uploads: uploads, stickers: stickers, contacts: contacts, log: log}
 }
 
 func (l *Local) Call(ctx context.Context, userID ids.UUID, deviceID uint64, req *pb.Request) (*pb.Response, error) {
@@ -149,6 +151,33 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_MoveSticker{MoveSticker: &pb.MoveStickerResponse{}}
+	case *pb.Request_ListContacts:
+		list, err := l.contacts.List(ctx, userID)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_ListContacts{ListContacts: &pb.ListContactsResponse{Contacts: list}}
+	case *pb.Request_AddContact:
+		contact, err := l.contacts.Add(ctx, userID, r.AddContact)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_AddContact{AddContact: &pb.AddContactResponse{Contact: contact}}
+	case *pb.Request_RemoveContact:
+		if err := l.contacts.Remove(ctx, userID, r.RemoveContact.GetUserId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_RemoveContact{RemoveContact: &pb.RemoveContactResponse{}}
+	case *pb.Request_BlockUser:
+		if err := l.contacts.Block(ctx, userID, r.BlockUser.GetUserId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_BlockUser{BlockUser: &pb.BlockUserResponse{}}
+	case *pb.Request_UnblockUser:
+		if err := l.contacts.Unblock(ctx, userID, r.UnblockUser.GetUserId()); err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_UnblockUser{UnblockUser: &pb.UnblockUserResponse{}}
 	case *pb.Request_OpenConversation:
 		conv, err := l.users.Open(ctx, userID, r.OpenConversation.GetPeerName())
 		if err != nil {

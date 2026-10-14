@@ -33,6 +33,9 @@ func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*
 	if peerID == userID {
 		return nil, apierror.InvalidArgument("a conversation needs two different users")
 	}
+	if err := s.contacts.CheckMessaging(ctx, userID, peerID); err != nil {
+		return nil, err
+	}
 	peer, found, err := s.accounts.Profile(ctx, peerID)
 	if err != nil {
 		return nil, err

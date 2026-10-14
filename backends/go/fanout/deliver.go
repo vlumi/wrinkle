@@ -30,12 +30,18 @@ type listEntry struct {
 	// profile when the entry may be new, nil otherwise.
 	peerID ids.UUID
 	peer   *pb.User
+	// deletedSender receives the sender of a group message being deleted,
+	// from the user's copy of it, for the notifier.
+	deletedSender *ids.UUID
 }
 
 // deliver appends a conversation's event to one recipient's log, then
 // pushes it.
 func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) error {
 	entry := listEntry{userID: userID, o: o}
+	if !o.direct() && o.event.GetMessageDeleted() != nil {
+		entry.deletedSender = new(ids.UUID)
+	}
 	if o.direct() {
 		entry.peerID = o.peerOf(userID)
 		if o.event.GetMessage() != nil {
@@ -52,11 +58,15 @@ func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) err
 	if msg := event.GetMessage().GetMessage(); msg != nil {
 		w.listed.add(userID, o.conversationID)
 		if w.notifier != nil {
-			w.notifier.MessageDelivered(userID, msg)
+			w.notifier.MessageDelivered(userID, msg, !o.direct())
 		}
 	}
 	if deleted := event.GetMessageDeleted(); deleted != nil && w.notifier != nil {
-		w.notifier.MessageDeleted(userID, deleted)
+		var sender ids.UUID
+		if entry.deletedSender != nil {
+			sender = *entry.deletedSender
+		}
+		w.notifier.MessageDeleted(userID, deleted, sender)
 	}
 	return nil
 }
@@ -95,7 +105,13 @@ func (w *Worker) peerForNewEntry(ctx context.Context, userID, conversationID, pe
 // when there is nothing to push: the user does not exist or is deleted, or
 // the log already has the event.
 func (w *Worker) append(ctx context.Context, userID, sourceID ids.UUID, outboxID uint64, source *pb.Event, update listUpdate) (*pb.Event, error) {
-	event, payload, err := w.store(ctx, userID, sourceID, outboxID, source, update)
+	return w.appendBuilt(ctx, userID, sourceID, outboxID, source, nil, update)
+}
+
+// appendBuilt is append with the event's body completed by build, in the
+// transaction and under the lock on the user row, before it is stored.
+func (w *Worker) appendBuilt(ctx context.Context, userID, sourceID ids.UUID, outboxID uint64, source *pb.Event, build listUpdate, update listUpdate) (*pb.Event, error) {
+	event, payload, err := w.store(ctx, userID, sourceID, outboxID, source, build, update)
 	if err != nil || event == nil {
 		return nil, err
 	}
@@ -117,7 +133,7 @@ func (w *Worker) publish(ctx context.Context, userID ids.UUID, push *backendv1.P
 	}
 }
 
-func (w *Worker) store(ctx context.Context, userID, sourceID ids.UUID, outboxID uint64, source *pb.Event, update listUpdate) (*pb.Event, []byte, error) {
+func (w *Worker) store(ctx context.Context, userID, sourceID ids.UUID, outboxID uint64, source *pb.Event, build, update listUpdate) (*pb.Event, []byte, error) {
 	tx, err := w.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, nil, err
@@ -139,6 +155,11 @@ func (w *Worker) store(ctx context.Context, userID, sourceID ids.UUID, outboxID 
 	}
 	event := proto.Clone(source).(*pb.Event)
 	event.Cursor = head + 1
+	if build != nil {
+		if err := build(ctx, tx, event); err != nil {
+			return nil, nil, err
+		}
+	}
 	payload, err := proto.Marshal(event)
 	if err != nil {
 		return nil, nil, err
@@ -318,6 +339,9 @@ func (e listEntry) recordDeletion(ctx context.Context, tx *sql.Tx, deleted *pb.M
 			return fmt.Errorf("event at %d of user %s: %w", position, userID, err)
 		}
 		if msg := event.GetMessage().GetMessage(); msg != nil {
+			if e.deletedSender != nil {
+				*e.deletedSender, _ = ids.Parse(msg.GetSenderUserId())
+			}
 			msg.Content = nil
 			msg.BlobIds = nil
 			msg.DeletedAt = deleted.GetDeletedAt()

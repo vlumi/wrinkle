@@ -3,7 +3,7 @@
 // devices: a conversation's events to the recipients its row names, a
 // user's profile changes to the user and every direct conversation partner,
 // a user's device changes to the user and, for device keys, to everyone in
-// a conversation with the user.
+// a conversation with the user, and a user's contact changes to both users.
 package fanout
 
 import (
@@ -42,10 +42,12 @@ type Publisher interface {
 }
 
 // Notifier is told about messages and deletions appended to a user's log,
-// to push them to devices that are not connected. Nil disables it.
+// to push them to devices that are not connected. Nil disables it. In a
+// group, a user who blocked the sender gets no push; the sender of a
+// deletion is zero when it is not known or not needed.
 type Notifier interface {
-	MessageDelivered(userID ids.UUID, msg *pb.Message)
-	MessageDeleted(userID ids.UUID, deleted *pb.MessageDeletedEvent)
+	MessageDelivered(userID ids.UUID, msg *pb.Message, group bool)
+	MessageDeleted(userID ids.UUID, deleted *pb.MessageDeletedEvent, senderID ids.UUID)
 }
 
 type Worker struct {
@@ -272,6 +274,8 @@ func (w *Worker) handleUserRecord(ctx context.Context, rec *kgo.Record) error {
 		if body.Device.GetDevice() != nil {
 			return w.deliverDevice(ctx, o)
 		}
+	case *pb.Event_Contact:
+		return w.deliverContact(ctx, o)
 	case *pb.Event_Palette:
 		// To the user's own devices only.
 		if _, err := w.append(ctx, o.userID, o.userID, o.outboxID, o.event, nil); err != nil {
@@ -279,6 +283,6 @@ func (w *Worker) handleUserRecord(ctx context.Context, rec *kgo.Record) error {
 		}
 		return nil
 	}
-	w.log.Error("skipping user outbox record without a profile, device or palette", "kind", o.kind, "offset", rec.Offset)
+	w.log.Error("skipping user outbox record without a known body", "kind", o.kind, "offset", rec.Offset)
 	return nil
 }

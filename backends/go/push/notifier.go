@@ -12,6 +12,7 @@ import (
 	"maps"
 	"time"
 
+	"github.com/vlumi/wrinkle/backends/go/contacts"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
@@ -46,22 +47,42 @@ func NewNotifier(apns *APNs, userDB *sql.DB, presence Presence, log *slog.Logger
 }
 
 // MessageDelivered is called after a message was appended to the user's
-// log. The sender's own devices are not notified, nor anyone of notices.
-func (n *Notifier) MessageDelivered(userID ids.UUID, msg *pb.Message) {
+// log. The sender's own devices are not notified, nor anyone of notices,
+// nor in a group a user who blocked the sender.
+func (n *Notifier) MessageDelivered(userID ids.UUID, msg *pb.Message, group bool) {
 	if n == nil || bytes.Equal(msg.GetSenderUserId(), userID[:]) || msg.GetNotice() != nil {
 		return
 	}
-	n.background(userID, func(ctx context.Context) error { return n.notify(ctx, userID, msg) })
+	var senderID ids.UUID
+	if group {
+		senderID, _ = ids.Parse(msg.GetSenderUserId())
+	}
+	n.background(userID, func(ctx context.Context) error { return n.notify(ctx, userID, senderID, msg) })
 }
 
 // MessageDeleted is called after a deletion was appended to the user's
 // log. A background notification lets the app withdraw the message's
-// alert if it showed one.
-func (n *Notifier) MessageDeleted(userID ids.UUID, deleted *pb.MessageDeletedEvent) {
+// alert if it showed one; none goes to a user who blocked the sender,
+// when the sender is given.
+func (n *Notifier) MessageDeleted(userID ids.UUID, deleted *pb.MessageDeletedEvent, senderID ids.UUID) {
 	if n == nil {
 		return
 	}
-	n.background(userID, func(ctx context.Context) error { return n.withdraw(ctx, userID, deleted) })
+	n.background(userID, func(ctx context.Context) error { return n.withdraw(ctx, userID, senderID, deleted) })
+}
+
+// registrationsFor returns the user's registered devices, none when the
+// user blocked the sender, unless the sender is zero.
+func (n *Notifier) registrationsFor(ctx context.Context, userID, senderID ids.UUID) ([]registration, error) {
+	regs, err := n.registrations(ctx, userID)
+	if err != nil || len(regs) == 0 || senderID.IsZero() {
+		return regs, err
+	}
+	blocked, err := contacts.Blocks(ctx, n.db, userID, senderID)
+	if err != nil || blocked {
+		return nil, err
+	}
+	return regs, nil
 }
 
 // background runs a send in a goroutine, when a slot is free.
@@ -89,8 +110,8 @@ type registration struct {
 	token    string
 }
 
-func (n *Notifier) notify(ctx context.Context, userID ids.UUID, msg *pb.Message) error {
-	regs, err := n.registrations(ctx, userID)
+func (n *Notifier) notify(ctx context.Context, userID, senderID ids.UUID, msg *pb.Message) error {
+	regs, err := n.registrationsFor(ctx, userID, senderID)
 	if err != nil || len(regs) == 0 {
 		return err
 	}
@@ -139,8 +160,8 @@ func messageAlert(title string, badge int, conversationID ids.UUID, msg *pb.Mess
 	return alert
 }
 
-func (n *Notifier) withdraw(ctx context.Context, userID ids.UUID, deleted *pb.MessageDeletedEvent) error {
-	regs, err := n.registrations(ctx, userID)
+func (n *Notifier) withdraw(ctx context.Context, userID, senderID ids.UUID, deleted *pb.MessageDeletedEvent) error {
+	regs, err := n.registrationsFor(ctx, userID, senderID)
 	if err != nil || len(regs) == 0 {
 		return err
 	}

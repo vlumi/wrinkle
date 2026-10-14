@@ -6,6 +6,7 @@ import (
 	"database/sql"
 
 	"github.com/vlumi/wrinkle/backends/go/accounts"
+	"github.com/vlumi/wrinkle/backends/go/contacts"
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 )
 
@@ -13,8 +14,9 @@ type Service struct {
 	db            *sql.DB
 	accounts      *accounts.Service
 	conversations *conversation.Service
+	contacts      *contacts.Service
 }
 
-func New(db *sql.DB, accounts *accounts.Service, conversations *conversation.Service) *Service {
-	return &Service{db: db, accounts: accounts, conversations: conversations}
+func New(db *sql.DB, accounts *accounts.Service, conversations *conversation.Service, contacts *contacts.Service) *Service {
+	return &Service{db: db, accounts: accounts, conversations: conversations, contacts: contacts}
 }

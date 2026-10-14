@@ -34,6 +34,9 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 			return apierror.InvalidArgument("sealed.ciphertext must be 1 to %d bytes", maxReactionCiphertext)
 		}
 	}
+	if err := s.checkBlocks(ctx, userID, conversationID); err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

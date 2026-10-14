@@ -93,15 +93,16 @@ const purgePage = 1000
 
 // deliverDeletion tells the partners of a deleted user as of a profile
 // change, closes the user's connections and removes the user's log,
-// conversation list, devices and palette; the uploads go back to unused,
-// for the sweeper, except those made stickers, which outlive the account. The user row stays as a tombstone. Each step may run again on
-// redelivery.
+// conversation list, devices, palette and contacts (other users' rows
+// toward the user stay); the uploads go back to unused, for the sweeper,
+// except those made stickers, which outlive the account. The user row
+// stays as a tombstone. Each step may run again on redelivery.
 func (w *Worker) deliverDeletion(ctx context.Context, o *userOutboxRow) error {
 	if err := w.deliverProfile(ctx, o); err != nil {
 		return err
 	}
 	w.publish(ctx, o.userID, &backendv1.Push{Kind: &backendv1.Push_SignedOut{SignedOut: &backendv1.SignedOut{AllDevices: true}}})
-	for _, table := range []string{"user_event", "user_conversation", "device", "palette_sticker"} {
+	for _, table := range []string{"user_event", "user_conversation", "device", "palette_sticker", "contact", "contact_peer"} {
 		for {
 			res, err := w.db.ExecContext(ctx, `DELETE FROM `+table+` WHERE user_id = ? LIMIT ?`, o.userID, purgePage)
 			if err != nil {

@@ -28,9 +28,19 @@ func (s *Service) CreateGroup(ctx context.Context, userID ids.UUID, req *pb.Crea
 	if err := conversation.CheckClientGroupID(req.GetClientGroupId()); err != nil {
 		return nil, err
 	}
-	invitees, err := s.resolveMembers(ctx, userID, req.GetMemberNames())
+	invitees, names, err := s.resolveMembers(ctx, userID, req.GetMemberNames())
 	if err != nil {
 		return nil, err
+	}
+	// Only a new group is checked: a retry returns the group as created.
+	exists, err := s.conversations.GroupExists(ctx, userID, req.GetClientGroupId())
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		if err := s.checkContacts(userID, names)(ctx, invitees); err != nil {
+			return nil, err
+		}
 	}
 	c, err := s.conversations.CreateGroup(ctx, userID, req.GetTopic(), req.GetClientGroupId(), invitees)
 	if err != nil {
@@ -53,40 +63,57 @@ func (s *Service) AddMembers(ctx context.Context, userID ids.UUID, req *pb.AddMe
 	if !ok {
 		return apierror.InvalidArgument("conversation_id must be 16 bytes")
 	}
-	users, err := s.resolveMembers(ctx, userID, req.GetMemberNames())
+	users, names, err := s.resolveMembers(ctx, userID, req.GetMemberNames())
 	if err != nil {
 		return err
 	}
-	return s.conversations.AddMembers(ctx, userID, conversationID, users)
+	return s.conversations.AddMembers(ctx, userID, conversationID, users, s.checkContacts(userID, names))
 }
 
 // resolveMembers finds the named users, leaving out the requesting user
-// and repeats.
-func (s *Service) resolveMembers(ctx context.Context, userID ids.UUID, names []string) ([]ids.UUID, error) {
+// and repeats, with the name each was first given by.
+func (s *Service) resolveMembers(ctx context.Context, userID ids.UUID, names []string) ([]ids.UUID, map[ids.UUID]string, error) {
 	if len(names) > maxMemberNames {
-		return nil, apierror.InvalidArgument("at most %d member names", maxMemberNames)
+		return nil, nil, apierror.InvalidArgument("at most %d member names", maxMemberNames)
 	}
 	for _, name := range names {
 		if !accounts.ValidName(name) {
-			return nil, apierror.InvalidArgument("member name %q is not a valid name", name)
+			return nil, nil, apierror.InvalidArgument("member name %q is not a valid name", name)
 		}
 	}
-	seen := map[ids.UUID]bool{userID: true}
+	given := map[ids.UUID]string{userID: ""}
 	var users []ids.UUID
 	for _, name := range names {
 		id, found, err := s.accounts.Resolve(ctx, name)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !found {
-			return nil, apierror.NotFound("no user named %q", name)
+			return nil, nil, apierror.NotFound("no user named %q", name)
 		}
-		if !seen[id] {
-			seen[id] = true
+		if _, seen := given[id]; !seen {
+			given[id] = name
 			users = append(users, id)
 		}
 	}
-	return users, nil
+	return users, given, nil
+}
+
+// checkContacts returns a check that every user is the requesting user's
+// contact; the first who is not fails, by the name given.
+func (s *Service) checkContacts(userID ids.UUID, names map[ids.UUID]string) func(context.Context, []ids.UUID) error {
+	return func(ctx context.Context, users []ids.UUID) error {
+		contacts, err := s.contacts.Contacts(ctx, userID, users)
+		if err != nil {
+			return err
+		}
+		for _, id := range users {
+			if !contacts[id] {
+				return apierror.FailedPrecondition("not a contact: %s", names[id])
+			}
+		}
+		return nil
+	}
 }
 
 // LeaveGroups takes the user out of every group the list says they are
