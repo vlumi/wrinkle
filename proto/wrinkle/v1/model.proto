@@ -39,6 +39,27 @@ message Sticker {
   google.protobuf.Timestamp created_at = 4;
 }
 
+// How another user stands to the requesting user. Contacts are mutual:
+// each of the two asked, or one asked and the other accepted.
+enum ContactState {
+  // Neither a contact nor a request; also a user who blocked the requesting
+  // user, which is never revealed.
+  CONTACT_STATE_UNSPECIFIED = 0;
+  CONTACT_STATE_CONTACT = 1;
+  // The other user asked; AddContact accepts, RemoveContact declines.
+  CONTACT_STATE_INCOMING = 2;
+  // The requesting user asked; RemoveContact withdraws.
+  CONTACT_STATE_OUTGOING = 3;
+  // The requesting user blocked the other user.
+  CONTACT_STATE_BLOCKED = 4;
+}
+
+message Contact {
+  User user = 1;
+  ContactState state = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
 // A device signed in to the requesting user's account.
 message Device {
   uint64 device_id = 1;

@@ -1,3 +1,19 @@
+defmodule Wrinkle.V1.ContactState do
+  @moduledoc false
+
+  use Protobuf,
+    enum: true,
+    full_name: "wrinkle.v1.ContactState",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :CONTACT_STATE_UNSPECIFIED, 0
+  field :CONTACT_STATE_CONTACT, 1
+  field :CONTACT_STATE_INCOMING, 2
+  field :CONTACT_STATE_OUTGOING, 3
+  field :CONTACT_STATE_BLOCKED, 4
+end
+
 defmodule Wrinkle.V1.ConversationKind do
   @moduledoc false
 
@@ -36,6 +52,19 @@ defmodule Wrinkle.V1.Sticker do
   field :creator_user_id, 2, type: :bytes, json_name: "creatorUserId"
   field :media_type, 3, type: :string, json_name: "mediaType"
   field :created_at, 4, type: Google.Protobuf.Timestamp, json_name: "createdAt"
+end
+
+defmodule Wrinkle.V1.Contact do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.Contact",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user, 1, type: Wrinkle.V1.User
+  field :state, 2, type: Wrinkle.V1.ContactState, enum: true
+  field :updated_at, 3, type: Google.Protobuf.Timestamp, json_name: "updatedAt"
 end
 
 defmodule Wrinkle.V1.Device do

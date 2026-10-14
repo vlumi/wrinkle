@@ -109,6 +109,11 @@ message Request {
     SaveStickerRequest save_sticker = 44;
     RemoveStickerRequest remove_sticker = 45;
     MoveStickerRequest move_sticker = 46;
+    ListContactsRequest list_contacts = 47;
+    AddContactRequest add_contact = 48;
+    RemoveContactRequest remove_contact = 49;
+    BlockUserRequest block_user = 50;
+    UnblockUserRequest unblock_user = 51;
   }
 }
 
@@ -153,6 +158,11 @@ message Response {
     SaveStickerResponse save_sticker = 44;
     RemoveStickerResponse remove_sticker = 45;
     MoveStickerResponse move_sticker = 46;
+    ListContactsResponse list_contacts = 47;
+    AddContactResponse add_contact = 48;
+    RemoveContactResponse remove_contact = 49;
+    BlockUserResponse block_user = 50;
+    UnblockUserResponse unblock_user = 51;
   }
 }
 

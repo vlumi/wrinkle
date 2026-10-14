@@ -169,7 +169,10 @@ enum BlobPurpose {
 }
 
 // Finds or creates the direct conversation between the requesting user and
-// the peer. The peer is found by name, ignoring case.
+// the peer. The peer is found by name, ignoring case; anyone may be messaged,
+// contact or not. A peer the requesting user blocked fails with
+// ERROR_CODE_FAILED_PRECONDITION; a peer who blocked the requesting user
+// fails with ERROR_CODE_PERMISSION_DENIED.
 message OpenConversationRequest {
   string peer_name = 1;
 }
@@ -184,7 +187,9 @@ message OpenConversationResponse {
 // with ERROR_CODE_NOT_FOUND, and the requesting user and repeated names
 // are ignored. A group has at most 256 members. Sending again with the same
 // client_group_id returns the group created the first time. The group's
-// first message is a GroupCreated notice.
+// first message is a GroupCreated notice. Only the requesting user's
+// contacts may be invited: anyone else fails with
+// ERROR_CODE_FAILED_PRECONDITION, naming them.
 message CreateGroupRequest {
   string topic = 1;
   repeated string member_names = 2;
@@ -202,7 +207,9 @@ message CreateGroupResponse {
 
 // Adds users to a group; any member may. Names as in CreateGroup; users
 // already members are ignored, and when none is left nothing happens. More
-// than 256 members fails with ERROR_CODE_FAILED_PRECONDITION.
+// than 256 members fails with ERROR_CODE_FAILED_PRECONDITION, as does adding
+// a user who is not the requesting member's contact. Members already in the
+// group stay whatever their contacts.
 message AddMembersRequest {
   bytes conversation_id = 1;
   repeated string member_names = 2;
@@ -260,7 +267,10 @@ message GetMembersResponse {
 // removed gets ERROR_CODE_PERMISSION_DENIED. The content is sealed with the
 // conversation's current key epoch: an older one, or none published yet,
 // fails with ERROR_CODE_FAILED_PRECONDITION, as does any epoch while the
-// conversation needs a new one (see PublishKeys).
+// conversation needs a new one (see PublishKeys). In a direct conversation,
+// blocking refuses as in OpenConversation, in both directions; in a group,
+// blocking changes nothing on the services and clients hide what blocked
+// users send.
 message SendMessageRequest {
   bytes conversation_id = 1;
   string client_message_id = 2;
@@ -298,7 +308,8 @@ message DeleteMessageResponse {}
 // to notices (ERROR_CODE_INVALID_ARGUMENT) nor deleted messages
 // (ERROR_CODE_FAILED_PRECONDITION). The sealed Reactions follow the key
 // epoch rules of SendMessage; the ciphertext is at most 1 KiB. Reactions
-// are not messages: they take no seq and are never unread.
+// are not messages: they take no seq and are never unread. Blocking refuses
+// reactions in a direct conversation as SendMessage does.
 message SetReactionRequest {
   bytes conversation_id = 1;
   uint64 seq = 2;
@@ -525,3 +536,64 @@ enum PushService {
   // APNs, production environment: TestFlight and App Store builds.
   PUSH_SERVICE_APNS = 2;
 }
+
+// Contacts. Each user keeps their own side: a request (or an acceptance),
+// or a block. Two users are contacts when both asked. Every change reaches
+// both users' devices as a ContactEvent, each with the state as that user
+// sees it. A user who blocked the requesting user looks like anyone else:
+// requests about them fail with ERROR_CODE_PERMISSION_DENIED and say no
+// more, and their state is CONTACT_STATE_UNSPECIFIED.
+
+// Lists the users the requesting user has any state with: contacts,
+// requests both ways and blocked users, at most 1000 of each, deleted
+// accounts left out.
+message ListContactsRequest {}
+
+message ListContactsResponse {
+  repeated Contact contacts = 1;
+}
+
+// Asks a user to be a contact, or accepts their request. By name, ignoring
+// case, or by id. Asking again changes nothing. Asking oneself fails with
+// ERROR_CODE_INVALID_ARGUMENT, an unknown user with ERROR_CODE_NOT_FOUND, a
+// user the requesting user blocked with ERROR_CODE_FAILED_PRECONDITION
+// (unblock first), and one who blocked the requesting user with
+// ERROR_CODE_PERMISSION_DENIED.
+message AddContactRequest {
+  oneof user {
+    string name = 1;
+    bytes user_id = 2;
+  }
+}
+
+message AddContactResponse {
+  Contact contact = 1;
+}
+
+// Ends any contact with the user, for both: removes a contact, declines
+// their request or withdraws one's own. Nothing to end changes nothing. A
+// block stays (see UnblockUser).
+message RemoveContactRequest {
+  bytes user_id = 1;
+}
+
+message RemoveContactResponse {}
+
+// Blocks a user: any contact or request between the two ends, and the
+// blocked user can no longer open or write to a direct conversation with
+// the requesting user, react there, ask to be a contact, or add them to a
+// group. Shared groups stay; clients hide what the blocked user sends in
+// them. Blocking again changes nothing; blocking oneself fails with
+// ERROR_CODE_INVALID_ARGUMENT.
+message BlockUserRequest {
+  bytes user_id = 1;
+}
+
+message BlockUserResponse {}
+
+// Lifts a block; no contact comes back. A user not blocked changes nothing.
+message UnblockUserRequest {
+  bytes user_id = 1;
+}
+
+message UnblockUserResponse {}

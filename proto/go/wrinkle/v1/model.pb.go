@@ -24,6 +24,68 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// How another user stands to the requesting user. Contacts are mutual:
+// each of the two asked, or one asked and the other accepted.
+type ContactState int32
+
+const (
+	// Neither a contact nor a request; also a user who blocked the requesting
+	// user, which is never revealed.
+	ContactState_CONTACT_STATE_UNSPECIFIED ContactState = 0
+	ContactState_CONTACT_STATE_CONTACT     ContactState = 1
+	// The other user asked; AddContact accepts, RemoveContact declines.
+	ContactState_CONTACT_STATE_INCOMING ContactState = 2
+	// The requesting user asked; RemoveContact withdraws.
+	ContactState_CONTACT_STATE_OUTGOING ContactState = 3
+	// The requesting user blocked the other user.
+	ContactState_CONTACT_STATE_BLOCKED ContactState = 4
+)
+
+// Enum value maps for ContactState.
+var (
+	ContactState_name = map[int32]string{
+		0: "CONTACT_STATE_UNSPECIFIED",
+		1: "CONTACT_STATE_CONTACT",
+		2: "CONTACT_STATE_INCOMING",
+		3: "CONTACT_STATE_OUTGOING",
+		4: "CONTACT_STATE_BLOCKED",
+	}
+	ContactState_value = map[string]int32{
+		"CONTACT_STATE_UNSPECIFIED": 0,
+		"CONTACT_STATE_CONTACT":     1,
+		"CONTACT_STATE_INCOMING":    2,
+		"CONTACT_STATE_OUTGOING":    3,
+		"CONTACT_STATE_BLOCKED":     4,
+	}
+)
+
+func (x ContactState) Enum() *ContactState {
+	p := new(ContactState)
+	*p = x
+	return p
+}
+
+func (x ContactState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ContactState) Descriptor() protoreflect.EnumDescriptor {
+	return file_wrinkle_v1_model_proto_enumTypes[0].Descriptor()
+}
+
+func (ContactState) Type() protoreflect.EnumType {
+	return &file_wrinkle_v1_model_proto_enumTypes[0]
+}
+
+func (x ContactState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ContactState.Descriptor instead.
+func (ContactState) EnumDescriptor() ([]byte, []int) {
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{0}
+}
+
 // A direct conversation has exactly two participants, for good; a group
 // has a topic, an admin or more, and members who join and leave. The kind
 // is fixed when the conversation is created.
@@ -60,11 +122,11 @@ func (x ConversationKind) String() string {
 }
 
 func (ConversationKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_wrinkle_v1_model_proto_enumTypes[0].Descriptor()
+	return file_wrinkle_v1_model_proto_enumTypes[1].Descriptor()
 }
 
 func (ConversationKind) Type() protoreflect.EnumType {
-	return &file_wrinkle_v1_model_proto_enumTypes[0]
+	return &file_wrinkle_v1_model_proto_enumTypes[1]
 }
 
 func (x ConversationKind) Number() protoreflect.EnumNumber {
@@ -73,7 +135,7 @@ func (x ConversationKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ConversationKind.Descriptor instead.
 func (ConversationKind) EnumDescriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{0}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{1}
 }
 
 type User struct {
@@ -232,6 +294,66 @@ func (x *Sticker) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+type Contact struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	User          *User                  `protobuf:"bytes,1,opt,name=user,proto3" json:"user,omitempty"`
+	State         ContactState           `protobuf:"varint,2,opt,name=state,proto3,enum=wrinkle.v1.ContactState" json:"state,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Contact) Reset() {
+	*x = Contact{}
+	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Contact) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Contact) ProtoMessage() {}
+
+func (x *Contact) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Contact.ProtoReflect.Descriptor instead.
+func (*Contact) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Contact) GetUser() *User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
+func (x *Contact) GetState() ContactState {
+	if x != nil {
+		return x.State
+	}
+	return ContactState_CONTACT_STATE_UNSPECIFIED
+}
+
+func (x *Contact) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 // A device signed in to the requesting user's account.
 type Device struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
@@ -250,7 +372,7 @@ type Device struct {
 
 func (x *Device) Reset() {
 	*x = Device{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -262,7 +384,7 @@ func (x *Device) String() string {
 func (*Device) ProtoMessage() {}
 
 func (x *Device) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[2]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -275,7 +397,7 @@ func (x *Device) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Device.ProtoReflect.Descriptor instead.
 func (*Device) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{2}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Device) GetDeviceId() uint64 {
@@ -352,7 +474,7 @@ type Message struct {
 
 func (x *Message) Reset() {
 	*x = Message{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[3]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -364,7 +486,7 @@ func (x *Message) String() string {
 func (*Message) ProtoMessage() {}
 
 func (x *Message) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[3]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -377,7 +499,7 @@ func (x *Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Message.ProtoReflect.Descriptor instead.
 func (*Message) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{3}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Message) GetConversationId() []byte {
@@ -491,7 +613,7 @@ type Reaction struct {
 
 func (x *Reaction) Reset() {
 	*x = Reaction{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[4]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -503,7 +625,7 @@ func (x *Reaction) String() string {
 func (*Reaction) ProtoMessage() {}
 
 func (x *Reaction) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[4]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -516,7 +638,7 @@ func (x *Reaction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Reaction.ProtoReflect.Descriptor instead.
 func (*Reaction) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{4}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Reaction) GetUserId() []byte {
@@ -557,7 +679,7 @@ type Sealed struct {
 
 func (x *Sealed) Reset() {
 	*x = Sealed{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[5]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -569,7 +691,7 @@ func (x *Sealed) String() string {
 func (*Sealed) ProtoMessage() {}
 
 func (x *Sealed) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[5]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -582,7 +704,7 @@ func (x *Sealed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sealed.ProtoReflect.Descriptor instead.
 func (*Sealed) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{5}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Sealed) GetEpoch() uint32 {
@@ -625,7 +747,7 @@ type Notice struct {
 
 func (x *Notice) Reset() {
 	*x = Notice{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[6]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -637,7 +759,7 @@ func (x *Notice) String() string {
 func (*Notice) ProtoMessage() {}
 
 func (x *Notice) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[6]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -650,7 +772,7 @@ func (x *Notice) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Notice.ProtoReflect.Descriptor instead.
 func (*Notice) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{6}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *Notice) GetKind() isNotice_Kind {
@@ -766,7 +888,7 @@ type GroupCreated struct {
 
 func (x *GroupCreated) Reset() {
 	*x = GroupCreated{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[7]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +900,7 @@ func (x *GroupCreated) String() string {
 func (*GroupCreated) ProtoMessage() {}
 
 func (x *GroupCreated) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[7]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +913,7 @@ func (x *GroupCreated) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupCreated.ProtoReflect.Descriptor instead.
 func (*GroupCreated) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{7}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GroupCreated) GetTopic() string {
@@ -817,7 +939,7 @@ type MembersAdded struct {
 
 func (x *MembersAdded) Reset() {
 	*x = MembersAdded{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[8]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -829,7 +951,7 @@ func (x *MembersAdded) String() string {
 func (*MembersAdded) ProtoMessage() {}
 
 func (x *MembersAdded) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[8]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -842,7 +964,7 @@ func (x *MembersAdded) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MembersAdded.ProtoReflect.Descriptor instead.
 func (*MembersAdded) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{8}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *MembersAdded) GetUsers() []*User {
@@ -862,7 +984,7 @@ type MemberRemoved struct {
 
 func (x *MemberRemoved) Reset() {
 	*x = MemberRemoved{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[9]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -874,7 +996,7 @@ func (x *MemberRemoved) String() string {
 func (*MemberRemoved) ProtoMessage() {}
 
 func (x *MemberRemoved) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[9]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -887,7 +1009,7 @@ func (x *MemberRemoved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemberRemoved.ProtoReflect.Descriptor instead.
 func (*MemberRemoved) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{9}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MemberRemoved) GetUser() *User {
@@ -908,7 +1030,7 @@ type MemberLeft struct {
 
 func (x *MemberLeft) Reset() {
 	*x = MemberLeft{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[10]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -920,7 +1042,7 @@ func (x *MemberLeft) String() string {
 func (*MemberLeft) ProtoMessage() {}
 
 func (x *MemberLeft) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[10]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -933,7 +1055,7 @@ func (x *MemberLeft) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MemberLeft.ProtoReflect.Descriptor instead.
 func (*MemberLeft) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{10}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *MemberLeft) GetPromoted() *User {
@@ -952,7 +1074,7 @@ type TopicChanged struct {
 
 func (x *TopicChanged) Reset() {
 	*x = TopicChanged{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[11]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -964,7 +1086,7 @@ func (x *TopicChanged) String() string {
 func (*TopicChanged) ProtoMessage() {}
 
 func (x *TopicChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[11]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -977,7 +1099,7 @@ func (x *TopicChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TopicChanged.ProtoReflect.Descriptor instead.
 func (*TopicChanged) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{11}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *TopicChanged) GetTopic() string {
@@ -997,7 +1119,7 @@ type AdminChanged struct {
 
 func (x *AdminChanged) Reset() {
 	*x = AdminChanged{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[12]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1009,7 +1131,7 @@ func (x *AdminChanged) String() string {
 func (*AdminChanged) ProtoMessage() {}
 
 func (x *AdminChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[12]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1022,7 +1144,7 @@ func (x *AdminChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdminChanged.ProtoReflect.Descriptor instead.
 func (*AdminChanged) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{12}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AdminChanged) GetUser() *User {
@@ -1068,7 +1190,7 @@ type Conversation struct {
 
 func (x *Conversation) Reset() {
 	*x = Conversation{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[13]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1080,7 +1202,7 @@ func (x *Conversation) String() string {
 func (*Conversation) ProtoMessage() {}
 
 func (x *Conversation) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[13]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1093,7 +1215,7 @@ func (x *Conversation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Conversation.ProtoReflect.Descriptor instead.
 func (*Conversation) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{13}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Conversation) GetConversationId() []byte {
@@ -1189,7 +1311,7 @@ type Member struct {
 
 func (x *Member) Reset() {
 	*x = Member{}
-	mi := &file_wrinkle_v1_model_proto_msgTypes[14]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1201,7 +1323,7 @@ func (x *Member) String() string {
 func (*Member) ProtoMessage() {}
 
 func (x *Member) ProtoReflect() protoreflect.Message {
-	mi := &file_wrinkle_v1_model_proto_msgTypes[14]
+	mi := &file_wrinkle_v1_model_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1214,7 +1336,7 @@ func (x *Member) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Member.ProtoReflect.Descriptor instead.
 func (*Member) Descriptor() ([]byte, []int) {
-	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{14}
+	return file_wrinkle_v1_model_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *Member) GetUser() *User {
@@ -1264,7 +1386,12 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\n" +
 	"media_type\x18\x03 \x01(\tR\tmediaType\x129\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xe5\x01\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x9a\x01\n" +
+	"\aContact\x12$\n" +
+	"\x04user\x18\x01 \x01(\v2\x10.wrinkle.v1.UserR\x04user\x12.\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x18.wrinkle.v1.ContactStateR\x05state\x129\n" +
+	"\n" +
+	"updated_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xe5\x01\n" +
 	"\x06Device\x12\x1b\n" +
 	"\tdevice_id\x18\x01 \x01(\x04R\bdeviceId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x129\n" +
@@ -1342,7 +1469,13 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\x05admin\x18\x02 \x01(\bR\x05admin\x12\x19\n" +
 	"\bread_seq\x18\x03 \x01(\x04R\areadSeq\x12\x1d\n" +
 	"\n" +
-	"joined_seq\x18\x04 \x01(\x04R\tjoinedSeq*p\n" +
+	"joined_seq\x18\x04 \x01(\x04R\tjoinedSeq*\x9b\x01\n" +
+	"\fContactState\x12\x1d\n" +
+	"\x19CONTACT_STATE_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15CONTACT_STATE_CONTACT\x10\x01\x12\x1a\n" +
+	"\x16CONTACT_STATE_INCOMING\x10\x02\x12\x1a\n" +
+	"\x16CONTACT_STATE_OUTGOING\x10\x03\x12\x19\n" +
+	"\x15CONTACT_STATE_BLOCKED\x10\x04*p\n" +
 	"\x10ConversationKind\x12!\n" +
 	"\x1dCONVERSATION_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONVERSATION_KIND_DIRECT\x10\x01\x12\x1b\n" +
@@ -1364,58 +1497,63 @@ func file_wrinkle_v1_model_proto_rawDescGZIP() []byte {
 	return file_wrinkle_v1_model_proto_rawDescData
 }
 
-var file_wrinkle_v1_model_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wrinkle_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_wrinkle_v1_model_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_wrinkle_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_wrinkle_v1_model_proto_goTypes = []any{
-	(ConversationKind)(0),         // 0: wrinkle.v1.ConversationKind
-	(*User)(nil),                  // 1: wrinkle.v1.User
-	(*Sticker)(nil),               // 2: wrinkle.v1.Sticker
-	(*Device)(nil),                // 3: wrinkle.v1.Device
-	(*Message)(nil),               // 4: wrinkle.v1.Message
-	(*Reaction)(nil),              // 5: wrinkle.v1.Reaction
-	(*Sealed)(nil),                // 6: wrinkle.v1.Sealed
-	(*Notice)(nil),                // 7: wrinkle.v1.Notice
-	(*GroupCreated)(nil),          // 8: wrinkle.v1.GroupCreated
-	(*MembersAdded)(nil),          // 9: wrinkle.v1.MembersAdded
-	(*MemberRemoved)(nil),         // 10: wrinkle.v1.MemberRemoved
-	(*MemberLeft)(nil),            // 11: wrinkle.v1.MemberLeft
-	(*TopicChanged)(nil),          // 12: wrinkle.v1.TopicChanged
-	(*AdminChanged)(nil),          // 13: wrinkle.v1.AdminChanged
-	(*Conversation)(nil),          // 14: wrinkle.v1.Conversation
-	(*Member)(nil),                // 15: wrinkle.v1.Member
-	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
+	(ContactState)(0),             // 0: wrinkle.v1.ContactState
+	(ConversationKind)(0),         // 1: wrinkle.v1.ConversationKind
+	(*User)(nil),                  // 2: wrinkle.v1.User
+	(*Sticker)(nil),               // 3: wrinkle.v1.Sticker
+	(*Contact)(nil),               // 4: wrinkle.v1.Contact
+	(*Device)(nil),                // 5: wrinkle.v1.Device
+	(*Message)(nil),               // 6: wrinkle.v1.Message
+	(*Reaction)(nil),              // 7: wrinkle.v1.Reaction
+	(*Sealed)(nil),                // 8: wrinkle.v1.Sealed
+	(*Notice)(nil),                // 9: wrinkle.v1.Notice
+	(*GroupCreated)(nil),          // 10: wrinkle.v1.GroupCreated
+	(*MembersAdded)(nil),          // 11: wrinkle.v1.MembersAdded
+	(*MemberRemoved)(nil),         // 12: wrinkle.v1.MemberRemoved
+	(*MemberLeft)(nil),            // 13: wrinkle.v1.MemberLeft
+	(*TopicChanged)(nil),          // 14: wrinkle.v1.TopicChanged
+	(*AdminChanged)(nil),          // 15: wrinkle.v1.AdminChanged
+	(*Conversation)(nil),          // 16: wrinkle.v1.Conversation
+	(*Member)(nil),                // 17: wrinkle.v1.Member
+	(*timestamppb.Timestamp)(nil), // 18: google.protobuf.Timestamp
 }
 var file_wrinkle_v1_model_proto_depIdxs = []int32{
-	16, // 0: wrinkle.v1.Sticker.created_at:type_name -> google.protobuf.Timestamp
-	16, // 1: wrinkle.v1.Device.created_at:type_name -> google.protobuf.Timestamp
-	16, // 2: wrinkle.v1.Device.last_seen_at:type_name -> google.protobuf.Timestamp
-	16, // 3: wrinkle.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
-	6,  // 4: wrinkle.v1.Message.sealed:type_name -> wrinkle.v1.Sealed
-	7,  // 5: wrinkle.v1.Message.notice:type_name -> wrinkle.v1.Notice
-	16, // 6: wrinkle.v1.Message.deleted_at:type_name -> google.protobuf.Timestamp
-	5,  // 7: wrinkle.v1.Message.reactions:type_name -> wrinkle.v1.Reaction
-	6,  // 8: wrinkle.v1.Reaction.sealed:type_name -> wrinkle.v1.Sealed
-	16, // 9: wrinkle.v1.Reaction.updated_at:type_name -> google.protobuf.Timestamp
-	8,  // 10: wrinkle.v1.Notice.group_created:type_name -> wrinkle.v1.GroupCreated
-	9,  // 11: wrinkle.v1.Notice.members_added:type_name -> wrinkle.v1.MembersAdded
-	10, // 12: wrinkle.v1.Notice.member_removed:type_name -> wrinkle.v1.MemberRemoved
-	11, // 13: wrinkle.v1.Notice.member_left:type_name -> wrinkle.v1.MemberLeft
-	12, // 14: wrinkle.v1.Notice.topic_changed:type_name -> wrinkle.v1.TopicChanged
-	13, // 15: wrinkle.v1.Notice.admin_changed:type_name -> wrinkle.v1.AdminChanged
-	1,  // 16: wrinkle.v1.GroupCreated.members:type_name -> wrinkle.v1.User
-	1,  // 17: wrinkle.v1.MembersAdded.users:type_name -> wrinkle.v1.User
-	1,  // 18: wrinkle.v1.MemberRemoved.user:type_name -> wrinkle.v1.User
-	1,  // 19: wrinkle.v1.MemberLeft.promoted:type_name -> wrinkle.v1.User
-	1,  // 20: wrinkle.v1.AdminChanged.user:type_name -> wrinkle.v1.User
-	0,  // 21: wrinkle.v1.Conversation.kind:type_name -> wrinkle.v1.ConversationKind
-	1,  // 22: wrinkle.v1.Conversation.peer:type_name -> wrinkle.v1.User
-	4,  // 23: wrinkle.v1.Conversation.last_message:type_name -> wrinkle.v1.Message
-	1,  // 24: wrinkle.v1.Member.user:type_name -> wrinkle.v1.User
-	25, // [25:25] is the sub-list for method output_type
-	25, // [25:25] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	18, // 0: wrinkle.v1.Sticker.created_at:type_name -> google.protobuf.Timestamp
+	2,  // 1: wrinkle.v1.Contact.user:type_name -> wrinkle.v1.User
+	0,  // 2: wrinkle.v1.Contact.state:type_name -> wrinkle.v1.ContactState
+	18, // 3: wrinkle.v1.Contact.updated_at:type_name -> google.protobuf.Timestamp
+	18, // 4: wrinkle.v1.Device.created_at:type_name -> google.protobuf.Timestamp
+	18, // 5: wrinkle.v1.Device.last_seen_at:type_name -> google.protobuf.Timestamp
+	18, // 6: wrinkle.v1.Message.sent_at:type_name -> google.protobuf.Timestamp
+	8,  // 7: wrinkle.v1.Message.sealed:type_name -> wrinkle.v1.Sealed
+	9,  // 8: wrinkle.v1.Message.notice:type_name -> wrinkle.v1.Notice
+	18, // 9: wrinkle.v1.Message.deleted_at:type_name -> google.protobuf.Timestamp
+	7,  // 10: wrinkle.v1.Message.reactions:type_name -> wrinkle.v1.Reaction
+	8,  // 11: wrinkle.v1.Reaction.sealed:type_name -> wrinkle.v1.Sealed
+	18, // 12: wrinkle.v1.Reaction.updated_at:type_name -> google.protobuf.Timestamp
+	10, // 13: wrinkle.v1.Notice.group_created:type_name -> wrinkle.v1.GroupCreated
+	11, // 14: wrinkle.v1.Notice.members_added:type_name -> wrinkle.v1.MembersAdded
+	12, // 15: wrinkle.v1.Notice.member_removed:type_name -> wrinkle.v1.MemberRemoved
+	13, // 16: wrinkle.v1.Notice.member_left:type_name -> wrinkle.v1.MemberLeft
+	14, // 17: wrinkle.v1.Notice.topic_changed:type_name -> wrinkle.v1.TopicChanged
+	15, // 18: wrinkle.v1.Notice.admin_changed:type_name -> wrinkle.v1.AdminChanged
+	2,  // 19: wrinkle.v1.GroupCreated.members:type_name -> wrinkle.v1.User
+	2,  // 20: wrinkle.v1.MembersAdded.users:type_name -> wrinkle.v1.User
+	2,  // 21: wrinkle.v1.MemberRemoved.user:type_name -> wrinkle.v1.User
+	2,  // 22: wrinkle.v1.MemberLeft.promoted:type_name -> wrinkle.v1.User
+	2,  // 23: wrinkle.v1.AdminChanged.user:type_name -> wrinkle.v1.User
+	1,  // 24: wrinkle.v1.Conversation.kind:type_name -> wrinkle.v1.ConversationKind
+	2,  // 25: wrinkle.v1.Conversation.peer:type_name -> wrinkle.v1.User
+	6,  // 26: wrinkle.v1.Conversation.last_message:type_name -> wrinkle.v1.Message
+	2,  // 27: wrinkle.v1.Member.user:type_name -> wrinkle.v1.User
+	28, // [28:28] is the sub-list for method output_type
+	28, // [28:28] is the sub-list for method input_type
+	28, // [28:28] is the sub-list for extension type_name
+	28, // [28:28] is the sub-list for extension extendee
+	0,  // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_model_proto_init() }
@@ -1423,11 +1561,11 @@ func file_wrinkle_v1_model_proto_init() {
 	if File_wrinkle_v1_model_proto != nil {
 		return
 	}
-	file_wrinkle_v1_model_proto_msgTypes[3].OneofWrappers = []any{
+	file_wrinkle_v1_model_proto_msgTypes[4].OneofWrappers = []any{
 		(*Message_Sealed)(nil),
 		(*Message_Notice)(nil),
 	}
-	file_wrinkle_v1_model_proto_msgTypes[6].OneofWrappers = []any{
+	file_wrinkle_v1_model_proto_msgTypes[7].OneofWrappers = []any{
 		(*Notice_GroupCreated)(nil),
 		(*Notice_MembersAdded)(nil),
 		(*Notice_MemberRemoved)(nil),
@@ -1440,8 +1578,8 @@ func file_wrinkle_v1_model_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_model_proto_rawDesc), len(file_wrinkle_v1_model_proto_rawDesc)),
-			NumEnums:      1,
-			NumMessages:   15,
+			NumEnums:      2,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

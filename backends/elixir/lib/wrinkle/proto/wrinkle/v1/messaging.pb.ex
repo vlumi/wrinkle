@@ -908,3 +908,108 @@ defmodule Wrinkle.V1.RegisterPushTokenResponse do
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
 end
+
+defmodule Wrinkle.V1.ListContactsRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ListContactsRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.ListContactsResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ListContactsResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :contacts, 1, repeated: true, type: Wrinkle.V1.Contact
+end
+
+defmodule Wrinkle.V1.AddContactRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.AddContactRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  oneof :user, 0
+
+  field :name, 1, type: :string, oneof: 0
+  field :user_id, 2, type: :bytes, json_name: "userId", oneof: 0
+end
+
+defmodule Wrinkle.V1.AddContactResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.AddContactResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :contact, 1, type: Wrinkle.V1.Contact
+end
+
+defmodule Wrinkle.V1.RemoveContactRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RemoveContactRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_id, 1, type: :bytes, json_name: "userId"
+end
+
+defmodule Wrinkle.V1.RemoveContactResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.RemoveContactResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.BlockUserRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.BlockUserRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_id, 1, type: :bytes, json_name: "userId"
+end
+
+defmodule Wrinkle.V1.BlockUserResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.BlockUserResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.UnblockUserRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.UnblockUserRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :user_id, 1, type: :bytes, json_name: "userId"
+end
+
+defmodule Wrinkle.V1.UnblockUserResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.UnblockUserResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end

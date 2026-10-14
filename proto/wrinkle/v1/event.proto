@@ -26,6 +26,7 @@ message Event {
     MessageDeletedEvent message_deleted = 15;
     ReactionEvent reaction = 16;
     PaletteEvent palette = 17;
+    ContactEvent contact = 18;
   }
 }
 
@@ -94,4 +95,10 @@ message ReactionEvent {
 message PaletteEvent {
   // The whole palette, in the user's order.
   repeated bytes sticker_ids = 1;
+}
+
+// How another user now stands to the receiving user, after a change by
+// either of them. Received by both users' devices, each with their own view.
+message ContactEvent {
+  Contact contact = 1;
 }

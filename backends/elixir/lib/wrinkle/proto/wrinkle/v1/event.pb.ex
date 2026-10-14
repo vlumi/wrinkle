@@ -28,6 +28,7 @@ defmodule Wrinkle.V1.Event do
 
   field :reaction, 16, type: Wrinkle.V1.ReactionEvent, oneof: 0
   field :palette, 17, type: Wrinkle.V1.PaletteEvent, oneof: 0
+  field :contact, 18, type: Wrinkle.V1.ContactEvent, oneof: 0
 end
 
 defmodule Wrinkle.V1.MessageEvent do
@@ -128,4 +129,15 @@ defmodule Wrinkle.V1.PaletteEvent do
     syntax: :proto3
 
   field :sticker_ids, 1, repeated: true, type: :bytes, json_name: "stickerIds"
+end
+
+defmodule Wrinkle.V1.ContactEvent do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.ContactEvent",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :contact, 1, type: Wrinkle.V1.Contact
 end

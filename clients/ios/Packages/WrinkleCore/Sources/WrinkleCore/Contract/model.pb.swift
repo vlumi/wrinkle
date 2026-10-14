@@ -27,6 +27,63 @@ fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobu
   typealias Version = _2
 }
 
+/// How another user stands to the requesting user. Contacts are mutual:
+/// each of the two asked, or one asked and the other accepted.
+public nonisolated enum Wrinkle_V1_ContactState: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+
+  /// Neither a contact nor a request; also a user who blocked the requesting
+  /// user, which is never revealed.
+  case unspecified // = 0
+  case contact // = 1
+
+  /// The other user asked; AddContact accepts, RemoveContact declines.
+  case incoming // = 2
+
+  /// The requesting user asked; RemoveContact withdraws.
+  case outgoing // = 3
+
+  /// The requesting user blocked the other user.
+  case blocked // = 4
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .contact
+    case 2: self = .incoming
+    case 3: self = .outgoing
+    case 4: self = .blocked
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .contact: return 1
+    case .incoming: return 2
+    case .outgoing: return 3
+    case .blocked: return 4
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Wrinkle_V1_ContactState] = [
+    .unspecified,
+    .contact,
+    .incoming,
+    .outgoing,
+    .blocked,
+  ]
+
+}
+
 /// A direct conversation has exactly two participants, for good; a group
 /// has a topic, an admin or more, and members who join and leave. The kind
 /// is fixed when the conversation is created.
@@ -125,6 +182,39 @@ public nonisolated struct Wrinkle_V1_Sticker: Sendable {
   public init() {}
 
   fileprivate var _createdAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
+}
+
+public nonisolated struct Wrinkle_V1_Contact: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var user: Wrinkle_V1_User {
+    get {_user ?? Wrinkle_V1_User()}
+    set {_user = newValue}
+  }
+  /// Returns true if `user` has been explicitly set.
+  public var hasUser: Bool {self._user != nil}
+  /// Clears the value of `user`. Subsequent reads from it will return its default value.
+  public mutating func clearUser() {self._user = nil}
+
+  public var state: Wrinkle_V1_ContactState = .unspecified
+
+  public var updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp {
+    get {_updatedAt ?? SwiftProtobuf.Google_Protobuf_Timestamp()}
+    set {_updatedAt = newValue}
+  }
+  /// Returns true if `updatedAt` has been explicitly set.
+  public var hasUpdatedAt: Bool {self._updatedAt != nil}
+  /// Clears the value of `updatedAt`. Subsequent reads from it will return its default value.
+  public mutating func clearUpdatedAt() {self._updatedAt = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _user: Wrinkle_V1_User? = nil
+  fileprivate var _updatedAt: SwiftProtobuf.Google_Protobuf_Timestamp? = nil
 }
 
 /// A device signed in to the requesting user's account.
@@ -608,6 +698,10 @@ public nonisolated struct Wrinkle_V1_Member: Sendable {
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
+nonisolated extension Wrinkle_V1_ContactState: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONTACT_STATE_UNSPECIFIED\0\u{1}CONTACT_STATE_CONTACT\0\u{1}CONTACT_STATE_INCOMING\0\u{1}CONTACT_STATE_OUTGOING\0\u{1}CONTACT_STATE_BLOCKED\0")
+}
+
 nonisolated extension Wrinkle_V1_ConversationKind: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_KIND_UNSPECIFIED\0\u{1}CONVERSATION_KIND_DIRECT\0\u{1}CONVERSATION_KIND_GROUP\0")
 }
@@ -706,6 +800,50 @@ nonisolated extension Wrinkle_V1_Sticker: SwiftProtobuf.Message, SwiftProtobuf._
     if lhs.creatorUserID != rhs.creatorUserID {return false}
     if lhs.mediaType != rhs.mediaType {return false}
     if lhs._createdAt != rhs._createdAt {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_Contact: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".Contact"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}user\0\u{1}state\0\u{3}updated_at\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._user) }()
+      case 2: try { try decoder.decodeSingularEnumField(value: &self.state) }()
+      case 3: try { try decoder.decodeSingularMessageField(value: &self._updatedAt) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._user {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    if self.state != .unspecified {
+      try visitor.visitSingularEnumField(value: self.state, fieldNumber: 2)
+    }
+    try { if let v = self._updatedAt {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_Contact, rhs: Wrinkle_V1_Contact) -> Bool {
+    if lhs._user != rhs._user {return false}
+    if lhs.state != rhs.state {return false}
+    if lhs._updatedAt != rhs._updatedAt {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

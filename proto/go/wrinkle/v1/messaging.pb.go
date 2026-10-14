@@ -1280,7 +1280,10 @@ func (x *CreateUploadResponse) GetExpiresAt() *timestamppb.Timestamp {
 }
 
 // Finds or creates the direct conversation between the requesting user and
-// the peer. The peer is found by name, ignoring case.
+// the peer. The peer is found by name, ignoring case; anyone may be messaged,
+// contact or not. A peer the requesting user blocked fails with
+// ERROR_CODE_FAILED_PRECONDITION; a peer who blocked the requesting user
+// fails with ERROR_CODE_PERMISSION_DENIED.
 type OpenConversationRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PeerName      string                 `protobuf:"bytes,1,opt,name=peer_name,json=peerName,proto3" json:"peer_name,omitempty"`
@@ -1375,7 +1378,9 @@ func (x *OpenConversationResponse) GetConversation() *Conversation {
 // with ERROR_CODE_NOT_FOUND, and the requesting user and repeated names
 // are ignored. A group has at most 256 members. Sending again with the same
 // client_group_id returns the group created the first time. The group's
-// first message is a GroupCreated notice.
+// first message is a GroupCreated notice. Only the requesting user's
+// contacts may be invited: anyone else fails with
+// ERROR_CODE_FAILED_PRECONDITION, naming them.
 type CreateGroupRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Topic       string                 `protobuf:"bytes,1,opt,name=topic,proto3" json:"topic,omitempty"`
@@ -1483,7 +1488,9 @@ func (x *CreateGroupResponse) GetConversation() *Conversation {
 
 // Adds users to a group; any member may. Names as in CreateGroup; users
 // already members are ignored, and when none is left nothing happens. More
-// than 256 members fails with ERROR_CODE_FAILED_PRECONDITION.
+// than 256 members fails with ERROR_CODE_FAILED_PRECONDITION, as does adding
+// a user who is not the requesting member's contact. Members already in the
+// group stay whatever their contacts.
 type AddMembersRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -2026,7 +2033,10 @@ func (x *GetMembersResponse) GetMembers() []*Member {
 // removed gets ERROR_CODE_PERMISSION_DENIED. The content is sealed with the
 // conversation's current key epoch: an older one, or none published yet,
 // fails with ERROR_CODE_FAILED_PRECONDITION, as does any epoch while the
-// conversation needs a new one (see PublishKeys).
+// conversation needs a new one (see PublishKeys). In a direct conversation,
+// blocking refuses as in OpenConversation, in both directions; in a group,
+// blocking changes nothing on the services and clients hide what blocked
+// users send.
 type SendMessageRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId  []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -2244,7 +2254,8 @@ func (*DeleteMessageResponse) Descriptor() ([]byte, []int) {
 // to notices (ERROR_CODE_INVALID_ARGUMENT) nor deleted messages
 // (ERROR_CODE_FAILED_PRECONDITION). The sealed Reactions follow the key
 // epoch rules of SendMessage; the ciphertext is at most 1 KiB. Reactions
-// are not messages: they take no seq and are never unread.
+// are not messages: they take no seq and are never unread. Blocking refuses
+// reactions in a direct conversation as SendMessage does.
 type SetReactionRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -3999,6 +4010,471 @@ func (*RegisterPushTokenResponse) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{78}
 }
 
+// Lists the users the requesting user has any state with: contacts,
+// requests both ways and blocked users, at most 1000 of each, deleted
+// accounts left out.
+type ListContactsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContactsRequest) Reset() {
+	*x = ListContactsRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[79]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContactsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContactsRequest) ProtoMessage() {}
+
+func (x *ListContactsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[79]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContactsRequest.ProtoReflect.Descriptor instead.
+func (*ListContactsRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{79}
+}
+
+type ListContactsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Contacts      []*Contact             `protobuf:"bytes,1,rep,name=contacts,proto3" json:"contacts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListContactsResponse) Reset() {
+	*x = ListContactsResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[80]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListContactsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListContactsResponse) ProtoMessage() {}
+
+func (x *ListContactsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[80]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListContactsResponse.ProtoReflect.Descriptor instead.
+func (*ListContactsResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{80}
+}
+
+func (x *ListContactsResponse) GetContacts() []*Contact {
+	if x != nil {
+		return x.Contacts
+	}
+	return nil
+}
+
+// Asks a user to be a contact, or accepts their request. By name, ignoring
+// case, or by id. Asking again changes nothing. Asking oneself fails with
+// ERROR_CODE_INVALID_ARGUMENT, an unknown user with ERROR_CODE_NOT_FOUND, a
+// user the requesting user blocked with ERROR_CODE_FAILED_PRECONDITION
+// (unblock first), and one who blocked the requesting user with
+// ERROR_CODE_PERMISSION_DENIED.
+type AddContactRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to User:
+	//
+	//	*AddContactRequest_Name
+	//	*AddContactRequest_UserId
+	User          isAddContactRequest_User `protobuf_oneof:"user"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddContactRequest) Reset() {
+	*x = AddContactRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[81]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddContactRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddContactRequest) ProtoMessage() {}
+
+func (x *AddContactRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[81]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddContactRequest.ProtoReflect.Descriptor instead.
+func (*AddContactRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{81}
+}
+
+func (x *AddContactRequest) GetUser() isAddContactRequest_User {
+	if x != nil {
+		return x.User
+	}
+	return nil
+}
+
+func (x *AddContactRequest) GetName() string {
+	if x != nil {
+		if x, ok := x.User.(*AddContactRequest_Name); ok {
+			return x.Name
+		}
+	}
+	return ""
+}
+
+func (x *AddContactRequest) GetUserId() []byte {
+	if x != nil {
+		if x, ok := x.User.(*AddContactRequest_UserId); ok {
+			return x.UserId
+		}
+	}
+	return nil
+}
+
+type isAddContactRequest_User interface {
+	isAddContactRequest_User()
+}
+
+type AddContactRequest_Name struct {
+	Name string `protobuf:"bytes,1,opt,name=name,proto3,oneof"`
+}
+
+type AddContactRequest_UserId struct {
+	UserId []byte `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3,oneof"`
+}
+
+func (*AddContactRequest_Name) isAddContactRequest_User() {}
+
+func (*AddContactRequest_UserId) isAddContactRequest_User() {}
+
+type AddContactResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Contact       *Contact               `protobuf:"bytes,1,opt,name=contact,proto3" json:"contact,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddContactResponse) Reset() {
+	*x = AddContactResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[82]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddContactResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddContactResponse) ProtoMessage() {}
+
+func (x *AddContactResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[82]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddContactResponse.ProtoReflect.Descriptor instead.
+func (*AddContactResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{82}
+}
+
+func (x *AddContactResponse) GetContact() *Contact {
+	if x != nil {
+		return x.Contact
+	}
+	return nil
+}
+
+// Ends any contact with the user, for both: removes a contact, declines
+// their request or withdraws one's own. Nothing to end changes nothing. A
+// block stays (see UnblockUser).
+type RemoveContactRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveContactRequest) Reset() {
+	*x = RemoveContactRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[83]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveContactRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveContactRequest) ProtoMessage() {}
+
+func (x *RemoveContactRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[83]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveContactRequest.ProtoReflect.Descriptor instead.
+func (*RemoveContactRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{83}
+}
+
+func (x *RemoveContactRequest) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
+type RemoveContactResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RemoveContactResponse) Reset() {
+	*x = RemoveContactResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[84]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RemoveContactResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveContactResponse) ProtoMessage() {}
+
+func (x *RemoveContactResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[84]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveContactResponse.ProtoReflect.Descriptor instead.
+func (*RemoveContactResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{84}
+}
+
+// Blocks a user: any contact or request between the two ends, and the
+// blocked user can no longer open or write to a direct conversation with
+// the requesting user, react there, ask to be a contact, or add them to a
+// group. Shared groups stay; clients hide what the blocked user sends in
+// them. Blocking again changes nothing; blocking oneself fails with
+// ERROR_CODE_INVALID_ARGUMENT.
+type BlockUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockUserRequest) Reset() {
+	*x = BlockUserRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[85]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockUserRequest) ProtoMessage() {}
+
+func (x *BlockUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[85]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockUserRequest.ProtoReflect.Descriptor instead.
+func (*BlockUserRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{85}
+}
+
+func (x *BlockUserRequest) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
+type BlockUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BlockUserResponse) Reset() {
+	*x = BlockUserResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[86]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockUserResponse) ProtoMessage() {}
+
+func (x *BlockUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[86]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockUserResponse.ProtoReflect.Descriptor instead.
+func (*BlockUserResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{86}
+}
+
+// Lifts a block; no contact comes back. A user not blocked changes nothing.
+type UnblockUserRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        []byte                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnblockUserRequest) Reset() {
+	*x = UnblockUserRequest{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[87]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnblockUserRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnblockUserRequest) ProtoMessage() {}
+
+func (x *UnblockUserRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[87]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnblockUserRequest.ProtoReflect.Descriptor instead.
+func (*UnblockUserRequest) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{87}
+}
+
+func (x *UnblockUserRequest) GetUserId() []byte {
+	if x != nil {
+		return x.UserId
+	}
+	return nil
+}
+
+type UnblockUserResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnblockUserResponse) Reset() {
+	*x = UnblockUserResponse{}
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[88]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnblockUserResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnblockUserResponse) ProtoMessage() {}
+
+func (x *UnblockUserResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wrinkle_v1_messaging_proto_msgTypes[88]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnblockUserResponse.ProtoReflect.Descriptor instead.
+func (*UnblockUserResponse) Descriptor() ([]byte, []int) {
+	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{88}
+}
+
 var File_wrinkle_v1_messaging_proto protoreflect.FileDescriptor
 
 const file_wrinkle_v1_messaging_proto_rawDesc = "" +
@@ -4208,7 +4684,25 @@ const file_wrinkle_v1_messaging_proto_rawDesc = "" +
 	"\x18RegisterPushTokenRequest\x121\n" +
 	"\aservice\x18\x01 \x01(\x0e2\x17.wrinkle.v1.PushServiceR\aservice\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\"\x1b\n" +
-	"\x19RegisterPushTokenResponse*{\n" +
+	"\x19RegisterPushTokenResponse\"\x15\n" +
+	"\x13ListContactsRequest\"G\n" +
+	"\x14ListContactsResponse\x12/\n" +
+	"\bcontacts\x18\x01 \x03(\v2\x13.wrinkle.v1.ContactR\bcontacts\"L\n" +
+	"\x11AddContactRequest\x12\x14\n" +
+	"\x04name\x18\x01 \x01(\tH\x00R\x04name\x12\x19\n" +
+	"\auser_id\x18\x02 \x01(\fH\x00R\x06userIdB\x06\n" +
+	"\x04user\"C\n" +
+	"\x12AddContactResponse\x12-\n" +
+	"\acontact\x18\x01 \x01(\v2\x13.wrinkle.v1.ContactR\acontact\"/\n" +
+	"\x14RemoveContactRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\fR\x06userId\"\x17\n" +
+	"\x15RemoveContactResponse\"+\n" +
+	"\x10BlockUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\fR\x06userId\"\x13\n" +
+	"\x11BlockUserResponse\"-\n" +
+	"\x12UnblockUserRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\fR\x06userId\"\x15\n" +
+	"\x13UnblockUserResponse*{\n" +
 	"\vBlobPurpose\x12\x1c\n" +
 	"\x18BLOB_PURPOSE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13BLOB_PURPOSE_AVATAR\x10\x01\x12\x18\n" +
@@ -4235,7 +4729,7 @@ func file_wrinkle_v1_messaging_proto_rawDescGZIP() []byte {
 }
 
 var file_wrinkle_v1_messaging_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_wrinkle_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 79)
+var file_wrinkle_v1_messaging_proto_msgTypes = make([]protoimpl.MessageInfo, 89)
 var file_wrinkle_v1_messaging_proto_goTypes = []any{
 	(BlobPurpose)(0),                    // 0: wrinkle.v1.BlobPurpose
 	(PushService)(0),                    // 1: wrinkle.v1.PushService
@@ -4318,48 +4812,61 @@ var file_wrinkle_v1_messaging_proto_goTypes = []any{
 	(*GetMessagesResponse)(nil),         // 78: wrinkle.v1.GetMessagesResponse
 	(*RegisterPushTokenRequest)(nil),    // 79: wrinkle.v1.RegisterPushTokenRequest
 	(*RegisterPushTokenResponse)(nil),   // 80: wrinkle.v1.RegisterPushTokenResponse
-	(*User)(nil),                        // 81: wrinkle.v1.User
-	(*Device)(nil),                      // 82: wrinkle.v1.Device
-	(*timestamppb.Timestamp)(nil),       // 83: google.protobuf.Timestamp
-	(*Conversation)(nil),                // 84: wrinkle.v1.Conversation
-	(*Member)(nil),                      // 85: wrinkle.v1.Member
-	(*Sealed)(nil),                      // 86: wrinkle.v1.Sealed
-	(*Message)(nil),                     // 87: wrinkle.v1.Message
-	(*Sticker)(nil),                     // 88: wrinkle.v1.Sticker
-	(*Event)(nil),                       // 89: wrinkle.v1.Event
+	(*ListContactsRequest)(nil),         // 81: wrinkle.v1.ListContactsRequest
+	(*ListContactsResponse)(nil),        // 82: wrinkle.v1.ListContactsResponse
+	(*AddContactRequest)(nil),           // 83: wrinkle.v1.AddContactRequest
+	(*AddContactResponse)(nil),          // 84: wrinkle.v1.AddContactResponse
+	(*RemoveContactRequest)(nil),        // 85: wrinkle.v1.RemoveContactRequest
+	(*RemoveContactResponse)(nil),       // 86: wrinkle.v1.RemoveContactResponse
+	(*BlockUserRequest)(nil),            // 87: wrinkle.v1.BlockUserRequest
+	(*BlockUserResponse)(nil),           // 88: wrinkle.v1.BlockUserResponse
+	(*UnblockUserRequest)(nil),          // 89: wrinkle.v1.UnblockUserRequest
+	(*UnblockUserResponse)(nil),         // 90: wrinkle.v1.UnblockUserResponse
+	(*User)(nil),                        // 91: wrinkle.v1.User
+	(*Device)(nil),                      // 92: wrinkle.v1.Device
+	(*timestamppb.Timestamp)(nil),       // 93: google.protobuf.Timestamp
+	(*Conversation)(nil),                // 94: wrinkle.v1.Conversation
+	(*Member)(nil),                      // 95: wrinkle.v1.Member
+	(*Sealed)(nil),                      // 96: wrinkle.v1.Sealed
+	(*Message)(nil),                     // 97: wrinkle.v1.Message
+	(*Sticker)(nil),                     // 98: wrinkle.v1.Sticker
+	(*Event)(nil),                       // 99: wrinkle.v1.Event
+	(*Contact)(nil),                     // 100: wrinkle.v1.Contact
 }
 var file_wrinkle_v1_messaging_proto_depIdxs = []int32{
-	6,  // 0: wrinkle.v1.RegisterResponse.credentials:type_name -> wrinkle.v1.DeviceCredentials
-	6,  // 1: wrinkle.v1.SignInResponse.credentials:type_name -> wrinkle.v1.DeviceCredentials
-	81, // 2: wrinkle.v1.ConnectResponse.user:type_name -> wrinkle.v1.User
-	81, // 3: wrinkle.v1.UpdateProfileResponse.user:type_name -> wrinkle.v1.User
-	82, // 4: wrinkle.v1.ListDevicesResponse.devices:type_name -> wrinkle.v1.Device
-	82, // 5: wrinkle.v1.RenameDeviceResponse.device:type_name -> wrinkle.v1.Device
-	0,  // 6: wrinkle.v1.CreateUploadRequest.purpose:type_name -> wrinkle.v1.BlobPurpose
-	83, // 7: wrinkle.v1.CreateUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	84, // 8: wrinkle.v1.OpenConversationResponse.conversation:type_name -> wrinkle.v1.Conversation
-	84, // 9: wrinkle.v1.CreateGroupResponse.conversation:type_name -> wrinkle.v1.Conversation
-	85, // 10: wrinkle.v1.GetMembersResponse.members:type_name -> wrinkle.v1.Member
-	86, // 11: wrinkle.v1.SendMessageRequest.sealed:type_name -> wrinkle.v1.Sealed
-	87, // 12: wrinkle.v1.SendMessageResponse.message:type_name -> wrinkle.v1.Message
-	86, // 13: wrinkle.v1.SetReactionRequest.sealed:type_name -> wrinkle.v1.Sealed
-	88, // 14: wrinkle.v1.CreateStickerResponse.sticker:type_name -> wrinkle.v1.Sticker
-	88, // 15: wrinkle.v1.GetStickersResponse.stickers:type_name -> wrinkle.v1.Sticker
-	88, // 16: wrinkle.v1.GetPaletteResponse.stickers:type_name -> wrinkle.v1.Sticker
-	63, // 17: wrinkle.v1.GetDeviceKeysResponse.users:type_name -> wrinkle.v1.UserDevices
-	82, // 18: wrinkle.v1.UserDevices.devices:type_name -> wrinkle.v1.Device
-	66, // 19: wrinkle.v1.PublishKeysRequest.keys:type_name -> wrinkle.v1.WrappedKey
-	69, // 20: wrinkle.v1.GetConversationKeysResponse.current_recipients:type_name -> wrinkle.v1.KeyRecipient
-	70, // 21: wrinkle.v1.GetConversationKeysResponse.keys:type_name -> wrinkle.v1.ReceivedKey
-	89, // 22: wrinkle.v1.SyncResponse.events:type_name -> wrinkle.v1.Event
-	84, // 23: wrinkle.v1.ListConversationsResponse.conversations:type_name -> wrinkle.v1.Conversation
-	87, // 24: wrinkle.v1.GetMessagesResponse.messages:type_name -> wrinkle.v1.Message
-	1,  // 25: wrinkle.v1.RegisterPushTokenRequest.service:type_name -> wrinkle.v1.PushService
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	6,   // 0: wrinkle.v1.RegisterResponse.credentials:type_name -> wrinkle.v1.DeviceCredentials
+	6,   // 1: wrinkle.v1.SignInResponse.credentials:type_name -> wrinkle.v1.DeviceCredentials
+	91,  // 2: wrinkle.v1.ConnectResponse.user:type_name -> wrinkle.v1.User
+	91,  // 3: wrinkle.v1.UpdateProfileResponse.user:type_name -> wrinkle.v1.User
+	92,  // 4: wrinkle.v1.ListDevicesResponse.devices:type_name -> wrinkle.v1.Device
+	92,  // 5: wrinkle.v1.RenameDeviceResponse.device:type_name -> wrinkle.v1.Device
+	0,   // 6: wrinkle.v1.CreateUploadRequest.purpose:type_name -> wrinkle.v1.BlobPurpose
+	93,  // 7: wrinkle.v1.CreateUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	94,  // 8: wrinkle.v1.OpenConversationResponse.conversation:type_name -> wrinkle.v1.Conversation
+	94,  // 9: wrinkle.v1.CreateGroupResponse.conversation:type_name -> wrinkle.v1.Conversation
+	95,  // 10: wrinkle.v1.GetMembersResponse.members:type_name -> wrinkle.v1.Member
+	96,  // 11: wrinkle.v1.SendMessageRequest.sealed:type_name -> wrinkle.v1.Sealed
+	97,  // 12: wrinkle.v1.SendMessageResponse.message:type_name -> wrinkle.v1.Message
+	96,  // 13: wrinkle.v1.SetReactionRequest.sealed:type_name -> wrinkle.v1.Sealed
+	98,  // 14: wrinkle.v1.CreateStickerResponse.sticker:type_name -> wrinkle.v1.Sticker
+	98,  // 15: wrinkle.v1.GetStickersResponse.stickers:type_name -> wrinkle.v1.Sticker
+	98,  // 16: wrinkle.v1.GetPaletteResponse.stickers:type_name -> wrinkle.v1.Sticker
+	63,  // 17: wrinkle.v1.GetDeviceKeysResponse.users:type_name -> wrinkle.v1.UserDevices
+	92,  // 18: wrinkle.v1.UserDevices.devices:type_name -> wrinkle.v1.Device
+	66,  // 19: wrinkle.v1.PublishKeysRequest.keys:type_name -> wrinkle.v1.WrappedKey
+	69,  // 20: wrinkle.v1.GetConversationKeysResponse.current_recipients:type_name -> wrinkle.v1.KeyRecipient
+	70,  // 21: wrinkle.v1.GetConversationKeysResponse.keys:type_name -> wrinkle.v1.ReceivedKey
+	99,  // 22: wrinkle.v1.SyncResponse.events:type_name -> wrinkle.v1.Event
+	94,  // 23: wrinkle.v1.ListConversationsResponse.conversations:type_name -> wrinkle.v1.Conversation
+	97,  // 24: wrinkle.v1.GetMessagesResponse.messages:type_name -> wrinkle.v1.Message
+	1,   // 25: wrinkle.v1.RegisterPushTokenRequest.service:type_name -> wrinkle.v1.PushService
+	100, // 26: wrinkle.v1.ListContactsResponse.contacts:type_name -> wrinkle.v1.Contact
+	100, // 27: wrinkle.v1.AddContactResponse.contact:type_name -> wrinkle.v1.Contact
+	28,  // [28:28] is the sub-list for method output_type
+	28,  // [28:28] is the sub-list for method input_type
+	28,  // [28:28] is the sub-list for extension type_name
+	28,  // [28:28] is the sub-list for extension extendee
+	0,   // [0:28] is the sub-list for field type_name
 }
 
 func init() { file_wrinkle_v1_messaging_proto_init() }
@@ -4370,13 +4877,17 @@ func file_wrinkle_v1_messaging_proto_init() {
 	file_wrinkle_v1_event_proto_init()
 	file_wrinkle_v1_model_proto_init()
 	file_wrinkle_v1_messaging_proto_msgTypes[9].OneofWrappers = []any{}
+	file_wrinkle_v1_messaging_proto_msgTypes[81].OneofWrappers = []any{
+		(*AddContactRequest_Name)(nil),
+		(*AddContactRequest_UserId)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wrinkle_v1_messaging_proto_rawDesc), len(file_wrinkle_v1_messaging_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   79,
+			NumMessages:   89,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

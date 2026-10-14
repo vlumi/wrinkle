@@ -9,7 +9,7 @@ import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Device, Message as Message$1, Sealed, User } from "./model_pb";
+import type { Contact, Device, Message as Message$1, Sealed, User } from "./model_pb";
 import { file_wrinkle_v1_model } from "./model_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event: GenFile = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIs4DCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SAASLQoIcmVhY3Rpb24YECABKAsyGS53cmlua2xlLnYxLlJlYWN0aW9uRXZlbnRIABIrCgdwYWxldHRlGBEgASgLMhgud3JpbmtsZS52MS5QYWxldHRlRXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiIwoMUGFsZXR0ZUV2ZW50EhMKC3N0aWNrZXJfaWRzGAEgAygMQp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIvsDCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SAASLQoIcmVhY3Rpb24YECABKAsyGS53cmlua2xlLnYxLlJlYWN0aW9uRXZlbnRIABIrCgdwYWxldHRlGBEgASgLMhgud3JpbmtsZS52MS5QYWxldHRlRXZlbnRIABIrCgdjb250YWN0GBIgASgLMhgud3JpbmtsZS52MS5Db250YWN0RXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiIwoMUGFsZXR0ZUV2ZW50EhMKC3N0aWNrZXJfaWRzGAEgAygMIjQKDENvbnRhY3RFdmVudBIkCgdjb250YWN0GAEgASgLMhMud3JpbmtsZS52MS5Db250YWN0Qp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * @generated from message wrinkle.v1.Event
@@ -87,6 +87,12 @@ export type Event = Message<"wrinkle.v1.Event"> & {
      */
     value: PaletteEvent;
     case: "palette";
+  } | {
+    /**
+     * @generated from field: wrinkle.v1.ContactEvent contact = 18;
+     */
+    value: ContactEvent;
+    case: "contact";
   } | { case: undefined; value?: undefined };
 };
 
@@ -325,4 +331,24 @@ export type PaletteEvent = Message<"wrinkle.v1.PaletteEvent"> & {
  */
 export const PaletteEventSchema: GenMessage<PaletteEvent> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 8);
+
+/**
+ * How another user now stands to the receiving user, after a change by
+ * either of them. Received by both users' devices, each with their own view.
+ *
+ * @generated from message wrinkle.v1.ContactEvent
+ */
+export type ContactEvent = Message<"wrinkle.v1.ContactEvent"> & {
+  /**
+   * @generated from field: wrinkle.v1.Contact contact = 1;
+   */
+  contact?: Contact | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.ContactEvent.
+ * Use `create(ContactEventSchema)` to create a new message.
+ */
+export const ContactEventSchema: GenMessage<ContactEvent> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_event, 9);
 

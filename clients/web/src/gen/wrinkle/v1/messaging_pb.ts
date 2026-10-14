@@ -10,7 +10,7 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Event } from "./event_pb";
 import { file_wrinkle_v1_event } from "./event_pb";
-import type { Conversation, Device, Member, Message as Message$1, Sealed, Sticker, User } from "./model_pb";
+import type { Contact, Conversation, Device, Member, Message as Message$1, Sealed, Sticker, User } from "./model_pb";
 import { file_wrinkle_v1_model } from "./model_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -18,7 +18,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file wrinkle/v1/messaging.proto.
  */
 export const file_wrinkle_v1_messaging: GenFile = /*@__PURE__*/
-  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UibgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBARITCgZhdmF0YXIYAyABKAxIAogBAUIHCgVfbmFtZUIHCgVfaWNvbkIJCgdfYXZhdGFyIjcKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIhAKDlNpZ25PdXRSZXF1ZXN0IhEKD1NpZ25PdXRSZXNwb25zZSIUChJMaXN0RGV2aWNlc1JlcXVlc3QiOgoTTGlzdERldmljZXNSZXNwb25zZRIjCgdkZXZpY2VzGAEgAygLMhIud3JpbmtsZS52MS5EZXZpY2UiNgoTUmVuYW1lRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCSI6ChRSZW5hbWVEZXZpY2VSZXNwb25zZRIiCgZkZXZpY2UYASABKAsyEi53cmlua2xlLnYxLkRldmljZSIpChRTaWduT3V0RGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQiFwoVU2lnbk91dERldmljZVJlc3BvbnNlIigKFERlbGV0ZUFjY291bnRSZXF1ZXN0EhAKCHBhc3N3b3JkGAEgASgJIhcKFURlbGV0ZUFjY291bnRSZXNwb25zZSJhChNDcmVhdGVVcGxvYWRSZXF1ZXN0EigKB3B1cnBvc2UYASABKA4yFy53cmlua2xlLnYxLkJsb2JQdXJwb3NlEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoBCJsChRDcmVhdGVVcGxvYWRSZXNwb25zZRIPCgdibG9iX2lkGAEgASgMEhMKC3VwbG9hZF9wYXRoGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiwKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhEKCXBlZXJfbmFtZRgBIAEoCSJKChhPcGVuQ29udmVyc2F0aW9uUmVzcG9uc2USLgoMY29udmVyc2F0aW9uGAEgASgLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUgoSQ3JlYXRlR3JvdXBSZXF1ZXN0Eg0KBXRvcGljGAEgASgJEhQKDG1lbWJlcl9uYW1lcxgCIAMoCRIXCg9jbGllbnRfZ3JvdXBfaWQYAyABKAkiRQoTQ3JlYXRlR3JvdXBSZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJCChFBZGRNZW1iZXJzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSFAoMbWVtYmVyX25hbWVzGAIgAygJIhQKEkFkZE1lbWJlcnNSZXNwb25zZSI/ChNSZW1vdmVNZW1iZXJSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIPCgd1c2VyX2lkGAIgASgMIhYKFFJlbW92ZU1lbWJlclJlc3BvbnNlIiwKEUxlYXZlR3JvdXBSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCIUChJMZWF2ZUdyb3VwUmVzcG9uc2UiOQoPU2V0VG9waWNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBINCgV0b3BpYxgCIAEoCSISChBTZXRUb3BpY1Jlc3BvbnNlIkoKD1NldEFkbWluUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBINCgVhZG1pbhgDIAEoCCISChBTZXRBZG1pblJlc3BvbnNlIiwKEUdldE1lbWJlcnNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCI5ChJHZXRNZW1iZXJzUmVzcG9uc2USIwoHbWVtYmVycxgBIAMoCzISLndyaW5rbGUudjEuTWVtYmVyIooBChJTZW5kTWVzc2FnZVJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEhkKEWNsaWVudF9tZXNzYWdlX2lkGAIgASgJEiIKBnNlYWxlZBgEIAEoCzISLndyaW5rbGUudjEuU2VhbGVkEhAKCGJsb2JfaWRzGAUgAygMSgQIAxAEUgR0ZXh0IjsKE1NlbmRNZXNzYWdlUmVzcG9uc2USJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSI8ChREZWxldGVNZXNzYWdlUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEIhcKFURlbGV0ZU1lc3NhZ2VSZXNwb25zZSJeChJTZXRSZWFjdGlvblJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIiCgZzZWFsZWQYAyABKAsyEi53cmlua2xlLnYxLlNlYWxlZCIVChNTZXRSZWFjdGlvblJlc3BvbnNlIicKFENyZWF0ZVN0aWNrZXJSZXF1ZXN0Eg8KB2Jsb2JfaWQYASABKAwiPQoVQ3JlYXRlU3RpY2tlclJlc3BvbnNlEiQKB3N0aWNrZXIYASABKAsyEy53cmlua2xlLnYxLlN0aWNrZXIiKQoSR2V0U3RpY2tlcnNSZXF1ZXN0EhMKC3N0aWNrZXJfaWRzGAEgAygMIjwKE0dldFN0aWNrZXJzUmVzcG9uc2USJQoIc3RpY2tlcnMYASADKAsyEy53cmlua2xlLnYxLlN0aWNrZXIiEwoRR2V0UGFsZXR0ZVJlcXVlc3QiOwoSR2V0UGFsZXR0ZVJlc3BvbnNlEiUKCHN0aWNrZXJzGAEgAygLMhMud3JpbmtsZS52MS5TdGlja2VyIigKElNhdmVTdGlja2VyUmVxdWVzdBISCgpzdGlja2VyX2lkGAEgASgMIhUKE1NhdmVTdGlja2VyUmVzcG9uc2UiKgoUUmVtb3ZlU3RpY2tlclJlcXVlc3QSEgoKc3RpY2tlcl9pZBgBIAEoDCIXChVSZW1vdmVTdGlja2VyUmVzcG9uc2UiQwoSTW92ZVN0aWNrZXJSZXF1ZXN0EhIKCnN0aWNrZXJfaWQYASABKAwSGQoRYmVmb3JlX3N0aWNrZXJfaWQYAiABKAwiFQoTTW92ZVN0aWNrZXJSZXNwb25zZSIpChNTZXREZXZpY2VLZXlSZXF1ZXN0EhIKCnB1YmxpY19rZXkYASABKAwiFgoUU2V0RGV2aWNlS2V5UmVzcG9uc2UiKAoUR2V0RGV2aWNlS2V5c1JlcXVlc3QSEAoIdXNlcl9pZHMYASADKAwiPwoVR2V0RGV2aWNlS2V5c1Jlc3BvbnNlEiYKBXVzZXJzGAEgAygLMhcud3JpbmtsZS52MS5Vc2VyRGV2aWNlcyJDCgtVc2VyRGV2aWNlcxIPCgd1c2VyX2lkGAEgASgMEiMKB2RldmljZXMYAiADKAsyEi53cmlua2xlLnYxLkRldmljZSJiChJQdWJsaXNoS2V5c1JlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg0KBWVwb2NoGAIgASgNEiQKBGtleXMYAyADKAsyFi53cmlua2xlLnYxLldyYXBwZWRLZXkiFQoTUHVibGlzaEtleXNSZXNwb25zZSJVCgpXcmFwcGVkS2V5EhkKEXJlY2lwaWVudF91c2VyX2lkGAEgASgMEhsKE3JlY2lwaWVudF9kZXZpY2VfaWQYAiABKAQSDwoHd3JhcHBlZBgDIAEoDCJKChpHZXRDb252ZXJzYXRpb25LZXlzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSEwoLYWZ0ZXJfZXBvY2gYAiABKA0ioQEKG0dldENvbnZlcnNhdGlvbktleXNSZXNwb25zZRIVCg1jdXJyZW50X2Vwb2NoGAEgASgNEg4KBnJvdGF0ZRgCIAEoCBI0ChJjdXJyZW50X3JlY2lwaWVudHMYAyADKAsyGC53cmlua2xlLnYxLktleVJlY2lwaWVudBIlCgRrZXlzGAQgAygLMhcud3JpbmtsZS52MS5SZWNlaXZlZEtleSIyCgxLZXlSZWNpcGllbnQSDwoHdXNlcl9pZBgBIAEoDBIRCglkZXZpY2VfaWQYAiABKAQiegoLUmVjZWl2ZWRLZXkSDQoFZXBvY2gYASABKA0SFgoOc2VuZGVyX3VzZXJfaWQYAiABKAwSGAoQc2VuZGVyX2RldmljZV9pZBgDIAEoBBIZChFzZW5kZXJfcHVibGljX2tleRgEIAEoDBIPCgd3cmFwcGVkGAUgASgMIjcKD01hcmtSZWFkUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEIhIKEE1hcmtSZWFkUmVzcG9uc2UiLAoLU3luY1JlcXVlc3QSDgoGY3Vyc29yGAEgASgEEg0KBWxpbWl0GAIgASgNIlMKDFN5bmNSZXNwb25zZRIhCgZldmVudHMYASADKAsyES53cmlua2xlLnYxLkV2ZW50Eg4KBmN1cnNvchgCIAEoBBIQCghoYXNfbW9yZRgDIAEoCCIaChhMaXN0Q29udmVyc2F0aW9uc1JlcXVlc3QiTAoZTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZRIvCg1jb252ZXJzYXRpb25zGAEgAygLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUAoSR2V0TWVzc2FnZXNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBISCgpiZWZvcmVfc2VxGAIgASgEEg0KBWxpbWl0GAMgASgNIjwKE0dldE1lc3NhZ2VzUmVzcG9uc2USJQoIbWVzc2FnZXMYASADKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiUwoYUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0EigKB3NlcnZpY2UYASABKA4yFy53cmlua2xlLnYxLlB1c2hTZXJ2aWNlEg0KBXRva2VuGAIgASgJIhsKGVJlZ2lzdGVyUHVzaFRva2VuUmVzcG9uc2UqewoLQmxvYlB1cnBvc2USHAoYQkxPQl9QVVJQT1NFX1VOU1BFQ0lGSUVEEAASFwoTQkxPQl9QVVJQT1NFX0FWQVRBUhABEhgKFEJMT0JfUFVSUE9TRV9TVElDS0VSEAISGwoXQkxPQl9QVVJQT1NFX0FUVEFDSE1FTlQQAyphCgtQdXNoU2VydmljZRIcChhQVVNIX1NFUlZJQ0VfVU5TUEVDSUZJRUQQABIdChlQVVNIX1NFUlZJQ0VfQVBOU19TQU5EQk9YEAESFQoRUFVTSF9TRVJWSUNFX0FQTlMQAkKhAQoOY29tLndyaW5rbGUudjFCDk1lc3NhZ2luZ1Byb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_event, file_wrinkle_v1_model]);
+  fileDesc("Chp3cmlua2xlL3YxL21lc3NhZ2luZy5wcm90bxIKd3JpbmtsZS52MSJGCg9SZWdpc3RlclJlcXVlc3QSDAoEbmFtZRgBIAEoCRIQCghwYXNzd29yZBgCIAEoCRITCgtkZXZpY2VfbmFtZRgDIAEoCSJGChBSZWdpc3RlclJlc3BvbnNlEjIKC2NyZWRlbnRpYWxzGAEgASgLMh0ud3JpbmtsZS52MS5EZXZpY2VDcmVkZW50aWFscyJECg1TaWduSW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkSEwoLZGV2aWNlX25hbWUYAyABKAkiRAoOU2lnbkluUmVzcG9uc2USMgoLY3JlZGVudGlhbHMYASABKAsyHS53cmlua2xlLnYxLkRldmljZUNyZWRlbnRpYWxzIk0KEURldmljZUNyZWRlbnRpYWxzEg8KB3VzZXJfaWQYASABKAwSEQoJZGV2aWNlX2lkGAIgASgEEhQKDGRldmljZV90b2tlbhgDIAEoCSImCg5Db25uZWN0UmVxdWVzdBIUCgxkZXZpY2VfdG9rZW4YASABKAkibQoPQ29ubmVjdFJlc3BvbnNlEh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXISEQoJZGV2aWNlX2lkGAIgASgEEhUKDWRldmljZV9jdXJzb3IYAyABKAQSEAoIbG9nX2hlYWQYBCABKAQiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UibgoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSEQoEbmFtZRgBIAEoCUgAiAEBEhEKBGljb24YAiABKAlIAYgBARITCgZhdmF0YXIYAyABKAxIAogBAUIHCgVfbmFtZUIHCgVfaWNvbkIJCgdfYXZhdGFyIjcKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIeCgR1c2VyGAEgASgLMhAud3JpbmtsZS52MS5Vc2VyIhAKDlNpZ25PdXRSZXF1ZXN0IhEKD1NpZ25PdXRSZXNwb25zZSIUChJMaXN0RGV2aWNlc1JlcXVlc3QiOgoTTGlzdERldmljZXNSZXNwb25zZRIjCgdkZXZpY2VzGAEgAygLMhIud3JpbmtsZS52MS5EZXZpY2UiNgoTUmVuYW1lRGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQSDAoEbmFtZRgCIAEoCSI6ChRSZW5hbWVEZXZpY2VSZXNwb25zZRIiCgZkZXZpY2UYASABKAsyEi53cmlua2xlLnYxLkRldmljZSIpChRTaWduT3V0RGV2aWNlUmVxdWVzdBIRCglkZXZpY2VfaWQYASABKAQiFwoVU2lnbk91dERldmljZVJlc3BvbnNlIigKFERlbGV0ZUFjY291bnRSZXF1ZXN0EhAKCHBhc3N3b3JkGAEgASgJIhcKFURlbGV0ZUFjY291bnRSZXNwb25zZSJhChNDcmVhdGVVcGxvYWRSZXF1ZXN0EigKB3B1cnBvc2UYASABKA4yFy53cmlua2xlLnYxLkJsb2JQdXJwb3NlEhIKCm1lZGlhX3R5cGUYAiABKAkSDAoEc2l6ZRgDIAEoBCJsChRDcmVhdGVVcGxvYWRSZXNwb25zZRIPCgdibG9iX2lkGAEgASgMEhMKC3VwbG9hZF9wYXRoGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIiwKF09wZW5Db252ZXJzYXRpb25SZXF1ZXN0EhEKCXBlZXJfbmFtZRgBIAEoCSJKChhPcGVuQ29udmVyc2F0aW9uUmVzcG9uc2USLgoMY29udmVyc2F0aW9uGAEgASgLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUgoSQ3JlYXRlR3JvdXBSZXF1ZXN0Eg0KBXRvcGljGAEgASgJEhQKDG1lbWJlcl9uYW1lcxgCIAMoCRIXCg9jbGllbnRfZ3JvdXBfaWQYAyABKAkiRQoTQ3JlYXRlR3JvdXBSZXNwb25zZRIuCgxjb252ZXJzYXRpb24YASABKAsyGC53cmlua2xlLnYxLkNvbnZlcnNhdGlvbiJCChFBZGRNZW1iZXJzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSFAoMbWVtYmVyX25hbWVzGAIgAygJIhQKEkFkZE1lbWJlcnNSZXNwb25zZSI/ChNSZW1vdmVNZW1iZXJSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIPCgd1c2VyX2lkGAIgASgMIhYKFFJlbW92ZU1lbWJlclJlc3BvbnNlIiwKEUxlYXZlR3JvdXBSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCIUChJMZWF2ZUdyb3VwUmVzcG9uc2UiOQoPU2V0VG9waWNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBINCgV0b3BpYxgCIAEoCSISChBTZXRUb3BpY1Jlc3BvbnNlIkoKD1NldEFkbWluUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBINCgVhZG1pbhgDIAEoCCISChBTZXRBZG1pblJlc3BvbnNlIiwKEUdldE1lbWJlcnNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDCI5ChJHZXRNZW1iZXJzUmVzcG9uc2USIwoHbWVtYmVycxgBIAMoCzISLndyaW5rbGUudjEuTWVtYmVyIooBChJTZW5kTWVzc2FnZVJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEhkKEWNsaWVudF9tZXNzYWdlX2lkGAIgASgJEiIKBnNlYWxlZBgEIAEoCzISLndyaW5rbGUudjEuU2VhbGVkEhAKCGJsb2JfaWRzGAUgAygMSgQIAxAEUgR0ZXh0IjsKE1NlbmRNZXNzYWdlUmVzcG9uc2USJAoHbWVzc2FnZRgBIAEoCzITLndyaW5rbGUudjEuTWVzc2FnZSI8ChREZWxldGVNZXNzYWdlUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEIhcKFURlbGV0ZU1lc3NhZ2VSZXNwb25zZSJeChJTZXRSZWFjdGlvblJlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIiCgZzZWFsZWQYAyABKAsyEi53cmlua2xlLnYxLlNlYWxlZCIVChNTZXRSZWFjdGlvblJlc3BvbnNlIicKFENyZWF0ZVN0aWNrZXJSZXF1ZXN0Eg8KB2Jsb2JfaWQYASABKAwiPQoVQ3JlYXRlU3RpY2tlclJlc3BvbnNlEiQKB3N0aWNrZXIYASABKAsyEy53cmlua2xlLnYxLlN0aWNrZXIiKQoSR2V0U3RpY2tlcnNSZXF1ZXN0EhMKC3N0aWNrZXJfaWRzGAEgAygMIjwKE0dldFN0aWNrZXJzUmVzcG9uc2USJQoIc3RpY2tlcnMYASADKAsyEy53cmlua2xlLnYxLlN0aWNrZXIiEwoRR2V0UGFsZXR0ZVJlcXVlc3QiOwoSR2V0UGFsZXR0ZVJlc3BvbnNlEiUKCHN0aWNrZXJzGAEgAygLMhMud3JpbmtsZS52MS5TdGlja2VyIigKElNhdmVTdGlja2VyUmVxdWVzdBISCgpzdGlja2VyX2lkGAEgASgMIhUKE1NhdmVTdGlja2VyUmVzcG9uc2UiKgoUUmVtb3ZlU3RpY2tlclJlcXVlc3QSEgoKc3RpY2tlcl9pZBgBIAEoDCIXChVSZW1vdmVTdGlja2VyUmVzcG9uc2UiQwoSTW92ZVN0aWNrZXJSZXF1ZXN0EhIKCnN0aWNrZXJfaWQYASABKAwSGQoRYmVmb3JlX3N0aWNrZXJfaWQYAiABKAwiFQoTTW92ZVN0aWNrZXJSZXNwb25zZSIpChNTZXREZXZpY2VLZXlSZXF1ZXN0EhIKCnB1YmxpY19rZXkYASABKAwiFgoUU2V0RGV2aWNlS2V5UmVzcG9uc2UiKAoUR2V0RGV2aWNlS2V5c1JlcXVlc3QSEAoIdXNlcl9pZHMYASADKAwiPwoVR2V0RGV2aWNlS2V5c1Jlc3BvbnNlEiYKBXVzZXJzGAEgAygLMhcud3JpbmtsZS52MS5Vc2VyRGV2aWNlcyJDCgtVc2VyRGV2aWNlcxIPCgd1c2VyX2lkGAEgASgMEiMKB2RldmljZXMYAiADKAsyEi53cmlua2xlLnYxLkRldmljZSJiChJQdWJsaXNoS2V5c1JlcXVlc3QSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEg0KBWVwb2NoGAIgASgNEiQKBGtleXMYAyADKAsyFi53cmlua2xlLnYxLldyYXBwZWRLZXkiFQoTUHVibGlzaEtleXNSZXNwb25zZSJVCgpXcmFwcGVkS2V5EhkKEXJlY2lwaWVudF91c2VyX2lkGAEgASgMEhsKE3JlY2lwaWVudF9kZXZpY2VfaWQYAiABKAQSDwoHd3JhcHBlZBgDIAEoDCJKChpHZXRDb252ZXJzYXRpb25LZXlzUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSEwoLYWZ0ZXJfZXBvY2gYAiABKA0ioQEKG0dldENvbnZlcnNhdGlvbktleXNSZXNwb25zZRIVCg1jdXJyZW50X2Vwb2NoGAEgASgNEg4KBnJvdGF0ZRgCIAEoCBI0ChJjdXJyZW50X3JlY2lwaWVudHMYAyADKAsyGC53cmlua2xlLnYxLktleVJlY2lwaWVudBIlCgRrZXlzGAQgAygLMhcud3JpbmtsZS52MS5SZWNlaXZlZEtleSIyCgxLZXlSZWNpcGllbnQSDwoHdXNlcl9pZBgBIAEoDBIRCglkZXZpY2VfaWQYAiABKAQiegoLUmVjZWl2ZWRLZXkSDQoFZXBvY2gYASABKA0SFgoOc2VuZGVyX3VzZXJfaWQYAiABKAwSGAoQc2VuZGVyX2RldmljZV9pZBgDIAEoBBIZChFzZW5kZXJfcHVibGljX2tleRgEIAEoDBIPCgd3cmFwcGVkGAUgASgMIjcKD01hcmtSZWFkUmVxdWVzdBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEIhIKEE1hcmtSZWFkUmVzcG9uc2UiLAoLU3luY1JlcXVlc3QSDgoGY3Vyc29yGAEgASgEEg0KBWxpbWl0GAIgASgNIlMKDFN5bmNSZXNwb25zZRIhCgZldmVudHMYASADKAsyES53cmlua2xlLnYxLkV2ZW50Eg4KBmN1cnNvchgCIAEoBBIQCghoYXNfbW9yZRgDIAEoCCIaChhMaXN0Q29udmVyc2F0aW9uc1JlcXVlc3QiTAoZTGlzdENvbnZlcnNhdGlvbnNSZXNwb25zZRIvCg1jb252ZXJzYXRpb25zGAEgAygLMhgud3JpbmtsZS52MS5Db252ZXJzYXRpb24iUAoSR2V0TWVzc2FnZXNSZXF1ZXN0EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBISCgpiZWZvcmVfc2VxGAIgASgEEg0KBWxpbWl0GAMgASgNIjwKE0dldE1lc3NhZ2VzUmVzcG9uc2USJQoIbWVzc2FnZXMYASADKAsyEy53cmlua2xlLnYxLk1lc3NhZ2UiUwoYUmVnaXN0ZXJQdXNoVG9rZW5SZXF1ZXN0EigKB3NlcnZpY2UYASABKA4yFy53cmlua2xlLnYxLlB1c2hTZXJ2aWNlEg0KBXRva2VuGAIgASgJIhsKGVJlZ2lzdGVyUHVzaFRva2VuUmVzcG9uc2UiFQoTTGlzdENvbnRhY3RzUmVxdWVzdCI9ChRMaXN0Q29udGFjdHNSZXNwb25zZRIlCghjb250YWN0cxgBIAMoCzITLndyaW5rbGUudjEuQ29udGFjdCI+ChFBZGRDb250YWN0UmVxdWVzdBIOCgRuYW1lGAEgASgJSAASEQoHdXNlcl9pZBgCIAEoDEgAQgYKBHVzZXIiOgoSQWRkQ29udGFjdFJlc3BvbnNlEiQKB2NvbnRhY3QYASABKAsyEy53cmlua2xlLnYxLkNvbnRhY3QiJwoUUmVtb3ZlQ29udGFjdFJlcXVlc3QSDwoHdXNlcl9pZBgBIAEoDCIXChVSZW1vdmVDb250YWN0UmVzcG9uc2UiIwoQQmxvY2tVc2VyUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgMIhMKEUJsb2NrVXNlclJlc3BvbnNlIiUKElVuYmxvY2tVc2VyUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgMIhUKE1VuYmxvY2tVc2VyUmVzcG9uc2UqewoLQmxvYlB1cnBvc2USHAoYQkxPQl9QVVJQT1NFX1VOU1BFQ0lGSUVEEAASFwoTQkxPQl9QVVJQT1NFX0FWQVRBUhABEhgKFEJMT0JfUFVSUE9TRV9TVElDS0VSEAISGwoXQkxPQl9QVVJQT1NFX0FUVEFDSE1FTlQQAyphCgtQdXNoU2VydmljZRIcChhQVVNIX1NFUlZJQ0VfVU5TUEVDSUZJRUQQABIdChlQVVNIX1NFUlZJQ0VfQVBOU19TQU5EQk9YEAESFQoRUFVTSF9TRVJWSUNFX0FQTlMQAkKhAQoOY29tLndyaW5rbGUudjFCDk1lc3NhZ2luZ1Byb3RvUAFaNmdpdGh1Yi5jb20vdmx1bWkvd3JpbmtsZS9wcm90by9nby93cmlua2xlL3YxO3dyaW5rbGV2MaICA1dYWKoCCldyaW5rbGUuVjHKAgpXcmlua2xlXFYx4gIWV3JpbmtsZVxWMVxHUEJNZXRhZGF0YeoCC1dyaW5rbGU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_wrinkle_v1_event, file_wrinkle_v1_model]);
 
 /**
  * Creates an account and signs this device in. Names are unique ignoring
@@ -544,7 +544,10 @@ export const CreateUploadResponseSchema: GenMessage<CreateUploadResponse> = /*@_
 
 /**
  * Finds or creates the direct conversation between the requesting user and
- * the peer. The peer is found by name, ignoring case.
+ * the peer. The peer is found by name, ignoring case; anyone may be messaged,
+ * contact or not. A peer the requesting user blocked fails with
+ * ERROR_CODE_FAILED_PRECONDITION; a peer who blocked the requesting user
+ * fails with ERROR_CODE_PERMISSION_DENIED.
  *
  * @generated from message wrinkle.v1.OpenConversationRequest
  */
@@ -586,7 +589,9 @@ export const OpenConversationResponseSchema: GenMessage<OpenConversationResponse
  * with ERROR_CODE_NOT_FOUND, and the requesting user and repeated names
  * are ignored. A group has at most 256 members. Sending again with the same
  * client_group_id returns the group created the first time. The group's
- * first message is a GroupCreated notice.
+ * first message is a GroupCreated notice. Only the requesting user's
+ * contacts may be invited: anyone else fails with
+ * ERROR_CODE_FAILED_PRECONDITION, naming them.
  *
  * @generated from message wrinkle.v1.CreateGroupRequest
  */
@@ -636,7 +641,9 @@ export const CreateGroupResponseSchema: GenMessage<CreateGroupResponse> = /*@__P
 /**
  * Adds users to a group; any member may. Names as in CreateGroup; users
  * already members are ignored, and when none is left nothing happens. More
- * than 256 members fails with ERROR_CODE_FAILED_PRECONDITION.
+ * than 256 members fails with ERROR_CODE_FAILED_PRECONDITION, as does adding
+ * a user who is not the requesting member's contact. Members already in the
+ * group stay whatever their contacts.
  *
  * @generated from message wrinkle.v1.AddMembersRequest
  */
@@ -866,7 +873,10 @@ export const GetMembersResponseSchema: GenMessage<GetMembersResponse> = /*@__PUR
  * removed gets ERROR_CODE_PERMISSION_DENIED. The content is sealed with the
  * conversation's current key epoch: an older one, or none published yet,
  * fails with ERROR_CODE_FAILED_PRECONDITION, as does any epoch while the
- * conversation needs a new one (see PublishKeys).
+ * conversation needs a new one (see PublishKeys). In a direct conversation,
+ * blocking refuses as in OpenConversation, in both directions; in a group,
+ * blocking changes nothing on the services and clients hide what blocked
+ * users send.
  *
  * @generated from message wrinkle.v1.SendMessageRequest
  */
@@ -971,7 +981,8 @@ export const DeleteMessageResponseSchema: GenMessage<DeleteMessageResponse> = /*
  * to notices (ERROR_CODE_INVALID_ARGUMENT) nor deleted messages
  * (ERROR_CODE_FAILED_PRECONDITION). The sealed Reactions follow the key
  * epoch rules of SendMessage; the ciphertext is at most 1 KiB. Reactions
- * are not messages: they take no seq and are never unread.
+ * are not messages: they take no seq and are never unread. Blocking refuses
+ * reactions in a direct conversation as SendMessage does.
  *
  * @generated from message wrinkle.v1.SetReactionRequest
  */
@@ -1746,6 +1757,196 @@ export type RegisterPushTokenResponse = Message<"wrinkle.v1.RegisterPushTokenRes
  */
 export const RegisterPushTokenResponseSchema: GenMessage<RegisterPushTokenResponse> = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_messaging, 78);
+
+/**
+ * Lists the users the requesting user has any state with: contacts,
+ * requests both ways and blocked users, at most 1000 of each, deleted
+ * accounts left out.
+ *
+ * @generated from message wrinkle.v1.ListContactsRequest
+ */
+export type ListContactsRequest = Message<"wrinkle.v1.ListContactsRequest"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.ListContactsRequest.
+ * Use `create(ListContactsRequestSchema)` to create a new message.
+ */
+export const ListContactsRequestSchema: GenMessage<ListContactsRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 79);
+
+/**
+ * @generated from message wrinkle.v1.ListContactsResponse
+ */
+export type ListContactsResponse = Message<"wrinkle.v1.ListContactsResponse"> & {
+  /**
+   * @generated from field: repeated wrinkle.v1.Contact contacts = 1;
+   */
+  contacts: Contact[];
+};
+
+/**
+ * Describes the message wrinkle.v1.ListContactsResponse.
+ * Use `create(ListContactsResponseSchema)` to create a new message.
+ */
+export const ListContactsResponseSchema: GenMessage<ListContactsResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 80);
+
+/**
+ * Asks a user to be a contact, or accepts their request. By name, ignoring
+ * case, or by id. Asking again changes nothing. Asking oneself fails with
+ * ERROR_CODE_INVALID_ARGUMENT, an unknown user with ERROR_CODE_NOT_FOUND, a
+ * user the requesting user blocked with ERROR_CODE_FAILED_PRECONDITION
+ * (unblock first), and one who blocked the requesting user with
+ * ERROR_CODE_PERMISSION_DENIED.
+ *
+ * @generated from message wrinkle.v1.AddContactRequest
+ */
+export type AddContactRequest = Message<"wrinkle.v1.AddContactRequest"> & {
+  /**
+   * @generated from oneof wrinkle.v1.AddContactRequest.user
+   */
+  user: {
+    /**
+     * @generated from field: string name = 1;
+     */
+    value: string;
+    case: "name";
+  } | {
+    /**
+     * @generated from field: bytes user_id = 2;
+     */
+    value: Uint8Array;
+    case: "userId";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message wrinkle.v1.AddContactRequest.
+ * Use `create(AddContactRequestSchema)` to create a new message.
+ */
+export const AddContactRequestSchema: GenMessage<AddContactRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 81);
+
+/**
+ * @generated from message wrinkle.v1.AddContactResponse
+ */
+export type AddContactResponse = Message<"wrinkle.v1.AddContactResponse"> & {
+  /**
+   * @generated from field: wrinkle.v1.Contact contact = 1;
+   */
+  contact?: Contact | undefined;
+};
+
+/**
+ * Describes the message wrinkle.v1.AddContactResponse.
+ * Use `create(AddContactResponseSchema)` to create a new message.
+ */
+export const AddContactResponseSchema: GenMessage<AddContactResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 82);
+
+/**
+ * Ends any contact with the user, for both: removes a contact, declines
+ * their request or withdraws one's own. Nothing to end changes nothing. A
+ * block stays (see UnblockUser).
+ *
+ * @generated from message wrinkle.v1.RemoveContactRequest
+ */
+export type RemoveContactRequest = Message<"wrinkle.v1.RemoveContactRequest"> & {
+  /**
+   * @generated from field: bytes user_id = 1;
+   */
+  userId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.RemoveContactRequest.
+ * Use `create(RemoveContactRequestSchema)` to create a new message.
+ */
+export const RemoveContactRequestSchema: GenMessage<RemoveContactRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 83);
+
+/**
+ * @generated from message wrinkle.v1.RemoveContactResponse
+ */
+export type RemoveContactResponse = Message<"wrinkle.v1.RemoveContactResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.RemoveContactResponse.
+ * Use `create(RemoveContactResponseSchema)` to create a new message.
+ */
+export const RemoveContactResponseSchema: GenMessage<RemoveContactResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 84);
+
+/**
+ * Blocks a user: any contact or request between the two ends, and the
+ * blocked user can no longer open or write to a direct conversation with
+ * the requesting user, react there, ask to be a contact, or add them to a
+ * group. Shared groups stay; clients hide what the blocked user sends in
+ * them. Blocking again changes nothing; blocking oneself fails with
+ * ERROR_CODE_INVALID_ARGUMENT.
+ *
+ * @generated from message wrinkle.v1.BlockUserRequest
+ */
+export type BlockUserRequest = Message<"wrinkle.v1.BlockUserRequest"> & {
+  /**
+   * @generated from field: bytes user_id = 1;
+   */
+  userId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.BlockUserRequest.
+ * Use `create(BlockUserRequestSchema)` to create a new message.
+ */
+export const BlockUserRequestSchema: GenMessage<BlockUserRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 85);
+
+/**
+ * @generated from message wrinkle.v1.BlockUserResponse
+ */
+export type BlockUserResponse = Message<"wrinkle.v1.BlockUserResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.BlockUserResponse.
+ * Use `create(BlockUserResponseSchema)` to create a new message.
+ */
+export const BlockUserResponseSchema: GenMessage<BlockUserResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 86);
+
+/**
+ * Lifts a block; no contact comes back. A user not blocked changes nothing.
+ *
+ * @generated from message wrinkle.v1.UnblockUserRequest
+ */
+export type UnblockUserRequest = Message<"wrinkle.v1.UnblockUserRequest"> & {
+  /**
+   * @generated from field: bytes user_id = 1;
+   */
+  userId: Uint8Array;
+};
+
+/**
+ * Describes the message wrinkle.v1.UnblockUserRequest.
+ * Use `create(UnblockUserRequestSchema)` to create a new message.
+ */
+export const UnblockUserRequestSchema: GenMessage<UnblockUserRequest> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 87);
+
+/**
+ * @generated from message wrinkle.v1.UnblockUserResponse
+ */
+export type UnblockUserResponse = Message<"wrinkle.v1.UnblockUserResponse"> & {
+};
+
+/**
+ * Describes the message wrinkle.v1.UnblockUserResponse.
+ * Use `create(UnblockUserResponseSchema)` to create a new message.
+ */
+export const UnblockUserResponseSchema: GenMessage<UnblockUserResponse> = /*@__PURE__*/
+  messageDesc(file_wrinkle_v1_messaging, 88);
 
 /**
  * @generated from enum wrinkle.v1.BlobPurpose

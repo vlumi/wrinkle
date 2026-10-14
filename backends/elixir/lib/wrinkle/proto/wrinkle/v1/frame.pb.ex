@@ -159,6 +159,21 @@ defmodule Wrinkle.V1.Request do
     oneof: 0
 
   field :move_sticker, 46, type: Wrinkle.V1.MoveStickerRequest, json_name: "moveSticker", oneof: 0
+
+  field :list_contacts, 47,
+    type: Wrinkle.V1.ListContactsRequest,
+    json_name: "listContacts",
+    oneof: 0
+
+  field :add_contact, 48, type: Wrinkle.V1.AddContactRequest, json_name: "addContact", oneof: 0
+
+  field :remove_contact, 49,
+    type: Wrinkle.V1.RemoveContactRequest,
+    json_name: "removeContact",
+    oneof: 0
+
+  field :block_user, 50, type: Wrinkle.V1.BlockUserRequest, json_name: "blockUser", oneof: 0
+  field :unblock_user, 51, type: Wrinkle.V1.UnblockUserRequest, json_name: "unblockUser", oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -315,6 +330,25 @@ defmodule Wrinkle.V1.Response do
   field :move_sticker, 46,
     type: Wrinkle.V1.MoveStickerResponse,
     json_name: "moveSticker",
+    oneof: 0
+
+  field :list_contacts, 47,
+    type: Wrinkle.V1.ListContactsResponse,
+    json_name: "listContacts",
+    oneof: 0
+
+  field :add_contact, 48, type: Wrinkle.V1.AddContactResponse, json_name: "addContact", oneof: 0
+
+  field :remove_contact, 49,
+    type: Wrinkle.V1.RemoveContactResponse,
+    json_name: "removeContact",
+    oneof: 0
+
+  field :block_user, 50, type: Wrinkle.V1.BlockUserResponse, json_name: "blockUser", oneof: 0
+
+  field :unblock_user, 51,
+    type: Wrinkle.V1.UnblockUserResponse,
+    json_name: "unblockUser",
     oneof: 0
 end
 
