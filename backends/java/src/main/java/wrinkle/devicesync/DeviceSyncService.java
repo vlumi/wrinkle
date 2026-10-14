@@ -18,6 +18,7 @@ import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
+import wrinkle.contacts.Contacts;
 import wrinkle.conversation.ConversationService;
 import wrinkle.v1.Conversation;
 import wrinkle.v1.ConversationKind;
@@ -46,12 +47,17 @@ public final class DeviceSyncService {
   private final DataSource db;
   private final AccountService accounts;
   private final ConversationService conversations;
+  private final Contacts contacts;
 
   public DeviceSyncService(
-      DataSource db, AccountService accounts, ConversationService conversations) {
+      DataSource db,
+      AccountService accounts,
+      ConversationService conversations,
+      Contacts contacts) {
     this.db = db;
     this.accounts = accounts;
     this.conversations = conversations;
+    this.contacts = contacts;
   }
 
   /** Records how far a device has processed the log. */
@@ -126,7 +132,10 @@ public final class DeviceSyncService {
     return resp.build();
   }
 
-  /** Finds or creates the direct conversation with the named peer. */
+  /**
+   * Finds or creates the direct conversation with the named peer, unless either of the two blocked
+   * the other.
+   */
   public Conversation open(Uuid userId, String peerName) throws SQLException {
     if (!AccountService.validName(peerName)) {
       throw ApiError.invalidArgument("peer_name is not a valid name");
@@ -138,6 +147,7 @@ public final class DeviceSyncService {
     if (peerId.equals(userId)) {
       throw ApiError.invalidArgument("a conversation needs two different users");
     }
+    contacts.checkMessaging(userId, peerId);
     User peer = accounts.profile(peerId);
     if (peer == null || peer.getDeleted()) {
       throw ApiError.notFound("no user named \"" + peerName + "\"");

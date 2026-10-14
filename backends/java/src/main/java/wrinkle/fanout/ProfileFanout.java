@@ -98,13 +98,21 @@ final class ProfileFanout {
   }
 
   /**
-   * Removes a deleted account's log, conversation list, devices and palette, and leaves its uploads
-   * to the sweeper, but those made stickers, which stay. The user row stays, so nothing is appended
-   * for it again. Repeating it is harmless.
+   * Removes a deleted account's log, conversation list, devices, palette and its own contact rows,
+   * and leaves its uploads to the sweeper, but those made stickers, which stay. Other users' rows
+   * toward it stay. The user row stays, so nothing is appended for it again. Repeating it is
+   * harmless.
    */
   private void purge(Uuid userId) throws SQLException {
     try (Connection c = userLog.db().getConnection()) {
-      for (String table : List.of("user_event", "user_conversation", "device", "palette_sticker")) {
+      for (String table :
+          List.of(
+              "user_event",
+              "user_conversation",
+              "device",
+              "palette_sticker",
+              "contact",
+              "contact_peer")) {
         while (Sql.update(
                 c, "DELETE FROM " + table + " WHERE user_id = ? LIMIT ?", userId, PURGE_PAGE)
             == PURGE_PAGE) {

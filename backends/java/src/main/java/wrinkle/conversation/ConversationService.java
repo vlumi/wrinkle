@@ -17,6 +17,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Ids;
@@ -25,6 +26,7 @@ import wrinkle.MessageBody;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
+import wrinkle.contacts.Contacts;
 import wrinkle.conversation.Rows.Header;
 import wrinkle.uploads.UploadService;
 import wrinkle.v1.Event;
@@ -50,13 +52,42 @@ public final class ConversationService {
   // How many of the newest messages a read covers are searched for senders to tell.
   private static final int READ_SENDERS_WINDOW = 1000;
   private static final int MAX_ATTACHMENTS = 10;
+  // Bounds the cache of conversations' kinds; it starts over when full.
+  private static final int MAX_KINDS = 1 << 20;
 
   private final DataSource db;
   private final UploadService uploads;
+  private final Contacts contacts;
+  // A direct conversation's two members, or no one for a group: neither ever changes.
+  private final Map<Uuid, List<Uuid>> directMembers = new ConcurrentHashMap<>();
 
-  public ConversationService(DataSource db, UploadService uploads) {
+  public ConversationService(DataSource db, UploadService uploads, Contacts contacts) {
     this.db = db;
     this.uploads = uploads;
+    this.contacts = contacts;
+  }
+
+  /**
+   * In a direct conversation the user is a member of, refuses the user when either participant
+   * blocked the other. A group, or a user who is not a member, is left to the transaction's checks.
+   */
+  private void checkBlocks(Uuid userId, Uuid conversationId) throws SQLException {
+    List<Uuid> members = directMembers.get(conversationId);
+    if (members == null) {
+      try (Connection c = db.getConnection()) {
+        Header h = Rows.header(c, conversationId, false);
+        members = h.group() ? List.of() : h.members();
+      }
+      if (directMembers.size() >= MAX_KINDS) {
+        directMembers.clear();
+      }
+      directMembers.put(conversationId, members);
+    }
+    if (members.size() != 2 || !members.contains(userId)) {
+      return;
+    }
+    contacts.checkMessaging(
+        userId, members.get(0).equals(userId) ? members.get(1) : members.get(0));
   }
 
   /**
@@ -150,6 +181,7 @@ public final class ConversationService {
           "sealed.ciphertext must be 1 to " + MAX_CIPHERTEXT_BYTES + " bytes");
     }
     List<Uuid> blobIds = blobIds(blobIdBytes);
+    checkBlocks(userId, conversationId);
     if (!blobIds.isEmpty()) {
       // A resend finds its message before the uploads are checked again; after a delete they may
       // be gone.
@@ -349,6 +381,7 @@ public final class ConversationService {
             "sealed.ciphertext must be 1 to " + MAX_REACTION_CIPHERTEXT_BYTES + " bytes");
       }
     }
+    checkBlocks(userId, conversationId);
     Sql.inTransaction(
         db,
         c -> {

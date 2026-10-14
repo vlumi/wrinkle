@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -21,6 +21,7 @@ import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
+import wrinkle.contacts.Contacts;
 import wrinkle.conversation.Rows.Header;
 import wrinkle.v1.AdminChanged;
 import wrinkle.v1.Conversation;
@@ -52,11 +53,14 @@ public final class GroupService {
   private final DataSource db;
   private final DataSource userDb;
   private final AccountService accounts;
+  private final Contacts contacts;
 
-  public GroupService(DataSource conversationDb, DataSource userDb, AccountService accounts) {
+  public GroupService(
+      DataSource conversationDb, DataSource userDb, AccountService accounts, Contacts contacts) {
     this.db = conversationDb;
     this.userDb = userDb;
     this.accounts = accounts;
+    this.contacts = contacts;
   }
 
   /** Whether a topic is acceptable: as a name, but up to 200 bytes. */
@@ -81,10 +85,11 @@ public final class GroupService {
   }
 
   /**
-   * The users the names belong to, without the requester and repeats, in the order named.
-   * INVALID_ARGUMENT for a name that is not valid, NOT_FOUND for one nobody has.
+   * The users the names belong to, without the requester and repeats, in the order named, each with
+   * the name first given for them. INVALID_ARGUMENT for a name that is not valid, NOT_FOUND for one
+   * nobody has.
    */
-  private List<Uuid> resolve(Uuid userId, List<String> names) throws SQLException {
+  private Map<Uuid, String> resolve(Uuid userId, List<String> names) throws SQLException {
     if (names.size() > MAX_MEMBER_NAMES) {
       throw ApiError.invalidArgument("at most " + MAX_MEMBER_NAMES + " member names");
     }
@@ -93,17 +98,27 @@ public final class GroupService {
         throw ApiError.invalidArgument("member name \"" + name + "\" is not a valid name");
       }
     }
-    Set<Uuid> ids = new LinkedHashSet<>();
+    Map<Uuid, String> ids = new LinkedHashMap<>();
     for (String name : names) {
       Uuid id = accounts.resolve(name);
       if (id == null) {
         throw ApiError.notFound("no user named \"" + name + "\"");
       }
       if (!id.equals(userId)) {
-        ids.add(id);
+        ids.putIfAbsent(id, name);
       }
     }
-    return new ArrayList<>(ids);
+    return ids;
+  }
+
+  /** FAILED_PRECONDITION naming the first of the users, in order, who is not the user's contact. */
+  private void requireContacts(Uuid userId, Map<Uuid, String> users) throws SQLException {
+    Set<Uuid> missing = contacts.notContacts(userId, List.copyOf(users.keySet()));
+    for (Map.Entry<Uuid, String> e : users.entrySet()) {
+      if (missing.contains(e.getKey())) {
+        throw ApiError.failedPrecondition("not a contact: " + e.getValue());
+      }
+    }
   }
 
   private static ApiError tooMany() {
@@ -112,7 +127,12 @@ public final class GroupService {
 
   private static Header groupHeader(Connection c, Uuid conversationId, Uuid userId)
       throws SQLException {
-    Header h = Rows.header(c, conversationId, true);
+    return groupHeader(c, conversationId, userId, true);
+  }
+
+  private static Header groupHeader(Connection c, Uuid conversationId, Uuid userId, boolean locking)
+      throws SQLException {
+    Header h = Rows.header(c, conversationId, locking);
     if (!h.group()) {
       throw ApiError.failedPrecondition("conversation " + conversationId + " is not a group");
     }
@@ -196,9 +216,9 @@ public final class GroupService {
   }
 
   /**
-   * Creates a group with the requester as its admin, or returns the one created by an earlier
-   * request with the same client group id. The claim, on the creator's shard, comes first; a claim
-   * whose conversation row is missing gets it here.
+   * Creates a group of the requester's contacts with the requester as its admin, or returns the one
+   * created by an earlier request with the same client group id. The claim, on the creator's shard,
+   * comes first; a claim whose conversation row is missing gets it here.
    */
   public Conversation create(Uuid userId, CreateGroupRequest req) throws SQLException {
     String topic = req.getTopic();
@@ -209,9 +229,14 @@ public final class GroupService {
       throw ApiError.invalidArgument(
           "client_group_id must be 1 to " + MAX_CLIENT_GROUP_ID + " bytes");
     }
-    List<Uuid> invitees = resolve(userId, req.getMemberNamesList());
+    Map<Uuid, String> named = resolve(userId, req.getMemberNamesList());
+    List<Uuid> invitees = List.copyOf(named.keySet());
     if (invitees.size() + 1 > Rows.MAX_MEMBERS) {
       throw tooMany();
+    }
+    // A retry of a group already created returns it, whatever the contacts are now.
+    if (!created(userId, clientGroupId)) {
+      requireContacts(userId, named);
     }
     Uuid conversationId = claim(userId, clientGroupId);
     Map<Uuid, User> profiles = accounts.profiles(invitees);
@@ -281,6 +306,21 @@ public final class GroupService {
           Timestamps.now());
     }
     return conversation;
+  }
+
+  /** Whether the creator's client group id names a group already created. */
+  private boolean created(Uuid userId, String clientGroupId) throws SQLException {
+    try (Connection c = db.getConnection()) {
+      Uuid id = claimed(c, userId, clientGroupId);
+      if (id == null) {
+        return false;
+      }
+      try (PreparedStatement ps =
+              Sql.prepare(c, "SELECT 1 FROM conversation WHERE conversation_id = ?", id);
+          ResultSet rs = ps.executeQuery()) {
+        return rs.next();
+      }
+    }
   }
 
   /** The conversation id claimed for the creator's client group id, claiming a new one if none. */
@@ -372,23 +412,40 @@ public final class GroupService {
     }
   }
 
-  /** Adds the named users; those already members are ignored. Any member may. */
+  /**
+   * Adds the named users, who must be the user's contacts; those already members are ignored. Any
+   * member may.
+   */
   public void addMembers(Uuid userId, Uuid conversationId, List<String> names) throws SQLException {
-    List<Uuid> resolved = resolve(userId, names);
+    Map<Uuid, String> named = resolve(userId, names);
+    // Those already members are skipped before the contact check; any who left meanwhile are
+    // checked under the lock.
+    Map<Uuid, String> checked = new LinkedHashMap<>(named);
+    try (Connection c = db.getConnection()) {
+      Header h = groupHeader(c, conversationId, userId, false);
+      checked.keySet().removeIf(h::includes);
+    }
+    requireContacts(userId, checked);
+    List<Uuid> resolved = List.copyOf(named.keySet());
     Map<Uuid, User> profiles = accounts.profiles(resolved);
     Sql.inTransaction(
         db,
         c -> {
           Header h = groupHeader(c, conversationId, userId);
           List<Uuid> added = new ArrayList<>();
+          Map<Uuid, String> unchecked = new LinkedHashMap<>();
           for (Uuid id : resolved) {
             if (!h.includes(id)) {
               added.add(id);
+              if (!checked.containsKey(id)) {
+                unchecked.put(id, named.get(id));
+              }
             }
           }
           if (added.isEmpty()) {
             return null;
           }
+          requireContacts(userId, unchecked);
           if (h.members().size() + added.size() > Rows.MAX_MEMBERS) {
             throw tooMany();
           }

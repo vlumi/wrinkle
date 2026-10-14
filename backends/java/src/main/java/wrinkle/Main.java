@@ -16,6 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
+import wrinkle.contacts.ContactService;
+import wrinkle.contacts.Contacts;
 import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
@@ -149,7 +151,9 @@ public final class Main {
     LocalBackend local() {
       if (local == null) {
         UploadService uploads = new UploadService(userDb(), blobs);
-        ConversationService conversations = new ConversationService(conversationDb(), uploads);
+        Contacts contacts = new Contacts(userDb());
+        ConversationService conversations =
+            new ConversationService(conversationDb(), uploads, contacts);
         AccountService accounts = new AccountService(userDb(), uploads);
         local =
             new LocalBackend(
@@ -157,10 +161,11 @@ public final class Main {
                 new Devices(userDb()),
                 uploads,
                 conversations,
-                new GroupService(conversationDb(), userDb(), accounts),
+                new GroupService(conversationDb(), userDb(), accounts, contacts),
                 new ConversationKeys(conversationDb(), userDb()),
-                new DeviceSyncService(userDb(), accounts, conversations),
-                new StickerService(userDb(), uploads));
+                new DeviceSyncService(userDb(), accounts, conversations, contacts),
+                new StickerService(userDb(), uploads),
+                new ContactService(userDb(), accounts, contacts));
       }
       return local;
     }

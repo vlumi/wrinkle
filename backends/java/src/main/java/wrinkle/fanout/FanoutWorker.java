@@ -36,7 +36,7 @@ import wrinkle.v1.Event;
  * concerned, and pushes them to connected devices: a conversation's events to the recipients its
  * outbox row names, a user's profile changes to the user and every direct conversation partner, a
  * device's key changes to the user, the partners and the members of the user's groups, a palette
- * change to the user alone.
+ * change to the user alone, a contact change to both users concerned.
  */
 public final class FanoutWorker {
   // The outbox topics: conversations' rows keyed by conversation id, users' by user id.
@@ -58,6 +58,7 @@ public final class FanoutWorker {
   private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
   private final ProfileFanout profiles;
   private final DeviceFanout devices;
+  private final ContactFanout contacts;
   private final AtomicBoolean stopped = new AtomicBoolean();
   private volatile Thread thread;
 
@@ -82,6 +83,7 @@ public final class FanoutWorker {
     this.userLog = new UserLog(userDb, presence);
     this.profiles = new ProfileFanout(userLog, tasks);
     this.devices = new DeviceFanout(userLog, conversationDb, tasks);
+    this.contacts = new ContactFanout(userLog);
   }
 
   /** Consumes on a platform thread of its own until stopped. */
@@ -254,9 +256,11 @@ public final class FanoutWorker {
       case DEVICE -> devices.deliver(o);
       // The user's own devices only.
       case PALETTE -> userLog.append(o.userId(), o.userId(), o.outboxId(), o.event(), null);
+      case CONTACT -> contacts.deliver(o);
       default ->
           log.error(
-              "skipping user outbox record without a profile, device or palette, kind {}, offset {}",
+              "skipping user outbox record without a profile, device, palette or contact, kind {},"
+                  + " offset {}",
               o.kind(),
               rec.offset());
     }

@@ -133,6 +133,17 @@ final class UserLog {
    */
   Event append(Uuid userId, Uuid sourceId, long outboxId, Event source, ListUpdate update)
       throws SQLException {
+    return append(userId, sourceId, outboxId, c -> source, update);
+  }
+
+  /** Makes the event to append in the transaction, after the user's log is locked. */
+  interface EventSource {
+    Event build(Connection c) throws SQLException;
+  }
+
+  /** As append, with the event made under the lock of the user's log. */
+  Event append(Uuid userId, Uuid sourceId, long outboxId, EventSource source, ListUpdate update)
+      throws SQLException {
     Stored stored =
         Sql.inTransaction(
             db,
@@ -141,7 +152,7 @@ final class UserLog {
               if (head.gone()) {
                 return null;
               }
-              Event event = source.toBuilder().setCursor(head.position() + 1).build();
+              Event event = source.build(c).toBuilder().setCursor(head.position() + 1).build();
               byte[] payload = event.toByteArray();
               try {
                 Sql.update(

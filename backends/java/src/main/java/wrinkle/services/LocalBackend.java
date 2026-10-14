@@ -8,13 +8,16 @@ import wrinkle.ApiError;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
+import wrinkle.contacts.ContactService;
 import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.stickers.StickerService;
 import wrinkle.uploads.UploadService;
+import wrinkle.v1.AddContactResponse;
 import wrinkle.v1.AddMembersResponse;
+import wrinkle.v1.BlockUserResponse;
 import wrinkle.v1.ChangePasswordResponse;
 import wrinkle.v1.CreateGroupResponse;
 import wrinkle.v1.CreateStickerResponse;
@@ -26,6 +29,7 @@ import wrinkle.v1.GetMessagesResponse;
 import wrinkle.v1.GetPaletteResponse;
 import wrinkle.v1.GetStickersResponse;
 import wrinkle.v1.LeaveGroupResponse;
+import wrinkle.v1.ListContactsResponse;
 import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
@@ -34,6 +38,7 @@ import wrinkle.v1.OpenConversationResponse;
 import wrinkle.v1.PublishKeysResponse;
 import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.RegisterResponse;
+import wrinkle.v1.RemoveContactResponse;
 import wrinkle.v1.RemoveMemberResponse;
 import wrinkle.v1.RemoveStickerResponse;
 import wrinkle.v1.RenameDeviceResponse;
@@ -48,9 +53,10 @@ import wrinkle.v1.SetTopicResponse;
 import wrinkle.v1.SignInResponse;
 import wrinkle.v1.SignOutDeviceResponse;
 import wrinkle.v1.SignOutResponse;
+import wrinkle.v1.UnblockUserResponse;
 import wrinkle.v1.UpdateProfileResponse;
 
-/** Runs the account, conversation, sticker and sync services in-process. */
+/** Runs the account, contact, conversation, sticker and sync services in-process. */
 public final class LocalBackend implements Backend {
   private static final Logger log = LoggerFactory.getLogger(LocalBackend.class);
 
@@ -62,6 +68,7 @@ public final class LocalBackend implements Backend {
   private final ConversationKeys keys;
   private final DeviceSyncService users;
   private final StickerService stickers;
+  private final ContactService contacts;
 
   public LocalBackend(
       AccountService accounts,
@@ -71,7 +78,8 @@ public final class LocalBackend implements Backend {
       GroupService groups,
       ConversationKeys keys,
       DeviceSyncService users,
-      StickerService stickers) {
+      StickerService stickers,
+      ContactService contacts) {
     this.accounts = accounts;
     this.devices = devices;
     this.uploads = uploads;
@@ -80,6 +88,7 @@ public final class LocalBackend implements Backend {
     this.keys = keys;
     this.users = users;
     this.stickers = stickers;
+    this.contacts = contacts;
   }
 
   @Override
@@ -286,6 +295,25 @@ public final class LocalBackend implements Backend {
         var r = req.getMoveSticker();
         stickers.move(userId, r.getStickerId(), r.getBeforeStickerId());
         yield resp.setMoveSticker(MoveStickerResponse.getDefaultInstance());
+      }
+      case LIST_CONTACTS ->
+          resp.setListContacts(
+              ListContactsResponse.newBuilder().addAllContacts(contacts.list(userId)));
+      case ADD_CONTACT ->
+          resp.setAddContact(
+              AddContactResponse.newBuilder()
+                  .setContact(contacts.add(userId, req.getAddContact())));
+      case REMOVE_CONTACT -> {
+        contacts.remove(userId, req.getRemoveContact().getUserId());
+        yield resp.setRemoveContact(RemoveContactResponse.getDefaultInstance());
+      }
+      case BLOCK_USER -> {
+        contacts.block(userId, req.getBlockUser().getUserId());
+        yield resp.setBlockUser(BlockUserResponse.getDefaultInstance());
+      }
+      case UNBLOCK_USER -> {
+        contacts.unblock(userId, req.getUnblockUser().getUserId());
+        yield resp.setUnblockUser(UnblockUserResponse.getDefaultInstance());
       }
       default -> throw ApiError.invalidArgument("unknown request");
     };
