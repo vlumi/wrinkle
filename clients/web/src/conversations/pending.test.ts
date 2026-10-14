@@ -34,3 +34,11 @@ test("files being sent show their progress, and a failed send can go again", () 
   expect(pending[k7][0].failed).toBe(false);
   expect(withProgress(pending, k7, "other", 0, 1)).toBe(pending);
 });
+
+test("a refused message keeps why until sent again", () => {
+  let pending = addPending({}, k7, { clientMessageId: "a", text: "one" });
+  pending = failPending(pending, k7, "a", "Can't message this user");
+  expect(pending[k7][0]).toMatchObject({ failed: true, failure: "Can't message this user" });
+  pending = retryPending(pending, k7, "a");
+  expect(pending[k7]).toEqual([{ clientMessageId: "a", text: "one", failed: false }]);
+});

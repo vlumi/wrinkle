@@ -12,6 +12,8 @@ export interface Pending {
   sticker?: string;
   attachments?: PendingFile[];
   failed?: boolean;
+  /** Why it failed, when sending again will not help. */
+  failure?: string;
 }
 
 /** A file being sent. */
@@ -64,8 +66,13 @@ export function failPending(
   pending: PendingByConversation,
   conversationId: string,
   clientMessageId: string,
+  failure?: string,
 ): PendingByConversation {
-  return changed(pending, conversationId, clientMessageId, (p) => ({ ...p, failed: true }));
+  return changed(pending, conversationId, clientMessageId, (p) => ({
+    ...p,
+    failed: true,
+    ...(failure ? { failure } : {}),
+  }));
 }
 
 /** Shows a failed message as sending again. */
@@ -74,7 +81,7 @@ export function retryPending(
   conversationId: string,
   clientMessageId: string,
 ): PendingByConversation {
-  return changed(pending, conversationId, clientMessageId, (p) => ({ ...p, failed: false }));
+  return changed(pending, conversationId, clientMessageId, ({ failure: _, ...p }) => ({ ...p, failed: false }));
 }
 
 /** Records the share of a pending message's file uploaded. */

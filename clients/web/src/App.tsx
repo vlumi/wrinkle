@@ -2,6 +2,8 @@ import { useEffect } from "react";
 import { Avatar } from "./account/Avatar";
 import { Settings } from "./account/Settings";
 import { StatusBadge } from "./connection/StatusBadge";
+import { Contacts } from "./contacts/Contacts";
+import { incomingCount } from "./contacts/model";
 import { ConversationList } from "./conversations/ConversationList";
 import { ConversationView } from "./conversations/ConversationView";
 import { SecurityBanners } from "./e2ee/SecurityBanners";
@@ -18,6 +20,9 @@ export function App() {
   const clearError = useSession((s) => s.clearError);
   const settings = useSession((s) => s.settings);
   const showSettings = useSession((s) => s.showSettings);
+  const contactsShown = useSession((s) => s.contactsShown);
+  const showContacts = useSession((s) => s.showContacts);
+  const requests = useSession((s) => incomingCount(s.contacts));
 
   // Resume the saved session; sign out to switch users.
   useEffect(() => {
@@ -27,7 +32,7 @@ export function App() {
   if (!credentials) return <SignIn />;
 
   return (
-    <div className="app" data-view={settings || current ? "conversation" : "list"}>
+    <div className="app" data-view={settings || contactsShown || current ? "conversation" : "list"}>
       <header className="top">
         <h1>Wrinkle</h1>
         <StatusBadge status={status} />
@@ -43,6 +48,22 @@ export function App() {
           </span>
           <Avatar user={me} />
         </button>
+        <button
+          className="contacts-open secondary"
+          data-testid="open-contacts"
+          aria-label={
+            requests > 0 ? `Contacts, ${requests} new ${requests === 1 ? "request" : "requests"}` : "Contacts"
+          }
+          aria-pressed={contactsShown}
+          onClick={() => showContacts(!contactsShown)}
+        >
+          Contacts
+          {requests > 0 && (
+            <span className="unread" data-testid="requests-badge" aria-hidden="true">
+              {requests}
+            </span>
+          )}
+        </button>
       </header>
       {error && (
         <div className="banner" role="alert" data-testid="error">
@@ -57,6 +78,8 @@ export function App() {
         <ConversationList />
         {settings ? (
           <Settings onClose={() => showSettings(false)} />
+        ) : contactsShown ? (
+          <Contacts onClose={() => showContacts(false)} />
         ) : current ? (
           <ConversationView key={current} id={current} />
         ) : (

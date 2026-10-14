@@ -1375,3 +1375,179 @@ button:disabled {
 .verify .verified {
   margin: 0;
 }
+
+/* Contacts */
+
+.contacts-open {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.contacts-open[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.contacts-open .unread {
+  min-width: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.contact-open {
+  flex: 1 1 160px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0;
+  color: var(--ink);
+  background: none;
+  text-align: left;
+}
+
+.device-actions {
+  flex-wrap: wrap;
+}
+
+.inline-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.inline-confirm button {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.banner.contact {
+  flex-wrap: wrap;
+  color: var(--ink);
+}
+
+.banner.contact .banner-actions {
+  flex-wrap: wrap;
+}
+
+.contact-error {
+  flex-basis: 100%;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.conversation header .more {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.peer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px calc(env(safe-area-inset-right) + 12px) 8px calc(env(safe-area-inset-left) + 12px);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.peer-actions > button {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.conversation .blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+}
+
+.conversation .blocked button {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.messages .hidden-message button {
+  padding: 2px 10px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--muted);
+  background: none;
+}
+
+.picker {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.picker legend {
+  margin-bottom: 6px;
+  padding: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.picker .hint {
+  padding: 0;
+}
+
+.picker-list {
+  max-height: 40dvh;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+
+.picker-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.picker-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 12px;
+  font-size: 16px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.picker-list input[type="checkbox"] {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+.picker-list .hint {
+  padding: 10px 12px;
+}
+
+.picker-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings .add-picked {
+  justify-self: start;
+}

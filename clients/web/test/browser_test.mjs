@@ -2,9 +2,11 @@
 // two users register in two pages, send a message each way, see a read
 // receipt, a deleted message, matching safety numbers, a rename and a
 // picture, sign a second device in, share the history with it and sign it
-// out from the first, delete an account, reload, sign out and in again;
-// then three users in a group: members added, messages, a topic change,
-// read counts and a removal, after which the group has a new key epoch.
+// out from the first, delete an account, reload, become contacts from the
+// conversation's banner, block and unblock, sign out and in again; then
+// three users become contacts from the contacts screen and make a group:
+// members picked and added, messages, a topic change, read counts and a
+// removal, after which the group has a new key epoch.
 // Reactions in both, toggled on and off; a sticker made, sent, saved, and
 // the palette reordered; two pictures and a file sent with a caption,
 // viewed, downloaded and deleted. Every message, reaction and attachment is
@@ -547,6 +549,47 @@ check(
 check(await alice.eval(removedShown), "the removed message stays removed in history");
 const revoked = await alice.eval(`localStorage.getItem("wrinkle.credentials")`);
 
+// Alice asks Bob to be a contact from the banner over their conversation,
+// and he accepts from his. Then he blocks her: her message is refused until
+// he unblocks her, when it goes through on a retry.
+const bannerSays = (s) => `${text("contact-banner-text")} === ${JSON.stringify(s)}`;
+await alice.waitFor(bannerSays(`${robertName} isn't in your contacts`));
+await alice.eval(click('[data-testid="banner-add"]'));
+await alice.waitFor(bannerSays("Contact request sent"));
+check(
+  await alice.eval("document.documentElement.scrollWidth <= window.innerWidth"),
+  "the banner fits the phone's width",
+);
+await bob.waitFor(`${text("requests-badge")} === "1"`);
+check(true, "alice asked bob to be a contact from the banner; bob's contacts button counts one request");
+await bob.eval(
+  `([...document.querySelectorAll(".row")].find(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(aliceName)}).click(), true)`,
+);
+await bob.waitFor(bannerSays(`${aliceName} wants to add you as a contact`));
+await bob.eval(click('[data-testid="banner-accept"]'));
+for (const p of [alice, bob]) await p.waitFor(`!!${q("peer-name")} && !${q("contact-banner")}`);
+await bob.waitFor(`!${q("requests-badge")}`);
+check(true, "bob accepted from his banner; now contacts, neither sees a banner");
+await bob.eval(click('[data-testid="peer-menu"]'));
+await bob.waitFor(`!!${q("block-user")}`);
+await bob.eval(click('[data-testid="block-user"]'));
+await bob.waitFor(`!!${q("confirm-block-user")}`);
+await bob.eval(click('[data-testid="confirm-block-user"]'));
+await bob.waitFor(`${text("blocked-text")} === ${JSON.stringify(`You blocked ${aliceName}`)} && !${q("text")}`);
+check(true, "bob blocked alice after confirming; his composer gives way to an unblock button");
+await alice.waitFor(bannerSays(`${robertName} isn't in your contacts`));
+check(true, "for alice the contact ended, the block not revealed");
+await fill(alice, "text", "still there?");
+await alice.waitFor(`${qa("failure")}.some(el => el.textContent === "Can't message this user")`);
+check(true, "alice's message to bob is refused: she can't message him");
+await bob.eval(click('[data-testid="unblock"]'));
+await bob.waitFor(`!!${q("text")} && !${q("blocked")}`);
+await alice.eval(click('[data-testid="retry"]'));
+await bob.waitFor(`${qa("message")}.some(li => li.querySelector(".text").textContent === "still there?")`);
+check(true, "bob unblocked alice; her message, tried again, reaches him");
+await bob.waitFor(bannerSays(`${aliceName} isn't in your contacts`));
+check(true, "unblocking does not bring the contact back");
+
 // Signed out, Alice can pick the gateway she used with one click.
 await alice.eval(click('[data-testid="open-settings"]'));
 await alice.waitFor(`!!${q("signout")}`);
@@ -609,9 +652,38 @@ for (const [p, name] of [
 check(true, "gina, hank and ivy registered");
 
 const topic = "Trip " + suffix;
-const topic2 = "Trip plans " + suffix;
 const has = (testid, s) => `${qa(testid)}.some(el => el.textContent === ${JSON.stringify(s)})`;
 const noOverflow = `document.documentElement.scrollWidth <= window.innerWidth`;
+// Members are picked from contacts: Gina asks Hank by name from her contacts
+// screen and he accepts from his; then Hank and Ivy the same.
+const contactRow = (name, state) =>
+  `${qa("contact")}.find(li => li.dataset.name === ${JSON.stringify(name)} && li.dataset.state === ${JSON.stringify(state)})`;
+async function befriend(asker, askerName, other, otherName) {
+  await asker.eval(click('[data-testid="open-contacts"]'));
+  await asker.waitFor(`!!${q("add-contact-name")}`);
+  await fill(asker, "add-contact-name", otherName.toUpperCase());
+  await asker.waitFor(
+    `${text("add-contact-done")} === ${JSON.stringify(`Asked ${otherName.toUpperCase()} to be a contact.`)} && !!${contactRow(otherName, "OUTGOING")}`,
+  );
+  await other.waitFor(`${text("requests-badge")} === "1"`);
+  await other.eval(click('[data-testid="open-contacts"]'));
+  await other.waitFor(`!!${contactRow(askerName, "INCOMING")}`);
+  await other.eval(
+    `(${contactRow(askerName, "INCOMING")}.querySelector('[data-testid="accept-contact"]').click(), true)`,
+  );
+  await other.waitFor(`!!${contactRow(askerName, "CONTACT")} && !${q("requests-badge")}`);
+  await asker.waitFor(`!!${contactRow(otherName, "CONTACT")}`);
+  check(await asker.eval(noOverflow), `${asker.name}'s contacts fit the screen`);
+  for (const p of [asker, other]) {
+    await p.eval(click('[data-testid="open-contacts"]'));
+    await p.waitFor(`!${q("add-contact-name")}`);
+  }
+  check(true, `${other.name} accepted ${asker.name}'s request from the contacts screen`);
+}
+await befriend(gina, ginaName, hank, hankName);
+await befriend(hank, hankName, ivy, ivyName);
+
+const topic2 = "Trip plans " + suffix;
 /** The message from the given sender with the given text, shown with the sender's name. */
 const fromSender = (name, body) =>
   `${qa("message")}.some(li => li.querySelector('[data-testid="sender"] .sender-name')?.textContent === ${JSON.stringify(name)} && li.querySelector(".text").textContent === ${JSON.stringify(body)})`;
@@ -620,7 +692,11 @@ await gina.eval(click('[data-testid="new-group"]'));
 await gina.waitFor(`!!${q("group-topic")}`);
 await gina.eval(type("group-topic", topic));
 await gina.waitFor(`${q("group-topic")}.value === ${JSON.stringify(topic)}`);
-await fill(gina, "group-members", hankName.toUpperCase());
+const pick = (name) => `document.querySelector('[data-testid="pick"][data-name=${JSON.stringify(name)}]')`;
+await gina.waitFor(`!!${pick(hankName)}`);
+await gina.eval(`(${pick(hankName)}.click(), true)`);
+await gina.waitFor(`${pick(hankName)}.checked`);
+await gina.eval(click('[data-testid="create-group"]'));
 await gina.waitFor(`${text("topic")} === ${JSON.stringify(topic)} && ${text("member-count")} === "2 members"`);
 check(await gina.eval(`!${visible(".list")}`), "gina created the group; on a phone it replaces the list");
 await gina.waitFor(has("notice", `You created the group “${topic}” with ${hankName}`));
@@ -648,7 +724,10 @@ check(
   await hank.eval(`!${q("remove-member")} && !${q("toggle-admin")}`),
   "the info lists the members, the creator as admin; a non-admin cannot remove anyone",
 );
-await fill(hank, "add-members", ivyName);
+await hank.waitFor(`!!${pick(ivyName)} && !${pick(ginaName)}`);
+await hank.eval(`(${pick(ivyName)}.click(), true)`);
+await hank.waitFor(`!!${q("add-picked")}`);
+await hank.eval(click('[data-testid="add-picked"]'));
 await hank.waitFor(`${qa("member")}.length === 3`);
 await hank.eval(click('[data-testid="close-info"]'));
 await hank.waitFor(has("notice", `You added ${ivyName}`));

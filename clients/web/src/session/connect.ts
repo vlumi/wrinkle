@@ -3,6 +3,7 @@
 // start and the model fills in; and signing out.
 
 import { BackendError, Connection } from "../connection/connection";
+import type { contactActions } from "../contacts/actions";
 import type { conversationActions } from "../conversations/actions";
 import type { keyActions } from "../e2ee/actions";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
@@ -24,6 +25,7 @@ export function connectActions(
   keys: ReturnType<typeof keyActions>,
   conversations: ReturnType<typeof conversationActions>,
   groups: ReturnType<typeof groupActions>,
+  contacts: ReturnType<typeof contactActions>,
   stickers: ReturnType<typeof stickerActions>,
   events: ReturnType<typeof sync>,
 ) {
@@ -113,6 +115,8 @@ export function connectActions(
     stickers.refreshPalette().catch(fail);
     await conversations.refreshConversations();
     await events.syncFromCursor();
+    // Contact events arriving during the listing win over it.
+    contacts.refreshContacts().catch(fail);
     const current = get().current;
     if (current) {
       await conversations.loadHistory(current, 0n);

@@ -8,12 +8,16 @@ import { NO_CRYPTO } from "../e2ee/actions";
 import type { BodyInit } from "../e2ee/keys";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
+import { isGroup } from "../groups/model";
 import { fromHex } from "../ids";
 import type { Api } from "../session/api";
 import type { Session } from "../session/session";
 import { addMessages, key, noteLatest, textKey, withStickers, withTexts } from "./model";
 import type { Data } from "./model";
 import { addPending, confirmPending, failPending, newMessageId, retryPending } from "./pending";
+
+/** What a failed message shows when the peer blocked the user. */
+export const REFUSED = "Can't message this user";
 
 export function sendActions({ set, get, link, onSignOut }: Api) {
   /** Sends that failed, to try again, by client message id. */
@@ -58,7 +62,11 @@ export function sendActions({ set, get, link, onSignOut }: Api) {
       await run();
     } catch (err) {
       retries.set(clientMessageId, { conversationId, run });
-      set({ pending: failPending(get().pending, conversationId, clientMessageId) });
+      const refused =
+        err instanceof BackendError &&
+        err.code === ErrorCode.PERMISSION_DENIED &&
+        !isGroup(get().conversations[conversationId]);
+      set({ pending: failPending(get().pending, conversationId, clientMessageId, refused ? REFUSED : undefined) });
       throw err;
     }
   }

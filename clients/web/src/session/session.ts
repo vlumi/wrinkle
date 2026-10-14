@@ -6,6 +6,8 @@ import { create } from "zustand";
 import { accountActions } from "../account/actions";
 import { attachmentActions } from "../attachments/send";
 import type { ConnectionState } from "../connection/connection";
+import { contactActions } from "../contacts/actions";
+import type { Contacts } from "../contacts/model";
 import { conversationActions, isVisible } from "../conversations/actions";
 import { emptyData } from "../conversations/model";
 import type { Data } from "../conversations/model";
@@ -17,7 +19,7 @@ import { opening } from "../e2ee/opening";
 import { sharingActions } from "../e2ee/sharing";
 import { deleteStore, storeName } from "../e2ee/store";
 import type { Verified } from "../e2ee/verified";
-import type { Device, User } from "../gen/wrinkle/v1/model_pb";
+import type { ContactState, Device, User } from "../gen/wrinkle/v1/model_pb";
 import { groupActions } from "../groups/actions";
 import { reactionActions } from "../reactions/actions";
 import { stickerActions } from "../stickers/actions";
@@ -48,6 +50,10 @@ export interface Session extends Data {
   complete: Record<string, true>;
   /** Settings on screen, in place of the conversation. */
   settings: boolean;
+  /** The contacts screen on screen, in place of the conversation. */
+  contactsShown: boolean;
+  /** Users the user has a state with, once listed. */
+  contacts: Contacts | null;
   pending: PendingByConversation;
   /** The account's signed-in devices, once listed. */
   devices: Device[] | null;
@@ -89,6 +95,13 @@ export interface Session extends Data {
   leaveGroup: () => Promise<void>;
   show: (conversationId: string | null) => Promise<void>;
   showSettings: (open: boolean) => void;
+  showContacts: (open: boolean) => void;
+  /** Asks a user to be a contact, or accepts their request; resolves with how they stand now. */
+  addContact: (user: { name: string } | { userId: Uint8Array }) => Promise<ContactState>;
+  /** Removes a contact, declines their request or withdraws one's own. */
+  removeContact: (userId: Uint8Array) => Promise<void>;
+  blockUser: (userId: Uint8Array) => Promise<void>;
+  unblockUser: (userId: Uint8Array) => Promise<void>;
   loadEarlier: () => Promise<void>;
   send: (text: string) => Promise<void>;
   /** Sends files, up to 10, with an optional caption, to the current conversation. */
@@ -127,6 +140,8 @@ const blank = {
   current: null,
   complete: {},
   settings: false,
+  contactsShown: false,
+  contacts: null,
   pending: {},
   devices: null,
   fingerprints: {},
@@ -163,6 +178,7 @@ export const useSession = create<Session>((set, get) => {
   };
 
   const groups = groupActions(api);
+  const contacts = contactActions(api);
   const keys = keyActions(api, groups.membersOf);
   const open = opening(api);
   const sharing = sharingActions(api);
@@ -170,8 +186,8 @@ export const useSession = create<Session>((set, get) => {
   const send = sendActions(api);
   const stickers = stickerActions(api, send);
   const attachments = attachmentActions(api, send);
-  const events = sync(api, conversations, groups, open, sharing);
-  const connect = connectActions(api, keys, conversations, groups, stickers, events);
+  const events = sync(api, conversations, groups, open, sharing, contacts);
+  const connect = connectActions(api, keys, conversations, groups, contacts, stickers, events);
 
   // Back on screen: reconnect now instead of waiting out the backoff.
   if (typeof document !== "undefined") {
@@ -194,6 +210,7 @@ export const useSession = create<Session>((set, get) => {
     ...deviceActions(api).actions,
     ...conversations.actions,
     ...groups.actions,
+    ...contacts.actions,
     ...send.actions,
     ...attachments.actions,
     ...stickers.actions,

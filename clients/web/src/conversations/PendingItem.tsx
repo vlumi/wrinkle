@@ -20,7 +20,7 @@ export function PendingItem({ pending: p, onRetry }: { pending: Pending; onRetry
       <span className="meta">
         {p.failed ? (
           <>
-            failed ·{" "}
+            <span data-testid="failure">{p.failure ?? "failed"}</span> ·{" "}
             <button type="button" className="message-retry" data-testid="retry" onClick={onRetry}>
               Retry
             </button>

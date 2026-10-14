@@ -3,6 +3,7 @@ import { Avatar } from "../account/Avatar";
 import { displayName } from "../account/icons";
 import { AttachmentsView } from "../attachments/AttachmentsView";
 import type { Message, User } from "../gen/wrinkle/v1/model_pb";
+import { withoutBlocked } from "../contacts/model";
 import { hex } from "../ids";
 import { chips, isEmoji, MAX_OWN, ownEmoji, QUICK, toggled } from "../reactions/model";
 import { useSession } from "../session/session";
@@ -26,6 +27,7 @@ export function MessageItem({
   sender,
   receipt,
   canReact,
+  blocked,
 }: {
   message: Message;
   mine: boolean;
@@ -34,13 +36,16 @@ export function MessageItem({
   receipt: string;
   /** Whether the user may still react to messages here. */
   canReact: boolean;
+  /** Hex ids of blocked users, whose reactions are left out. */
+  blocked?: ReadonlySet<string>;
 }) {
   const t = textKey(m);
   const me = useSession((s) => s.me?.userId);
   const texts = useSession((s) => s.texts);
   const sticker = useSession((s) => stickerOf(m, s.stickers));
   const files = useSession((s) => attachmentsOf(m, s.attachments));
-  const reactions = useSession((s) => (isDeleted(m) ? undefined : s.reactions[t]));
+  const listed = useSession((s) => (isDeleted(m) ? undefined : s.reactions[t]));
+  const reactions = blocked ? withoutBlocked(listed, blocked) : listed;
   const palette = useSession((s) => s.palette);
   const saveSticker = useSession((s) => s.saveSticker);
   const deleteMessage = useSession((s) => s.deleteMessage);

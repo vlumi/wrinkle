@@ -2,13 +2,16 @@ import { useEffect, useState } from "react";
 import { Avatar } from "../account/Avatar";
 import { displayName } from "../account/icons";
 import { errorText } from "../connection/connection";
+import { ContactActions, contactError } from "../contacts/ContactActions";
+import { ContactPicker } from "../contacts/ContactPicker";
+import { notContact } from "../contacts/model";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { Verify } from "../e2ee/Verify";
 import type { Member, User } from "../gen/wrinkle/v1/model_pb";
 import { hex, sameId } from "../ids";
 import { useSession } from "../session/session";
 import { GroupAvatar } from "./GroupAvatar";
-import { namesProblem, parseNames, topicProblem } from "./model";
+import { namesProblem, topicProblem } from "./model";
 
 /** A group's topic and members, and the changes the user may make to them. */
 export function GroupInfo({ id, onClose }: { id: string; onClose: () => void }) {
@@ -18,7 +21,12 @@ export function GroupInfo({ id, onClose }: { id: string; onClose: () => void }) 
   const loadMembers = useSession((s) => s.loadMembers);
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState<User | null>(null);
-  const report = (err: unknown) =>
+  const report = (err: unknown) => {
+    const name = notContact(err);
+    if (name) {
+      setError(`${name} isn't in your contacts.`);
+      return;
+    }
     setError(
       errorText(err, {
         [ErrorCode.PERMISSION_DENIED]: "Only admins can do that.",
@@ -26,6 +34,7 @@ export function GroupInfo({ id, onClose }: { id: string; onClose: () => void }) 
         [ErrorCode.FAILED_PRECONDITION]: "That would leave the group without an admin, or with too many members.",
       }),
     );
+  };
 
   useEffect(() => {
     loadMembers(id).catch(report);
@@ -71,12 +80,13 @@ export function GroupInfo({ id, onClose }: { id: string; onClose: () => void }) 
                     self={sameId(m.user?.userId, me?.userId)}
                     canManage={admin}
                     onError={report}
+                    onContactError={(err) => setError(contactError(err))}
                     onVerify={() => m.user && setVerifying(m.user)}
                   />
                 ))}
               </ul>
             </div>
-            <AddMembers onError={report} onDone={() => setError(null)} />
+            <AddMembers members={members} onError={report} onDone={() => setError(null)} />
             <Leave onError={report} onLeft={onClose} />
           </>
         )}
@@ -131,12 +141,14 @@ function MemberItem({
   self,
   canManage,
   onError,
+  onContactError,
   onVerify,
 }: {
   member: Member;
   self: boolean;
   canManage: boolean;
   onError: (err: unknown) => void;
+  onContactError: (err: unknown) => void;
   onVerify: () => void;
 }) {
   const setAdmin = useSession((s) => s.setAdmin);
@@ -164,6 +176,7 @@ function MemberItem({
           <button type="button" className="secondary" data-testid="verify-member" onClick={onVerify}>
             Verify
           </button>
+          {m.user && <ContactActions user={m.user} onError={onContactError} />}
           {canManage && (
             <>
               <button
@@ -190,15 +203,24 @@ function MemberItem({
   );
 }
 
-function AddMembers({ onError, onDone }: { onError: (err: unknown) => void; onDone: () => void }) {
+function AddMembers({
+  members,
+  onError,
+  onDone,
+}: {
+  members: Member[] | undefined;
+  onError: (err: unknown) => void;
+  onDone: () => void;
+}) {
   const addMembers = useSession((s) => s.addMembers);
-  const [names, setNames] = useState("");
+  const [picked, setPicked] = useState<User[]>([]);
+  const current = new Set((members ?? []).map((m) => hex(m.user?.userId ?? new Uint8Array())));
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        const list = parseNames(names);
+        const list = picked.filter((u) => !current.has(hex(u.userId))).map((u) => u.name);
         const problem = namesProblem(list);
         if (problem) {
           onError(new Error(problem));
@@ -206,27 +228,18 @@ function AddMembers({ onError, onDone }: { onError: (err: unknown) => void; onDo
         }
         addMembers(list)
           .then(() => {
-            setNames("");
+            setPicked([]);
             onDone();
           })
           .catch(onError);
       }}
     >
-      <label>
-        Add members
-        <span className="row-input">
-          <input
-            data-testid="add-members"
-            value={names}
-            onChange={(e) => setNames(e.target.value)}
-            placeholder="Names, separated by commas"
-            autoCapitalize="none"
-          />
-          <button type="submit" disabled={parseNames(names).length === 0}>
-            Add
-          </button>
-        </span>
-      </label>
+      <ContactPicker legend="Add members" selected={picked} onChange={setPicked} exclude={current} />
+      {picked.length > 0 && (
+        <button type="submit" className="add-picked" data-testid="add-picked">
+          Add {picked.length === 1 ? "1 member" : `${picked.length} members`}
+        </button>
+      )}
     </form>
   );
 }

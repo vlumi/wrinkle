@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Avatar } from "../account/Avatar";
 import { displayName } from "../account/icons";
 import { errorText } from "../connection/connection";
+import { blockedIds, sections } from "../contacts/model";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { Conversation } from "../gen/wrinkle/v1/model_pb";
 import { GroupAvatar } from "../groups/GroupAvatar";
@@ -9,7 +10,7 @@ import { isGroup } from "../groups/model";
 import type { Users } from "../groups/model";
 import { NewGroup } from "../groups/NewGroup";
 import { useSession } from "../session/session";
-import { byActivity, isDeleted, isUndecryptable, key, preview, unread } from "./model";
+import { byActivity, isDeleted, isHidden, isUndecryptable, key, preview, unread } from "./model";
 import type { Texts } from "./model";
 
 export function ConversationList() {
@@ -19,6 +20,8 @@ export function ConversationList() {
   const users = useSession((s) => s.users);
   const texts = useSession((s) => s.texts);
   const show = useSession((s) => s.show);
+  const contacts = useSession((s) => s.contacts);
+  const blocked = useMemo(() => blockedIds(contacts), [contacts]);
   const [creating, setCreating] = useState(false);
 
   return (
@@ -41,6 +44,7 @@ export function ConversationList() {
                 me={me?.userId}
                 users={users}
                 texts={texts}
+                blocked={blocked}
                 current={id === current}
                 onClick={() => show(id)}
               />
@@ -57,6 +61,9 @@ export function ConversationList() {
 
 function OpenConversation() {
   const openConversation = useSession((s) => s.openConversation);
+  const contacts = useSession((s) => s.contacts);
+  // Contacts are suggested as the name is typed; anyone may be messaged.
+  const names = useMemo(() => sections(contacts).contacts.map((c) => c.user?.name ?? ""), [contacts]);
   const [peer, setPeer] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -78,6 +85,8 @@ function OpenConversation() {
                 errorText(err, {
                   [ErrorCode.NOT_FOUND]: `No one is called ${name}.`,
                   [ErrorCode.INVALID_ARGUMENT]: "Enter another user's name.",
+                  [ErrorCode.FAILED_PRECONDITION]: "You blocked this user. Unblock them in Contacts first.",
+                  [ErrorCode.PERMISSION_DENIED]: "Can't message this user.",
                 }),
               ),
             );
@@ -90,7 +99,13 @@ function OpenConversation() {
           placeholder="Start a conversation with…"
           maxLength={64}
           autoCapitalize="none"
+          list="contact-names"
         />
+        <datalist id="contact-names">
+          {names.map((n) => (
+            <option key={n} value={n} />
+          ))}
+        </datalist>
         <button type="submit" disabled={!peer.trim()}>
           Open
         </button>
@@ -105,6 +120,7 @@ function ConversationRow({
   me,
   users,
   texts,
+  blocked,
   current,
   onClick,
 }: {
@@ -112,6 +128,7 @@ function ConversationRow({
   me: Uint8Array | undefined;
   users: Users;
   texts: Texts;
+  blocked: ReadonlySet<string>;
   current: boolean;
   onClick: () => void;
 }) {
@@ -130,10 +147,12 @@ function ConversationRow({
       </span>
       <span
         className={
-          c.lastMessage && (isDeleted(c.lastMessage) || isUndecryptable(c.lastMessage, texts)) ? "last removed" : "last"
+          c.lastMessage && (isDeleted(c.lastMessage) || isUndecryptable(c.lastMessage, texts) || isHidden(c, blocked))
+            ? "last removed"
+            : "last"
         }
       >
-        {preview(c, me, users, texts)}
+        {preview(c, me, users, texts, blocked)}
       </span>
     </button>
   );

@@ -277,6 +277,18 @@ describe("groups", () => {
     expect(data.conversations[kg].topic).toBe("Trip 2");
   });
 
+  test("a blocked sender's latest message is hidden in a group's preview, not in a direct one", () => {
+    const blocked = new Set([hex(peer)]);
+    let data = applyEvent(group(), groupMessage(2n, peer, sealed), me).data;
+    expect(preview(data.conversations[kg], me, data.users, opened(data, g).texts, blocked)).toBe(
+      "Message from a blocked user",
+    );
+    data = applyEvent(data, groupMessage(3n, me, sealed), me).data;
+    expect(preview(data.conversations[kg], me, data.users, opened(data, g).texts, blocked)).toBe("You: yo");
+    const direct = applyEvent(oneConversation(), messageEvent(1n, peer), me).data;
+    expect(preview(direct.conversations[k7], me, direct.users, opened(direct).texts, blocked)).toBe("m1");
+  });
+
   test("an unknown sender's text is shown alone", () => {
     const data = applyEvent(
       group(),

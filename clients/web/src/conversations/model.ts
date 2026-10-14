@@ -9,6 +9,7 @@ import type { Attachments } from "../gen/wrinkle/v1/content_pb";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import type { Conversation, Member, Message, User } from "../gen/wrinkle/v1/model_pb";
 import { displayName } from "../account/icons";
+import { BLOCKED_MESSAGE } from "../contacts/model";
 import {
   applyNotice,
   changesMembers,
@@ -321,13 +322,26 @@ export function inOrder(messages: Record<string, Message> | undefined): Message[
   return Object.values(messages ?? {}).sort((a, b) => compare(a.seq, b.seq));
 }
 
+/** Whether a group's latest message is from a blocked user, and so hidden. */
+export function isHidden(c: Conversation, blocked: ReadonlySet<string>): boolean {
+  const m = c.lastMessage;
+  return !!m && isGroup(c) && !noticeOf(m) && !isDeleted(m) && blocked.has(hex(m.senderUserId));
+}
+
 /** The list's line under a conversation: its latest message, with who sent it. */
-export function preview(c: Conversation, me: Uint8Array | undefined, users: Users, texts: Texts): string {
+export function preview(
+  c: Conversation,
+  me: Uint8Array | undefined,
+  users: Users,
+  texts: Texts,
+  blocked: ReadonlySet<string> = new Set(),
+): string {
   const m = c.lastMessage;
   if (!m) return "No messages yet";
   const notice = noticeOf(m);
   if (notice) return noticeText(notice, m.senderUserId, me, users);
   if (isDeleted(m)) return REMOVED;
+  if (isHidden(c, blocked)) return BLOCKED_MESSAGE;
   const text = textOf(m, texts);
   if (sameId(m.senderUserId, me)) return `You: ${text}`;
   const sender = isGroup(c) ? users[hex(m.senderUserId)] : undefined;

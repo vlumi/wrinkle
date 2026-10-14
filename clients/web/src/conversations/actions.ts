@@ -64,7 +64,7 @@ export function conversationActions(
     },
 
     async show(conversationId) {
-      set({ current: conversationId, settings: false });
+      set({ current: conversationId, settings: false, contactsShown: false });
       if (!conversationId) return;
       // Keys may have arrived since, as from another device of the user.
       link.keys?.retry(conversationId);
@@ -81,7 +81,7 @@ export function conversationActions(
     },
 
     showSettings(open) {
-      set({ settings: open });
+      set({ settings: open, ...(open ? { contactsShown: false } : {}) });
     },
 
     async loadEarlier() {

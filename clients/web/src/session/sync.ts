@@ -1,6 +1,7 @@
 // The flow of events into the model: synced from the cursor on connect and
 // after a gap, pushed over the connection in between.
 
+import type { contactActions } from "../contacts/actions";
 import type { conversationActions } from "../conversations/actions";
 import { applyEvent, key } from "../conversations/model";
 import { confirmPending } from "../conversations/pending";
@@ -20,6 +21,7 @@ export function sync(
   groups: ReturnType<typeof groupActions>,
   open: ReturnType<typeof opening>,
   sharing: ReturnType<typeof sharingActions>,
+  contacts: ReturnType<typeof contactActions>,
 ) {
   async function syncFromCursor() {
     if (!link.conn) return;
@@ -44,6 +46,11 @@ export function sync(
       set({ palette: event.body.value.stickerIds.map(hex) });
       return;
     }
+    if (event.body.case === "contact") {
+      if (event.body.value.contact) contacts.apply(event.body.value.contact);
+      return;
+    }
+    if (event.body.case === "profile" && event.body.value.user) contacts.profileChanged(event.body.value.user);
     if (event.body.case === "device") {
       const { device, signedOut } = event.body.value;
       // Others' devices reach the user too, with only their keys.

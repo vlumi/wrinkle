@@ -1,6 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Avatar } from "../account/Avatar";
 import { displayName } from "../account/icons";
+import { ContactActions, contactError } from "../contacts/ContactActions";
+import { BlockedNotice, ContactBanner } from "../contacts/ContactBanner";
+import { HiddenMessage } from "../contacts/HiddenMessage";
+import { blockedIds } from "../contacts/model";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { GroupAvatar } from "../groups/GroupAvatar";
 import { GroupInfo } from "../groups/GroupInfo";
@@ -31,11 +35,15 @@ export function ConversationView({ id }: { id: string }) {
   const sendAttachments = useSession((s) => s.sendAttachments);
   const retrySend = useSession((s) => s.retrySend);
   const loadEarlier = useSession((s) => s.loadEarlier);
+  const contacts = useSession((s) => s.contacts);
   const scroller = useRef<HTMLOListElement>(null);
   // Whether to follow new messages: not while the user reads further up.
   const atBottom = useRef(true);
   const [info, setInfo] = useState(false);
   const [verifying, setVerifying] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const blocked = useMemo(() => blockedIds(contacts), [contacts]);
   const messages = inOrder(messageMap);
   const count = messages.length + (pending?.length ?? 0);
 
@@ -98,13 +106,38 @@ export function ConversationView({ id }: { id: string }) {
             <Avatar user={conversation.peer} />
             <h2 data-testid="peer-name">{peerName}</h2>
             {!conversation.peer?.deleted && (
-              <button className="info secondary" data-testid="verify" onClick={() => setVerifying(true)}>
-                Verify
-              </button>
+              <>
+                <button className="info secondary" data-testid="verify" onClick={() => setVerifying(true)}>
+                  Verify
+                </button>
+                <button
+                  className="more secondary"
+                  data-testid="peer-menu"
+                  aria-label="More actions"
+                  aria-expanded={menu}
+                  onClick={() => {
+                    setMenu(!menu);
+                    setMenuError(null);
+                  }}
+                >
+                  ⋯
+                </button>
+              </>
             )}
           </>
         )}
       </header>
+      {!group && menu && conversation.peer && !conversation.peer.deleted && (
+        <div className="peer-actions" data-testid="peer-actions">
+          <ContactActions user={conversation.peer} onError={(err) => setMenuError(contactError(err))} />
+          {menuError && (
+            <span className="contact-error" role="alert">
+              {menuError}
+            </span>
+          )}
+        </div>
+      )}
+      {!group && conversation.peer && <ContactBanner peer={conversation.peer} />}
       <FingerprintWarning
         users={
           group
@@ -147,7 +180,7 @@ export function ConversationView({ id }: { id: string }) {
             );
           }
           const mine = sameId(m.senderUserId, me?.userId);
-          return (
+          const item = (
             <MessageItem
               key={m.seq.toString()}
               message={m}
@@ -155,7 +188,14 @@ export function ConversationView({ id }: { id: string }) {
               sender={group && !mine ? (users[hex(m.senderUserId)] ?? null) : undefined}
               receipt={mine ? receipt(m) : ""}
               canReact={!former}
+              blocked={group ? blocked : undefined}
             />
+          );
+          // In groups, a blocked user's messages stay collapsed until asked for.
+          return group && !mine && !isDeleted(m) && blocked.has(hex(m.senderUserId)) ? (
+            <HiddenMessage key={m.seq.toString()}>{item}</HiddenMessage>
+          ) : (
+            item
           );
         })}
         {pending?.map((p) => (
@@ -172,6 +212,8 @@ export function ConversationView({ id }: { id: string }) {
         </p>
       ) : !group && conversation.peer?.deleted ? (
         <p className="hint closed">This account was deleted.</p>
+      ) : !group && conversation.peer && blocked.has(hex(conversation.peer.userId)) ? (
+        <BlockedNotice peer={conversation.peer} />
       ) : (
         <Composer
           onSend={(text) => {
