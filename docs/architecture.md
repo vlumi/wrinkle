@@ -63,10 +63,12 @@ flowchart TB
     d["device: token hash, public key, acked position, push token"]
     e["user_event: the log, by position"]
     l["user_conversation: the list, with peers' profiles"]
-    uo["user_outbox: profile, device and palette changes, deleted on insert"]
+    uo["user_outbox: profile, device, palette and contact changes, deleted on insert"]
     up["upload: blobs by uploader, used or not"]
     s["sticker: creator and media type, by sticker_id"]
     ps["palette_sticker: the user's palette, in order"]
+    ct["contact: the user's own side toward another, a request or a block"]
+    cp["contact_peer: the other's side, copied by the fan-out"]
   end
 ```
 
@@ -101,6 +103,12 @@ A conversation's kind is fixed when it is created. A direct conversation has its
 Every change to a group is a notice: a message in the group's sequence, with the acting user as its sender, so every member sees the changes and the messages in one order, and devices sync them like any message. The conversation row holds the current members' ids, so a send checks membership and learns its recipients from the row it locks anyway; `conversation_member` keeps each member's role and the part of the sequence they may read, from the notice that added them to the one that removed them. A removed member keeps the history they had and gets nothing new.
 
 Outbox rows carry their recipients and the conversation's kind, topic and member count as of the change, so a fan-out worker still needs no lookup, and each recipient's list entry follows the group: its topic, its size, and whether the user is still a member or an admin. Profile changes reach direct partners only; clients refresh a group's members when they open it. A group message costs one log append per member, which is what caps the size: rooms with thousands of readers would need a read path per room instead (issue #9).
+
+## Contacts and blocking
+
+Contacts are mutual: two users are contacts when each asked the other, or one asked and the other accepted. A group takes only its adder's contacts, so nobody lands in a group of strangers; anyone may still message anyone directly. A block refuses the blocked user in everything one-to-one: opening or writing to the direct conversation, reacting there, asking to be a contact, adding the blocker to a group. The refusal is a plain permission error, and the blocked user's view of the blocker is the same as of anyone else. Shared groups stay as they are for everyone else; the blocker's clients hide the blocked user's messages and reactions, and the fan-out sends the blocker no push for them. Blocking ends any contact or request between the two, and unblocking does not bring a contact back.
+
+Each user owns their side toward another (a request or a block) in `contact` on their own shard, and only their own requests change it, through their outbox, as profile changes go. The fan-out copies each side to the other user's `contact_peer`, so a user's contacts and requests both ways are one local read, and when a side ends or turns into a block, it ends the other user's request through the other user's outbox. No request writes another user's shard, and every change to a side is ordered by its owner's outbox, so redelivered or reordered copies are recognized by their outbox id. Each change reaches both users as a `ContactEvent` with their own view. The checks that refuse never use the copies: they read the other user's own row by its primary key, so a block holds from the moment it commits.
 
 ## End-to-end encryption
 

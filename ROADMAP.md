@@ -16,6 +16,7 @@ What is done, what is open and why, and the gaps that are known and accepted for
 - **Reactions (#3).** One sealed set per user and message, replaced as a whole. [Reactions](docs/architecture.md#reactions).
 - **Stickers (#5).** Public, permanent blobs made from a user's images; a palette of up to 200 per user, synced across devices. [Stickers](docs/architecture.md#stickers).
 - **Attachments (#7).** Images and files encrypted on the device with a key per file, thumbnails made on the device, blob ids in clear for their lifecycle; the load generator can include them. [Attachments](docs/architecture.md#attachments).
+- **Contacts and blocking (#10).** Mutual contacts by request and acceptance; groups take only the adder's contacts; a block refuses the blocked user one-to-one and hides them in shared groups on the blocker's devices. [Contacts and blocking](docs/architecture.md#contacts-and-blocking).
 - **Push notifications.** `RegisterPushToken` in every backend; APNs from the Go fan-out to devices that are not connected, with the sealed content for the iOS notification service extension to decrypt. [Sending a message](docs/architecture.md#sending-a-message).
 
 ## Open

@@ -17,7 +17,7 @@ Prototype:
 
 - one Vitess process rather than a topology, whose change stream does not survive a restart;
 - no limits per user or per address, and no password recovery;
-- no blocking, reporting or moderation;
+- no reporting or moderation;
 - no forward secrecy between key rotations;
 - push notifications from the Go fan-out only;
 - monitoring of the native processes only.
@@ -26,7 +26,7 @@ Prototype:
 
 **Status:** Go and Java backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements comparing the three gateways and the two monoliths are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
 
-Users register with a name and a password, sign in on any number of devices, each with its own token, and manage their profile (name, icon, picture), their devices and their account, which they can delete. Conversations are direct, between two users, or groups of up to 256 members with a topic and admins. Messages carry text, a sticker or attachments (images and files, with thumbnails); their sender can delete them for everyone, anyone can react to them with up to three emoji, and every participant's read position is shared. Content is encrypted end to end: the servers see who talks to whom and when, group topics and membership, profiles and avatars, and sizes, but no text, sticker, attachment or reaction.
+Users register with a name and a password, sign in on any number of devices, each with its own token, and manage their profile (name, icon, picture), their devices and their account, which they can delete. Users become contacts by asking and accepting, and can block anyone. Conversations are direct, between any two users, or groups of up to 256 of the creator's and members' contacts, with a topic and admins. Messages carry text, a sticker or attachments (images and files, with thumbnails); their sender can delete them for everyone, anyone can react to them with up to three emoji, and every participant's read position is shared. Content is encrypted end to end: the servers see who talks to whom and when, group topics and membership, profiles and avatars, and sizes, but no text, sticker, attachment or reaction.
 
 ## How it works
 
