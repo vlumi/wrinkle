@@ -16,6 +16,11 @@ case ${1:-} in
 esac
 shift
 
+# macOS starts shells at 256 open files. Go and the JVM raise their own limit;
+# the BEAM and the Rust runtime do not, and would refuse connections past
+# about 200.
+ulimit -Sn "$(sysctl -n kern.maxfilesperproc 2>/dev/null || ulimit -Hn)" 2>/dev/null || true
+
 # A services process left over from an aborted run would answer instead, and
 # its fan-out would take records from the shared consumer group.
 "$repo/backends/ports-free.sh" 8090 9000
