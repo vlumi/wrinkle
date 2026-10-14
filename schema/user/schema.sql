@@ -113,7 +113,7 @@ CREATE TABLE user_outbox (
   user_id BINARY(16) NOT NULL,
   -- From user.last_outbox_id.
   outbox_id BIGINT UNSIGNED NOT NULL,
-  -- Event body type: profile, device, palette.
+  -- Event body type: profile, device, palette, contact.
   kind VARCHAR(32) NOT NULL,
   -- Serialized wrinkle.v1.Event without a cursor.
   payload BLOB NOT NULL,
@@ -155,4 +155,34 @@ CREATE TABLE upload (
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, blob_id),
   KEY upload_unused (used, created_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- Each user's own side toward other users: a request, which is also how one
+-- accepts, or a block. Only the user's own requests change it, through the
+-- user outbox; the fan-out copies it to the other user's contact_peer and,
+-- when it ends a request of the other user's, ends that one through the
+-- other user's outbox. Blocks are checked against this table, on the
+-- blocking user's shard.
+CREATE TABLE contact (
+  user_id BINARY(16) NOT NULL,
+  other_user_id BINARY(16) NOT NULL,
+  -- request, block.
+  state VARCHAR(8) NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (user_id, other_user_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
+
+-- The other user's side toward this user, as the fan-out last copied it
+-- from their contact row. Lists incoming requests without reading every
+-- shard.
+CREATE TABLE contact_peer (
+  user_id BINARY(16) NOT NULL,
+  other_user_id BINARY(16) NOT NULL,
+  -- request, block, or none once it ended (kept for source_outbox_id).
+  state VARCHAR(8) NOT NULL,
+  -- The other user's outbox_id of the change copied, so a redelivered or
+  -- older change is ignored.
+  source_outbox_id BIGINT UNSIGNED NOT NULL,
+  updated_at DATETIME(6) NOT NULL,
+  PRIMARY KEY (user_id, other_user_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;

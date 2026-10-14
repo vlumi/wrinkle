@@ -35,6 +35,12 @@
     },
     "upload": {
       "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "contact": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
+    },
+    "contact_peer": {
+      "column_vindexes": [{ "column": "user_id", "name": "xxhash" }]
     }
   }
 }
