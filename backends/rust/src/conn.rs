@@ -718,6 +718,11 @@ impl request::Body {
             Self::SaveSticker(_) => "save_sticker",
             Self::RemoveSticker(_) => "remove_sticker",
             Self::MoveSticker(_) => "move_sticker",
+            Self::ListContacts(_) => "list_contacts",
+            Self::AddContact(_) => "add_contact",
+            Self::RemoveContact(_) => "remove_contact",
+            Self::BlockUser(_) => "block_user",
+            Self::UnblockUser(_) => "unblock_user",
         }
     }
 }
