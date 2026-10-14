@@ -176,8 +176,11 @@ extension AppState {
         VerificationState(verified: verified, current: fingerprints[userID])
     }
 
-    /// Writes the groups and names the notification service extension words pushes with.
+    /// Writes the groups, names and blocked users the notification service extension words
+    /// pushes with.
     func publishNames() {
-        store?.sharedNames().save(to: sharedVault)
+        guard var shared = store?.sharedNames() else { return }
+        shared.blocked = contacts.blocked
+        shared.save(to: sharedVault)
     }
 }

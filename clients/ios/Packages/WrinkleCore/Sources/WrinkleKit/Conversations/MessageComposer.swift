@@ -6,6 +6,8 @@ import WrinkleCore
 /// caption.
 struct MessageComposer: View {
     let conversationID: IDHex
+    /// What a refused send means: no longer in the group, or not allowed to message the peer.
+    let refusal: String
     @Binding var showStickers: Bool
     @Binding var error: String?
     @Environment(AppState.self) private var app
@@ -112,8 +114,7 @@ struct MessageComposer: View {
                     try await app.send(text: t, in: conversationID)
                     error = nil
                 } catch {
-                    self.error = errorText(
-                        error, [.permissionDenied: "You are no longer in this group."])
+                    self.error = errorText(error, [.permissionDenied: refusal])
                 }
             }
             return
@@ -131,7 +132,7 @@ struct MessageComposer: View {
                 self.error = errorText(
                     error,
                     [
-                        .permissionDenied: "You are no longer in this group.",
+                        .permissionDenied: refusal,
                         .failedPrecondition: "An attachment was not uploaded; try again.",
                     ])
             }

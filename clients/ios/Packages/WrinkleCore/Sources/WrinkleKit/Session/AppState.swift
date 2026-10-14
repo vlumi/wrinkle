@@ -37,6 +37,9 @@ public final class AppState {
     /// The user's saved sticker ids, in their order: from GetPalette on connecting, then kept
     /// current by palette events.
     public internal(set) var palette: [Data] = []
+    /// The user's contacts, requests and blocked users: from ListContacts on connecting, then
+    /// kept current by contact events.
+    public internal(set) var contacts = ContactBook()
     /// Stickers decoded so far, by sticker id as hex; nil for one that cannot be shown.
     var stickerImages: [String: CGImage?] = [:]
     /// Attachments being sent, by conversation, kept across a failed send for its retry.
@@ -199,6 +202,7 @@ public final class AppState {
         pendingConversation = nil
         devices = []
         palette = []
+        contacts = ContactBook()
         store?.reset()
         self.notice = notice
     }
@@ -275,6 +279,7 @@ public final class AppState {
         try await syncFromCursor(conn)
         // After the sync, whose palette events may be older.
         palette = try await conn.getPalette().map(\.stickerID)
+        contacts = ContactBook(try await conn.listContacts())
         publishNames()
     }
 }
@@ -352,6 +357,8 @@ extension AppState {
             followDevice(d)
         case .palette(let p):
             palette = p.stickerIds
+        case .contact(let c):
+            followContact(c.contact)
         case .messageDeleted(let d):
             onMessageDeleted?(d.conversationID.hex, d.seq)
         // Synced from before the deletion: the message arrives already deleted.
@@ -386,10 +393,4 @@ extension AppState {
             await openLocked(conn)
         }
     }
-}
-
-/// A failure the client itself detected, worded for the user.
-public struct AccountError: Error, CustomStringConvertible {
-    public let description: String
-    init(_ description: String) { self.description = description }
 }

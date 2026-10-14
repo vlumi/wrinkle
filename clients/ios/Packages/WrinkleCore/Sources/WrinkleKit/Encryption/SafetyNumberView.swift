@@ -3,7 +3,7 @@ import SwiftUI
 import WrinkleCore
 
 /// A contact's safety number, to compare with theirs, and whether the user verified it.
-struct ContactView: View {
+struct SafetyNumberView: View {
     let user: Wrinkle_V1_User
     @Environment(AppState.self) private var app
     @Query private var verifications: [StoredVerification]

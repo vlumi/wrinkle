@@ -2,8 +2,9 @@ import UserNotifications
 import WrinkleCore
 
 /// Words a message push: the backend sends "New message" and the sealed content, which the
-/// epoch keys the app shares through the app group open. Without a key that does, or without
-/// the sealed content (a payload that would have been too large), the generic body stays.
+/// epoch keys the app shares through the app group open. Without a key that does, without the
+/// sealed content (a payload that would have been too large), or from a sender the user
+/// blocked, the generic body stays.
 final class NotificationService: UNNotificationServiceExtension {
     override func didReceive(
         _ request: UNNotificationRequest,

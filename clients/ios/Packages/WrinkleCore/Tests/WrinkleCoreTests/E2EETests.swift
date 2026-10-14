@@ -254,12 +254,15 @@ final class E2EETests: XCTestCase {
             content: .with { $0.sticker = .with { $0.stickerID = Data(count: 16) } })
         XCTAssertEqual(PushContent.body(sticker, keys: keys, names: SharedNames()), "Sticker")
         XCTAssertEqual(PushContent.body(sticker, keys: keys, names: names), "alice: Sticker")
+        // A sender the user blocked: the generic body stays.
+        let blocking = SharedNames(groups: [conversation], blocked: [a1.userID])
+        XCTAssertNil(PushContent.body(info, keys: keys, names: blocking))
     }
 
     func testSharedNamesRoundTrip() {
         let vault = MemoryVault()
         XCTAssertEqual(SharedNames.load(from: vault), SharedNames())
-        let names = SharedNames(groups: ["g"], names: ["u": "una"])
+        let names = SharedNames(groups: ["g"], names: ["u": "una"], blocked: ["b"])
         names.save(to: vault)
         XCTAssertEqual(SharedNames.load(from: vault), names)
         SharedNames.forget(in: vault)

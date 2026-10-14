@@ -3,7 +3,8 @@ import XCTest
 @testable import WrinkleCore
 
 /// A group of three against the live backend: created, a member added, a message, a topic
-/// change, read positions, a removal.
+/// change, read positions, a removal. Members are added only by their contacts: alice and bob
+/// are contacts, as are bob and carol.
 extension BackendTests {
     /// Polls until the result satisfies the condition, for state the fan-out writes behind
     /// the events.
@@ -37,6 +38,8 @@ extension BackendTests {
         let (bob, b) = try await registered(unique("ios-bob"))
         let (carol, c) = try await registered(unique("ios-carol"))
         let t = Three(alice: alice, a: a.user, bob: bob, b: b.user, carol: carol, c: c.user)
+        try await befriend(alice, a.user, bob, b.user)
+        try await befriend(bob, b.user, carol, c.user)
         let id = try await create(t)
         try await addAndTalk(t, id)
         try await reads(t, id)
@@ -57,6 +60,11 @@ extension BackendTests {
             try await t.alice.createGroup(topic: " ", memberNames: [], clientGroupID: "g0")
         }
         XCTAssertEqual(blank, .invalidArgument)
+        let stranger = await code {
+            try await t.alice.createGroup(
+                topic: "Trip", memberNames: [t.c.name], clientGroupID: "g0")
+        }
+        XCTAssertEqual(stranger, .failedPrecondition)
 
         let group = try await t.alice.createGroup(
             topic: "Trip", memberNames: [t.b.name.uppercased()], clientGroupID: "g1")

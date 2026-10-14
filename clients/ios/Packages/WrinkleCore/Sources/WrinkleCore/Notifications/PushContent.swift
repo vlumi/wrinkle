@@ -3,15 +3,17 @@ import SwiftData
 import os
 
 /// What the notification service extension needs beyond the epoch keys to word a decrypted
-/// push: which conversations are groups and the names of the people in them. The app writes it
-/// to the shared vault; the backend's push carries neither.
+/// push: which conversations are groups, the names of the people in them, and the users the
+/// user blocked. The app writes it to the shared vault; the backend's push carries none of it.
 public struct SharedNames: Codable, Equatable, Sendable {
     public var groups: Set<IDHex> = []
     public var names: [IDHex: String] = [:]
+    public var blocked: Set<IDHex> = []
 
-    public init(groups: Set<IDHex> = [], names: [IDHex: String] = [:]) {
+    public init(groups: Set<IDHex> = [], names: [IDHex: String] = [:], blocked: Set<IDHex> = []) {
         self.groups = groups
         self.names = names
+        self.blocked = blocked
     }
 
     static let account = "names"
@@ -40,11 +42,14 @@ public struct SharedNames: Codable, Equatable, Sendable {
 public enum PushContent {
     /// The notification body: the text, "Sticker" for a sticker, or the attachments' caption,
     /// "Photo", "n photos" or "File: <name>", in a direct conversation;
-    /// "<sender>: <text>" in a group; nil when the push has no sealed content or no held key opens it.
+    /// "<sender>: <text>" in a group; nil when the push has no sealed content, no held key opens
+    /// it, or its sender is someone the user blocked, so the generic body stays.
     public static func body(
         _ info: [AnyHashable: Any], keys: EpochKeys, names: SharedNames
     ) -> String? {
-        guard let message = message(info), let content = keys.open(message) else { return nil }
+        guard let message = message(info), !names.blocked.contains(message.senderUserID.hex),
+            let content = keys.open(message)
+        else { return nil }
         let conversation = message.conversationID.hex
         guard names.groups.contains(conversation) else { return content.preview }
         let sender = names.names[message.senderUserID.hex] ?? "Someone"

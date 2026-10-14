@@ -11,10 +11,11 @@ struct GroupInfoView: View {
     @Query private var conversations: [StoredConversation]
     @Query private var members: [StoredMember]
     @State private var topic = ""
-    @State private var newNames: [String] = []
+    @State private var picked: Set<IDHex> = []
     @State private var confirmingLeave = false
     @State private var error: String?
     @State private var contact: Wrinkle_V1_User?
+    @State private var confirming: ContactChange?
 
     init(conversationID: IDHex, done: @escaping () -> Void) {
         self.conversationID = conversationID
@@ -44,9 +45,11 @@ struct GroupInfoView: View {
                 Section("\(members.count) members") {
                     ForEach(members, id: \.userID) { row($0) }
                 }
-                NameListSection(title: "Add members", names: $newNames)
-                if !newNames.isEmpty {
-                    Button("Add \(newNames.count == 1 ? "member" : "members")", action: add)
+                ContactPickerSection(
+                    title: "Add members", picked: $picked,
+                    excluding: Set(members.map(\.userID)))
+                if !picked.isEmpty {
+                    Button("Add \(picked.count == 1 ? "member" : "members")", action: add)
                 }
                 Section {
                     Button("Leave group", role: .destructive) { confirmingLeave = true }
@@ -78,7 +81,8 @@ struct GroupInfoView: View {
             }
         }
         .onChange(of: conversation?.topic) { _, new in topic = new ?? "" }
-        .navigationDestination(item: $contact) { ContactView(user: $0) }
+        .navigationDestination(item: $contact) { SafetyNumberView(user: $0) }
+        .confirmingContactChange($confirming) { error = $0 }
     }
 
     private func row(_ m: StoredMember) -> some View {
@@ -93,6 +97,9 @@ struct GroupInfoView: View {
             if !me {
                 Menu {
                     Button("Safety number", systemImage: "checkmark.shield") { contact = m.user }
+                    if m.known {
+                        ContactMenuItems(user: m.user, confirming: $confirming) { error = $0 }
+                    }
                     if isAdmin {
                         Button(m.admin ? "Remove as admin" : "Make admin") {
                             run {
@@ -122,10 +129,21 @@ struct GroupInfoView: View {
     }
 
     private func add() {
-        let names = newNames
-        run {
-            try await app.addMembers(names, to: conversationID)
-            newNames = []
+        let names = app.names(of: picked)
+        Task {
+            do {
+                try await app.addMembers(names, to: conversationID)
+                picked = []
+                error = nil
+            } catch {
+                self.error = errorText(
+                    error,
+                    [
+                        .notFound: "Someone picked no longer has an account.",
+                        .failedPrecondition:
+                            "Someone picked is no longer your contact, or the group is full.",
+                    ])
+            }
         }
     }
 

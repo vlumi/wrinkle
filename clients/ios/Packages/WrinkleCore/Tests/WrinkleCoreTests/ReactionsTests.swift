@@ -65,6 +65,11 @@ final class ReactionsTests: XCTestCase {
         let chips = ReactionRules.chips(store.reactions(to: 1, in: conv7.hex), me: me.hex)
         XCTAssertEqual(chips.map(\.emoji), ["❤️", "😂", "👍"])
         XCTAssertEqual(chips.map(\.mine), [true, false, false])
+        // A blocked user's reactions are left out of the counts and the names.
+        let hiding = ReactionRules.chips(
+            store.reactions(to: 1, in: conv7.hex), me: me.hex, hiding: [bob.hex])
+        XCTAssertEqual(hiding.map(\.emoji), ["❤️"])
+        XCTAssertEqual(hiding.map(\.users), [[me.hex]])
 
         _ = store.apply(reaction(nil, by: bob, at: 3), me: me.hex)
         XCTAssertEqual(emoji(store), [me.hex: ["❤️"]])

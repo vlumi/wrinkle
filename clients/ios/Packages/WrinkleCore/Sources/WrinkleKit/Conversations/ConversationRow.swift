@@ -10,7 +10,10 @@ struct ConversationRow: View {
             ConversationAvatar(conversation: conversation)
             VStack(alignment: .leading) {
                 Text(conversation.title).font(.headline)
-                if conversation.lastDeleted {
+                if hidesLast {
+                    Text("Message from a blocked user")
+                        .font(.subheadline).italic().foregroundStyle(.secondary).lineLimit(1)
+                } else if conversation.lastDeleted {
                     Text("Message removed")
                         .font(.subheadline).italic().foregroundStyle(.secondary).lineLimit(1)
                 } else if conversation.lastSealed != nil {
@@ -30,6 +33,13 @@ struct ConversationRow: View {
                     .background(.tint, in: Capsule()).foregroundStyle(.white)
             }
         }
+    }
+
+    /// The latest message is a group message from someone the user blocked.
+    private var hidesLast: Bool {
+        let c = conversation
+        guard let sender = c.lastSenderID, c.lastNotice == nil else { return false }
+        return app.contacts.hides(sender, inGroup: c.isGroup)
     }
 
     /// The latest message: a notice as its sentence; a text after its sender's name in a

@@ -41,11 +41,15 @@ public enum ReactionRules {
         public var count: Int { users.count }
     }
 
-    /// The chips of a message's reactions, in the order the emoji were first chosen.
-    public static func chips(_ reactions: [StoredReaction], me: IDHex) -> [Chip] {
+    /// The chips of a message's reactions, in the order the emoji were first chosen, leaving
+    /// out the hidden users' reactions.
+    public static func chips(
+        _ reactions: [StoredReaction], me: IDHex, hiding hidden: Set<IDHex> = []
+    ) -> [Chip] {
         var order: [String] = []
         var users: [String: [IDHex]] = [:]
-        for r in reactions.sorted(by: { ($0.updatedAt, $0.userID) < ($1.updatedAt, $1.userID) }) {
+        let shown = reactions.filter { !hidden.contains($0.userID) }
+        for r in shown.sorted(by: { ($0.updatedAt, $0.userID) < ($1.updatedAt, $1.userID) }) {
             for e in r.emoji {
                 if users[e] == nil { order.append(e) }
                 users[e, default: []].append(r.userID)

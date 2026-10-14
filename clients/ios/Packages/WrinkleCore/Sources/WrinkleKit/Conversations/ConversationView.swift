@@ -19,6 +19,7 @@ struct ConversationView: View {
     @State private var reactingWithOther: Int64?
     @State private var otherEmoji = ""
     @State private var showStickers = false
+    @State private var confirming: ContactChange?
 
     init(conversationID: IDHex) {
         self.conversationID = conversationID
@@ -33,9 +34,17 @@ struct ConversationView: View {
 
     private var conversation: StoredConversation? { conversations.first }
     private var isGroup: Bool { conversation?.isGroup ?? false }
+    /// The peer of a direct conversation; nil for a group.
+    private var peer: Wrinkle_V1_User? { conversation.flatMap { $0.isGroup ? nil : $0.peer } }
+    private var peerBlocked: Bool { peer.map { app.contacts.isBlocked($0.userID.hex) } ?? false }
+    /// What a refused send means here.
+    private var refusal: String {
+        isGroup ? "You are no longer in this group." : "Can't message this user."
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            if let peer { ContactBanner(user: peer) }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 6) {
@@ -81,9 +90,12 @@ struct ConversationView: View {
             if conversation?.isFormer == true {
                 Text("You are no longer in this group")
                     .font(.footnote).foregroundStyle(.secondary).padding()
+            } else if let peer, peerBlocked {
+                BlockedNotice(user: peer)
             } else {
                 MessageComposer(
-                    conversationID: conversationID, showStickers: $showStickers, error: $error)
+                    conversationID: conversationID, refusal: refusal,
+                    showStickers: $showStickers, error: $error)
             }
             if let error {
                 Text(error).font(.footnote).foregroundStyle(.red).padding(.bottom)
@@ -97,19 +109,28 @@ struct ConversationView: View {
             }
             if let conversation {
                 ToolbarItem(placement: Toolbar.trailing) {
-                    Button {
-                        if conversation.isGroup {
-                            showInfo = true
-                        } else {
-                            contact = conversation.peer
+                    if let peer {
+                        Menu {
+                            Button("Safety number", systemImage: "checkmark.shield") {
+                                contact = peer
+                            }
+                            ContactMenuItems(user: peer, confirming: $confirming) { error = $0 }
+                        } label: {
+                            Image(systemName: "info.circle")
                         }
-                    } label: {
-                        Image(systemName: "info.circle")
+                        .accessibilityLabel("Contact")
+                    } else {
+                        Button {
+                            showInfo = conversation.isGroup
+                        } label: {
+                            Image(systemName: "info.circle")
+                        }
+                        .accessibilityLabel("Group info")
                     }
-                    .accessibilityLabel(conversation.isGroup ? "Group info" : "Contact")
                 }
             }
         }
+        .confirmingContactChange($confirming) { error = $0 }
         .confirmationDialog(
             "Delete this message for everyone?",
             isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -146,7 +167,7 @@ struct ConversationView: View {
         .sheet(isPresented: Binding(get: { contact != nil }, set: { if !$0 { contact = nil } })) {
             if let contact {
                 NavigationStack {
-                    ContactView(user: contact)
+                    SafetyNumberView(user: contact)
                         .toolbar {
                             ToolbarItem(placement: .confirmationAction) {
                                 Button("Done") { self.contact = nil }
@@ -194,39 +215,47 @@ struct ConversationView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
+        } else if app.contacts.hides(m.senderID, inGroup: isGroup) {
+            HiddenMessage { bubble(m) }
         } else {
-            let mine = m.senderID == app.myUserID
-            MessageBubble(
-                message: m, mine: mine, sender: isGroup && !mine ? sender(m.senderID) : nil,
-                receipt: mine ? receipt(m) : nil,
-                chips: ReactionRules.chips(reactions.filter { $0.seq == m.seq }, me: app.myUserID),
-                names: reactorNames, toggle: { toggleReaction($0, on: m.seq) }
-            )
-            .contextMenu {
-                if !m.isDeleted && conversation?.isFormer == false {
-                    ControlGroup {
-                        ForEach(ReactionRules.quick, id: \.self) { e in
-                            Button(e) { toggleReaction(e, on: m.seq) }
-                        }
-                    }
-                    .controlGroupStyle(.compactMenu)
-                    Button("Other Emoji…", systemImage: "face.smiling") {
-                        reactingWithOther = m.seq
-                    }
-                }
-                if let sticker = Data.id(hex: m.stickerID), !m.isDeleted {
-                    if app.isSaved(sticker) {
-                        Button("Saved", systemImage: "checkmark") {}.disabled(true)
-                    } else {
-                        Button("Save to Palette", systemImage: "square.and.arrow.down") {
-                            save(sticker)
-                        }
+            bubble(m)
+        }
+    }
+
+    private func bubble(_ m: StoredMessage) -> some View {
+        let mine = m.senderID == app.myUserID
+        let shown = reactions.filter { $0.seq == m.seq }
+        let hidden = isGroup ? app.contacts.blocked : []
+        return MessageBubble(
+            message: m, mine: mine, sender: isGroup && !mine ? sender(m.senderID) : nil,
+            receipt: mine ? receipt(m) : nil,
+            chips: ReactionRules.chips(shown, me: app.myUserID, hiding: hidden),
+            names: reactorNames, toggle: { toggleReaction($0, on: m.seq) }
+        )
+        .contextMenu {
+            if !m.isDeleted && conversation?.isFormer == false {
+                ControlGroup {
+                    ForEach(ReactionRules.quick, id: \.self) { e in
+                        Button(e) { toggleReaction(e, on: m.seq) }
                     }
                 }
-                if m.deletable(by: app.myUserID) {
-                    Button("Delete for Everyone", systemImage: "trash", role: .destructive) {
-                        deleting = m.seq
+                .controlGroupStyle(.compactMenu)
+                Button("Other Emoji…", systemImage: "face.smiling") {
+                    reactingWithOther = m.seq
+                }
+            }
+            if let sticker = Data.id(hex: m.stickerID), !m.isDeleted {
+                if app.isSaved(sticker) {
+                    Button("Saved", systemImage: "checkmark") {}.disabled(true)
+                } else {
+                    Button("Save to Palette", systemImage: "square.and.arrow.down") {
+                        save(sticker)
                     }
+                }
+            }
+            if m.deletable(by: app.myUserID) {
+                Button("Delete for Everyone", systemImage: "trash", role: .destructive) {
+                    deleting = m.seq
                 }
             }
         }
@@ -297,7 +326,7 @@ extension ConversationView {
                 error = nil
             } catch {
                 self.error = errorText(
-                    error, [.permissionDenied: "You are no longer in this group."])
+                    error, [.permissionDenied: refusal])
             }
         }
     }
@@ -310,7 +339,7 @@ extension ConversationView {
                 error = nil
             } catch {
                 self.error = errorText(
-                    error, [.permissionDenied: "You are no longer in this group."])
+                    error, [.permissionDenied: refusal])
             }
         }
     }

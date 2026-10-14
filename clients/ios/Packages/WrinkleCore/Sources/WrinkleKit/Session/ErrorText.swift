@@ -16,3 +16,9 @@ func errorText(_ error: Error, _ meanings: [Wrinkle_V1_ErrorCode: String] = [:])
     default: return "Something went wrong (\(e.code))."
     }
 }
+
+/// A failure the client itself detected, worded for the user.
+public struct AccountError: Error, CustomStringConvertible {
+    public let description: String
+    init(_ description: String) { self.description = description }
+}
