@@ -21,7 +21,6 @@ import wrinkle.accounts.AccountService;
 import wrinkle.contacts.Contacts;
 import wrinkle.conversation.ConversationService;
 import wrinkle.v1.Conversation;
-import wrinkle.v1.ConversationKind;
 import wrinkle.v1.Event;
 import wrinkle.v1.Message;
 import wrinkle.v1.PushService;
@@ -145,7 +144,7 @@ public final class DeviceSyncService {
       throw ApiError.notFound("no user named \"" + peerName + "\"");
     }
     if (peerId.equals(userId)) {
-      throw ApiError.invalidArgument("a conversation needs two different users");
+      throw ApiError.invalidArgument("your own notes are opened with OpenNotes");
     }
     contacts.checkMessaging(userId, peerId);
     User peer = accounts.profile(peerId);
@@ -169,16 +168,39 @@ public final class DeviceSyncService {
           peer.getAvatar().isEmpty() ? null : peer.getAvatar().toByteArray(),
           peer.getDeleted(),
           Timestamps.now());
-      List<Conversation> list =
-          selectConversations(
-              c,
-              SELECT_CONVERSATIONS + " WHERE user_id = ? AND conversation_id = ?",
-              userId,
-              conversationId);
-      if (list.isEmpty()) {
-        throw new SQLException("conversation " + conversationId + " missing after insert");
-      }
-      return list.getFirst();
+      return listed(c, userId, conversationId);
+    }
+  }
+
+  /** The user's list entry of the conversation, just inserted if it was missing. */
+  private static Conversation listed(Connection c, Uuid userId, Uuid conversationId)
+      throws SQLException {
+    List<Conversation> list =
+        selectConversations(
+            c,
+            SELECT_CONVERSATIONS + " WHERE user_id = ? AND conversation_id = ?",
+            userId,
+            conversationId);
+    if (list.isEmpty()) {
+      throw new SQLException("conversation " + conversationId + " missing after insert");
+    }
+    return list.getFirst();
+  }
+
+  /** Finds or creates the user's notes. */
+  public Conversation openNotes(Uuid userId) throws SQLException {
+    Uuid conversationId = conversations.openNotes(userId);
+    try (Connection c = db.getConnection()) {
+      Sql.update(
+          c,
+          "INSERT IGNORE INTO user_conversation (user_id, conversation_id, kind, member_count,"
+              + " member, last_seq, read_seq, peer_read_seq, updated_at) VALUES (?, ?, ?, 1, TRUE,"
+              + " 0, 0, 0, ?)",
+          userId,
+          conversationId,
+          Kinds.NOTES,
+          Timestamps.now());
+      return listed(c, userId, conversationId);
     }
   }
 
@@ -211,10 +233,7 @@ public final class DeviceSyncService {
     Conversation.Builder c =
         Conversation.newBuilder()
             .setConversationId(conversationId)
-            .setKind(
-                Kinds.GROUP.equals(rs.getString(14))
-                    ? ConversationKind.CONVERSATION_KIND_GROUP
-                    : ConversationKind.CONVERSATION_KIND_DIRECT)
+            .setKind(Kinds.contract(rs.getString(14)))
             .setLastSeq(lastSeq)
             .setReadSeq(rs.getLong(10))
             .setPeerReadSeq(rs.getLong(11))

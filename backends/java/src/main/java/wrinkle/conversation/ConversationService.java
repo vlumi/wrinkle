@@ -96,6 +96,19 @@ public final class ConversationService {
    * is missing gets it here.
    */
   public Uuid open(Uuid userA, Uuid userB) throws SQLException {
+    return open(Kinds.DIRECT, userA, userB);
+  }
+
+  /**
+   * Finds or creates the user's notes: the pair of the user with themselves, decided by the pair
+   * row as a direct conversation is.
+   */
+  public Uuid openNotes(Uuid userId) throws SQLException {
+    return open(Kinds.NOTES, userId, userId);
+  }
+
+  private Uuid open(String kind, Uuid userA, Uuid userB) throws SQLException {
+    List<Uuid> members = userA.equals(userB) ? List.of(userA) : List.of(userA, userB);
     try (Connection c = db.getConnection()) {
       Uuid conversationId = pair(c, userA, userB);
       if (conversationId == null) {
@@ -125,19 +138,18 @@ public final class ConversationService {
           "INSERT IGNORE INTO conversation (conversation_id, kind, topic, members, last_seq,"
               + " created_at) VALUES (?, ?, '', ?, 0, ?)",
           conversationId,
-          Kinds.DIRECT,
-          Uuid.join(List.of(userA, userB)),
+          kind,
+          Uuid.join(members),
           now);
-      Sql.update(
-          c,
-          "INSERT IGNORE INTO conversation_member (conversation_id, user_id, admin, joined_seq,"
-              + " left_seq, joined_at) VALUES (?, ?, FALSE, 1, NULL, ?), (?, ?, FALSE, 1, NULL, ?)",
-          conversationId,
-          userA,
-          now,
-          conversationId,
-          userB,
-          now);
+      for (Uuid member : members) {
+        Sql.update(
+            c,
+            "INSERT IGNORE INTO conversation_member (conversation_id, user_id, admin, joined_seq,"
+                + " left_seq, joined_at) VALUES (?, ?, FALSE, 1, NULL, ?)",
+            conversationId,
+            member,
+            now);
+      }
       return conversationId;
     }
   }

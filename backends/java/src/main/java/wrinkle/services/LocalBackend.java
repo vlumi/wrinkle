@@ -35,6 +35,7 @@ import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
 import wrinkle.v1.MoveStickerResponse;
 import wrinkle.v1.OpenConversationResponse;
+import wrinkle.v1.OpenNotesResponse;
 import wrinkle.v1.PublishKeysResponse;
 import wrinkle.v1.RegisterPushTokenResponse;
 import wrinkle.v1.RegisterResponse;
@@ -165,6 +166,9 @@ public final class LocalBackend implements Backend {
           resp.setOpenConversation(
               OpenConversationResponse.newBuilder()
                   .setConversation(users.open(userId, req.getOpenConversation().getPeerName())));
+      case OPEN_NOTES ->
+          resp.setOpenNotes(
+              OpenNotesResponse.newBuilder().setConversation(users.openNotes(userId)));
       case CREATE_GROUP ->
           resp.setCreateGroup(
               CreateGroupResponse.newBuilder()
