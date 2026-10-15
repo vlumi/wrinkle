@@ -44,12 +44,12 @@ public record Config(
 
   public static Config parse(String[] args) {
     String roles = env("WRINKLE_ROLES", "gateway,fanout");
-    String listen = env("WRINKLE_LISTEN", ":8080");
+    String listen = env("WRINKLE_LISTEN", "127.0.0.1:8080");
     String mysql = env("WRINKLE_MYSQL", "127.0.0.1:15003");
     String kafka = env("WRINKLE_KAFKA", "localhost:19092");
     String valkey = env("WRINKLE_VALKEY", "localhost:6379");
     String services = env("WRINKLE_SERVICES", "");
-    String servicesListen = env("WRINKLE_SERVICES_LISTEN", ":9000");
+    String servicesListen = env("WRINKLE_SERVICES_LISTEN", "127.0.0.1:9000");
     String node = env("WRINKLE_NODE", hostname());
     String dbConns = env("WRINKLE_DB_CONNS", "64");
     // The local object storage's credentials; fine to commit.

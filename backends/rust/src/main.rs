@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    let listen = listen_address(&env("WRINKLE_LISTEN", ":8080"));
+    let listen = listen_address(&env("WRINKLE_LISTEN", "127.0.0.1:8080"));
     let services = env("WRINKLE_SERVICES", "localhost:9000");
     let valkey = env("WRINKLE_VALKEY", "localhost:6379");
     let node = env("WRINKLE_NODE", &hostname());

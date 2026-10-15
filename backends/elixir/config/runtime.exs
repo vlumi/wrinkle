@@ -4,7 +4,7 @@ import Config
 # to a services process and needs no database.
 
 # WRINKLE_LISTEN is host:port; an empty host means every interface.
-listen = System.get_env("WRINKLE_LISTEN", ":8080")
+listen = System.get_env("WRINKLE_LISTEN", "127.0.0.1:8080")
 
 {host, port} =
   case Regex.run(~r/^\[?([^\[\]]*)\]?:(\d+)$/, listen) do
