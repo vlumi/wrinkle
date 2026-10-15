@@ -257,8 +257,10 @@ LABEL_java-gw := java-gateway
 LABEL_elixir-gw := elixir
 LABEL_rust-gw := rust
 
-# One make invocation is one session: every shape's file carries the date it started.
-RESULTS_DATE := $(shell date +%Y-%m-%d)
+# One make invocation is one session: every shape's file carries the date it
+# started. RESULTS_DATE, from the environment too, continues an earlier session.
+RESULTS_DATE ?= $(shell date +%Y-%m-%d)
+RESULTS_DATE := $(RESULTS_DATE)
 
 $(SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
 	FRESH=1 LABEL=$(LABEL_$*) loadgen/protocol.sh docs/results/$(RESULTS_DATE)-$(LABEL_$*).jsonl $(SHAPE_$*)
