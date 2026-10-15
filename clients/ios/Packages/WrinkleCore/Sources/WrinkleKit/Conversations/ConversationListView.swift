@@ -53,7 +53,8 @@ struct ConversationListView: View {
                     }
                 }
                 Section {
-                    ForEach(conversations) { c in
+                    PinnedNotesRow(notes: notes) { path = [$0] }
+                    ForEach(conversations.filter { !$0.isNotes }) { c in
                         NavigationLink(value: c.id) {
                             ConversationRow(conversation: c)
                         }
@@ -175,6 +176,8 @@ struct ConversationListView: View {
                 .prefix(3))
     }
 
+    private var notes: StoredConversation? { conversations.first(where: \.isNotes) }
+
     private var totalUnread: Int64 { conversations.reduce(0) { $0 + $1.unread } }
 
     private func open() {
@@ -187,7 +190,12 @@ struct ConversationListView: View {
                 error = nil
                 path = [id]
             } catch {
-                self.error = errorText(error, [.notFound: "No one by that name."])
+                self.error = errorText(
+                    error,
+                    [
+                        .notFound: "No one by that name.",
+                        .invalidArgument: "Write to yourself in Notes.",
+                    ])
             }
         }
     }

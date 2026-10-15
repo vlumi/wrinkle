@@ -79,7 +79,7 @@ struct GroupAvatar: View {
     }
 }
 
-/// A conversation's picture: the group's, or the peer's.
+/// A conversation's picture: the group's, the notes', or the peer's.
 struct ConversationAvatar: View {
     let conversation: StoredConversation
     var size: CGFloat = 40
@@ -87,6 +87,8 @@ struct ConversationAvatar: View {
     var body: some View {
         if conversation.isGroup {
             GroupAvatar(size: size)
+        } else if conversation.isNotes {
+            NotesAvatar(size: size)
         } else {
             Avatar(peerOf: conversation, size: size)
         }

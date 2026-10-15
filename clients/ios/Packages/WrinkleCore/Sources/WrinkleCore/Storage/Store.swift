@@ -3,7 +3,7 @@ import SwiftData
 
 /// A conversation as the device last saw it. Ids are the lowercase hex of the 16-byte ids.
 /// The peer fields are for direct conversations; topic, member count and the member and admin
-/// flags for groups.
+/// flags for groups. The user's notes have neither.
 @Model
 public final class StoredConversation {
     @Attribute(.unique) public var id: IDHex
@@ -61,8 +61,8 @@ public final class StoredConversation {
     /// A group the user left or was removed from: its history stays, read-only.
     public var isFormer: Bool { isGroup && !member }
 
-    /// The name shown for the conversation: the topic of a group, else the peer's name.
-    public var title: String { isGroup ? topic : peerDisplayName }
+    /// The name shown for the conversation: the topic of a group, "Notes", else the peer's name.
+    public var title: String { isGroup ? topic : isNotes ? Self.notesTitle : peerDisplayName }
 
     public var unread: Int64 { max(0, lastSeq - readSeq) }
 
@@ -70,9 +70,10 @@ public final class StoredConversation {
     public var peerDisplayName: String { UserDisplay.name(peerName, deleted: peerDeleted) }
 
     public func apply(_ c: Wrinkle_V1_Conversation) {
-        if c.kind == .group {
-            kind = Wrinkle_V1_ConversationKind.group.rawValue
-        } else {
+        switch c.kind {
+        case .group, .notes:
+            kind = c.kind.rawValue
+        default:
             peerID = c.peer.userID.hex
             showPeer(c.peer)
         }

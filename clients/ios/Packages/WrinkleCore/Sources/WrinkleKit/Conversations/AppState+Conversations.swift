@@ -48,9 +48,12 @@ extension AppState {
         store.save()
     }
 
-    /// Who seals for the conversation: the peer of a direct one, or a group's members.
+    /// Who seals for the conversation: the peer of a direct one, a group's members, or the
+    /// user alone in their notes.
     func members(of c: StoredConversation) throws -> KeyManager.Members {
-        c.isGroup ? .group : .direct(peer: try wireID(c.peerID))
+        if c.isGroup { return .group }
+        if c.isNotes { return .notes }
+        return .direct(peer: try wireID(c.peerID))
     }
 
     /// Deletes one of the user's own messages for everyone; the event that follows changes

@@ -43,7 +43,7 @@ struct ConversationRow: View {
     }
 
     /// The latest message: a notice as its sentence; a text after its sender's name in a
-    /// group, or "You" for the user's own.
+    /// group, or "You" for the user's own outside their notes.
     private var preview: String? {
         let c = conversation
         let sender = c.lastSenderID ?? ""
@@ -51,6 +51,7 @@ struct ConversationRow: View {
             return app.sentence(notice, sender: sender, in: c.id)
         }
         guard let text = c.lastText else { return nil }
+        if c.isNotes { return text }
         if sender == app.myUserID { return "You: " + text }
         if c.isGroup, let name = app.name(of: sender, in: c.id) { return "\(name): \(text)" }
         return text

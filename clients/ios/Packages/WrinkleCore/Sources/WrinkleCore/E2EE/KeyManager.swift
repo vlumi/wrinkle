@@ -17,12 +17,6 @@ public actor KeyManager {
     private var seen: [Data: [UInt64: Data]] = [:]
     private var rosters: [Data: Roster] = [:]
 
-    /// Who is in a conversation: the user and a peer, or a group's members.
-    public enum Members: Sendable {
-        case direct(peer: Data)
-        case group
-    }
-
     public struct Recipient: Hashable, Sendable {
         public let userID: Data
         public let deviceID: UInt64
@@ -231,6 +225,8 @@ public actor KeyManager {
         switch members {
         case .direct(let peer):
             users = [userID, peer]
+        case .notes:
+            users = [userID]
         case .group:
             users = try await connection.getMembers(conversationID: conversationID)
                 .map(\.user.userID)
@@ -312,6 +308,14 @@ public actor KeyManager {
 }
 
 extension KeyManager {
+    /// Who is in a conversation: the user and a peer, a group's members, or the user alone in
+    /// their notes.
+    public enum Members: Sendable {
+        case direct(peer: Data)
+        case group
+        case notes
+    }
+
     /// Seals the text and sends it; see send(content:).
     public func send(
         _ text: String, to conversationID: Data, members: Members, clientMessageID: String,

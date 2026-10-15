@@ -34,8 +34,8 @@ struct ConversationView: View {
 
     private var conversation: StoredConversation? { conversations.first }
     private var isGroup: Bool { conversation?.isGroup ?? false }
-    /// The peer of a direct conversation; nil for a group.
-    private var peer: Wrinkle_V1_User? { conversation.flatMap { $0.isGroup ? nil : $0.peer } }
+    /// The peer of a direct conversation; nil for a group and the notes.
+    private var peer: Wrinkle_V1_User? { conversation.flatMap { $0.isDirect ? $0.peer : nil } }
     private var peerBlocked: Bool { peer.map { app.contacts.isBlocked($0.userID.hex) } ?? false }
     /// What a refused send means here.
     private var refusal: String {
@@ -107,7 +107,7 @@ struct ConversationView: View {
             ToolbarItem(placement: .principal) {
                 if let conversation { header(conversation) }
             }
-            if let conversation {
+            if let conversation, !conversation.isNotes {
                 ToolbarItem(placement: Toolbar.trailing) {
                     if let peer {
                         Menu {
@@ -119,9 +119,9 @@ struct ConversationView: View {
                             Image(systemName: "info.circle")
                         }
                         .accessibilityLabel("Contact")
-                    } else {
+                    } else if conversation.isGroup {
                         Button {
-                            showInfo = conversation.isGroup
+                            showInfo = true
                         } label: {
                             Image(systemName: "info.circle")
                         }
@@ -267,7 +267,7 @@ struct ConversationView: View {
 extension ConversationView {
     /// The other people in the conversation.
     private var contacts: [Wrinkle_V1_User] {
-        guard let c = conversation else { return [] }
+        guard let c = conversation, !c.isNotes else { return [] }
         guard c.isGroup else { return [c.peer] }
         return members.filter { $0.current && $0.userID != app.myUserID }.map(\.user)
     }
@@ -292,9 +292,9 @@ extension ConversationView {
     }
 
     /// Direct: "read" once the peer has read it. Groups: "Read by n" on the user's latest
-    /// message, n counting the other current members who have read it.
+    /// message, n counting the other current members who have read it. Notes: none.
     private func receipt(_ m: StoredMessage) -> String? {
-        guard let c = conversation else { return nil }
+        guard let c = conversation, !c.isNotes else { return nil }
         guard c.isGroup else { return c.peerReadSeq >= m.seq ? "read" : nil }
         let latest = messages.last { $0.senderID == app.myUserID && $0.notice == nil }
         guard latest?.seq == m.seq else { return nil }
