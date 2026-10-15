@@ -9,6 +9,8 @@ import { GroupAvatar } from "../groups/GroupAvatar";
 import { isGroup } from "../groups/model";
 import type { Users } from "../groups/model";
 import { NewGroup } from "../groups/NewGroup";
+import { isNotes, NOTES, notesOf } from "../notes/model";
+import { NotesAvatar } from "../notes/NotesAvatar";
 import { useSession } from "../session/session";
 import { byActivity, isDeleted, isHidden, isUndecryptable, key, preview, unread } from "./model";
 import type { Texts } from "./model";
@@ -20,9 +22,13 @@ export function ConversationList() {
   const users = useSession((s) => s.users);
   const texts = useSession((s) => s.texts);
   const show = useSession((s) => s.show);
+  const openNotes = useSession((s) => s.openNotes);
   const contacts = useSession((s) => s.contacts);
   const blocked = useMemo(() => blockedIds(contacts), [contacts]);
   const [creating, setCreating] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
+  const notes = notesOf(conversations);
+  const others = byActivity(conversations).filter((c) => !isNotes(c));
 
   return (
     <section className="list" aria-label="Conversations">
@@ -35,7 +41,38 @@ export function ConversationList() {
         </button>
       )}
       <ul data-testid="conversations">
-        {byActivity(conversations).map((c) => {
+        {/* The notes stay at the top, even before the backend has them. */}
+        <li key="notes">
+          {notes ? (
+            <ConversationRow
+              conversation={notes}
+              me={me?.userId}
+              users={users}
+              texts={texts}
+              blocked={blocked}
+              current={key(notes.conversationId) === current}
+              onClick={() => show(key(notes.conversationId))}
+            />
+          ) : (
+            <button
+              className="row notes"
+              data-testid="row"
+              onClick={() =>
+                openNotes()
+                  .then(() => setNotesError(null))
+                  .catch((err: unknown) => setNotesError(errorText(err)))
+              }
+            >
+              <NotesAvatar />
+              <span className="peer">
+                <span className="name">{NOTES}</span>
+              </span>
+              <span className="last">No notes yet</span>
+            </button>
+          )}
+          {notesError && <p className="error">{notesError}</p>}
+        </li>
+        {others.map((c) => {
           const id = key(c.conversationId);
           return (
             <li key={id}>
@@ -52,9 +89,7 @@ export function ConversationList() {
           );
         })}
       </ul>
-      {Object.keys(conversations).length === 0 && (
-        <p className="hint">No conversations yet. Start one above with another user's name.</p>
-      )}
+      {others.length === 0 && <p className="hint">No conversations yet. Start one above with another user's name.</p>}
     </section>
   );
 }
@@ -134,11 +169,16 @@ function ConversationRow({
 }) {
   const n = unread(c);
   const group = isGroup(c);
+  const notes = isNotes(c);
   return (
-    <button className={current ? "row current" : "row"} onClick={onClick} data-testid="row">
-      {group ? <GroupAvatar /> : <Avatar user={c.peer} />}
+    <button
+      className={["row", notes && "notes", current && "current"].filter(Boolean).join(" ")}
+      onClick={onClick}
+      data-testid="row"
+    >
+      {notes ? <NotesAvatar /> : group ? <GroupAvatar /> : <Avatar user={c.peer} />}
       <span className="peer">
-        <span className="name">{group ? c.topic : displayName(c.peer)}</span>
+        <span className="name">{notes ? NOTES : group ? c.topic : displayName(c.peer)}</span>
         {n > 0n && (
           <span className="unread" data-testid="unread">
             {n.toString()}

@@ -1203,7 +1203,8 @@ button:disabled {
 
 /* Groups */
 
-.avatar.group {
+.avatar.group,
+.avatar.notes {
   color: var(--on-accent);
   background: var(--accent);
 }

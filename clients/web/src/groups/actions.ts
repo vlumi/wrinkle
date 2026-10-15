@@ -3,6 +3,7 @@
 
 import { key, upsertConversation, withMembers } from "../conversations/model";
 import { hex, sameId } from "../ids";
+import { isNotes } from "../notes/model";
 import type { Api } from "../session/api";
 import type { Session } from "../session/session";
 import { isGroup } from "./model";
@@ -36,12 +37,13 @@ export function groupActions({ set, get, link, fail, current }: Api) {
     refreshMembers(conversationId).catch(fail);
   }
 
-  /** The conversation's current members, for the key epochs. */
+  /** The conversation's current members, for the key epochs: the user alone in the notes. */
   async function membersOf(conversationId: Uint8Array, fresh: boolean): Promise<Uint8Array[]> {
     const id = key(conversationId);
     const c = get().conversations[id];
     const me = get().me;
     if (!c || !me) throw new Error("unknown conversation");
+    if (isNotes(c)) return [me.userId];
     if (!isGroup(c)) return c.peer ? [me.userId, c.peer.userId] : [me.userId];
     if (fresh || !get().members[id]) await refreshMembers(id);
     return (get().members[id] ?? []).flatMap((m) => (m.user ? [m.user.userId] : []));

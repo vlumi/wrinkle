@@ -21,6 +21,7 @@ import { deleteStore, storeName } from "../e2ee/store";
 import type { Verified } from "../e2ee/verified";
 import type { ContactState, Device, User } from "../gen/wrinkle/v1/model_pb";
 import { groupActions } from "../groups/actions";
+import { notesActions } from "../notes/actions";
 import { reactionActions } from "../reactions/actions";
 import { stickerActions } from "../stickers/actions";
 import type { Api } from "./api";
@@ -84,6 +85,8 @@ export interface Session extends Data {
   signOutDevice: (deviceId: bigint) => Promise<void>;
   deleteAccount: (password: string) => Promise<void>;
   openConversation: (peerName: string) => Promise<void>;
+  /** Shows the user's notes, made on the backend the first time. */
+  openNotes: () => Promise<void>;
   /** Creates a group and shows it; the same clientGroupId on a retry returns the group created first. */
   createGroup: (topic: string, memberNames: string[], clientGroupId: string) => Promise<void>;
   /** Lists the current group's members again. */
@@ -209,6 +212,7 @@ export const useSession = create<Session>((set, get) => {
     ...accountActions(api).actions,
     ...deviceActions(api).actions,
     ...conversations.actions,
+    ...notesActions(api, open).actions,
     ...groups.actions,
     ...contacts.actions,
     ...send.actions,

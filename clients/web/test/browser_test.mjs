@@ -1,8 +1,8 @@
 // Drives the web client in headless Chrome over the DevTools protocol:
 // two users register in two pages, send a message each way, see a read
-// receipt, a deleted message, matching safety numbers, a rename and a
-// picture, sign a second device in, share the history with it and sign it
-// out from the first, delete an account, reload, become contacts from the
+// receipt, matching safety numbers, a deleted message, a note to oneself, a
+// rename and a picture, sign a second device in, share the history with it
+// and sign it out from the first, delete an account, reload, become contacts from the
 // conversation's banner, block and unblock, sign out and in again; then
 // three users become contacts from the contacts screen and make a group:
 // members picked and added, messages, a topic change, read counts and a
@@ -275,7 +275,7 @@ await bob.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.textContent.includes("hello bob") && r.querySelector('[data-testid="unread"]')?.textContent === "1")`,
 );
 check(true, "bob's list shows the conversation with 1 unread");
-await bob.eval(click(".row"));
+await bob.eval(click(".row:not(.notes)"));
 await bob.waitFor(`${qa("message")}.some(li => li.textContent.startsWith("hello bob"))`);
 check(await bob.eval(visible(".list")), "on a desktop, the list stays beside the conversation");
 await bob.waitFor(`!${q("unread")}`);
@@ -394,8 +394,36 @@ await alice.eval(click(".back"));
 await alice.waitFor(visible(".list"));
 check(await alice.eval(`!${q("peer-name")}`), "the back button returns to the list");
 check(
-  await alice.eval(`document.querySelector(".row .last").textContent === "Message removed"`),
+  await alice.eval(`document.querySelector(".row:not(.notes) .last").textContent === "Message removed"`),
   "alice's list previews the removed message",
+);
+
+// Alice's notes are pinned at the top before she has any; opening them makes
+// them, and a note is sent and shown like any message, without a receipt.
+const notesRow = `document.querySelector(".row.notes")`;
+check(
+  await alice.eval(
+    `${notesRow} === document.querySelector(".row") && ${notesRow}.querySelector(".last").textContent === "No notes yet"`,
+  ),
+  "the notes are pinned at the top of the list before they exist",
+);
+await alice.eval(click(".row.notes"));
+await alice.waitFor(`${text("notes-title")} === "Notes"`);
+check(
+  await alice.eval(`!${q("verify")} && !${q("peer-menu")} && !${q("contact-banner")}`),
+  "the notes show no verify, contact actions or banner",
+);
+await fill(alice, "text", "buy milk");
+await alice.waitFor(
+  `${qa("message")}.some(li => li.classList.contains("mine") && li.textContent.startsWith("buy milk"))`,
+);
+await alice.eval(click(".back"));
+await alice.waitFor(`${notesRow}?.querySelector(".last").textContent === "buy milk"`);
+check(
+  await alice.eval(
+    `document.querySelectorAll(".row.notes").length === 1 && ${notesRow} === document.querySelector(".row")`,
+  ),
+  "alice wrote a note; the notes stay pinned, once, with the note as the preview",
 );
 
 // Bob renames himself and picks an icon; Alice sees both.
@@ -411,7 +439,7 @@ await alice.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(robertName)} && r.querySelector(".avatar").textContent === "🦊")`,
 );
 check(true, "alice's list shows bob's new name and icon");
-await alice.eval(click(".row"));
+await alice.eval(click(".row:not(.notes)"));
 await alice.waitFor(`${text("peer-name")} === ${JSON.stringify(robertName)}`);
 check(true, "the conversation header shows the new name");
 
@@ -467,7 +495,7 @@ await phone.waitFor(`${text("status")} === "online"`);
 // until it does, the phone cannot read the earlier messages.
 await bob.waitFor(`${text("share-prompt")}?.includes("signed in. Share your message history with it?")`);
 check(true, "bob's first device asks whether to share the history with the new one");
-await phone.eval(click(".row"));
+await phone.eval(click(".row:not(.notes)"));
 await phone.waitFor(
   `${qa("message")}.filter(li => li.classList.contains("undecryptable") && li.querySelector(".text").textContent === "Can't decrypt this message").length === 2`,
 );
@@ -476,7 +504,7 @@ await bob.eval(click('[data-testid="share-history"]'));
 await bob.waitFor(`${text("security-notice")}?.startsWith("Your message history was shared with")`);
 await phone.eval(click(".back"));
 await phone.waitFor(visible(".list"));
-await phone.eval(click(".row"));
+await phone.eval(click(".row:not(.notes)"));
 await phone.waitFor(
   `${qa("message")}.some(li => li.querySelector(".text").textContent === "hello bob") && ${qa("message")}.some(li => li.querySelector(".text").textContent === "hi alice")`,
 );
@@ -538,7 +566,7 @@ check(true, "the deleted account's name can be registered again");
 await alice.send("Page.reload");
 await sleep(1500);
 await alice.waitFor(`${text("status")} === "online"`);
-await alice.eval(click(".row"));
+await alice.eval(click(".row:not(.notes)"));
 await alice.waitFor(
   `${qa("message")}.length === 4 && ${qa("message")}.some(li => li.querySelector(".text").textContent === "hello bob")`,
 );
@@ -707,7 +735,7 @@ await hank.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(topic)} && r.querySelector('[data-testid="group-avatar"]') && r.querySelector(".last").textContent === ${JSON.stringify(`${ginaName} created the group “${topic}” with you`)})`,
 );
 check(true, "hank's list shows the group by its topic, a group avatar and the notice");
-await hank.eval(click(".row"));
+await hank.eval(click(".row:not(.notes)"));
 await hank.waitFor(`${text("topic")} === ${JSON.stringify(topic)}`);
 
 // Hank, not an admin, adds Ivy from the group's info.
@@ -737,7 +765,7 @@ check(true, "hank added ivy; gina sees the notice and three members");
 await ivy.waitFor(
   `[...document.querySelectorAll(".row")].some(r => r.querySelector(".peer .name").textContent === ${JSON.stringify(topic)})`,
 );
-await ivy.eval(click(".row"));
+await ivy.eval(click(".row:not(.notes)"));
 await ivy.waitFor(has("notice", `${hankName} added you`));
 // The history check settles once the first page is loaded.
 await ivy.waitFor(`${qa("notice")}.length === 1 && !document.querySelector(".earlier")`);
@@ -923,7 +951,7 @@ await hank.waitFor(`${text("status")} === "online"`);
 await hank.eval(click('[data-testid="open-settings"]'));
 await hank.waitFor(`${paletteOrder} === ${JSON.stringify(hankSticker)}`);
 await hank.eval(click('[data-testid="close-settings"]'));
-await hank.eval(click(".row"));
+await hank.eval(click(".row:not(.notes)"));
 await hank.waitFor(
   stickerShown(ginaSticker, 512) +
     ` && !!${stickerMessage(ginaSticker)}?.querySelector('[data-testid="save-sticker"]')`,

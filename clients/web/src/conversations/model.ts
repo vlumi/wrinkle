@@ -22,6 +22,7 @@ import {
 } from "../groups/model";
 import type { Users } from "../groups/model";
 import { hex, sameId } from "../ids";
+import { isNotes } from "../notes/model";
 import { withListed, withoutMessage, withReaction } from "../reactions/model";
 import type { Reactions } from "../reactions/model";
 
@@ -328,7 +329,7 @@ export function isHidden(c: Conversation, blocked: ReadonlySet<string>): boolean
   return !!m && isGroup(c) && !noticeOf(m) && !isDeleted(m) && blocked.has(hex(m.senderUserId));
 }
 
-/** The list's line under a conversation: its latest message, with who sent it. */
+/** The list's line under a conversation: its latest message, with who sent it; in the notes, always the user. */
 export function preview(
   c: Conversation,
   me: Uint8Array | undefined,
@@ -343,7 +344,7 @@ export function preview(
   if (isDeleted(m)) return REMOVED;
   if (isHidden(c, blocked)) return BLOCKED_MESSAGE;
   const text = textOf(m, texts);
-  if (sameId(m.senderUserId, me)) return `You: ${text}`;
+  if (sameId(m.senderUserId, me)) return isNotes(c) ? text : `You: ${text}`;
   const sender = isGroup(c) ? users[hex(m.senderUserId)] : undefined;
   return sender ? `${displayName(sender)}: ${text}` : text;
 }

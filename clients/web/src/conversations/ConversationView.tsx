@@ -10,6 +10,8 @@ import { GroupAvatar } from "../groups/GroupAvatar";
 import { GroupInfo } from "../groups/GroupInfo";
 import { isFormer, isGroup, noticeOf, noticeText, readBy } from "../groups/model";
 import { hex, sameId } from "../ids";
+import { isNotes, NOTES } from "../notes/model";
+import { NotesAvatar } from "../notes/NotesAvatar";
 import { useSession } from "../session/session";
 import { FingerprintWarning } from "../e2ee/FingerprintWarning";
 import { Verify } from "../e2ee/Verify";
@@ -58,8 +60,11 @@ export function ConversationView({ id }: { id: string }) {
 
   if (!conversation) return null;
   const group = isGroup(conversation);
+  const notes = isNotes(conversation);
+  // With another user: neither a group nor the notes.
+  const direct = !group && !notes;
   if (group && info) return <GroupInfo id={id} onClose={() => setInfo(false)} />;
-  if (!group && verifying && conversation.peer) {
+  if (direct && verifying && conversation.peer) {
     return <Verify user={conversation.peer} onClose={() => setVerifying(false)} />;
   }
   const oldest = messages[0];
@@ -72,7 +77,7 @@ export function ConversationView({ id }: { id: string }) {
 
   /** What the user's own message shows about who read it. */
   function receipt(m: Message): string {
-    if (isDeleted(m)) return "";
+    if (isDeleted(m) || notes) return "";
     if (!group) return conversation.peerReadSeq >= m.seq ? "read" : "";
     if (m !== lastMine) return "";
     const n = readBy(members, me?.userId, m.seq);
@@ -82,7 +87,7 @@ export function ConversationView({ id }: { id: string }) {
   return (
     <section
       className="conversation"
-      aria-label={group ? `Group ${conversation.topic}` : `Conversation with ${peerName}`}
+      aria-label={group ? `Group ${conversation.topic}` : notes ? NOTES : `Conversation with ${peerName}`}
     >
       <header>
         <button className="back" onClick={() => show(null)} aria-label="Back to conversations">
@@ -100,6 +105,11 @@ export function ConversationView({ id }: { id: string }) {
             <button className="info secondary" data-testid="group-info" onClick={() => setInfo(true)}>
               Info
             </button>
+          </>
+        ) : notes ? (
+          <>
+            <NotesAvatar />
+            <h2 data-testid="notes-title">{NOTES}</h2>
           </>
         ) : (
           <>
@@ -127,7 +137,7 @@ export function ConversationView({ id }: { id: string }) {
           </>
         )}
       </header>
-      {!group && menu && conversation.peer && !conversation.peer.deleted && (
+      {direct && menu && conversation.peer && !conversation.peer.deleted && (
         <div className="peer-actions" data-testid="peer-actions">
           <ContactActions user={conversation.peer} onError={(err) => setMenuError(contactError(err))} />
           {menuError && (
@@ -137,18 +147,20 @@ export function ConversationView({ id }: { id: string }) {
           )}
         </div>
       )}
-      {!group && conversation.peer && <ContactBanner peer={conversation.peer} />}
-      <FingerprintWarning
-        users={
-          group
-            ? (members ?? []).flatMap((m) => (m.user ? [m.user] : []))
-            : conversation.peer
-              ? [conversation.peer]
-              : []
-        }
-        me={me?.userId}
-        onVerify={group ? () => setInfo(true) : () => setVerifying(true)}
-      />
+      {direct && conversation.peer && <ContactBanner peer={conversation.peer} />}
+      {!notes && (
+        <FingerprintWarning
+          users={
+            group
+              ? (members ?? []).flatMap((m) => (m.user ? [m.user] : []))
+              : conversation.peer
+                ? [conversation.peer]
+                : []
+          }
+          me={me?.userId}
+          onVerify={group ? () => setInfo(true) : () => setVerifying(true)}
+        />
+      )}
       <ol
         ref={scroller}
         className="messages"
@@ -210,9 +222,9 @@ export function ConversationView({ id }: { id: string }) {
         <p className="hint closed" data-testid="former-member">
           You are no longer in this group
         </p>
-      ) : !group && conversation.peer?.deleted ? (
+      ) : direct && conversation.peer?.deleted ? (
         <p className="hint closed">This account was deleted.</p>
-      ) : !group && conversation.peer && blocked.has(hex(conversation.peer.userId)) ? (
+      ) : direct && conversation.peer && blocked.has(hex(conversation.peer.userId)) ? (
         <BlockedNotice peer={conversation.peer} />
       ) : (
         <Composer
