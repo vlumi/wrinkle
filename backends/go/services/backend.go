@@ -184,6 +184,12 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 			return err
 		}
 		resp.Body = &pb.Response_OpenConversation{OpenConversation: &pb.OpenConversationResponse{Conversation: conv}}
+	case *pb.Request_OpenNotes:
+		conv, err := l.users.OpenNotes(ctx, userID)
+		if err != nil {
+			return err
+		}
+		resp.Body = &pb.Response_OpenNotes{OpenNotes: &pb.OpenNotesResponse{Conversation: conv}}
 	case *pb.Request_CreateGroup:
 		conv, err := l.users.CreateGroup(ctx, userID, r.CreateGroup)
 		if err != nil {

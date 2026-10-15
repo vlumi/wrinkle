@@ -69,6 +69,16 @@ func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments
 // < user_b. The pair row, on user_a's shard, decides between two opening at
 // once; a pair whose conversation row is missing gets it here.
 func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, error) {
+	return s.open(ctx, kindDirect, userA, userB)
+}
+
+// OpenNotes finds or creates the user's notes: the pair of the user with
+// themselves, decided by the pair row as a direct conversation is.
+func (s *Service) OpenNotes(ctx context.Context, userID ids.UUID) (ids.UUID, error) {
+	return s.open(ctx, kindNotes, userID, userID)
+}
+
+func (s *Service) open(ctx context.Context, kind string, userA, userB ids.UUID) (ids.UUID, error) {
 	conversationID, found, err := s.pair(ctx, userA, userB)
 	if err != nil {
 		return conversationID, err
@@ -90,18 +100,23 @@ func (s *Service) Open(ctx context.Context, userA, userB ids.UUID) (ids.UUID, er
 			}
 		}
 	}
+	members := slices.Compact([]ids.UUID{userA, userB})
 	now := vtdb.Now()
 	if _, err := s.db.ExecContext(ctx, `
 		INSERT IGNORE INTO conversation (conversation_id, kind, topic, members, last_seq, created_at)
 		VALUES (?, ?, '', ?, 0, ?)`,
-		conversationID, kindDirect, encodeMembers([]ids.UUID{userA, userB}), now); err != nil {
+		conversationID, kind, encodeMembers(members), now); err != nil {
 		return conversationID, err
 	}
-	_, err = s.db.ExecContext(ctx, `
-		INSERT IGNORE INTO conversation_member (conversation_id, user_id, admin, joined_seq, left_seq, joined_at)
-		VALUES (?, ?, FALSE, 1, NULL, ?), (?, ?, FALSE, 1, NULL, ?)`,
-		conversationID, userA, now, conversationID, userB, now)
-	return conversationID, err
+	for _, id := range members {
+		if _, err := s.db.ExecContext(ctx, `
+			INSERT IGNORE INTO conversation_member (conversation_id, user_id, admin, joined_seq, left_seq, joined_at)
+			VALUES (?, ?, FALSE, 1, NULL, ?)`,
+			conversationID, id, now); err != nil {
+			return conversationID, err
+		}
+	}
+	return conversationID, nil
 }
 
 func (s *Service) pair(ctx context.Context, userA, userB ids.UUID) (ids.UUID, bool, error) {

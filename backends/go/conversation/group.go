@@ -540,6 +540,8 @@ func Kind(kind string) pb.ConversationKind {
 		return pb.ConversationKind_CONVERSATION_KIND_DIRECT
 	case kindGroup:
 		return pb.ConversationKind_CONVERSATION_KIND_GROUP
+	case kindNotes:
+		return pb.ConversationKind_CONVERSATION_KIND_NOTES
 	}
 	return pb.ConversationKind_CONVERSATION_KIND_UNSPECIFIED
 }

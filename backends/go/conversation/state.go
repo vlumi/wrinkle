@@ -24,6 +24,7 @@ import (
 const (
 	kindDirect = "direct"
 	kindGroup  = "group"
+	kindNotes  = "notes"
 )
 
 // state is a conversation's row: what a change checks and fans out to.

@@ -31,7 +31,7 @@ func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*
 		return nil, apierror.NotFound("no user named %q", peerName)
 	}
 	if peerID == userID {
-		return nil, apierror.InvalidArgument("a conversation needs two different users")
+		return nil, apierror.InvalidArgument("your own notes are opened with OpenNotes")
 	}
 	if err := s.contacts.CheckMessaging(ctx, userID, peerID); err != nil {
 		return nil, err
@@ -55,6 +55,22 @@ func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*
 		VALUES (?, ?, 'direct', ?, ?, ?, ?, ?, TRUE, 0, 0, 0, ?)`,
 		userID, conversationID, peerID, peer.GetName(), peer.GetIcon(), vtdb.NullBytes(peer.GetAvatar()), peer.GetDeleted(),
 		vtdb.Now()); err != nil {
+		return nil, err
+	}
+	return s.listed(ctx, userID, conversationID)
+}
+
+// OpenNotes finds or creates the user's notes.
+func (s *Service) OpenNotes(ctx context.Context, userID ids.UUID) (*pb.Conversation, error) {
+	conversationID, err := s.conversations.OpenNotes(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.db.ExecContext(ctx, `
+		INSERT IGNORE INTO user_conversation
+			(user_id, conversation_id, kind, member_count, member, last_seq, read_seq, peer_read_seq, updated_at)
+		VALUES (?, ?, 'notes', 1, TRUE, 0, 0, 0, ?)`,
+		userID, conversationID, vtdb.Now()); err != nil {
 		return nil, err
 	}
 	return s.listed(ctx, userID, conversationID)
