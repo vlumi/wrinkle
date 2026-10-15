@@ -97,3 +97,13 @@ A dated log of how Wrinkle got to where it is: the phases, the questions settled
 **A review round over every implementation.** Go and Java release a message's uploads on any failure after marking them used (the remaining cases are in the roadmap); the Java gateway keeps its connection state as one enum under one lock and leaves WebSocket control frames outside the rate limit, as the other gateways do; the Elixir gateway keeps its connection state in a struct and counts queued pushes exactly, so its 1013 cut is the same 32 queued pushes as everywhere else; the Rust gateway bounds presence writes at 5 s and completes the closing handshake; the infrastructure got health checks for every service and hermetic lint of every HAProxy configuration.
 
 **The Vitess restart, found the hard way.** A Docker Desktop restart restarted the Vitess container, which started an empty database; Debezium's stored offsets pointed into history that no longer existed, both connectors retried forever ("failed to find a PRIMARY tablet for VStream"), and every conformance run failed at the readiness probe with "no event delivered". `make infra-reset` fixed it; detecting the state in `make infra-up` is an idea in the roadmap.
+
+## 2026-10-14
+
+**Contacts and blocking (#10).** Mutual contacts, by a request and its acceptance; groups take only the adder's contacts. A block refuses the blocked user everything one-to-one with a plain permission error, and hides them in shared groups on the blocker's devices. Each user changes only their own side, through their own outbox; the fan-out copies it to the other user's shard, so every check is a primary-key read of one row. Go and Java implement it; both clients manage contacts and blocks, and the load generator befriends a group's members before creating it.
+
+## 2026-10-15
+
+**Notes.** Each user has a conversation of their own, shared among their devices: a third conversation kind with one member, found by the user's pair with themselves, so two devices opening it at once agree. Everything else is a direct conversation's machinery, the keys wrapped for the user's own devices. Go and Java implement it; both clients pin it at the top of the list.
+
+**The open-file limit, found by a failed overnight measurement.** macOS starts shells with a soft limit of 256 open files. Go and the JVM raise their own; the BEAM and the Rust runtime do not, so run from a terminal, the Elixir gateway refused connections past about 200 and its listener restarted again and again, while every run from the agent's shell, with a higher limit, passed. The launcher the Elixir and Rust gateways share now raises the limit, and the protocol refuses to append to a results file from another commit.
