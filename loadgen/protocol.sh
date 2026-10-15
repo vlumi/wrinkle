@@ -18,6 +18,10 @@ REPS=${REPS:-1}
 SERIES=${SERIES:-all}
 LABEL=${LABEL:-$(basename "$1")}
 commit=$(git rev-parse --short HEAD)
+if [ -s "$out" ] && grep -qv "\"commit\":\"$commit\"" "$out"; then
+  echo "$out holds runs from another commit; move it aside first" >&2
+  exit 1
+fi
 
 go build -o bin/loadgen ./loadgen
 if [ "${FRESH:-0}" = 1 ]; then
