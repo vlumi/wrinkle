@@ -723,6 +723,7 @@ impl request::Body {
             Self::RemoveContact(_) => "remove_contact",
             Self::BlockUser(_) => "block_user",
             Self::UnblockUser(_) => "unblock_user",
+            Self::OpenNotes(_) => "open_notes",
         }
     }
 }
