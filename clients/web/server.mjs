@@ -1,8 +1,9 @@
 // Serves the built web client (dist/) to the network, with no dependencies.
 // Usage: node server.mjs [port]; HOST and PORT override the defaults
-// (0.0.0.0:8081). Over HTTPS with the certificate from make certs when there
-// is one, unless WEB_TLS=0; the page then connects to the TLS edge on its own
-// host, port 8443.
+// (0.0.0.0:8081). Over HTTPS with the certificate from make certs, and the
+// page then connects to the TLS edge on its own host, port 8443. Plain HTTP
+// (no certificate, or WEB_TLS=0) only on loopback, so nothing on the network
+// signs in without encryption.
 // /monitor, for requests from this host only, links to the monitoring pages.
 import { createReadStream, existsSync, readFileSync } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -21,6 +22,10 @@ const tls =
     : null;
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.argv[2] ?? process.env.PORT ?? 8081);
+if (!tls && !["127.0.0.1", "::1", "localhost"].includes(host)) {
+  console.error("no certificate in infra/certs: run make tls-up, or serve on loopback (HOST=127.0.0.1)");
+  process.exit(1);
+}
 
 const types = {
   ".html": "text/html; charset=utf-8",

@@ -75,11 +75,11 @@ reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backen
 .PHONY: run-go-mono run-java-mono
 run-go-mono: build-go  ## Go, all roles in one process
 	backends/ports-free.sh 8080
-	WRINKLE_LISTEN=127.0.0.1:8080 $(GO_BACKEND) $(ARGS)
+	$(GO_BACKEND) $(ARGS)
 
 run-java-mono: build-java  ## Java, all roles in one process
 	backends/ports-free.sh 8080
-	WRINKLE_LISTEN=127.0.0.1:8080 $(JAVA_BACKEND) $(ARGS)
+	$(JAVA_BACKEND) $(ARGS)
 
 ##@ Side by side (services instances and gateways behind the balancers)
 ##~ make lb-up, then services instances and gateways in other terminals, in any number and language.
@@ -144,10 +144,10 @@ cluster-logs:  ## Follow the cluster's logs (SERVICE=go-gw for one kind)
 ##@ Clients
 
 .PHONY: web web-dev monitor ios-sim ios-device ios-project
-web: build-web  ## Web client, built and served to the network on :8081
+web: build-web tls-up  ## Web client, built and served to the network over HTTPS on :8081, with the TLS edge
 	$(NPM) run --silent serve
 
-web-dev: web-deps  ## Web client with live reload on :8081, for working on it
+web-dev: web-deps tls-up  ## Web client with live reload over HTTPS on :8081, with the TLS edge, for working on it
 	$(NPM) run dev
 
 monitor:  ## Open the monitoring page, links to every dashboard (on this host, with make web running)
