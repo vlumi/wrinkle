@@ -542,7 +542,8 @@ public nonisolated struct Wrinkle_V1_CreateUploadResponse: Sendable {
 
 /// Finds or creates the direct conversation between the requesting user and
 /// the peer. The peer is found by name, ignoring case; anyone may be messaged,
-/// contact or not. A peer the requesting user blocked fails with
+/// contact or not. The requesting user's own name fails with
+/// ERROR_CODE_INVALID_ARGUMENT: their notes are opened with OpenNotes. A peer the requesting user blocked fails with
 /// ERROR_CODE_FAILED_PRECONDITION; a peer who blocked the requesting user
 /// fails with ERROR_CODE_PERMISSION_DENIED.
 public nonisolated struct Wrinkle_V1_OpenConversationRequest: Sendable {
@@ -558,6 +559,39 @@ public nonisolated struct Wrinkle_V1_OpenConversationRequest: Sendable {
 }
 
 public nonisolated struct Wrinkle_V1_OpenConversationResponse: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var conversation: Wrinkle_V1_Conversation {
+    get {_conversation ?? Wrinkle_V1_Conversation()}
+    set {_conversation = newValue}
+  }
+  /// Returns true if `conversation` has been explicitly set.
+  public var hasConversation: Bool {self._conversation != nil}
+  /// Clears the value of `conversation`. Subsequent reads from it will return its default value.
+  public mutating func clearConversation() {self._conversation = nil}
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+
+  fileprivate var _conversation: Wrinkle_V1_Conversation? = nil
+}
+
+/// Finds or creates the requesting user's notes, a conversation of their own
+/// with no one else in it. Every user has one; it is created on first open.
+public nonisolated struct Wrinkle_V1_OpenNotesRequest: Sendable {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public nonisolated struct Wrinkle_V1_OpenNotesResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2388,6 +2422,59 @@ nonisolated extension Wrinkle_V1_OpenConversationResponse: SwiftProtobuf.Message
   }
 
   public static func ==(lhs: Wrinkle_V1_OpenConversationResponse, rhs: Wrinkle_V1_OpenConversationResponse) -> Bool {
+    if lhs._conversation != rhs._conversation {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_OpenNotesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OpenNotesRequest"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    // Load everything into unknown fields
+    while try decoder.nextFieldNumber() != nil {}
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_OpenNotesRequest, rhs: Wrinkle_V1_OpenNotesRequest) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+nonisolated extension Wrinkle_V1_OpenNotesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".OpenNotesResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversation\0")
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularMessageField(value: &self._conversation) }()
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    // The use of inline closures is to circumvent an issue where the compiler
+    // allocates stack space for every if/case branch local when no optimizations
+    // are enabled. https://github.com/apple/swift-protobuf/issues/1034 and
+    // https://github.com/apple/swift-protobuf/issues/1182
+    try { if let v = self._conversation {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
+    } }()
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: Wrinkle_V1_OpenNotesResponse, rhs: Wrinkle_V1_OpenNotesResponse) -> Bool {
     if lhs._conversation != rhs._conversation {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

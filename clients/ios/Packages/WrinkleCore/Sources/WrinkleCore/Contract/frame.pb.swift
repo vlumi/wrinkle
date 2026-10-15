@@ -568,6 +568,14 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     set {body = .unblockUser(newValue)}
   }
 
+  public var openNotes: Wrinkle_V1_OpenNotesRequest {
+    get {
+      if case .openNotes(let v)? = body {return v}
+      return Wrinkle_V1_OpenNotesRequest()
+    }
+    set {body = .openNotes(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -613,6 +621,7 @@ public nonisolated struct Wrinkle_V1_Request: Sendable {
     case removeContact(Wrinkle_V1_RemoveContactRequest)
     case blockUser(Wrinkle_V1_BlockUserRequest)
     case unblockUser(Wrinkle_V1_UnblockUserRequest)
+    case openNotes(Wrinkle_V1_OpenNotesRequest)
 
   }
 
@@ -978,6 +987,14 @@ public nonisolated struct Wrinkle_V1_Response: @unchecked Sendable {
     set {_uniqueStorage()._body = .unblockUser(newValue)}
   }
 
+  public var openNotes: Wrinkle_V1_OpenNotesResponse {
+    get {
+      if case .openNotes(let v)? = _storage._body {return v}
+      return Wrinkle_V1_OpenNotesResponse()
+    }
+    set {_uniqueStorage()._body = .openNotes(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public nonisolated enum OneOf_Body: Equatable, Sendable {
@@ -1024,6 +1041,7 @@ public nonisolated struct Wrinkle_V1_Response: @unchecked Sendable {
     case removeContact(Wrinkle_V1_RemoveContactResponse)
     case blockUser(Wrinkle_V1_BlockUserResponse)
     case unblockUser(Wrinkle_V1_UnblockUserResponse)
+    case openNotes(Wrinkle_V1_OpenNotesResponse)
 
   }
 
@@ -1228,7 +1246,7 @@ nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._Me
 
 nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Request"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0\u{3}list_contacts\0\u{3}add_contact\0\u{3}remove_contact\0\u{3}block_user\0\u{3}unblock_user\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}id\0\u{2}\u{9}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0\u{3}list_contacts\0\u{3}add_contact\0\u{3}remove_contact\0\u{3}block_user\0\u{3}unblock_user\0\u{3}open_notes\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1783,6 +1801,19 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
           self.body = .unblockUser(v)
         }
       }()
+      case 52: try {
+        var v: Wrinkle_V1_OpenNotesRequest?
+        var hadOneofValue = false
+        if let current = self.body {
+          hadOneofValue = true
+          if case .openNotes(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {
+          if hadOneofValue {try decoder.handleConflictingOneOf()}
+          self.body = .openNotes(v)
+        }
+      }()
       default: break
       }
     }
@@ -1965,6 +1996,10 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
       guard case .unblockUser(let v)? = self.body else { preconditionFailure() }
       try visitor.visitSingularMessageField(value: v, fieldNumber: 51)
     }()
+    case .openNotes?: try {
+      guard case .openNotes(let v)? = self.body else { preconditionFailure() }
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 52)
+    }()
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1980,7 +2015,7 @@ nonisolated extension Wrinkle_V1_Request: SwiftProtobuf.Message, SwiftProtobuf._
 
 nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Response"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0\u{3}list_contacts\0\u{3}add_contact\0\u{3}remove_contact\0\u{3}block_user\0\u{3}unblock_user\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}request_id\0\u{1}error\0\u{2}\u{8}connect\0\u{3}open_conversation\0\u{3}send_message\0\u{3}mark_read\0\u{1}sync\0\u{3}list_conversations\0\u{3}get_messages\0\u{3}register_push_token\0\u{1}register\0\u{3}sign_in\0\u{3}change_password\0\u{3}update_profile\0\u{3}sign_out\0\u{3}list_devices\0\u{3}rename_device\0\u{3}sign_out_device\0\u{3}delete_account\0\u{3}create_upload\0\u{3}create_group\0\u{3}add_members\0\u{3}remove_member\0\u{3}leave_group\0\u{3}set_topic\0\u{3}set_admin\0\u{3}get_members\0\u{3}delete_message\0\u{3}set_device_key\0\u{3}get_device_keys\0\u{3}publish_keys\0\u{3}get_conversation_keys\0\u{3}set_reaction\0\u{3}create_sticker\0\u{3}get_stickers\0\u{3}get_palette\0\u{3}save_sticker\0\u{3}remove_sticker\0\u{3}move_sticker\0\u{3}list_contacts\0\u{3}add_contact\0\u{3}remove_contact\0\u{3}block_user\0\u{3}unblock_user\0\u{3}open_notes\0")
 
   fileprivate class _StorageClass {
     var _requestID: UInt64 = 0
@@ -2575,6 +2610,19 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
             _storage._body = .unblockUser(v)
           }
         }()
+        case 52: try {
+          var v: Wrinkle_V1_OpenNotesResponse?
+          var hadOneofValue = false
+          if let current = _storage._body {
+            hadOneofValue = true
+            if case .openNotes(let m) = current {v = m}
+          }
+          try decoder.decodeSingularMessageField(value: &v)
+          if let v = v {
+            if hadOneofValue {try decoder.handleConflictingOneOf()}
+            _storage._body = .openNotes(v)
+          }
+        }()
         default: break
         }
       }
@@ -2762,6 +2810,10 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
       case .unblockUser?: try {
         guard case .unblockUser(let v)? = _storage._body else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 51)
+      }()
+      case .openNotes?: try {
+        guard case .openNotes(let v)? = _storage._body else { preconditionFailure() }
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 52)
       }()
       case nil: break
       }

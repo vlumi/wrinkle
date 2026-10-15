@@ -170,7 +170,8 @@ enum BlobPurpose {
 
 // Finds or creates the direct conversation between the requesting user and
 // the peer. The peer is found by name, ignoring case; anyone may be messaged,
-// contact or not. A peer the requesting user blocked fails with
+// contact or not. The requesting user's own name fails with
+// ERROR_CODE_INVALID_ARGUMENT: their notes are opened with OpenNotes. A peer the requesting user blocked fails with
 // ERROR_CODE_FAILED_PRECONDITION; a peer who blocked the requesting user
 // fails with ERROR_CODE_PERMISSION_DENIED.
 message OpenConversationRequest {
@@ -178,6 +179,14 @@ message OpenConversationRequest {
 }
 
 message OpenConversationResponse {
+  Conversation conversation = 1;
+}
+
+// Finds or creates the requesting user's notes, a conversation of their own
+// with no one else in it. Every user has one; it is created on first open.
+message OpenNotesRequest {}
+
+message OpenNotesResponse {
   Conversation conversation = 1;
 }
 

@@ -85,13 +85,16 @@ public nonisolated enum Wrinkle_V1_ContactState: SwiftProtobuf.Enum, Swift.CaseI
 }
 
 /// A direct conversation has exactly two participants, for good; a group
-/// has a topic, an admin or more, and members who join and leave. The kind
-/// is fixed when the conversation is created.
+/// has a topic, an admin or more, and members who join and leave; notes
+/// have one member, the user, for good, and are what the user's devices
+/// share among themselves. The kind is fixed when the conversation is
+/// created.
 public nonisolated enum Wrinkle_V1_ConversationKind: SwiftProtobuf.Enum, Swift.CaseIterable {
   public typealias RawValue = Int
   case unspecified // = 0
   case direct // = 1
   case group // = 2
+  case notes // = 3
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -103,6 +106,7 @@ public nonisolated enum Wrinkle_V1_ConversationKind: SwiftProtobuf.Enum, Swift.C
     case 0: self = .unspecified
     case 1: self = .direct
     case 2: self = .group
+    case 3: self = .notes
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -112,6 +116,7 @@ public nonisolated enum Wrinkle_V1_ConversationKind: SwiftProtobuf.Enum, Swift.C
     case .unspecified: return 0
     case .direct: return 1
     case .group: return 2
+    case .notes: return 3
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -121,6 +126,7 @@ public nonisolated enum Wrinkle_V1_ConversationKind: SwiftProtobuf.Enum, Swift.C
     .unspecified,
     .direct,
     .group,
+    .notes,
   ]
 
 }
@@ -635,7 +641,9 @@ public nonisolated struct Wrinkle_V1_Conversation: @unchecked Sendable {
 
   /// Groups: the topic, the number of members, whether the requesting user
   /// is still a member (false once they left or were removed; the
-  /// conversation stays, with the history they had) and an admin.
+  /// conversation stays, with the history they had) and an admin. Notes
+  /// have no topic, one member, and the user always a member and never an
+  /// admin.
   public var topic: String {
     get {_storage._topic}
     set {_uniqueStorage()._topic = newValue}
@@ -703,7 +711,7 @@ nonisolated extension Wrinkle_V1_ContactState: SwiftProtobuf._ProtoNameProviding
 }
 
 nonisolated extension Wrinkle_V1_ConversationKind: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_KIND_UNSPECIFIED\0\u{1}CONVERSATION_KIND_DIRECT\0\u{1}CONVERSATION_KIND_GROUP\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0CONVERSATION_KIND_UNSPECIFIED\0\u{1}CONVERSATION_KIND_DIRECT\0\u{1}CONVERSATION_KIND_GROUP\0\u{1}CONVERSATION_KIND_NOTES\0")
 }
 
 nonisolated extension Wrinkle_V1_User: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {

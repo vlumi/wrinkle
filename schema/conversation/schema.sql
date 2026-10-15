@@ -4,7 +4,7 @@
 
 CREATE TABLE conversation (
   conversation_id BINARY(16) NOT NULL,
-  -- direct or group, fixed at creation.
+  -- direct, group or notes, fixed at creation.
   kind VARCHAR(8) NOT NULL,
   -- Groups only; empty for direct conversations.
   topic VARCHAR(255) NOT NULL DEFAULT '',
@@ -58,7 +58,8 @@ CREATE TABLE conversation_key (
 -- The direct conversation between two users, sharded by user_a, so that
 -- both opening it at once find one: the first insert claims the pair. A
 -- claim whose conversation row is missing (the opener stopped in between)
--- is completed by the next open.
+-- is completed by the next open. A user's notes are the pair of the user
+-- with themselves.
 CREATE TABLE conversation_pair (
   user_a BINARY(16) NOT NULL,
   user_b BINARY(16) NOT NULL,

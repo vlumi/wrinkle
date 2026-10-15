@@ -26,6 +26,7 @@ defmodule Wrinkle.V1.ConversationKind do
   field :CONVERSATION_KIND_UNSPECIFIED, 0
   field :CONVERSATION_KIND_DIRECT, 1
   field :CONVERSATION_KIND_GROUP, 2
+  field :CONVERSATION_KIND_NOTES, 3
 end
 
 defmodule Wrinkle.V1.User do

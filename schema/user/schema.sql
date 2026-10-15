@@ -72,7 +72,7 @@ CREATE TABLE user_event (
 CREATE TABLE user_conversation (
   user_id BINARY(16) NOT NULL,
   conversation_id BINARY(16) NOT NULL,
-  -- direct or group.
+  -- direct, group or notes.
   kind VARCHAR(8) NOT NULL,
   -- Direct conversations: the peer and their profile, updated by their
   -- profile changes. NULL and empty for groups.

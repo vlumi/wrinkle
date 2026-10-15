@@ -87,14 +87,17 @@ func (ContactState) EnumDescriptor() ([]byte, []int) {
 }
 
 // A direct conversation has exactly two participants, for good; a group
-// has a topic, an admin or more, and members who join and leave. The kind
-// is fixed when the conversation is created.
+// has a topic, an admin or more, and members who join and leave; notes
+// have one member, the user, for good, and are what the user's devices
+// share among themselves. The kind is fixed when the conversation is
+// created.
 type ConversationKind int32
 
 const (
 	ConversationKind_CONVERSATION_KIND_UNSPECIFIED ConversationKind = 0
 	ConversationKind_CONVERSATION_KIND_DIRECT      ConversationKind = 1
 	ConversationKind_CONVERSATION_KIND_GROUP       ConversationKind = 2
+	ConversationKind_CONVERSATION_KIND_NOTES       ConversationKind = 3
 )
 
 // Enum value maps for ConversationKind.
@@ -103,11 +106,13 @@ var (
 		0: "CONVERSATION_KIND_UNSPECIFIED",
 		1: "CONVERSATION_KIND_DIRECT",
 		2: "CONVERSATION_KIND_GROUP",
+		3: "CONVERSATION_KIND_NOTES",
 	}
 	ConversationKind_value = map[string]int32{
 		"CONVERSATION_KIND_UNSPECIFIED": 0,
 		"CONVERSATION_KIND_DIRECT":      1,
 		"CONVERSATION_KIND_GROUP":       2,
+		"CONVERSATION_KIND_NOTES":       3,
 	}
 )
 
@@ -1179,7 +1184,9 @@ type Conversation struct {
 	PeerReadSeq uint64 `protobuf:"varint,6,opt,name=peer_read_seq,json=peerReadSeq,proto3" json:"peer_read_seq,omitempty"`
 	// Groups: the topic, the number of members, whether the requesting user
 	// is still a member (false once they left or were removed; the
-	// conversation stays, with the history they had) and an admin.
+	// conversation stays, with the history they had) and an admin. Notes
+	// have no topic, one member, and the user always a member and never an
+	// admin.
 	Topic         string `protobuf:"bytes,8,opt,name=topic,proto3" json:"topic,omitempty"`
 	MemberCount   uint32 `protobuf:"varint,9,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
 	Member        bool   `protobuf:"varint,10,opt,name=member,proto3" json:"member,omitempty"`
@@ -1475,11 +1482,12 @@ const file_wrinkle_v1_model_proto_rawDesc = "" +
 	"\x15CONTACT_STATE_CONTACT\x10\x01\x12\x1a\n" +
 	"\x16CONTACT_STATE_INCOMING\x10\x02\x12\x1a\n" +
 	"\x16CONTACT_STATE_OUTGOING\x10\x03\x12\x19\n" +
-	"\x15CONTACT_STATE_BLOCKED\x10\x04*p\n" +
+	"\x15CONTACT_STATE_BLOCKED\x10\x04*\x8d\x01\n" +
 	"\x10ConversationKind\x12!\n" +
 	"\x1dCONVERSATION_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONVERSATION_KIND_DIRECT\x10\x01\x12\x1b\n" +
-	"\x17CONVERSATION_KIND_GROUP\x10\x02B\x9d\x01\n" +
+	"\x17CONVERSATION_KIND_GROUP\x10\x02\x12\x1b\n" +
+	"\x17CONVERSATION_KIND_NOTES\x10\x03B\x9d\x01\n" +
 	"\x0ecom.wrinkle.v1B\n" +
 	"ModelProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +

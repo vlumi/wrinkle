@@ -114,6 +114,7 @@ message Request {
     RemoveContactRequest remove_contact = 49;
     BlockUserRequest block_user = 50;
     UnblockUserRequest unblock_user = 51;
+    OpenNotesRequest open_notes = 52;
   }
 }
 
@@ -163,6 +164,7 @@ message Response {
     RemoveContactResponse remove_contact = 49;
     BlockUserResponse block_user = 50;
     UnblockUserResponse unblock_user = 51;
+    OpenNotesResponse open_notes = 52;
   }
 }
 

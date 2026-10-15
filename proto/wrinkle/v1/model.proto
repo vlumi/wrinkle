@@ -167,12 +167,15 @@ message AdminChanged {
 }
 
 // A direct conversation has exactly two participants, for good; a group
-// has a topic, an admin or more, and members who join and leave. The kind
-// is fixed when the conversation is created.
+// has a topic, an admin or more, and members who join and leave; notes
+// have one member, the user, for good, and are what the user's devices
+// share among themselves. The kind is fixed when the conversation is
+// created.
 enum ConversationKind {
   CONVERSATION_KIND_UNSPECIFIED = 0;
   CONVERSATION_KIND_DIRECT = 1;
   CONVERSATION_KIND_GROUP = 2;
+  CONVERSATION_KIND_NOTES = 3;
 }
 
 // A conversation as seen by the requesting user.
@@ -192,7 +195,9 @@ message Conversation {
   uint64 peer_read_seq = 6;
   // Groups: the topic, the number of members, whether the requesting user
   // is still a member (false once they left or were removed; the
-  // conversation stays, with the history they had) and an admin.
+  // conversation stays, with the history they had) and an admin. Notes
+  // have no topic, one member, and the user always a member and never an
+  // admin.
   string topic = 8;
   uint32 member_count = 9;
   bool member = 10;

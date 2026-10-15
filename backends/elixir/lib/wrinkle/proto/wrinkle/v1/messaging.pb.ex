@@ -307,6 +307,26 @@ defmodule Wrinkle.V1.OpenConversationResponse do
   field :conversation, 1, type: Wrinkle.V1.Conversation
 end
 
+defmodule Wrinkle.V1.OpenNotesRequest do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.OpenNotesRequest",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+end
+
+defmodule Wrinkle.V1.OpenNotesResponse do
+  @moduledoc false
+
+  use Protobuf,
+    full_name: "wrinkle.v1.OpenNotesResponse",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :conversation, 1, type: Wrinkle.V1.Conversation
+end
+
 defmodule Wrinkle.V1.CreateGroupRequest do
   @moduledoc false
 

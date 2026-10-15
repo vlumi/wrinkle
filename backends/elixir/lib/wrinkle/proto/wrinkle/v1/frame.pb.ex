@@ -174,6 +174,7 @@ defmodule Wrinkle.V1.Request do
 
   field :block_user, 50, type: Wrinkle.V1.BlockUserRequest, json_name: "blockUser", oneof: 0
   field :unblock_user, 51, type: Wrinkle.V1.UnblockUserRequest, json_name: "unblockUser", oneof: 0
+  field :open_notes, 52, type: Wrinkle.V1.OpenNotesRequest, json_name: "openNotes", oneof: 0
 end
 
 defmodule Wrinkle.V1.Response do
@@ -350,6 +351,8 @@ defmodule Wrinkle.V1.Response do
     type: Wrinkle.V1.UnblockUserResponse,
     json_name: "unblockUser",
     oneof: 0
+
+  field :open_notes, 52, type: Wrinkle.V1.OpenNotesResponse, json_name: "openNotes", oneof: 0
 end
 
 defmodule Wrinkle.V1.Error do
