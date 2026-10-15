@@ -71,6 +71,17 @@ func (c *Client) OpenConversation(ctx context.Context, peerName string) (*pb.Con
 	return conv, nil
 }
 
+// OpenNotes finds or creates the user's notes.
+func (c *Client) OpenNotes(ctx context.Context) (*pb.Conversation, error) {
+	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_OpenNotes{OpenNotes: &pb.OpenNotesRequest{}}})
+	if err != nil {
+		return nil, err
+	}
+	conv := resp.GetOpenNotes().GetConversation()
+	c.Keys().learnConversation(conv)
+	return conv, nil
+}
+
 // SendMessage sends sealed content as it is; SendText seals and sends.
 func (c *Client) SendMessage(ctx context.Context, conversationID []byte, clientMessageID string, sealed *pb.Sealed, blobIDs ...[]byte) (*pb.Message, error) {
 	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_SendMessage{

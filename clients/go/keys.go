@@ -55,7 +55,8 @@ type conversationKeys struct {
 	gen      uint64
 	readyGen uint64
 	current  uint32
-	// direct: the two users of a direct conversation, which never change.
+	// direct: the users of a direct conversation or the notes, which never
+	// change.
 	direct [][]byte
 	// members of a group and the gen they were read at.
 	members    [][]byte
@@ -173,14 +174,24 @@ func (k *Keys) SetPeer(conversationID, peerUserID []byte) {
 	k.conv(conversationID).direct = [][]byte{k.UserID, peerUserID}
 }
 
-// learnConversation remembers the users of a direct conversation.
+// learnConversation remembers the users of a direct conversation, or of
+// the user's notes.
 func (k *Keys) learnConversation(conv *pb.Conversation) {
-	if k == nil || conv.GetKind() != pb.ConversationKind_CONVERSATION_KIND_DIRECT || conv.GetPeer() == nil {
+	if k == nil {
+		return
+	}
+	var users [][]byte
+	switch {
+	case conv.GetKind() == pb.ConversationKind_CONVERSATION_KIND_DIRECT && conv.GetPeer() != nil:
+		users = [][]byte{k.UserID, conv.GetPeer().GetUserId()}
+	case conv.GetKind() == pb.ConversationKind_CONVERSATION_KIND_NOTES:
+		users = [][]byte{k.UserID}
+	default:
 		return
 	}
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.conv(conv.GetConversationId()).direct = [][]byte{k.UserID, conv.GetPeer().GetUserId()}
+	k.conv(conv.GetConversationId()).direct = users
 }
 
 // observe keeps the state current with a received event: a member's
@@ -395,7 +406,7 @@ func (k *Keys) deviceKey(ctx context.Context, c *Client, userID []byte, deviceID
 }
 
 // members returns the users of a conversation: the two of a direct one,
-// the current members of a group.
+// the user of their notes, the current members of a group.
 func (k *Keys) members(ctx context.Context, c *Client, conversationID []byte, cs *conversationKeys) ([][]byte, error) {
 	k.mu.Lock()
 	if cs.direct != nil {
@@ -411,14 +422,14 @@ func (k *Keys) members(ctx context.Context, c *Client, conversationID []byte, cs
 
 	list, err := c.GetMembers(ctx, conversationID)
 	if Code(err) == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION {
-		// Not a group: find the peer.
+		// Not a group: find the peer, or the notes.
 		if _, err := c.ListConversations(ctx); err != nil {
 			return nil, err
 		}
 		k.mu.Lock()
 		defer k.mu.Unlock()
 		if cs.direct == nil {
-			return nil, errors.New("direct conversation not in the list")
+			return nil, errors.New("conversation not in the list")
 		}
 		return cs.direct, nil
 	}
