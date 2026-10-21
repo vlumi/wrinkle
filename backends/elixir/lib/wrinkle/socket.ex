@@ -48,7 +48,8 @@ defmodule Wrinkle.Socket do
 
   @type device :: {user_id :: <<_::128>>, device_id :: non_neg_integer()}
   @type task ::
-          {:request, id :: non_neg_integer(), type :: String.t(), started :: integer()} | :ack
+          {:request, id :: non_neg_integer(), type :: String.t(), started :: integer()}
+          | {:ack, pid()}
   @type connect ::
           :none
           | :pending
@@ -145,7 +146,16 @@ defmodule Wrinkle.Socket do
     Presence.delete(user_id, device_id)
     Process.demonitor(state.push, [:flush])
     response = error(id, :ERROR_CODE_UNAVAILABLE, "push channel unavailable")
-    state = restart_deadline(%__MODULE__{state | device: nil, connect: :none, push: nil})
+
+    state =
+      restart_deadline(%__MODULE__{
+        state
+        | device: nil,
+          connect: :none,
+          push: nil,
+          ack: AckWriter.drop(state.ack)
+      })
+
     respond({id, "connect", started}, response, state)
   end
 
@@ -191,6 +201,11 @@ defmodule Wrinkle.Socket do
 
   def handle_info(:drain_deadline, state), do: {:stop, :normal, @shutting_down, state}
 
+  def handle_info(:ack_due, %__MODULE__{} = state) do
+    {action, acks} = AckWriter.due(state.ack, System.monotonic_time(:millisecond))
+    {:ok, write_ack(action, %__MODULE__{state | ack: acks})}
+  end
+
   def handle_info(_other, state), do: {:ok, state}
 
   @impl true
@@ -202,6 +217,7 @@ defmodule Wrinkle.Socket do
     with {user_id, device_id} <- state.device do
       Push.detach()
       Presence.delete(user_id, device_id)
+      final_ack(state)
     end
 
     :ok
@@ -251,7 +267,8 @@ defmodule Wrinkle.Socket do
   end
 
   defp inbound({:ack, ack}, :ok, %__MODULE__{device: {_, _}} = state) do
-    {action, acks} = AckWriter.ack(state.ack, ack.cursor)
+    now = System.monotonic_time(:millisecond)
+    {action, acks} = AckWriter.ack(state.ack, ack.cursor, now, ack_interval())
     {:ok, write_ack(action, %__MODULE__{state | ack: acks})}
   end
 
@@ -291,8 +308,8 @@ defmodule Wrinkle.Socket do
     respond({id, type, started}, response, after_request(type, state))
   end
 
-  defp finished(:ack, result, state) do
-    with {:error, reason} <- result, do: Logger.warning("ack failed: #{inspect(reason)}")
+  defp finished({:ack, _}, result, state) do
+    log_ack(result)
     ack_done(state)
   end
 
@@ -302,7 +319,7 @@ defmodule Wrinkle.Socket do
     respond({id, type, started}, response, after_request(type, state))
   end
 
-  defp crashed(:ack, state), do: ack_done(state)
+  defp crashed({:ack, _}, state), do: ack_done(state)
 
   # A Connect that failed may be retried. Hashing a password may have taken
   # a while, so a Register or SignIn answered gives Connect a fresh deadline.
@@ -332,20 +349,52 @@ defmodule Wrinkle.Socket do
   end
 
   defp ack_done(%__MODULE__{} = state) do
-    {action, ack} = AckWriter.done(state.ack)
+    now = System.monotonic_time(:millisecond)
+    {action, ack} = AckWriter.done(state.ack, now, ack_interval())
     {:ok, write_ack(action, %__MODULE__{state | ack: ack})}
   end
 
   defp write_ack(:none, state), do: state
 
+  defp write_ack({:schedule, delay}, state) do
+    Process.send_after(self(), :ack_due, delay)
+    state
+  end
+
   defp write_ack({:write, cursor}, %__MODULE__{device: {user_id, device_id}} = state) do
     task =
-      Task.Supervisor.async_nolink(Wrinkle.Tasks, fn ->
+      Task.Supervisor.async_nolink(Wrinkle.AckWrites, fn ->
         Backend.ack(user_id, device_id, cursor)
       end)
 
-    %__MODULE__{state | tasks: Map.put(state.tasks, task.ref, :ack)}
+    %__MODULE__{state | tasks: Map.put(state.tasks, task.ref, {:ack, task.pid})}
   end
+
+  # The pending cursor, written by a task that outlives the connection, after
+  # the write in flight; a scheduled write dies with this process.
+  defp final_ack(%__MODULE__{device: device} = state) do
+    case AckWriter.close(state.ack) do
+      {nil, _, _} -> :ok
+      {cursor, false, _} -> final_ack(device, nil, cursor)
+      {cursor, true, _} -> final_ack(device, Enum.find_value(state.tasks, &ack_task/1), cursor)
+    end
+  end
+
+  defp final_ack({user_id, device_id}, in_flight, cursor) do
+    write = fn -> log_ack(Backend.ack(user_id, device_id, cursor)) end
+
+    Task.Supervisor.start_child(Wrinkle.AckWrites, fn ->
+      AckWriter.final_write(in_flight, write)
+    end)
+  end
+
+  defp ack_task({_ref, {:ack, pid}}), do: pid
+  defp ack_task(_), do: nil
+
+  defp log_ack({:error, reason}), do: Logger.warning("ack failed: #{inspect(reason)}")
+  defp log_ack(_), do: :ok
+
+  defp ack_interval, do: Application.get_env(:wrinkle, :ack_interval, 60_000)
 
   defp encode(kind), do: {:binary, Frame.encode(%Frame{kind: kind})}
 

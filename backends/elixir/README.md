@@ -11,7 +11,7 @@ application.ex   the supervision tree, configuration, drain on stop
 router.ex        HTTP: the WebSocket upgrade, /healthz, /metrics, /debug/*
 socket.ex        one connection: frames, limits, request dispatch, pushes, close codes
 token_bucket.ex  the per-connection rate limit, a pure function
-ack_writer.ex    one ack write at a time, coalescing to the highest cursor, a pure function
+ack_writer.ex    acks written at most once per interval, the highest cursor, a pure function
 backend.ex       the RPC client to the services: one HTTP/2 channel, connected in the background
 push.ex          Valkey pub/sub, one channel per user, to the connection processes; who is attached
 presence.ex      the presence hash and this instance's expiring key
@@ -33,6 +33,7 @@ There is one role, the gateway, so there are no role flags. [config/runtime.exs]
 | `WRINKLE_SERVICES` | `localhost:9000` | services RPC address, a services process or the services balancer |
 | `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
 | `WRINKLE_NODE` | the host name | first part of the instance id in presence entries |
+| `WRINKLE_ACK_INTERVAL_MS` | `60000` | the least time between the starts of a connection's ack writes; 0 writes every ack as it comes |
 
 [application.ex](lib/wrinkle/application.ex) creates the ETS metrics table, makes the instance id (`<node>/<16 random hex chars>`, kept in `:persistent_term`), and starts one `:one_for_one` supervisor:
 
@@ -46,13 +47,14 @@ Wrinkle.Supervisor (one_for_one)
 ├── Wrinkle.Backend                 connects the RPC channel, retrying
 ├── Wrinkle.Push                    owns the push:<user id hex> subscriptions
 ├── Wrinkle.Keepalive               the 30 s sweep
-├── Task.Supervisor Wrinkle.Tasks   one task per request, one per ack write
+├── Task.Supervisor Wrinkle.Tasks   one task per request
+├── Task.Supervisor Wrinkle.AckWrites   one task per ack write, outliving its connection
 └── Bandit (Wrinkle.Router)
     └── Thousand Island acceptors
         └── one process per connection, running Wrinkle.Socket
 ```
 
-The order matters: Valkey, presence and the push subscriber are up before Bandit accepts a connection, and the task supervisor stops after Bandit. The services need not be: `Wrinkle.Backend` connects in the background, retrying every 0.1 s and backing off to every 2 s, and until it has connected every request is answered `ERROR_CODE_UNAVAILABLE`. Once connected, a channel that drops is reconnected by the Mint adapter (elixir-grpc's `retry` option), meanwhile requests get `ERROR_CODE_UNAVAILABLE` too. Redix connects to Valkey in the background as well and reconnects with backoff (0.5 s growing to 30 s). In the container the application runs in the prod environment, where it is permanent: if the supervisor gives up, the VM exits and the container ends. The RPC channel is stored in `:persistent_term`, so request tasks use it directly, without a call through the `Backend` process; requests are concurrent HTTP/2 streams on that one channel. The services must allow many concurrent streams per connection: elixir-grpc fails a call beyond the limit rather than queuing it, which once lost a third of the requests under a connect storm (see Measured).
+The order matters: Valkey, presence and the push subscriber are up before Bandit accepts a connection, and the task supervisors stop after Bandit. The services need not be: `Wrinkle.Backend` connects in the background, retrying every 0.1 s and backing off to every 2 s, and until it has connected every request is answered `ERROR_CODE_UNAVAILABLE`. Once connected, a channel that drops is reconnected by the Mint adapter (elixir-grpc's `retry` option), meanwhile requests get `ERROR_CODE_UNAVAILABLE` too. Redix connects to Valkey in the background as well and reconnects with backoff (0.5 s growing to 30 s). In the container the application runs in the prod environment, where it is permanent: if the supervisor gives up, the VM exits and the container ends. The RPC channel is stored in `:persistent_term`, so request tasks use it directly, without a call through the `Backend` process; requests are concurrent HTTP/2 streams on that one channel. The services must allow many concurrent streams per connection: elixir-grpc fails a call beyond the limit rather than queuing it, which once lost a third of the requests under a connect storm (see Measured).
 
 ## Connections
 
@@ -94,7 +96,7 @@ The limits and their values are the contract's ([frame.proto](../../proto/wrinkl
 | Connect deadline, 1008 | a `{:connect_deadline, ref}` message sent to itself at `init`, and again with a new ref when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; only the latest ref counts. The 5 s wait for the push subscription is a `{:subscribe_deadline, ref}` message the same way, its ref kept with the Connect it bounds |
 | Rate | [token_bucket.ex](lib/wrinkle/token_bucket.ex), in thousandths of a token; every protobuf frame takes one, WebSocket control frames none; a request over it gets `ERROR_CODE_RESOURCE_EXHAUSTED`, an ack, ping or pong is dropped |
 | Requests in flight | the in-flight count, a Connect until its response is sent; beyond it, `ERROR_CODE_RESOURCE_EXHAUSTED` |
-| One ack write at a time | [ack_writer.ex](lib/wrinkle/ack_writer.ex): acks arriving during a write are coalesced to the highest cursor and written when it finishes |
+| Acks once per interval | [ack_writer.ex](lib/wrinkle/ack_writer.ex): after Connect, the first ack is written at once; later ones raise a pending cursor, written in one write `WRINKLE_ACK_INTERVAL_MS` after the last write started (an `:ack_due` message to itself), one write at a time. When the connection ends for any reason, `terminate` hands the pending cursor to a task under `Wrinkle.AckWrites`, which writes it once the write in flight, if any, has ended. Failures are logged, not retried |
 | Pings and the idle timeout, 1001 | [keepalive.ex](lib/wrinkle/keepalive.ex): one process broadcasts to every socket every 30 s instead of a timer per connection; a socket that has seen any frame, control frames included, since the idle bound sends a WebSocket ping, otherwise closes |
 | Keeping up with events, 1013 | the push count in the mailbox (Writing, above) |
 | Internal error, 1011 | Bandit, when a socket process fails |
@@ -105,7 +107,7 @@ Push delivery: [push.ex](lib/wrinkle/push.ex) is one process that keeps which co
 
 Presence and the instance key: [presence.ex](lib/wrinkle/presence.ex) writes `presence:<user id hex>`, a hash from device id to this instance id, on attach, and on close removes the entry with a Lua script only if it still names this instance, so a device that reconnected elsewhere keeps its new entry. A connection casts these writes to one of the `Wrinkle.Presence.Writer` processes, chosen by user id, so a user's writes stay in order and a connection never waits on Valkey. The same process sets `gateway:<instance id>` with a 90 s expiry every 30 s (retrying every second on failure); entries of a gateway that died stop counting once the key expires.
 
-Drain on shutdown: SIGTERM stops the application, and `prep_stop` runs [drain.ex](lib/wrinkle/drain.ex) before the supervisor stops its children. It sets a flag that makes `/healthz` and new upgrades answer 503, and broadcasts `{:drain, 5000}` to every socket. A socket with nothing in flight closes with 1001 at once; one with requests in flight answers new requests with `ERROR_CODE_UNAVAILABLE` (counted in the metrics like the other refusals), closes with 1001 after its last response, or after 5 s at the latest. The drain waits until every socket has closed or the grace has passed, then deletes the instance key. The VM ignores SIGINT when started with `+Bi`, which [run.sh](run.sh) and [gateway.sh](../gateway.sh) set, so Ctrl-C reaches it as SIGTERM through the scripts and drains too.
+Drain on shutdown: SIGTERM stops the application, and `prep_stop` runs [drain.ex](lib/wrinkle/drain.ex) before the supervisor stops its children. It sets a flag that makes `/healthz` and new upgrades answer 503, and broadcasts `{:drain, 5000}` to every socket. A socket with nothing in flight closes with 1001 at once; one with requests in flight answers new requests with `ERROR_CODE_UNAVAILABLE` (counted in the metrics like the other refusals), closes with 1001 after its last response, or after 5 s at the latest. The drain waits until every socket has closed or the grace has passed, then up to 2 s more for the ack writes the sockets left, then deletes the instance key. The VM ignores SIGINT when started with `+Bi`, which [run.sh](run.sh) and [gateway.sh](../gateway.sh) set, so Ctrl-C reaches it as SIGTERM through the scripts and drains too.
 
 ## Metrics and debug endpoints
 
@@ -136,7 +138,7 @@ The make targets for this backend:
 
 [run.sh](run.sh) starts the gateway through [beside-services.sh](../beside-services.sh): a Go services process with the fan-out on 127.0.0.1:9000 (metrics on 8090), then the gateway on :8080 pointed at it; on exit the gateway stops first, so it drains while the services still answer. It runs `mix run --no-halt` in the default environment; the [Dockerfile](Dockerfile) builds and runs it with `MIX_ENV=prod`. There is no release build.
 
-The unit tests run with `mix test --no-start`, without the application, Valkey or the services: [token_bucket_test.exs](test/token_bucket_test.exs) covers bursts, refill, the cap and partial refills; [ack_writer_test.exs](test/ack_writer_test.exs) one write in flight and coalescing; [push_test.exs](test/push_test.exs) the frame wrapping across varint boundaries, decoding pushes (events, sign-outs, garbage) and the hex of a user id. Everything else is covered by the conformance tests.
+The unit tests run with `mix test --no-start`, without the application, Valkey or the services: [token_bucket_test.exs](test/token_bucket_test.exs) covers bursts, refill, the cap and partial refills; [ack_writer_test.exs](test/ack_writer_test.exs) the interval, coalescing, one write in flight, the flush on close and interval 0; [push_test.exs](test/push_test.exs) the frame wrapping across varint boundaries, decoding pushes (events, sign-outs, garbage) and the hex of a user id. Everything else is covered by the conformance tests.
 
 ## Measured
 
@@ -148,4 +150,4 @@ On 2026-10-15 at commit bfc6a78 ([2026-10-15-shapes.md](../../docs/results/2026-
 - Every attach and detach goes through the one `Wrinkle.Push` process, as does every push; it is a single serialization point per gateway, though it never waits on Valkey.
 - A services channel that drops is reconnected by the Mint adapter with its own backoff, which grows to two minutes between attempts after a few minutes of outage, so recovery from a long services outage can lag.
 - No resident memory metric and no release build; the gateway runs under `mix run`.
-- As for every gateway: no limits per user or per address, which need shared state, and acks written as they come rather than coalesced over time ([ROADMAP.md](../../ROADMAP.md)).
+- As for every gateway: no limits per user or per address, which need shared state ([ROADMAP.md](../../ROADMAP.md)).

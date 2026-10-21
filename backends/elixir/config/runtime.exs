@@ -30,4 +30,6 @@ config :wrinkle,
   listen: {ip, port},
   services: System.get_env("WRINKLE_SERVICES", "localhost:9000"),
   valkey: System.get_env("WRINKLE_VALKEY", "localhost:6379"),
-  node: System.get_env("WRINKLE_NODE", List.to_string(hostname))
+  node: System.get_env("WRINKLE_NODE", List.to_string(hostname)),
+  # 0 writes every ack as it comes, one at a time.
+  ack_interval: String.to_integer(System.get_env("WRINKLE_ACK_INTERVAL_MS", "60000"))

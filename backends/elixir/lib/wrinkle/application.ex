@@ -26,6 +26,7 @@ defmodule Wrinkle.Application do
       Wrinkle.Push,
       Wrinkle.Keepalive,
       {Task.Supervisor, name: Wrinkle.Tasks},
+      {Task.Supervisor, name: Wrinkle.AckWrites},
       {Bandit,
        plug: Wrinkle.Router,
        ip: ip,
