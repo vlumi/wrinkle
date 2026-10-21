@@ -50,6 +50,7 @@ Startup opens a pool per keyspace (`conversation`, `user`) when any role needs t
 | `--node` | `WRINKLE_NODE` | host name | prefix of the instance name in presence |
 | `--db-conns` | `WRINKLE_DB_CONNS` | 64 | connections per keyspace pool |
 | `--fanout-concurrency` | `WRINKLE_FANOUT_CONCURRENCY` | 64 | conversations delivered at a time |
+| `--ack-interval-ms` | `WRINKLE_ACK_INTERVAL_MS` | 60000 | gateway: least time between two ack writes of a connection; 0 writes each as it comes |
 | `--apns-key` | `WRINKLE_APNS_KEY` | empty | `.p8` key; push is off without it |
 | `--apns-key-id` | `WRINKLE_APNS_KEY_ID` | from `AuthKey_<id>.p8` | key id |
 | `--apns-team-id` | `WRINKLE_TEAM_ID` | empty | developer team |
@@ -96,7 +97,7 @@ The limits and their values are the contract's ([frame.proto](../../proto/wrinkl
 | Frame size | the read limit, so the library closes an oversize frame with 1009 |
 | Rate | a token bucket per connection, used only by the read loop, so unlocked; every protobuf frame takes a token, WebSocket pings and pongs none, since the library answers them before the read loop sees them |
 | Requests in flight | an atomic counter; requests over either limit get `RESOURCE_EXHAUSTED`, other frames are dropped |
-| One ack write at a time | `ackCursor` keeps the highest pending cursor; one goroutine writes until none is pending |
+| Acks once per interval | `ackCursor` keeps the highest pending cursor and when the last write started; a goroutine writes it at once if `--ack-interval-ms` has passed since, otherwise a timer starts one when it has, and acks meanwhile only raise the cursor. When the connection ends, the read loop stops the timer and writes what is pending at once, after a write in flight |
 | Connect deadline | a timer per connection, stopped by a Connect that succeeds and restarted when a Register or SignIn is answered (hashing the password may have taken a while) or a Connect is undone; on expiry, close with 1008 |
 | Pings and the idle timeout | one ticker per gateway ([keepalive.go](gateway/keepalive.go)), the presence heartbeat's, sweeps all connections: idle ones close with 1001, the rest get a ping; pongs update the last-seen time |
 | Keeping up with events | a full outbound queue on push closes with 1013 (Writing, above) |
@@ -194,6 +195,5 @@ On 2026-10-15 at commit bfc6a78, from a fresh stack, medians of three ([shapes](
 ## Gaps
 
 - A goroutine per connection, plus the one coder/websocket keeps for timeouts, sets the idle memory; the roadmap's second Go gateway on a poller-driven library would measure the alternative.
-- Acks are forwarded as they come, one write at a time per connection, not coalesced to once a minute as the design allows (open for every gateway in [ROADMAP.md](../../ROADMAP.md)).
 - Limits are per connection only; none per user or per address, so nothing slows down password guessing beyond the cost of the hash.
 - A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good ([ROADMAP.md](../../ROADMAP.md), Operations).

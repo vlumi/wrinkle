@@ -291,6 +291,41 @@ func TestConnCoalescesAcks(t *testing.T) {
 	backend.ackRelease <- struct{}{}
 }
 
+func TestConnWritesHeldAckOnClose(t *testing.T) {
+	backend := newFakeBackend()
+	s, url := newTestServer(t, backend)
+	s.ackInterval = time.Hour
+	ws := dialTest(t, url)
+	connect(t, ws)
+
+	writeFrame(t, ws, ack(1))
+	if cursor := <-backend.acks; cursor != 1 {
+		t.Fatalf("first ack %d, want 1", cursor)
+	}
+	backend.ackRelease <- struct{}{}
+	writeFrame(t, ws, ack(2))
+	writeFrame(t, ws, ack(3))
+	writeFrame(t, ws, &pb.Frame{Kind: &pb.Frame_Ping{Ping: &pb.Ping{}}})
+	if readFrame(t, ws).GetPong() == nil {
+		t.Fatal("no pong")
+	}
+	select {
+	case cursor := <-backend.acks:
+		t.Fatalf("ack %d written within the interval", cursor)
+	default:
+	}
+	_ = ws.Close(websocket.StatusNormalClosure, "")
+	select {
+	case cursor := <-backend.acks:
+		if cursor != 3 {
+			t.Fatalf("ack on close %d, want 3", cursor)
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("held ack not written on close")
+	}
+	backend.ackRelease <- struct{}{}
+}
+
 func TestConnClosesSlowConsumer(t *testing.T) {
 	s, url := newTestServer(t, newFakeBackend())
 	ws := dialTest(t, url)

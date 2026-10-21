@@ -51,8 +51,10 @@ type Server struct {
 
 	backend  services.Backend
 	presence presenceClient
-	registry *registry
-	log      *slog.Logger
+	// ackInterval is the least time between two ack writes of a connection.
+	ackInterval time.Duration
+	registry    *registry
+	log         *slog.Logger
 
 	requests sync.WaitGroup
 	open     sync.WaitGroup
@@ -62,7 +64,7 @@ type Server struct {
 }
 
 // New announces the gateway instance in presence and returns its server.
-func New(ctx context.Context, backend services.Backend, pres *presence.Client, log *slog.Logger) (*Server, error) {
+func New(ctx context.Context, backend services.Backend, pres *presence.Client, ackInterval time.Duration, log *slog.Logger) (*Server, error) {
 	if err := pres.Announce(ctx); err != nil {
 		return nil, fmt.Errorf("announce gateway instance: %w", err)
 	}
@@ -76,6 +78,7 @@ func New(ctx context.Context, backend services.Backend, pres *presence.Client, l
 		cancelRequests: cancelRequests,
 		backend:        backend,
 		presence:       pres,
+		ackInterval:    ackInterval,
 		registry:       newRegistry(pres, log),
 		log:            log,
 		conns:          map[*conn]struct{}{},

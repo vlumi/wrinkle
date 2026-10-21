@@ -55,6 +55,7 @@ func run() error {
 		node    = flag.String("node", env("WRINKLE_NODE", hostname), "this node's name in presence")
 		dbConns = flag.Int("db-conns", envInt("WRINKLE_DB_CONNS", 64), "connections per keyspace")
 		fanoutN = flag.Int("fanout-concurrency", envInt("WRINKLE_FANOUT_CONCURRENCY", 64), "fanout: conversations delivered at a time")
+		ackMS   = flag.Int("ack-interval-ms", envInt("WRINKLE_ACK_INTERVAL_MS", 60000), "gateway: least time between two ack writes of a connection, in milliseconds")
 		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
 		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
@@ -139,7 +140,7 @@ func run() error {
 			backend = client
 			log.Info("gateway forwarding to services", "addr", *svcAddr)
 		}
-		gw, err = gateway.New(ctx, backend, pres, log.With("role", "gateway"))
+		gw, err = gateway.New(ctx, backend, pres, time.Duration(*ackMS)*time.Millisecond, log.With("role", "gateway"))
 		if err != nil {
 			return err
 		}

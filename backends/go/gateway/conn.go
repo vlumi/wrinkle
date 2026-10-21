@@ -129,8 +129,11 @@ func (c *conn) serve() {
 		// cancellation and detaches itself (see identify).
 		c.cancel()
 		c.stopConnectTimer()
-		if _, _, ok := c.identity(); ok {
+		if userID, deviceID, ok := c.identity(); ok {
 			c.server.detach(c)
+			if c.acks.close() {
+				c.writeAcks(userID, deviceID)
+			}
 		}
 	}()
 
@@ -313,11 +316,15 @@ func (c *conn) pushEvent(payload []byte) {
 	}
 }
 
-// writeAcks writes the pending ack cursor until no newer one has arrived.
+// writeAcks writes the pending ack cursor until none is left or the next
+// write has to wait for the interval, when a timer starts it again.
 func (c *conn) writeAcks(userID ids.UUID, deviceID uint64) {
+	schedule := func(wait time.Duration) *time.Timer {
+		return time.AfterFunc(wait, func() { c.writeAcks(userID, deviceID) })
+	}
 	for {
-		cursor, ok := c.acks.next()
-		if !ok {
+		cursor := c.acks.next(time.Now(), c.server.ackInterval, schedule)
+		if cursor == 0 {
 			return
 		}
 		ctx, cancel := context.WithTimeout(c.server.requestCtx, requestTimeout)

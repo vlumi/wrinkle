@@ -146,3 +146,32 @@ func TestAckIsRememberedPerDevice(t *testing.T) {
 		t.Fatalf("log head %d is below the delivered event %d", fresh.cursor, a.cursor)
 	}
 }
+
+// Gateways write a device's acks at most once an interval; whatever is
+// held is written when the connection ends.
+func TestLastAckIsRememberedAfterClose(t *testing.T) {
+	a, b, conv := pair(t)
+	for i, text := range []string{"m1", "m2"} {
+		if _, err := b.SendText(ctx(t), conv, text, text); err != nil {
+			t.Fatal(err)
+		}
+		messageEvent(t, a, conv, uint64(i+1))
+		if err := a.Ack(ctx(t), a.cursor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a.Close()
+	deadline := time.Now().Add(eventTimeout)
+	for {
+		again := reconnect(t, a)
+		got := again.deviceCursor
+		again.Close()
+		if got == a.cursor {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("device cursor is %d after acking %d and closing", got, a.cursor)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
