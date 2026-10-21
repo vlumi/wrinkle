@@ -59,6 +59,7 @@ type Service struct {
 	keys        DeviceKeys
 	attachments Attachments
 	blocks      Blocks
+	direct      directMembers
 }
 
 func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments, blocks Blocks) *Service {
@@ -227,17 +228,24 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 // anything is taken into use; the change's transaction checks membership
 // again.
 func (s *Service) checkBlocks(ctx context.Context, userID, conversationID ids.UUID) error {
-	st, err := load(ctx, s.db, selectState, conversationID)
-	if err != nil {
-		return err
+	members, direct := s.direct.get(conversationID)
+	if members == nil {
+		st, err := load(ctx, s.db, selectState, conversationID)
+		if err != nil {
+			return err
+		}
+		if st.kind == kindDirect || st.kind == kindNotes {
+			s.direct.add(conversationID, st.kind, st.members)
+		}
+		members, direct = st.members, st.kind == kindDirect
 	}
-	if !st.has(userID) {
+	if !slices.Contains(members, userID) {
 		return apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
 	}
-	if st.kind != kindDirect {
+	if !direct {
 		return nil
 	}
-	for _, id := range st.members {
+	for _, id := range members {
 		if id != userID {
 			return s.blocks.CheckMessaging(ctx, userID, id)
 		}
