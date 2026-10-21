@@ -270,7 +270,7 @@ A user with many conversations makes one change fan out to many logs; the fan-ou
 
 ### Acks
 
-A device acks the cursor it has processed; the gateway writes it to the device's row, and the next Connect returns it, so a device that lost its local state can resume. The design forwards a device's ack at most once a minute and on disconnect, so acks cost about one write per connected device per minute. Every gateway today forwards them as they come, one write at a time per connection, collapsing acks that arrive during a write into the highest cursor; coalescing over time is an open item (ROADMAP.md, Open, Contract). The load generator acks once a second per device and the web client after every event, so the measured write load has more ack writes than the design would see ([capacity.md](capacity.md)).
+A device acks the cursor it has processed; the gateway writes it to the device's row, and the next Connect returns it, so a device that lost its local state can resume. Every gateway forwards a connection's acks at most once a minute (`WRINKLE_ACK_INTERVAL_MS`), and at once when the connection ends, so acks cost about one write per connected device per minute however often the device acks. The first ack after a quiet minute is written at once; later ones within the minute only raise the cursor held, which is written when the minute since the last write is up, or when the connection ends, after any write in flight, and a drain waits for those writes as for requests. A gateway that crashes loses at most a minute of acks; that matters only to a device that lost its local state, which then syncs those events again.
 
 ## Guarantees
 

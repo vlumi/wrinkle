@@ -32,5 +32,5 @@ From [results/2026-10-15-shapes.md](results/2026-10-15-shapes.md) (commit bfc6a7
 Where the prototype departs from the design, and what it means for extrapolating:
 
 - **Push routing.** The design routes a push directly to the gateway nodes holding the user's devices, found in Presence, one RPC per node, and rejects a subscription per user because of the count at 100M connections. The prototype uses a Valkey pub/sub channel per user. Invisible at the prototype's size; the design's point at scale.
-- **Acks.** The design forwards a device's ack at most once a minute and on disconnect. The web client acks every event and the load generator once a second per device, so the measured load includes more ack writes than the design would see.
+- **Acks.** The design forwards a device's ack at most once a minute and on disconnect; the gateways did not when these results were taken, writing them as they came, and the load generator acks once a second per device, so the measured load included more ack writes than the design would see. The gateways now forward at most one a minute per connection.
 - **Rate limits** (50 frames a second per connection) are far above what the load generator sends per device, so they did not shape its traffic.

@@ -20,29 +20,24 @@ What is done, what is open and why, and the gaps that are known and accepted for
 - **Notes.** Each user's own conversation, shared among their devices, created on first open and pinned at the top of the list. [Groups](docs/architecture.md#groups).
 - **Push notifications.** `RegisterPushToken` in every backend; APNs from the Go fan-out to devices that are not connected, with the sealed content for the iOS notification service extension to decrypt. [Sending a message](docs/architecture.md#sending-a-message).
 - **Measurements.** Every shape measured on the current code, three repetitions each: all six sustain 500 messages per second end to end encrypted at 86 to 118 ms p50, and the database sets the limit above it. [docs/results/2026-10-15-shapes.md](docs/results/2026-10-15-shapes.md).
+- **Coalesced acks.** Every gateway writes a connection's acks at most once a minute, and at once when the connection ends. [Acks](docs/architecture.md#acks).
 
 ## Open
 
 In the order they would be done. Each item says why it comes where it does and how it would be built; the features and experiments after the numbered items are not ordered.
 
-### 1. Coalesced acks
-
-**Why:** the design forwards a device's acks at most once a minute per device, and on disconnect; every gateway writes them as they come, one write at a time per connection, keeping only the highest cursor that arrived meanwhile. Acks are about 30 % of the database's transactions, so this is the cheapest relief for the database ceiling, and it brings all four gateways to the design.
-
-**Plan:** in each gateway (Go's `ackCursor`, Java's `AckCoalescer`, and their Elixir and Rust counterparts) keep the highest cursor per connection and write it when the connection closes, when the gateway drains, and otherwise at most once per interval (60 s by default). An ack lost to a crashed gateway costs the device a re-sync of up to a minute of events it already has, which clients already ignore. `TestAckIsRememberedPerDevice` reads the cursor back from a second connection while the first stays open, so the conformance runs set a short interval; a new test closes the connection and expects the cursor at once. Measure again at 500 and 1000 messages per second; the load generator acks once a second per device, so the saving shows directly.
-
-### 2. Database ceiling
+### 1. Database ceiling
 
 **Why:** above about 500 messages per second the shared database limits every backend on a laptop. It is the Vitess layer in one process: at 1000 messages per second, about 3400 transactions and 15000 statements per second, vtcombo uses about 2.7 cores and mysqld 1.7, and the fan-out consumes about 700 records per second whatever its pool size or concurrency. Disk, Debezium and Kafka were ruled out ([history](docs/history.md)). Until it moves, no backend can be compared above 500 messages per second.
 
 **Plan**, cheapest first, measuring after each step:
 
-1. Coalesced acks (item 1).
+1. Coalesced acks (done): measure the protocol again to see what the saving is, since the load generator acks once a second per device.
 2. Fewer statements per fan-out append: one multi-row insert into `user_event` and one update of `user_conversation` per recipient shard and batch of records, instead of statements per recipient and record, in Go and Java.
 3. A plain MySQL profile of the infrastructure (`make infra-up PROFILE=mysql`): the same schema unsharded on one MySQL, with Debezium's MySQL connector reading its binlog. It measures Vitess's share, gives the backends headroom, and is the deployment the managed clouds offer ([docs/production.md](docs/production.md)). It also removes the stranded-offsets problem below.
 4. A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes, when the question is sharding rather than the backends.
 
-### 3. Retention and history in cold storage
+### 2. Retention and history in cold storage
 
 **Why:** the capacity estimates assume two weeks of history on the server ([docs/capacity.md](docs/capacity.md)); the prototype keeps everything, and clients assume they can scroll back. Keeping history for good makes storage grow without bound: at the estimated 1.7 billion messages a day and 300 bytes each, the conversation store grows by about 0.5 TB a day, and the user logs, a copy per participant, by about 1 TB more. On MySQL shards of 100 to 250 GB that is several new shards a day, holding rows that are almost never read.
 
@@ -62,19 +57,19 @@ In the order they would be done. Each item says why it comes where it does and h
 6. **Go and Java.** gohbase in Go, the shaded HBase client in Java; the Elixir and Rust gateways are untouched. Unit tests for the key layout and the watermark rules in both; conformance tests run with a hot window of seconds, so they cross the watermark: history pages across it, and deletes and reactions on cold messages.
 7. **Measure** GetMessages latency above and below the watermark, the mover's throughput, and the database's statements per message with the logs trimmed.
 
-### 4. Stray blobs and the Vitess restart
+### 3. Stray blobs and the Vitess restart
 
 **Why:** both leave a running stack in a state only `make infra-reset` fixes, and both are small.
 
 - **Attachment uploads that stay used.** A send releases its uploads on any failure after marking them used, but the release itself can fail, and a retried `DeleteMessage` has nothing to release, since the delete erases the blob ids from the row; in both cases the sweeper never deletes the blobs. Keep the blob ids on the tombstone and hide them in reads, so a retried delete releases them again; have the sweeper also take used uploads whose message is a tombstone. Go and Java.
-- **The change-data path does not survive a restart of the Vitess container.** The test server starts an empty database whenever its container restarts, and Debezium's stored offsets then point into history that no longer exists: both connectors retry forever ("failed to find a PRIMARY tablet for VStream"), and every conformance run fails at the readiness probe with "no event delivered". `make infra-up` checks the connectors' task state and, on that failure against an empty database, resets their offsets and restarts them. The plain MySQL profile (item 2) has no such problem.
+- **The change-data path does not survive a restart of the Vitess container.** The test server starts an empty database whenever its container restarts, and Debezium's stored offsets then point into history that no longer exists: both connectors retry forever ("failed to find a PRIMARY tablet for VStream"), and every conformance run fails at the readiness probe with "no event delivered". `make infra-up` checks the connectors' task state and, on that failure against an empty database, resets their offsets and restarts them. The plain MySQL profile (item 1) has no such problem.
 - **Load-generator attachments are never deleted**, so blob storage grows with each run. The load generator deletes the messages it sent with attachments after the grace, outside the window, which releases the blobs through the normal path.
 
-### 5. Contract clean-up
+### 4. Contract clean-up
 
 - **`MessageFailedEvent`**: drop it. Sends are answered synchronously and the fan-out retries until an append succeeds, so there is no asynchronous failure to report and no backend produces it ([Connect and sync](docs/architecture.md#connect-and-sync)). Reserve its field number and name so they are not reused.
 
-### 6. Parity
+### 5. Parity
 
 - **Pushes from the Java fan-out.** The Java backend stores push tokens but sends nothing to APNs, so in a pool of Go and Java services instances the partitions a Java instance consumes get no notifications. Port Go's notifier: the provider token, the payload with the sealed content, presence and badge, and clearing rejected tokens; Java's HTTP client speaks HTTP/2.
 - **Prometheus scrapes only port 8080.** Add the side-by-side processes' and the cluster's ports as scrape targets, labeled by process, so the dashboards cover every shape.
@@ -84,7 +79,7 @@ In the order they would be done. Each item says why it comes where it does and h
 
 Not ordered; each is an issue or becomes one when started.
 
-- **Message editing:** a replacement body by the same path as reactions, one sealed edit per message replacing the last, with the edit's own event. After item 3, so an edit of a cold message is designed with it. Also deleting only on one's own devices.
+- **Message editing:** a replacement body by the same path as reactions, one sealed edit per message replacing the last, with the edit's own event. After item 2, so an edit of a cold message is designed with it. Also deleting only on one's own devices.
 - **Stickers:** packs and the sticker editor (#8); animated stickers (GIF and WebP upload, but clients redraw them as still images); moderation, reporting and takedown.
 - **Attachments:** video thumbnails and playback; downloads served through a CDN.
 - **Public channels (#9):** rooms with thousands of readers need a read path per room instead of a log append per member; the cold tier's history by conversation is that read path for everything but the newest messages.
@@ -97,7 +92,7 @@ Not ordered; each is an issue or becomes one when started.
 
 ### Experiments
 
-- **Services in Elixir and Rust.** Left out because the services are SQL and a Kafka consumer, where the languages differ least; a gateway is where they differ most. A full implementation in each would complete the matrix, and would grow with item 3.
+- **Services in Elixir and Rust.** Left out because the services are SQL and a Kafka consumer, where the languages differ least; a gateway is where they differ most. A full implementation in each would complete the matrix, and would grow with item 2.
 - **A second Go gateway without a goroutine per connection**, on a poller-driven WebSocket library, to see how far the idle memory per connection falls when the model changes; see [docs/results/2026-10-10-idle-memory.md](docs/results/2026-10-10-idle-memory.md).
 
 ## Known gaps
