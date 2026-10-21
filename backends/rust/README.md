@@ -9,6 +9,7 @@ Cargo.toml        dependencies; release builds keep line-level debug info
 build.rs          generates the contract from ../../proto with a vendored protoc
 src/main.rs       configuration, startup, routes, health, drain on shutdown
 src/conn.rs       one connection: read loop, writer, requests, limits, keepalive sweep
+src/ack.rs        a connection's acks, forwarded once per interval and on close
 src/push.rs       Valkey pub/sub: one channel per user, delivery to its connections
 src/presence.rs   the presence hash and this instance's expiring key
 src/metrics.rs    the shared metric names in the Prometheus text format
@@ -29,6 +30,7 @@ There are no roles to choose: the binary is always a gateway. [main.rs](src/main
 | `WRINKLE_SERVICES` | `localhost:9000` | The services RPC, or the services balancer |
 | `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
 | `WRINKLE_NODE` | the host name | The node part of the instance id |
+| `WRINKLE_ACK_INTERVAL_MS` | `60000` | How often a device's acks are forwarded; `0` forwards each as it comes |
 | `RUST_LOG` | `info` | The `tracing` filter, used as given when set |
 
 Startup, in order:
@@ -66,7 +68,7 @@ flowchart TB
   q --> write --> ws
 ```
 
-The pieces, all in [conn.rs](src/conn.rs):
+The pieces, in [conn.rs](src/conn.rs) but for the acks:
 
 - `Link` is what other tasks hold: the sender of the bounded outbound queue (32 entries), a one-shot close signal, the connection id and when it last received anything. `Conns` keeps every `Link` by id for the sweep and the drain, and counts requests in flight across the gateway.
 - The read loop is a `select!` over the next WebSocket message, the Connect deadline and the writer ending. Any message refreshes the last-seen time. Binary messages are decoded as `Frame`; text closes with 1003, a frame over the limit (tungstenite's capacity error) with 1009, a malformed frame or a server-side frame kind with 1008.
@@ -82,7 +84,7 @@ The limits and their values are the contract's ([frame.proto](../../proto/wrinkl
 | Rate | a `TokenBucket` per connection, owned by the read loop; every decoded protobuf frame takes a token, WebSocket control frames none. A request without one fails with `RESOURCE_EXHAUSTED`; an ack or ping without one is dropped |
 | Requests in flight | an atomic counter per connection; beyond it, `RESOURCE_EXHAUSTED` |
 | Connect deadline | a timer in the read loop, restarted when a Register or SignIn is answered (hashing the password takes a while) or a Connect is undone; if the connection is not bound when it fires, close 1008 |
-| One ack write at a time | `Acks`: one task writes `BackendService.Ack`; acks arriving meanwhile collapse into the highest cursor, written next |
+| Acks once per interval | `Acks` in [ack.rs](src/ack.rs), created on the first ack after Connect: the first is written at once, later ones raise a pending cursor, written by the same task an interval after the last write started, one write at a time; when the connection ends, the pending cursor is written at once. A connection that never acks has no task |
 | Pings and the idle timeout | the gateway-wide sweep runs every 10 s, closes connections idle for 90 s with 1001, and every third sweep queues a WebSocket ping (skipped if the queue is full) |
 | Keeping up with events | a full queue on push closes with 1013 |
 
@@ -100,7 +102,7 @@ If the pub/sub connection drops (the message stream ends, or a command fails or 
 
 ### Drain
 
-On SIGTERM or SIGINT [main.rs](src/main.rs) stops the sweep and the heartbeat, then `Conns::drain` marks the gateway draining (health check and upgrades answer 503) and closes every connection with 1001. It waits up to 5 seconds for every connection to detach and every request in flight to finish, deletes the instance key, and gives the HTTP server 3 seconds to stop. A request still running when the grace ends is not cancelled: its task lives on until the services answer or the 10 second call timeout passes, and its response is dropped since the connection is gone; this is intended, so the drain need not track those tasks.
+On SIGTERM or SIGINT [main.rs](src/main.rs) stops the sweep and the heartbeat, then `Conns::drain` marks the gateway draining (health check and upgrades answer 503) and closes every connection with 1001. It waits up to 5 seconds for every connection to detach and every request and final ack write in flight to finish, deletes the instance key, and gives the HTTP server 3 seconds to stop. A request still running when the grace ends is not cancelled: its task lives on until the services answer or the 10 second call timeout passes, and its response is dropped since the connection is gone; this is intended, so the drain need not track those tasks.
 
 ## Metrics and debug endpoints
 
@@ -127,7 +129,7 @@ There is no live-memory metric and no profiling endpoint.
 
 [run.sh](run.sh) hands the release binary to [beside-services.sh](../beside-services.sh), which starts Go services and fan-out on 127.0.0.1:9000 and 8090, waits for them, and runs the gateway on :8080; on exit it stops the gateway first so it drains while the services still answer.
 
-The unit tests are small: the listen address, the token bucket's burst and refill, ack coalescing, the instance id format, and the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`. Everything that involves a connection is left to the conformance tests.
+The unit tests are small: the listen address, the token bucket's burst and refill, the ack interval and its coalescing on paused time, the instance id format, and the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`. Everything that involves a connection is left to the conformance tests.
 
 ## Measured
 
@@ -137,6 +139,5 @@ On 2026-10-15 at commit bfc6a78 ([2026-10-15-shapes.md](../../docs/results/2026-
 
 - Gateway only: services and fan-out in Rust are open in [ROADMAP.md](../../ROADMAP.md). Pushes to devices that are not connected depend on the services beside it, which only the Go ones send.
 - No live-memory figure and no profiling endpoints; `/debug/gc` exists only so the load generator can call it.
-- Acks are forwarded as they come, one write at a time; coalescing them over time, as the design intends, is open in [ROADMAP.md](../../ROADMAP.md) for every gateway.
 - No limits per user or per address, as in every gateway; they need shared state.
 - A Valkey restart loses the presence entries of devices that stay connected; they are written again only when each device reconnects. The instance key comes back with the next heartbeat.

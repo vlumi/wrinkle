@@ -2,6 +2,7 @@
 //! services process over the internal RPC, pushes through Valkey pub/sub.
 //! A gateway only; run.sh starts the Go services and fan-out beside it.
 
+mod ack;
 mod conn;
 mod metrics;
 mod presence;
@@ -64,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let services = env("WRINKLE_SERVICES", "localhost:9000");
     let valkey = env("WRINKLE_VALKEY", "localhost:6379");
     let node = env("WRINKLE_NODE", &hostname());
+    let ack_interval = ack_interval(&env("WRINKLE_ACK_INTERVAL_MS", "60000"))?;
 
     // Connected on first use, so the gateway serves before the services are
     // up; requests answer UNAVAILABLE until they are.
@@ -80,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         push,
         presence,
         metrics,
-        conns: conn::Conns::default(),
+        conns: conn::Conns::new(ack_interval),
     });
     let keepalive = tokio::spawn({
         let app = app.clone();
@@ -193,6 +195,13 @@ fn listen_address(listen: &str) -> String {
     }
 }
 
+/// How often a device's acks are forwarded; 0 forwards each as it comes.
+fn ack_interval(ms: &str) -> Result<Duration, String> {
+    ms.parse()
+        .map(Duration::from_millis)
+        .map_err(|_| format!("WRINKLE_ACK_INTERVAL_MS: not milliseconds: {ms:?}"))
+}
+
 fn env(key: &str, fallback: &str) -> String {
     std::env::var(key)
         .ok()
@@ -221,5 +230,13 @@ mod tests {
         assert_eq!(listen_address(":8080"), "0.0.0.0:8080");
         assert_eq!(listen_address("127.0.0.1:8182"), "127.0.0.1:8182");
         assert_eq!(listen_address("[::1]:8080"), "[::1]:8080");
+    }
+
+    #[test]
+    fn ack_interval_is_milliseconds() {
+        assert_eq!(ack_interval("60000"), Ok(Duration::from_secs(60)));
+        assert_eq!(ack_interval("0"), Ok(Duration::ZERO));
+        assert!(ack_interval("1s").is_err());
+        assert!(ack_interval("-1").is_err());
     }
 }

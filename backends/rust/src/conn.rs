@@ -18,6 +18,7 @@ use prost::Message as _;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{Notify, mpsc, oneshot};
 
+use crate::ack::{self, Acks};
 use crate::pb::backend::v1::{AckRequest, CallRequest};
 use crate::pb::v1::{
     self as pb, ErrorCode, Frame, Request, Response as WireResponse, frame, request, response,
@@ -117,22 +118,25 @@ pub struct Conns {
     next_id: AtomicU64,
     all: Mutex<HashMap<u64, Arc<Link>>>,
     in_flight: AtomicUsize,
+    /// Ack writer tasks, which may outlive their connections.
+    ack_tasks: Arc<AtomicUsize>,
+    ack_interval: Duration,
     draining: AtomicBool,
 }
 
-impl Default for Conns {
-    fn default() -> Self {
+impl Conns {
+    pub fn new(ack_interval: Duration) -> Self {
         Self {
             epoch: Instant::now(),
             next_id: AtomicU64::default(),
             all: Mutex::default(),
             in_flight: AtomicUsize::default(),
+            ack_tasks: Arc::default(),
+            ack_interval,
             draining: AtomicBool::default(),
         }
     }
-}
 
-impl Conns {
     fn now(&self) -> u32 {
         self.epoch.elapsed().as_secs() as u32
     }
@@ -169,9 +173,12 @@ impl Conns {
         }
     }
 
-    /// True once every connection has detached and no request is running.
+    /// True once every connection has detached and no request or final ack
+    /// is running.
     pub fn settled(&self) -> bool {
-        self.all.lock().unwrap().is_empty() && self.in_flight.load(Ordering::SeqCst) == 0
+        self.all.lock().unwrap().is_empty()
+            && self.in_flight.load(Ordering::SeqCst) == 0
+            && self.ack_tasks.load(Ordering::SeqCst) == 0
     }
 
     /// Pings every connection now and then and closes the idle ones.
@@ -202,7 +209,7 @@ impl Conns {
 }
 
 /// The device a connection belongs to, known once Connect succeeds.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq)]
 struct Device {
     user_id: UserId,
     device_id: u64,
@@ -230,7 +237,8 @@ pub struct Conn {
     /// so the Connect that follows gets a fresh deadline.
     restart_deadline: Notify,
     in_flight: AtomicUsize,
-    acks: Mutex<Acks>,
+    /// Created on the first ack after Connect.
+    acks: Mutex<Option<Arc<Acks<DeviceAcks>>>>,
 }
 
 pub async fn upgrade(ws: WebSocketUpgrade, State(app): State<Arc<App>>) -> Response {
@@ -313,6 +321,9 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
         }
     }
     link.finish();
+    if let Some(acks) = conn.acks.lock().unwrap().take() {
+        acks.close();
+    }
     conn.detach().await;
     app.conns.deregister(&link);
     if !writer_done {
@@ -558,23 +569,25 @@ impl Conn {
             .await;
     }
 
-    /// Writes acks one at a time; acks arriving meanwhile collapse into the
-    /// highest cursor, written next.
-    fn ack(self: &Arc<Self>, cursor: u64) {
+    /// Forwards the device's ack, at most once per interval.
+    fn ack(&self, cursor: u64) {
         let Some(device) = self.device() else {
             return;
         };
-        let Some(first) = self.acks.lock().unwrap().offer(cursor) else {
-            return;
-        };
-        let conn = self.clone();
-        tokio::spawn(async move {
-            let mut next = Some(first);
-            while let Some(cursor) = next {
-                ack_cursor(conn.app.backend.clone(), device, cursor).await;
-                next = conn.acks.lock().unwrap().done();
-            }
+        let mut acks = self.acks.lock().unwrap();
+        // A Connect undone and redone may have bound another device.
+        if let Some(old) = acks.take_if(|a| a.writer().device != device) {
+            old.close();
+        }
+        let acks = acks.get_or_insert_with(|| {
+            let writer = DeviceAcks {
+                backend: self.app.backend.clone(),
+                device,
+            };
+            let conns = &self.app.conns;
+            Acks::new(conns.ack_interval, writer, conns.ack_tasks.clone())
         });
+        acks.ack(cursor);
     }
 
     async fn respond(&self, kind: frame::Kind) -> bool {
@@ -583,16 +596,24 @@ impl Conn {
     }
 }
 
-async fn ack_cursor(mut backend: BackendClient, device: Device, cursor: u64) {
-    let ack = AckRequest {
-        user_id: device.user_id.to_vec(),
-        device_id: device.device_id,
-        cursor,
-    };
-    match tokio::time::timeout(REQUEST_TIMEOUT, backend.ack(ack)).await {
-        Ok(Ok(_)) => {}
-        Ok(Err(e)) => tracing::warn!(error = %e, "ack failed"),
-        Err(_) => tracing::warn!("ack timed out"),
+struct DeviceAcks {
+    backend: BackendClient,
+    device: Device,
+}
+
+impl ack::Write for DeviceAcks {
+    async fn write(&self, cursor: u64) {
+        let ack = AckRequest {
+            user_id: self.device.user_id.to_vec(),
+            device_id: self.device.device_id,
+            cursor,
+        };
+        let mut backend = self.backend.clone();
+        match tokio::time::timeout(REQUEST_TIMEOUT, backend.ack(ack)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => tracing::warn!(error = %e, "ack failed"),
+            Err(_) => tracing::warn!("ack timed out"),
+        }
     }
 }
 
@@ -621,33 +642,6 @@ impl TokenBucket {
         } else {
             false
         }
-    }
-}
-
-/// At most one ack write in flight, the highest cursor since kept for after.
-#[derive(Default)]
-struct Acks {
-    writing: bool,
-    pending: Option<u64>,
-}
-
-impl Acks {
-    /// The cursor to write now, or None while a write is in flight.
-    fn offer(&mut self, cursor: u64) -> Option<u64> {
-        if self.writing {
-            self.pending = self.pending.max(Some(cursor));
-            None
-        } else {
-            self.writing = true;
-            Some(cursor)
-        }
-    }
-
-    /// After a write: the next cursor to write, or None once idle.
-    fn done(&mut self) -> Option<u64> {
-        let next = self.pending.take();
-        self.writing = next.is_some();
-        next
     }
 }
 
@@ -755,18 +749,5 @@ mod tests {
         let later = start + Duration::from_secs(60);
         let allowed = (0..200).filter(|_| bucket.take(later)).count();
         assert_eq!(allowed, 100);
-    }
-
-    #[test]
-    fn acks_coalesce_to_the_highest_while_one_is_written() {
-        let mut acks = Acks::default();
-        assert_eq!(acks.offer(5), Some(5));
-        assert_eq!(acks.offer(9), None);
-        assert_eq!(acks.offer(7), None);
-        assert_eq!(acks.done(), Some(9));
-        assert_eq!(acks.done(), None);
-        // Idle again: the next ack is written at once.
-        assert_eq!(acks.offer(10), Some(10));
-        assert_eq!(acks.done(), None);
     }
 }
