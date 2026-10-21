@@ -32,8 +32,8 @@ In the order they would be done. Each item says why it comes where it does and h
 
 **Plan**, cheapest first, measuring after each step:
 
-1. Coalesced acks (done): measure the protocol again to see what the saving is, since the load generator acks once a second per device.
-2. Fewer statements per fan-out append: one multi-row insert into `user_event` and one update of `user_conversation` per recipient shard and batch of records, instead of statements per recipient and record, in Go and Java.
+1. Coalesced acks (done): 0.1 ack writes per message remain in a diagnostic count at 500 messages a second.
+2. Fewer statements per fan-out append (done): a message's copies are stored in one transaction per recipient shard with whatever else is queued for it, with multi-row statements. At 500 messages a second the fan-out's statements per message fell from about 12 to 2, and the database's from 24 to 14, in a diagnostic count; the protocol is to be run again.
 3. A plain MySQL profile of the infrastructure (`make infra-up PROFILE=mysql`): the same schema unsharded on one MySQL, with Debezium's MySQL connector reading its binlog. It measures Vitess's share, gives the backends headroom, and is the deployment the managed clouds offer ([docs/production.md](docs/production.md)). It also removes the stranded-offsets problem below.
 4. A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes, when the question is sharding rather than the backends.
 
