@@ -245,9 +245,9 @@ LOADGEN_ARGS ?=
 load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s, LOADGEN_ARGS for any other flag)
 	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s $(LOADGEN_ARGS)
 
-measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape, each from a fresh stack (about an hour)
+measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape, each from a fresh stack (about 75 minutes per repetition)
 
-##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw run the protocol for one (about 10 minutes each).
+##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw run the protocol for one (about 12 minutes each per repetition).
 
 # The labels name the results files, as in the earlier write-ups.
 LABEL_go-mono := go

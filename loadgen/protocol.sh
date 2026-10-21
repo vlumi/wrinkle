@@ -74,7 +74,7 @@ for rep in $(seq 1 "$REPS"); do
   fi
   if [ "$SERIES" != idle ]; then
     echo "== latency at fixed rates (rep $rep)"
-    for rate in 100 500 1000 2000; do
+    for rate in 100 500 1000 1500 2000; do
       LOADGEN_ARGS=(--connections 1000 --rate "$rate" --warmup 15s --duration 60s --ramp 500)
       run "$@"
     done
