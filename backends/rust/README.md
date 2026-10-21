@@ -131,7 +131,7 @@ The unit tests are small: the listen address, the token bucket's burst and refil
 
 ## Measured
 
-The figures predate accounts, groups and encryption (commit 0b06d92) and the limits and drain; the current code has not been measured, and the next round of results replaces them. On 2026-10-11 ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), raw runs in [2026-10-11-rust.jsonl](../../docs/results/2026-10-11-rust.jsonl)): 4000 idle connections in 78 MiB resident, against about 167 MiB for the Go gateway; at 500 messages per second over 1000 connections, 84 ms p50 and 246 ms p99 end to end, and 277 ms of gateway CPU per 1000 messages.
+On 2026-10-15 at commit bfc6a78 ([2026-10-15-shapes.md](../../docs/results/2026-10-15-shapes.md), raw runs in [2026-10-15-rust.jsonl](../../docs/results/2026-10-15-rust.jsonl)), medians of three: 4000 idle connections in 124 MiB resident, against 225 to 405 MiB for the other gateways, from a baseline of a few megabytes (the allocator returns memory unevenly, so single runs at 4000 ranged from 60 to 129 MiB); at 500 messages per second over 1000 connections, 88 ms p50 and 189 ms p99 end to end, 28 MiB resident, and 239 ms of gateway CPU per 1000 messages, the least of the four gateways on every count. An earlier round, before accounts, groups and encryption: [2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md).
 
 ## Gaps
 

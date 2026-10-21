@@ -189,7 +189,7 @@ The gateway adds `GET /v1/ws`. A services instance in the side-by-side setup lis
 
 ## Measured
 
-The figures predate accounts, groups and encryption (commit 0b06d92); the current code has not been measured, and the next round of results replaces them. On 2026-10-11, from a fresh stack ([gateways](../../docs/results/2026-10-11-gateways.md)): the Go monolith held 4000 idle connections in 146 MiB and delivered 500 messages/s at 87 ms p50 and 277 ms p99 end to end; the split Go gateway held them in 167 MiB, at 94 / 574 ms and 454 ms of gateway CPU per thousand messages. Earlier runs: [Go](../../docs/results/2026-10-10-go.md), [Go against Java](../../docs/results/2026-10-10-go-vs-java.md), [idle memory per connection](../../docs/results/2026-10-10-idle-memory.md).
+On 2026-10-15 at commit bfc6a78, from a fresh stack, medians of three ([shapes](../../docs/results/2026-10-15-shapes.md)): the monolith delivered 500 messages/s at 86 ms p50 and 204 ms p99 end to end with 1542 ms of CPU per thousand messages for every role, and keeps 28 KiB of live memory per idle connection (its resident memory after the load generator's sign-ins measures the password hashing, not the connections); the split gateway held 4000 idle connections in 225 MiB, at 95 / 238 ms and 385 ms of gateway CPU per thousand messages. Earlier runs: [gateways](../../docs/results/2026-10-11-gateways.md), [Go](../../docs/results/2026-10-10-go.md), [Go against Java](../../docs/results/2026-10-10-go-vs-java.md), [idle memory per connection](../../docs/results/2026-10-10-idle-memory.md).
 
 ## Gaps
 

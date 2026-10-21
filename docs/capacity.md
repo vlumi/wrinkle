@@ -18,16 +18,16 @@ The sizing the design was made for, and how the measured prototype compares. Ass
 
 ## Measured against the estimates
 
-From [results/2026-10-11-gateways.md](results/2026-10-11-gateways.md) and, for Go's idle memory, [results/2026-10-10-idle-memory.md](results/2026-10-10-idle-memory.md), taken at commit 0b06d92, before accounts, groups and encryption (a re-measurement is open in ROADMAP.md); scaled to the per-node and per-shard assumptions above. The prototype runs the whole database as one `mysqld` on about five cores with two shards per keyspace, so per-shard figures are read off per `mysqld`.
+From [results/2026-10-15-shapes.md](results/2026-10-15-shapes.md) (commit bfc6a78, six shapes, three repetitions each) and, for the database, the investigation of its ceiling before encryption (ROADMAP.md, "Database ceiling"); scaled to the per-node and per-shard assumptions above. The prototype runs the whole database as one `mysqld` on about five cores with two shards per keyspace, so per-shard figures are read off per `mysqld`.
 
 | Estimate | Measured |
 |---|---|
-| ~100k connections per gateway node | Resident memory at 4000 idle connections ([gateways](results/2026-10-11-gateways.md)): Rust 78 MiB, Go about 150, Elixir about 180, Java about 400. By slope, 20 to 35 KiB per connection for all five measured shapes (three gateways, two monoliths), which is 2 to 3.5 GB for 100k: every one fits a 16 GB node. Go's cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps ([idle memory](results/2026-10-10-idle-memory.md)); going lower needs a poller-driven library. |
+| ~100k connections per gateway node | Resident memory at 4000 idle connections ([shapes](results/2026-10-15-shapes.md)): the Rust gateway 124 MiB, Go 225, Elixir 245, Java 405. By slope, 31 to 50 KiB of resident memory per connection for the four gateways, 11 to 28 KiB live, which is 3 to 5 GB for 100k: every one fits a 16 GB node. Go's cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps ([idle memory](results/2026-10-10-idle-memory.md)); going lower needs a poller-driven library. |
 | ~1.5k writes/s per shard | The single `mysqld` ran about 3400 transactions/s at 1000 messages/s, one send, two fan-out appends and the acks per message, at 1.7 cores; the Vitess layer in front of it, all in one vtcombo process, was the limit at 2.7 cores (ROADMAP.md, "Database ceiling"). More than twice the per-shard assumption on one process; a real shard has its own `mysqld` and disk. |
 | ~3k user-log appends/s per shard | 1000/s sustained alongside the sends on the same `mysqld`. Same order. |
 | ~230 pushes/s per gateway node | 1000/s from one process acting as gateway and fan-out worker, far from any limit. |
-| 100 to 300 ms end to end | 85 to 110 ms p50 at 500/s across all five measured shapes from a fresh stack, p99 230 to 574 ms ([gateways](results/2026-10-11-gateways.md)), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
-| JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap, which is also why its per-connection memory needs a fixed heap or a live-set measurement before it is quoted. |
+| 100 to 300 ms end to end | 86 to 118 ms p50 at 500/s across all six measured shapes from a fresh stack, p99 189 to 268 ms ([shapes](results/2026-10-15-shapes.md)), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
+| JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap. The live slope, 11 to 12 KiB per connection, is the lowest of the runtimes; the Java gateway's resident memory starts at almost 300 MiB. |
 
 Where the prototype departs from the design, and what it means for extrapolating:
 

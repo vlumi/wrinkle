@@ -180,7 +180,7 @@ Unit tests: [PresignerTest](src/test/java/wrinkle/uploads/PresignerTest.java) ch
 
 ## Measured
 
-The figures predate accounts, groups and encryption (commit 0b06d92); the current code has not been measured, and the next round of results replaces them. On 2026-10-11, from a fresh stack ([2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md)), the Java monolith delivered 500 messages per second at 87 ms p50 and 230 ms p99 end to end, and held 4000 idle connections in 398 MiB, against 312 MiB at 500. Earlier runs: [2026-10-10-java.md](../../docs/results/2026-10-10-java.md), [2026-10-10-go-vs-java.md](../../docs/results/2026-10-10-go-vs-java.md), [2026-10-10-idle-memory.md](../../docs/results/2026-10-10-idle-memory.md). The split shape (`java-gw`) has no results yet.
+On 2026-10-15 at commit bfc6a78, from a fresh stack, medians of three ([2026-10-15-shapes.md](../../docs/results/2026-10-15-shapes.md)): the monolith delivered 500 messages per second at 93 ms p50 and 203 ms p99 end to end with 2041 ms of CPU per thousand messages for every role, and keeps 11 KiB of live memory per idle connection; the split gateway (`java-gw`) delivered them at 97 / 206 ms with 404 ms of gateway CPU per thousand messages, and held 4000 idle connections in 405 MiB from a baseline near 300 MiB. Earlier runs: [2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md), [2026-10-10-java.md](../../docs/results/2026-10-10-java.md), [2026-10-10-go-vs-java.md](../../docs/results/2026-10-10-go-vs-java.md), [2026-10-10-idle-memory.md](../../docs/results/2026-10-10-idle-memory.md).
 
 ## Gaps
 
