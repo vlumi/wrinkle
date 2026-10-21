@@ -44,6 +44,7 @@ import wrinkle.uploads.UploadSweeper;
 public final class Main {
   private static final Logger log = LoggerFactory.getLogger(Main.class);
   private static final String FANOUT_GROUP = "wrinkle-fanout";
+  private static final String USER_KEYSPACE = "user";
   // A drain that has not finished by then exits anyway.
   private static final long SHUTDOWN_LIMIT_MILLIS = 9500;
   // Leaves the fan-out consumer time to leave its group before the limit.
@@ -87,6 +88,7 @@ public final class Main {
               cfg.kafka(),
               FANOUT_GROUP,
               shared.userDb(),
+              USER_KEYSPACE,
               shared.conversationDb(),
               shared.presence());
       fanout.start();
@@ -136,7 +138,7 @@ public final class Main {
 
     DataSource userDb() {
       if (userDb == null) {
-        userDb = Db.open(cfg.mysql(), "user", cfg.dbConns());
+        userDb = Db.open(cfg.mysql(), USER_KEYSPACE, cfg.dbConns());
       }
       return userDb;
     }

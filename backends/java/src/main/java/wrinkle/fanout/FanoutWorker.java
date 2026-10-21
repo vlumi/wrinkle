@@ -27,6 +27,7 @@ import org.apache.kafka.common.serialization.ByteArrayDeserializer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.Metrics;
+import wrinkle.Shards;
 import wrinkle.Uuid;
 import wrinkle.presence.Presence;
 import wrinkle.v1.Event;
@@ -66,6 +67,7 @@ public final class FanoutWorker {
       String brokers,
       String group,
       DataSource userDb,
+      String userKeyspace,
       DataSource conversationDb,
       Presence presence) {
     Properties p = new Properties();
@@ -80,7 +82,7 @@ public final class FanoutWorker {
     p.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     this.consumer = new KafkaConsumer<>(p);
-    this.userLog = new UserLog(userDb, presence);
+    this.userLog = new UserLog(userDb, presence, Shards.load(userDb, userKeyspace));
     this.profiles = new ProfileFanout(userLog, tasks);
     this.devices = new DeviceFanout(userLog, conversationDb, tasks);
     this.contacts = new ContactFanout(userLog);
@@ -209,6 +211,10 @@ public final class FanoutWorker {
     }
     if (o.event().getBodyCase() == Event.BodyCase.BODY_NOT_SET) {
       log.error("skipping outbox record without a body, kind {}", o.kind());
+      return;
+    }
+    if (AppendBatcher.batchable(o)) {
+      userLog.deliverBatched(o);
       return;
     }
     Semaphore slots = new Semaphore(RECIPIENT_CONCURRENCY);

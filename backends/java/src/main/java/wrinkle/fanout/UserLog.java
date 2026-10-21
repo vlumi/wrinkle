@@ -8,6 +8,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import javax.sql.DataSource;
@@ -15,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.MessageBody;
 import wrinkle.Metrics;
+import wrinkle.Shards;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
@@ -45,12 +48,15 @@ final class UserLog {
 
   private final DataSource db;
   private final Presence presence;
+  private final AppendBatcher batcher;
   // Conversation list entries known to exist; entries are never removed, so one stays true.
   private final Set<ListKey> listedCache = ConcurrentHashMap.newKeySet();
 
-  UserLog(DataSource db, Presence presence) {
+  /** The shards of the user keyspace place each user's appends in batches. */
+  UserLog(DataSource db, Presence presence, Shards shards) {
     this.db = db;
     this.presence = presence;
+    this.batcher = new AppendBatcher(shards, db);
   }
 
   DataSource db() {
@@ -80,6 +86,35 @@ final class UserLog {
             });
     if (event != null && event.hasMessage()) {
       remember(userId, o.conversationId());
+    }
+  }
+
+  /**
+   * Appends a message that is not a notice to each recipient's log through the batcher, and pushes
+   * it once every copy is stored. A recipient whose batch failed (a redelivered row, a deadlock) is
+   * delivered to on its own.
+   */
+  void deliverBatched(OutboxRecord o) throws SQLException, InterruptedException {
+    List<AppendBatcher.Pending> pending = new ArrayList<>(o.recipients().size());
+    for (Uuid userId : o.recipients()) {
+      Uuid peerId = o.peerOf(userId);
+      User peer = peerId != null ? peerForNewEntry(userId, o.conversationId(), peerId) : null;
+      AppendBatcher.Pending p = new AppendBatcher.Pending(userId, o, peerId, peer);
+      pending.add(p);
+      batcher.add(p);
+    }
+    List<Uuid> fallback = new ArrayList<>();
+    for (AppendBatcher.Pending p : pending) {
+      p.done.await();
+      if (p.failed) {
+        fallback.add(p.userId);
+      } else if (p.event != null) {
+        delivered(p.userId, p.event, p.payload);
+        remember(p.userId, o.conversationId());
+      }
+    }
+    for (Uuid userId : fallback) {
+      deliver(userId, o);
     }
   }
 
@@ -182,13 +217,17 @@ final class UserLog {
     if (stored == null) {
       return null;
     }
-    LocalDateTime occurredAt = Timestamps.fromProto(stored.event().getOccurredAt());
+    delivered(userId, stored.event(), stored.payload());
+    return stored.event();
+  }
+
+  /** Counts an event stored in the user's log and publishes it. */
+  private void delivered(Uuid userId, Event event, byte[] payload) {
+    LocalDateTime occurredAt = Timestamps.fromProto(event.getOccurredAt());
     Metrics.FANOUT_DELIVERIES.inc();
     Metrics.FANOUT_LAG.observe(Duration.between(occurredAt, Timestamps.now()).toNanos() / 1e9);
     presence.publish(
-        userId,
-        Push.newBuilder().setEvent(UnsafeByteOperations.unsafeWrap(stored.payload())).build());
-    return stored.event();
+        userId, Push.newBuilder().setEvent(UnsafeByteOperations.unsafeWrap(payload)).build());
   }
 
   /** An event as appended, and its bytes as stored, which the push carries. */
