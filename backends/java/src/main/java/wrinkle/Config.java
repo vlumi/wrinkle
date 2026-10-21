@@ -21,7 +21,8 @@ public record Config(
     String blobUrl,
     String blobKeyId,
     String blobSecret,
-    String blobRegion) {
+    String blobRegion,
+    long ackIntervalMillis) {
 
   private static final Set<String> ROLES = Set.of("gateway", "fanout", "services");
 
@@ -60,6 +61,7 @@ public record Config(
             "WRINKLE_BLOB_SECRET",
             "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4");
     String blobRegion = env("WRINKLE_BLOB_REGION", "garage");
+    String ackIntervalMs = env("WRINKLE_ACK_INTERVAL_MS", "60000");
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
       String value = null;
@@ -87,6 +89,7 @@ public record Config(
         case "blob-key-id" -> blobKeyId = value;
         case "blob-secret" -> blobSecret = value;
         case "blob-region" -> blobRegion = value;
+        case "ack-interval-ms" -> ackIntervalMs = value;
         default -> throw new IllegalArgumentException("unknown flag " + a);
       }
     }
@@ -95,6 +98,10 @@ public record Config(
       if (!ROLES.contains(r)) {
         throw new IllegalArgumentException("unknown role " + r);
       }
+    }
+    long ackIntervalMillis = Long.parseLong(ackIntervalMs);
+    if (ackIntervalMillis < 0) {
+      throw new IllegalArgumentException("ack interval must not be negative");
     }
     return new Config(
         roleSet,
@@ -109,7 +116,8 @@ public record Config(
         blobUrl,
         blobKeyId,
         blobSecret,
-        blobRegion);
+        blobRegion,
+        ackIntervalMillis);
   }
 
   /** host:port, or :port for every interface. */

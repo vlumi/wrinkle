@@ -67,7 +67,7 @@ public final class Main {
     Gateway gateway = null;
     if (cfg.runsGateway()) {
       Backend backend = cfg.forwardsToServices() ? new RpcClient(cfg.services()) : shared.local();
-      gateway = new Gateway(backend, shared.presence());
+      gateway = new Gateway(backend, shared.presence(), cfg.ackIntervalMillis());
       gateway.register(sb, draining::get);
       if (cfg.forwardsToServices()) {
         log.info("gateway forwarding to services at {}", cfg.services());

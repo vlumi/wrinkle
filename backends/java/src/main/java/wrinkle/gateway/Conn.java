@@ -61,7 +61,8 @@ final class Conn {
   private final String remote;
   // Touched only by the inbound stream, which delivers one frame at a time.
   private final TokenBucket tokens;
-  private final AckCoalescer acks;
+  private final AckCoalescer.Timer ackTimer;
+  private final long ackIntervalNanos;
   private final AtomicInteger inFlight = new AtomicInteger();
   private final AtomicInteger queued = new AtomicInteger();
   private final AtomicBoolean closed = new AtomicBoolean();
@@ -75,10 +76,18 @@ final class Conn {
   private State state = State.PENDING;
   private Identity identity;
   private long connectBy;
+  // Guarded by this; made on the first ack.
+  private AckCoalescer acks;
 
   private record Identity(Uuid userId, long deviceId) {}
 
-  Conn(Backend backend, Connections connections, WebSocketWriter out, String remote) {
+  Conn(
+      Backend backend,
+      Connections connections,
+      WebSocketWriter out,
+      String remote,
+      AckCoalescer.Timer ackTimer,
+      long ackIntervalNanos) {
     this.backend = backend;
     this.connections = connections;
     this.out = out;
@@ -88,7 +97,8 @@ final class Conn {
     this.lastReceived = now;
     this.lastPing = now;
     this.tokens = new TokenBucket(RATE_BURST, RATE_PER_SECOND, now);
-    this.acks = new AckCoalescer(Thread::startVirtualThread, this::writeAck);
+    this.ackTimer = ackTimer;
+    this.ackIntervalNanos = ackIntervalNanos;
   }
 
   /** The user and device Connect established, or null before it. */
@@ -143,7 +153,7 @@ final class Conn {
       case REQUEST -> request(f.getRequest(), allowed);
       case ACK -> {
         if (allowed && identity() != null) {
-          acks.offer(f.getAck().getCursor());
+          acks().offer(f.getAck().getCursor());
         }
       }
       case PING -> {
@@ -192,6 +202,7 @@ final class Conn {
             new WebSocketProtocolViolationException(
                 WebSocketCloseStatus.TRY_AGAIN_LATER, "too slow"));
       }
+      flushAcks();
       return false;
     }
     return send(frame);
@@ -243,12 +254,14 @@ final class Conn {
     if (closed.compareAndSet(false, true)) {
       out.close(status, reason);
     }
+    flushAcks();
   }
 
   /** Closes the outbound side once the client's side has ended. */
   void end() {
     closed.set(true);
     out.close();
+    flushAcks();
   }
 
   void closeForShutdown() {
@@ -295,6 +308,39 @@ final class Conn {
     boolean release = state == State.BOUND;
     state = State.GONE;
     return release;
+  }
+
+  private synchronized AckCoalescer acks() {
+    if (acks == null) {
+      acks =
+          new AckCoalescer(
+              this::runAckWrite, ackTimer, System::nanoTime, ackIntervalNanos, this::writeAck);
+    }
+    return acks;
+  }
+
+  /** The connection is ending: its pending ack is written now. */
+  private void flushAcks() {
+    AckCoalescer a;
+    synchronized (this) {
+      a = acks;
+    }
+    if (a != null) {
+      a.end();
+    }
+  }
+
+  /** Counts as a request in flight, so a drain waits for it. */
+  private void runAckWrite(Runnable write) {
+    connections.requestStarted();
+    Thread.startVirtualThread(
+        () -> {
+          try {
+            write.run();
+          } finally {
+            connections.requestFinished();
+          }
+        });
   }
 
   private void writeAck(long cursor) {

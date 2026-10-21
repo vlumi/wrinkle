@@ -38,11 +38,20 @@ public final class Gateway implements WebSocketServiceHandler {
   private final ScheduledExecutorService timer =
       Executors.newSingleThreadScheduledExecutor(
           Thread.ofPlatform().name("gateway-timer").daemon().factory());
+  // Apart from the timer, which a drain stops: acks keep being written through a drain.
+  private final ScheduledExecutorService ackTimer =
+      Executors.newSingleThreadScheduledExecutor(
+          Thread.ofPlatform().name("gateway-acks").daemon().factory());
+  private final AckCoalescer.Timer acksTimer =
+      (task, delay) -> ackTimer.schedule(task, delay, TimeUnit.NANOSECONDS);
+  private final long ackIntervalNanos;
 
-  public Gateway(Backend backend, Presence presence) {
+  /** A device's acks are written at most once per ackIntervalMillis, and when it disconnects. */
+  public Gateway(Backend backend, Presence presence, long ackIntervalMillis) {
     this.backend = backend;
     this.presence = presence;
     this.connections = new Connections(presence);
+    this.ackIntervalNanos = TimeUnit.MILLISECONDS.toNanos(ackIntervalMillis);
   }
 
   /** Serves WebSocket upgrades until draining, then refuses them. */
@@ -88,7 +97,9 @@ public final class Gateway implements WebSocketServiceHandler {
   @Override
   public WebSocket handle(ServiceRequestContext ctx, WebSocket in) {
     WebSocketWriter out = WebSocket.streaming();
-    Conn conn = new Conn(backend, connections, out, ctx.remoteAddress().toString());
+    Conn conn =
+        new Conn(
+            backend, connections, out, ctx.remoteAddress().toString(), acksTimer, ackIntervalNanos);
     connections.opened(conn);
     Metrics.CONNECTIONS.inc();
     in.subscribe(
