@@ -20,6 +20,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
+	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -60,6 +61,9 @@ type Worker struct {
 	log           *slog.Logger
 	concurrency   int
 	listed        listedCache
+	// shards places users on the user keyspace's shards, for batches.
+	shards  vtdb.Shards
+	batches *batcher
 }
 
 // Config is what a worker needs: the brokers and consumer group, the user
@@ -72,9 +76,11 @@ type Config struct {
 	Concurrency   int
 	DB            *sql.DB
 	Conversations *sql.DB
-	Publisher     Publisher
-	Notifier      Notifier
-	Log           *slog.Logger
+	// UserKeyspace names DB's keyspace, whose shards batches follow.
+	UserKeyspace string
+	Publisher    Publisher
+	Notifier     Notifier
+	Log          *slog.Logger
 }
 
 // New connects the worker to the brokers.
@@ -98,9 +104,14 @@ func New(ctx context.Context, cfg Config) (*Worker, error) {
 		client.Close()
 		return nil, fmt.Errorf("kafka at %v: %w", cfg.Brokers, err)
 	}
+	shards, err := vtdb.LoadShards(ctx, cfg.DB, cfg.UserKeyspace)
+	if err != nil {
+		client.Close()
+		return nil, fmt.Errorf("shards of %s: %w", cfg.UserKeyspace, err)
+	}
 	return &Worker{
 		db: cfg.DB, conversations: cfg.Conversations, kafka: client, pub: cfg.Publisher, notifier: cfg.Notifier,
-		log: cfg.Log, concurrency: max(cfg.Concurrency, 1),
+		log: cfg.Log, concurrency: max(cfg.Concurrency, 1), shards: shards,
 	}, nil
 }
 
@@ -111,6 +122,7 @@ func (w *Worker) Close() { w.kafka.CloseAllowingRebalance() }
 // Run consumes until the context ends. A record is committed only after
 // every recipient's log has it; a failing record is retried, not skipped.
 func (w *Worker) Run(ctx context.Context) error {
+	w.batches = newBatcher(ctx, w)
 	for {
 		fetches := w.kafka.PollFetches(ctx)
 		if fetches.IsClientClosed() || ctx.Err() != nil {
@@ -241,6 +253,9 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 	if o.event.GetBody() == nil {
 		w.log.Error("skipping outbox record without a body", "kind", o.kind, "offset", rec.Offset)
 		return nil
+	}
+	if batchable(o) {
+		return w.deliverBatched(ctx, o)
 	}
 	g, gctx := errgroup.WithContext(ctx)
 	g.SetLimit(recipientConcurrency)

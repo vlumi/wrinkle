@@ -161,7 +161,7 @@ func run() error {
 		}
 		worker, err := fanout.New(ctx, fanout.Config{
 			Brokers: strings.Split(*brokers, ","), Group: "wrinkle-fanout", Concurrency: *fanoutN,
-			DB: userDB, Conversations: conversationDB, Publisher: pres, Notifier: notifier, Log: log.With("role", "fanout"),
+			DB: userDB, Conversations: conversationDB, UserKeyspace: "user", Publisher: pres, Notifier: notifier, Log: log.With("role", "fanout"),
 		})
 		if err != nil {
 			return err

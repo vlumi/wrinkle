@@ -55,12 +55,7 @@ func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) err
 	if err != nil || event == nil {
 		return err
 	}
-	if msg := event.GetMessage().GetMessage(); msg != nil {
-		w.listed.add(userID, o.conversationID)
-		if w.notifier != nil {
-			w.notifier.MessageDelivered(userID, msg, !o.direct())
-		}
-	}
+	w.messageDelivered(userID, o, event)
 	if deleted := event.GetMessageDeleted(); deleted != nil && w.notifier != nil {
 		var sender ids.UUID
 		if entry.deletedSender != nil {
@@ -69,6 +64,19 @@ func (w *Worker) deliver(ctx context.Context, userID ids.UUID, o *outboxRow) err
 		w.notifier.MessageDeleted(userID, deleted, sender)
 	}
 	return nil
+}
+
+// messageDelivered notes a message's list entry as existing and tells the
+// notifier.
+func (w *Worker) messageDelivered(userID ids.UUID, o *outboxRow, event *pb.Event) {
+	msg := event.GetMessage().GetMessage()
+	if msg == nil {
+		return
+	}
+	w.listed.add(userID, o.conversationID)
+	if w.notifier != nil {
+		w.notifier.MessageDelivered(userID, msg, !o.direct())
+	}
 }
 
 // peerForNewEntry returns the peer's current profile when the user's list
@@ -115,10 +123,15 @@ func (w *Worker) appendBuilt(ctx context.Context, userID, sourceID ids.UUID, out
 	if err != nil || event == nil {
 		return nil, err
 	}
+	w.delivered(ctx, userID, event, payload)
+	return event, nil
+}
+
+// delivered counts an event stored in the user's log and publishes it.
+func (w *Worker) delivered(ctx context.Context, userID ids.UUID, event *pb.Event, payload []byte) {
 	metrics.FanoutDeliveries.Inc()
 	metrics.FanoutLag.Observe(time.Since(event.GetOccurredAt().AsTime()).Seconds())
 	w.publish(ctx, userID, &backendv1.Push{Kind: &backendv1.Push_Event{Event: payload}})
-	return event, nil
 }
 
 // publish sends a push to the gateways holding the user's devices. A lost
