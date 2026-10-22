@@ -19,7 +19,7 @@ What is done, what is open and why, and the gaps that are known and accepted for
 - **Contacts and blocking (#10).** Mutual contacts by request and acceptance; groups take only the adder's contacts; a block refuses the blocked user one-to-one and hides them in shared groups on the blocker's devices. [Contacts and blocking](docs/architecture.md#contacts-and-blocking).
 - **Notes.** Each user's own conversation, shared among their devices, created on first open and pinned at the top of the list. [Groups](docs/architecture.md#groups).
 - **Push notifications.** `RegisterPushToken` in every backend; APNs from the Go fan-out to devices that are not connected, with the sealed content for the iOS notification service extension to decrypt. [Sending a message](docs/architecture.md#sending-a-message).
-- **Measurements.** Every shape measured on the current code, three repetitions each: all six sustain 500 messages per second end to end encrypted at 86 to 118 ms p50, and the database sets the limit above it. [docs/results/2026-10-15-shapes.md](docs/results/2026-10-15-shapes.md).
+- **Measurements.** Every shape measured on the current code, three repetitions each: five of six sustain 1000 messages per second end to end encrypted, the Elixir gateway 500, and the database sets the limit above 1000. [docs/results/2026-10-21-shapes.md](docs/results/2026-10-21-shapes.md).
 - **Coalesced acks.** Every gateway writes a connection's acks at most once a minute, and at once when the connection ends. [Acks](docs/architecture.md#acks).
 
 ## Open
@@ -28,12 +28,12 @@ In the order they would be done. Each item says why it comes where it does and h
 
 ### 1. Database ceiling
 
-**Why:** above about 500 messages per second the shared database limits every backend on a laptop. It is the Vitess layer in one process: at 1000 messages per second, about 3400 transactions and 15000 statements per second, vtcombo uses about 2.7 cores and mysqld 1.7, and the fan-out consumes about 700 records per second whatever its pool size or concurrency. Disk, Debezium and Kafka were ruled out ([history](docs/history.md)). Until it moves, no backend can be compared above 500 messages per second.
+**Why:** the shared database limits every backend on a laptop. It is the Vitess layer in one process: before steps 1 and 2 below, at 1000 messages per second, about 3400 transactions and 15000 statements per second, vtcombo used about 2.7 cores and mysqld 1.7. Disk, Debezium and Kafka were ruled out ([history](docs/history.md)). After steps 1 and 2 the limit moved from between 500 and 1000 messages per second to between 1000 and 1500 ([2026-10-21](docs/results/2026-10-21-shapes.md)); until it moves further, no backend can be compared above 1000.
 
 **Plan**, cheapest first, measuring after each step:
 
-1. Coalesced acks (done): 0.1 ack writes per message remain in a diagnostic count at 500 messages a second.
-2. Fewer statements per fan-out append (done): a message's copies are stored in one transaction per recipient shard with whatever else is queued for it, with multi-row statements. At 500 messages a second the fan-out's statements per message fell from about 12 to 2, and the database's from 24 to 14, in a diagnostic count; the protocol is to be run again.
+1. Coalesced acks (done): 0.1 ack writes per message remain in a diagnostic count at 500 messages a second, and the gateways use 16 to 23 % less CPU per message.
+2. Fewer statements per fan-out append (done): a message's copies are stored in one transaction per recipient shard with whatever else is queued for it, with multi-row statements. At 500 messages a second the fan-out's statements per message fell from about 12 to 2, and the database's from 24 to 14, in a diagnostic count. With step 1, the highest sustained rate doubled to 1000 messages a second.
 3. A plain MySQL profile of the infrastructure (`make infra-up PROFILE=mysql`): the same schema unsharded on one MySQL, with Debezium's MySQL connector reading its binlog. It measures Vitess's share, gives the backends headroom, and is the deployment the managed clouds offer ([docs/production.md](docs/production.md)). It also removes the stranded-offsets problem below.
 4. A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes, when the question is sharding rather than the backends.
 
@@ -70,6 +70,8 @@ In the order they would be done. Each item says why it comes where it does and h
 - **`MessageFailedEvent`**: drop it. Sends are answered synchronously and the fan-out retries until an append succeeds, so there is no asynchronous failure to report and no backend produces it ([Connect and sync](docs/architecture.md#connect-and-sync)). Reserve its field number and name so they are not reused.
 
 ### 5. Parity
+
+- **The Elixir gateway at 1000 messages per second.** The other three gateways deliver everything at 1000/s in front of the same Go services; the Elixir gateway times out about 5 % of its sends there while using about 0.4 of a core ([2026-10-21](docs/results/2026-10-21-shapes.md)), so a process on its path serializes the load. Profile it under load (`:observer`'s process list, or `:recon` on message queue lengths) and find the process whose queue grows: the one `Wrinkle.Push` process, the gRPC client's connection, or Bandit's handlers.
 
 - **Pushes from the Java fan-out.** The Java backend stores push tokens but sends nothing to APNs, so in a pool of Go and Java services instances the partitions a Java instance consumes get no notifications. Port Go's notifier: the provider token, the payload with the sealed content, presence and badge, and clearing rejected tokens; Java's HTTP client speaks HTTP/2.
 - **Prometheus scrapes only port 8080.** Add the side-by-side processes' and the cluster's ports as scrape targets, labeled by process, so the dashboards cover every shape.
