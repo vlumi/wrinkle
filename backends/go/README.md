@@ -191,7 +191,7 @@ The gateway adds `GET /v1/ws`. A services instance in the side-by-side setup lis
 
 ## Measured
 
-On 2026-10-15 at commit bfc6a78, from a fresh stack, medians of three ([shapes](../../docs/results/2026-10-15-shapes.md)): the monolith delivered 500 messages/s at 86 ms p50 and 204 ms p99 end to end with 1542 ms of CPU per thousand messages for every role, and keeps 28 KiB of live memory per idle connection (its resident memory after the load generator's sign-ins measures the password hashing, not the connections); the split gateway held 4000 idle connections in 225 MiB, at 95 / 238 ms and 385 ms of gateway CPU per thousand messages. Earlier runs: [gateways](../../docs/results/2026-10-11-gateways.md), [Go](../../docs/results/2026-10-10-go.md), [Go against Java](../../docs/results/2026-10-10-go-vs-java.md), [idle memory per connection](../../docs/results/2026-10-10-idle-memory.md).
+On 2026-10-21 at commit 607dcfd, from a fresh stack, medians of three ([shapes](../../docs/results/2026-10-21-shapes.md)): the monolith delivered 500 messages/s at 63 ms p50 and 123 ms p99 end to end and 1000/s at 153 / 481 ms, with 1095 ms of CPU per thousand messages at 500 for every role, and keeps 27 KiB of live memory per idle connection; the split gateway delivered 500/s at 67 / 140 ms and 1000/s at 250 / 665 ms with 298 ms of gateway CPU per thousand messages, and held 4000 idle connections in 226 MiB. Earlier runs: [2026-10-15](../../docs/results/2026-10-15-shapes.md), [gateways](../../docs/results/2026-10-11-gateways.md), [Go](../../docs/results/2026-10-10-go.md), [Go against Java](../../docs/results/2026-10-10-go-vs-java.md), [idle memory per connection](../../docs/results/2026-10-10-idle-memory.md).
 
 ## Gaps
 

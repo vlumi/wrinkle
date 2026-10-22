@@ -220,7 +220,7 @@ sequenceDiagram
 4. **Push.** After the append, the worker publishes the event, now carrying its log position, to the recipient's Valkey channel. Each gateway holding one of that user's devices is subscribed to the channel and writes the event to those connections.
 5. **Notify.** For a recipient's devices that are not connected and have registered for push, the Go fan-out sends an APNs notification.
 
-The sender's response returns after step 1; everything after it is asynchronous. End to end, send to receipt on a connected device, took 86 to 118 ms at the median at 500 messages a second in the last results ([2026-10-15](results/2026-10-15-shapes.md)).
+The sender's response returns after step 1; everything after it is asynchronous. End to end, send to receipt on a connected device, took 63 to 72 ms at the median at 500 messages a second, and 153 to 250 ms at 1000, in the last results ([2026-10-21](results/2026-10-21-shapes.md)).
 
 ### Read marks
 
@@ -328,7 +328,7 @@ The prototype's single Vitess process has one known weakness: it starts empty wh
 - **Requests** scale with services instances, which hold no state.
 - **Writes** scale with shards. A send is one transaction on one conversation shard; its fan-out is one transaction per participant on their user shards.
 - **Fan-out** scales with Kafka partitions, keyed by conversation, so different conversations proceed in parallel and each stays in order.
-- **The database** is where a laptop runs out first: above about 500 messages a second the single Vitess process limits every backend ([ROADMAP.md](../ROADMAP.md), "Database ceiling").
+- **The database** is where a laptop runs out first: above about 1000 messages a second the single Vitess process limits every backend ([ROADMAP.md](../ROADMAP.md), "Database ceiling").
 
 Where the prototype departs from the design it was sized on, push routing through a channel per user and frequent acks, is listed in [capacity.md](capacity.md).
 

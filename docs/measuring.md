@@ -42,4 +42,4 @@ Never compare numbers taken on different machines or infrastructure settings; ta
 ## Caveats
 
 - End-to-end latency includes the change-data path: Debezium reading the binlog through vtgate, Kafka, and the fan-out worker. That part is shared by every backend and dominates at low load. Its own figure is the backend's `wrinkle_fanout_lag_seconds` histogram.
-- The database and brokers are capped in memory and run under Docker Desktop's virtual machine; they may saturate before a backend does, and on a laptop they do, between 500 and 1000 messages per second (ROADMAP.md, "Database ceiling"). Watch their CPU with `make infra-status` during the high-rate runs and note it.
+- The database and brokers are capped in memory and run under Docker Desktop's virtual machine; they may saturate before a backend does, and on a laptop they do, between 1000 and 1500 messages per second (between 500 and 1000 before 2026-10-21) (ROADMAP.md, "Database ceiling"). Watch their CPU with `make infra-status` during the high-rate runs and note it.
