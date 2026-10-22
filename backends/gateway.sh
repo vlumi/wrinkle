@@ -33,7 +33,7 @@ case $lang in
     # The VM ignores SIGINT, which would open its break menu; Ctrl-C becomes
     # SIGTERM, on which the gateway drains.
     cd elixir
-    ELIXIR_ERL_OPTIONS="+Bi ${ELIXIR_ERL_OPTIONS:-}" mix run --no-halt &
+    ELIXIR_ERL_OPTIONS="+Bi +sbwt none +sbwtdcpu none +sbwtdio none ${ELIXIR_ERL_OPTIONS:-}" mix run --no-halt &
     vm=$!
     trap 'kill $vm 2>/dev/null || true' INT TERM
     status=0
