@@ -75,7 +75,7 @@ reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backen
 ##@ Monoliths (all roles in one process, on :8080; one at a time; Ctrl-C stops it)
 ##~ Settings for push and the iOS team come from .env (see .env.example). ARGS=... passes flags.
 
-.PHONY: run-go-mono run-java-mono
+.PHONY: run-go-mono run-java-mono run-ts-mono
 run-go-mono: build-go  ## Go, all roles in one process
 	backends/ports-free.sh 8080
 	$(GO_BACKEND) $(ARGS)
@@ -84,18 +84,25 @@ run-java-mono: build-java  ## Java, all roles in one process
 	backends/ports-free.sh 8080
 	$(JAVA_BACKEND) $(ARGS)
 
+run-ts-mono: ts-deps  ## TypeScript, all roles in one process
+	backends/ports-free.sh 8080
+	$(SHAPE_ts-mono) $(ARGS)
+
 ##@ Side by side (services instances and gateways behind the balancers)
 ##~ make lb-up, then services instances and gateways in other terminals, in any number and language.
 ##~ INSTANCE=2 (up to 4) runs another services instance; PORT=... moves a gateway.
 
 INSTANCE ?= 1
 
-.PHONY: run-go-services run-java-services run-go-gw run-java-gw run-elixir-gw run-rust-gw
+.PHONY: run-go-services run-java-services run-ts-services run-go-gw run-java-gw run-elixir-gw run-rust-gw run-ts-gw
 run-go-services: build-go  ## Go services and fan-out, instance INSTANCE (RPC on :9100+n)
 	INSTANCE=$(INSTANCE) backends/services.sh go $(ARGS)
 
 run-java-services: build-java  ## Java services and fan-out, instance INSTANCE; no pushes yet
 	INSTANCE=$(INSTANCE) backends/services.sh java $(ARGS)
+
+run-ts-services: ts-deps  ## TypeScript services and fan-out, instance INSTANCE
+	INSTANCE=$(INSTANCE) backends/services.sh ts $(ARGS)
 
 run-go-gw: build-go  ## Go gateway on :8180
 	backends/gateway.sh go $(PORT)
@@ -108,6 +115,9 @@ run-rust-gw: build-rust  ## Rust gateway on :8182
 
 run-java-gw: build-java  ## Java gateway on :8183
 	backends/gateway.sh java $(PORT)
+
+run-ts-gw: ts-deps  ## TypeScript gateway on :8184
+	backends/gateway.sh ts $(PORT)
 
 .PHONY: certs tls-up tls-down lb-up lb-down
 certs:  ## A TLS certificate for this Mac from mkcert, for the TLS edge and the web client

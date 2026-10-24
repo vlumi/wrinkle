@@ -2,7 +2,7 @@
 # One gateway of the side-by-side setup, forwarding to the services instances
 # through the services balancer (make lb-up). Each language has its own port,
 # so they can run side by side against the same users.
-# Usage: gateway.sh go|elixir|rust|java [port]
+# Usage: gateway.sh go|elixir|rust|java|ts [port]
 set -euo pipefail
 cd "$(dirname "$0")"
 lang=${1:-}
@@ -11,8 +11,9 @@ case $lang in
   elixir) port=${2:-8181} ;;
   rust) port=${2:-8182} ;;
   java) port=${2:-8183} ;;
+  ts) port=${2:-8184} ;;
   *)
-    echo "usage: gateway.sh go|elixir|rust|java [port]" >&2
+    echo "usage: gateway.sh go|elixir|rust|java|ts [port]" >&2
     exit 2
     ;;
 esac
@@ -44,4 +45,5 @@ case $lang in
     ;;
   rust) exec rust/target/release/wrinkle ;;
   java) exec java/build/install/wrinkle/bin/wrinkle --roles gateway ;;
+  ts) exec ts/wrinkle --roles gateway ;;
 esac

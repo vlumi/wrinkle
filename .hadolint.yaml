@@ -2,5 +2,8 @@ ignored:
   # The Vitess image is built locally from a release tag; its OS packages
   # follow the base image rather than being pinned one by one.
   - DL3041
+  # Likewise the build tools of the TypeScript image's build stage, which
+  # follow the pinned Node image.
+  - DL3008
   # Users are created in the image itself, so names resolve.
   - DL3066
