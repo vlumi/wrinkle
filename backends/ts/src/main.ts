@@ -5,9 +5,9 @@ import { homedir, hostname } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { Pool } from "mysql2/promise";
-import { accounts } from "./accounts/feature.ts";
+import { accountsFeature } from "./accounts/feature.ts";
 import { contacts } from "./contacts/feature.ts";
-import { conversation } from "./conversation/feature.ts";
+import { conversation, leaveAllGroups } from "./conversation/feature.ts";
 import { devicesync } from "./devicesync/feature.ts";
 import { startFanout, topics, type Fanout } from "./fanout/worker.ts";
 import { Server } from "./gateway/server.ts";
@@ -90,7 +90,14 @@ async function main(): Promise<void> {
       }),
       log: log.with({ role: "services" }),
     };
-    const built = newLocal(deps, [accounts, devicesync, conversation, contacts, uploads, stickers]);
+    const built = newLocal(deps, [
+      accountsFeature({ leaveGroups: leaveAllGroups }),
+      devicesync,
+      conversation,
+      contacts,
+      uploads,
+      stickers,
+    ]);
     features = built.features;
     backend = built.local;
   }
