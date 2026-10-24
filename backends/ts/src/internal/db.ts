@@ -1,6 +1,8 @@
 // A connection pool for one Vitess keyspace through vtgate, and what the
 // services share for it. Parameters are interpolated on the client, so
 // vtgate sees no prepared statements; BIGINT columns come back as bigint.
+import { create } from "@bufbuild/protobuf";
+import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 import mysql, { type Pool, type PoolConnection, type RowDataPacket, type ResultSetHeader } from "mysql2/promise";
 
 export type Row = RowDataPacket;
@@ -73,6 +75,48 @@ export async function tx<T>(pool: Pool, fn: (c: PoolConnection) => Promise<T>): 
   } finally {
     c.release();
   }
+}
+
+/** A DATETIME(6) as read: a Date, with the microseconds a Date drops. */
+export type DbTime = Date & { micros?: number };
+
+export function parseDateTime(s: string): DbTime {
+  const d: DbTime = new Date(s.replace(" ", "T") + "Z");
+  const fraction = /\.(\d+)$/.exec(s)?.[1];
+  if (fraction) d.micros = Number(fraction.padEnd(6, "0").slice(3, 6));
+  return d;
+}
+
+const datetimeType = 12;
+
+/** Rows of a SELECT, with its DATETIME columns as DbTime, to the microsecond. */
+export async function timedRows<T = Row>(q: Querier, sql: string, args: unknown[] = []): Promise<T[]> {
+  const [result, fields] = await q.query<RowDataPacket[]>({ sql, dateStrings: true }, args);
+  const times = fields.filter((f) => f.type === datetimeType).map((f) => f.name);
+  for (const r of result)
+    for (const name of times) {
+      const v = r[name] as string | null;
+      if (v !== null) r[name] = parseDateTime(v);
+    }
+  return result as T[];
+}
+
+/** The first row of timedRows, or undefined. */
+export async function timedRow<T = Row>(q: Querier, sql: string, args: unknown[] = []): Promise<T | undefined> {
+  return (await timedRows<T>(q, sql, args))[0];
+}
+
+/** Microseconds since the epoch, keeping what the database stored. */
+export const microsOf = (d: DbTime): bigint => BigInt(d.getTime()) * 1000n + BigInt(d.micros ?? 0);
+
+/** The time as a contract timestamp, to the microsecond the database stored. */
+export function timestampOf(d: DbTime): Timestamp {
+  const ms = d.getTime();
+  const seconds = Math.floor(ms / 1000);
+  return create(TimestampSchema, {
+    seconds: BigInt(seconds),
+    nanos: (ms - seconds * 1000) * 1_000_000 + (d.micros ?? 0) * 1000,
+  });
 }
 
 /** The time as the database stores it: UTC, to the microsecond (milliseconds here). */
