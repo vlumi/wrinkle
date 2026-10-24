@@ -29,7 +29,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 | Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
 | Object storage | blobs: avatars, stickers, encrypted attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
 
-The services are two, split by keyspace. The conversation service owns the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs. The sync service owns the user keyspace: accounts, devices and profiles, sync and conversation lists, uploads, stickers and push tokens; the code splits it further (accounts, uploads and stickers are packages of their own in Go and Java). The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
+The services are two, split by keyspace. The conversation service owns the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs. The sync service owns the user keyspace: accounts, devices and profiles, sync and conversation lists, uploads, stickers and push tokens; the code splits it further (accounts, uploads and stickers are packages of their own in Go, Java and TypeScript). The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
 
 ### Shapes
 
@@ -85,7 +85,7 @@ Claims make the lookups that ids no longer answer, each sharded by its own key, 
 - **Pairs.** `conversation_pair` maps two users, smaller id first bytewise, to their conversation, sharded by the first user. The first opener's insert claims the pair; both opening at once end up with the same conversation. A claim whose conversation row is missing is completed by the next open. A user's notes are the pair of the user with themselves, so two devices opening them at once end up with the same notes too.
 - **Groups.** `group_claim` maps a creator and the client's group id to the group, so a retried CreateGroup finds the group the first attempt made.
 
-Go and Java implement all of this, and the password and token formats, alike (unit tests in each hold the same vectors), so both work on the same data; the Elixir and Rust gateways only carry ids.
+Go, Java and TypeScript implement all of this, and the password and token formats, alike (unit tests in each hold the same vectors), so all three work on the same data; the Elixir and Rust gateways only carry ids.
 
 ## Accounts
 
@@ -338,7 +338,8 @@ Where the prototype departs from the design it was sized on, push routing throug
 |---|---|---|---|
 | [Go](../backends/go/README.md) | goroutines, coder/websocket | database/sql, franz-go | APNs |
 | [Java](../backends/java/README.md) | Armeria on Netty, virtual threads | HikariCP, the Kafka client | not yet |
-| [Elixir](../backends/elixir/README.md) | Bandit, a process per connection | beside Go or Java services | through the services |
-| [Rust](../backends/rust/README.md) | axum on tokio, a task per connection | beside Go or Java services | through the services |
+| [TypeScript](../backends/ts/README.md) | ws on Node, one event loop | mysql2, librdkafka | APNs |
+| [Elixir](../backends/elixir/README.md) | Bandit, a process per connection | beside Go, Java or TypeScript services | through the services |
+| [Rust](../backends/rust/README.md) | axum on tokio, a task per connection | beside Go, Java or TypeScript services | through the services |
 
 Clients: the [web client](../clients/web) in React and TypeScript, the [iOS client](../clients/ios) in SwiftUI with local storage, and the [Go client library](../clients/go) the conformance tests and the load generator use.

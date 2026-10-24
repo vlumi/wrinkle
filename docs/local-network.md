@@ -72,7 +72,7 @@ WRINKLE_APNS_KEY=~/path/to/AuthKey_XXXXXXXXXX.p8
 
 and restart the backend; it logs "push notifications on". Without a key everything else works and the app catches up when it is opened.
 
-Pushes are sent by the Go fan-out, so they need the Go monolith or Go services instances; which gateway a device uses does not matter. The Java fan-out stores tokens but does not push yet. In a pool with both, such as the cluster's default of two Go and one Java services instances, the Go and Java instances split Kafka's partitions between them, so a message whose conversation falls to a Java instance gets no push; for testing push, run only Go services (`make cluster-up JAVA_SERVICES=0`, or a Go monolith).
+Pushes are sent by the Go and TypeScript fan-out, so they need one of those monoliths or Go or TypeScript services instances; which gateway a device uses does not matter. The Java fan-out stores tokens but does not push yet. In a pool with both, such as the cluster's default of two Go and one Java services instances, the Go and Java instances split Kafka's partitions between them, so a message whose conversation falls to a Java instance gets no push; for testing push, run only Go services (`make cluster-up JAVA_SERVICES=0`, or a Go monolith).
 
 Message text is encrypted, so the backend sends notifications with the generic body "New message" and the sealed content; the app's notification service extension decrypts it on the phone. It reads the keys from an app group, `group.fi.misaki.wrinkle`, which the team must have and both app ids (`fi.misaki.wrinkle` and `fi.misaki.wrinkle.NotificationService`) must be allowed; automatic signing in `make ios-device` usually registers it, otherwise add App Groups under Signing & Capabilities in Xcode for both targets. Without it the app works, but notifications keep the generic body.
 
@@ -138,7 +138,7 @@ The first time each program listens, macOS asks whether to accept incoming conne
 
 ### Side by side
 
-The shape the design scales in, natively: services instances and gateways as separate processes, any number of each, in any of the languages, behind two balancers. Go and Java services implement the same internal contract, so they serve in one pool; their fan-out shares one Kafka consumer group, so they split that work too. The Elixir and Rust implementations are gateways, run beside Go or Java services. Their toolchains:
+The shape the design scales in, natively: services instances and gateways as separate processes, any number of each, in any of the languages, behind two balancers. Go, Java and TypeScript services implement the same internal contract, so they serve in one pool; their fan-out shares one Kafka consumer group, so they split that work too. The Elixir and Rust implementations are gateways, run beside any of those services. Their toolchains:
 
 ```sh
 brew install elixir

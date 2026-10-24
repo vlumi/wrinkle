@@ -24,7 +24,7 @@ Prototype:
 
 [docs/production.md](docs/production.md) lists what a public deployment would take, with deployment options and their costs.
 
-**Status:** Go and Java backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements comparing the three gateways and the two monoliths are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
+**Status:** Go, Java and TypeScript backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements comparing the shapes are in [docs/results/](docs/results/); the TypeScript backend is not measured yet. See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
 
 Users register with a name and a password, sign in on any number of devices, each with its own token, and manage their profile (name, icon, picture), their devices and their account, which they can delete. Users become contacts by asking and accepting, and can block anyone. Conversations are direct, between any two users, or groups of up to 256 of the creator's and members' contacts, with a topic and admins. Messages carry text, a sticker or attachments (images and files, with thumbnails); their sender can delete them for everyone, anyone can react to them with up to three emoji, and every participant's read position is shared. Content is encrypted end to end: the servers see who talks to whom and when, group topics and membership, profiles and avatars, and sizes, but no text, sticker, attachment or reaction.
 
@@ -83,14 +83,15 @@ Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by 
 
 ## Implementations
 
-All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them. A backend can also be split into gateways and services instances over an internal RPC, any number of each behind balancers, which is the shape the design scales in. The Elixir and Rust implementations are gateways only, since connection handling is where the languages differ most; Go and Java services serve them all, in one pool.
+All backends implement the same Protobuf contract and pass the same conformance tests, so clients and the load generator work against any of them. A backend can also be split into gateways and services instances over an internal RPC, any number of each behind balancers, which is the shape the design scales in. The Elixir and Rust implementations are gateways only, since connection handling is where the languages differ most; Go, Java and TypeScript services serve them all, in one pool.
 
 | Backend | Shape | Push |
 |---|---|---|
 | [Go](backends/go/README.md) | all roles in one process, or gateways and services instances | yes |
 | [Java](backends/java/README.md) | all roles in one process, or gateways and services instances | stores tokens, does not send yet |
-| [Elixir](backends/elixir/README.md) | gateways, beside Go or Java services | through the Go services |
-| [Rust](backends/rust/README.md) | gateways, beside Go or Java services | through the Go services |
+| [TypeScript](backends/ts/README.md) | all roles in one process, or gateways and services instances | yes |
+| [Elixir](backends/elixir/README.md) | gateways, beside Go, Java or TypeScript services | through the Go or TypeScript services |
+| [Rust](backends/rust/README.md) | gateways, beside Go, Java or TypeScript services | through the Go or TypeScript services |
 
 Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
 
@@ -107,7 +108,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client, and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
+Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client (26 or later for the TypeScript backend), and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
 
 1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana).
 2. `make cluster-up`: the whole backend in containers, two Go and one Java services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono` or `make run-java-mono`; `mono` in a target name is the monolith, `gw` a gateway.
