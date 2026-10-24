@@ -109,7 +109,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client (26 or later for the TypeScript backend), and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
 
-1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana).
+1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana). `make infra-up PROFILE=mysql` runs plain MySQL in place of Vitess, the same schema unsharded.
 2. `make cluster-up`: the whole backend in containers, two Go and one Java services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono` or `make run-java-mono`; `mono` in a target name is the monolith, `gw` a gateway.
 3. `make web`: the web client, built and served over HTTPS on port 8081, together with the TLS edge on port 8443 in front of whatever serves port 8080 (`make tls-up`, which makes the certificate with mkcert if there is none yet). Devices reach the backend only through the edge: port 8080 listens on loopback, and the web server refuses to serve the network without a certificate.
 4. Open `https://localhost:8081/` on the Mac. Phones and other computers on the network open the Mac's address instead and must trust the certificate first: [docs/local-network.md](docs/local-network.md), which also covers the iOS app, push notifications and running the backends natively.
@@ -121,7 +121,7 @@ Grafana is at http://localhost:3000 with a dashboard over the backend's metrics,
 ```text
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
-infra/        Docker Compose for Vitess, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana, HAProxy for the TLS edge and the side-by-side setup, and the cluster; the arm64 Vitess image
+infra/        Docker Compose for Vitess or MySQL, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana, HAProxy for the TLS edge and the side-by-side setup, and the cluster; the arm64 Vitess image
 backends/     go/, java/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)

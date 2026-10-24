@@ -59,7 +59,7 @@ The services already refuse requests about conversations the user is not in. Mis
 
 The prototype's infrastructure is shaped for the scale the design was sized for ([architecture.md, Choices](architecture.md#choices); the figures in [capacity.md](capacity.md)), not for a first deployment:
 
-- **Vitess**: managed clouds offer plain MySQL, not Vitess. The schema runs unsharded on one MySQL; Debezium would use its MySQL connector, reading the binlog, instead of the Vitess one. Managed Vitess exists (PlanetScale, on AWS or GCP) and keeps the sharding path open.
+- **Vitess**: managed clouds offer plain MySQL, not Vitess. The schema runs unsharded on one MySQL; Debezium uses its MySQL connector, reading the binlog, instead of the Vitess one, as the infrastructure's `mysql` profile does locally (`make infra-up PROFILE=mysql`). Managed Vitess exists (PlanetScale, on AWS or GCP) and keeps the sharding path open.
 - **Kafka**: managed Kafka has a high floor (below). A single broker, or Redpanda as one binary, carries a small service; it is the simplest piece to move to a managed service later.
 - **Valkey** is cheap everywhere.
 

@@ -1,0 +1,2820 @@
+docker compose -f infra/docker-compose.yml up -d --build --wait
+ Image wrinkle/vttestserver:v24.0.4 Building 
+#1 [internal] load local bake definitions
+#1 reading from stdin 552B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 1.34kB done
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/golang:1.26-bookworm
+#3 ...
+
+#4 [auth] library/golang:pull token for registry-1.docker.io
+#4 DONE 0.0s
+
+#5 [auth] library/mysql:pull token for registry-1.docker.io
+#5 DONE 0.0s
+
+#6 [internal] load metadata for docker.io/library/mysql:8.4.9
+#6 DONE 2.2s
+
+#3 [internal] load metadata for docker.io/library/golang:1.26-bookworm
+#3 DONE 2.8s
+
+#7 [internal] load .dockerignore
+#7 transferring context: 2B done
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 28B done
+#8 DONE 0.0s
+
+#9 [stage-1 1/4] FROM docker.io/library/mysql:8.4.9@sha256:c36050afdca850f23cef85703f84c7531a5ae155a11b5ee1c60acb09937c4084
+#9 resolve docker.io/library/mysql:8.4.9@sha256:c36050afdca850f23cef85703f84c7531a5ae155a11b5ee1c60acb09937c4084 0.0s done
+#9 DONE 0.0s
+
+#10 [builder 1/3] FROM docker.io/library/golang:1.26-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af
+#10 resolve docker.io/library/golang:1.26-bookworm@sha256:632dff7351799a5a9954a48dc06670ade72ee44e8c351cdc0e5a57af2fea21af 0.0s done
+#10 DONE 0.0s
+
+#11 [stage-1 2/4] RUN microdnf install -y procps-ng && microdnf clean all     && groupadd -r vitess && useradd -r -g vitess vitess     && mkdir -p /vt/vtdataroot && chown -R vitess:vitess /vt
+#11 CACHED
+
+#12 [builder 2/3] WORKDIR /vt/src/vitess.io/vitess
+#12 CACHED
+
+#13 [builder 3/3] RUN git clone --depth 1 --branch "v24.0.4" https://github.com/vitessio/vitess.git .     && mkdir -p /vt/install/bin     && CGO_ENABLED=0 go build -trimpath         -ldflags "$(tools/build_version_flags.sh)"         -o /vt/install/bin ./go/cmd/mysqlctl ./go/cmd/mysqlctld ./go/cmd/vtcombo ./go/cmd/vttestserver     && cp -R config /vt/install/
+#13 CACHED
+
+#14 [stage-1 3/4] COPY --from=builder --chown=vitess:vitess /vt/install /vt
+#14 CACHED
+
+#15 [stage-1 4/4] COPY --chown=vitess:vitess run.sh /vt/run.sh
+#15 CACHED
+
+#16 exporting to image
+#16 exporting layers done
+#16 exporting manifest sha256:8669796be8ccd28f216e667d5705a4c19106000015a7699dbfa300142f67d649 done
+#16 exporting config sha256:84a03ad3db9f44d6a647b88ebce5f3d8508b41a74884e564d8dae7613ec7f947 done
+#16 exporting attestation manifest sha256:739778eee9c698ff4f7fcefcb69fee98ac65cf6f1d94f4dfa77f7bff58a09953 done
+#16 exporting manifest list sha256:513c2adeb1ec0eeca96f20071e4edeefe2c803cda8b30aad1f19a08ae8497cd2 done
+#16 naming to docker.io/wrinkle/vttestserver:v24.0.4 done
+#16 unpacking to docker.io/wrinkle/vttestserver:v24.0.4 done
+#16 DONE 0.0s
+
+#17 resolving provenance for metadata file
+#17 DONE 0.0s
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Container wrinkle-blobs-1 Running 
+ Container wrinkle-kafka-1 Running 
+ Container wrinkle-vitess-1 Running 
+ Container wrinkle-connect-1 Running 
+ Container wrinkle-valkey-1 Running 
+ Container wrinkle-garage-1 Running 
+ Container wrinkle-grafana-1 Running 
+ Container wrinkle-prometheus-1 Running 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+infra/kafka-topics.sh
+infra/garage-init.sh
+infra/debezium/register.sh
+connector wrinkle-outbox registered
+connector wrinkle-user-outbox registered
+go build -o /Users/vlumi/src/vlumi/wrinkle/bin/wrinkle ./backends/go/cmd/wrinkle
+FRESH=1 LABEL=go loadgen/protocol.sh docs/results/2026-10-24-go.jsonl /Users/vlumi/src/vlumi/wrinkle/bin/wrinkle
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 1.588s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.047s, 0 failed
+published conversation keys in 257ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.11s (0.0 ms per 1000 msgs) rss=251.2 MiB live=19.8 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 3.84s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.103s, 0 failed
+published conversation keys in 481ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.16s (0.0 ms per 1000 msgs) rss=241.6 MiB live=35.3 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 7.566s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.163s, 0 failed
+published conversation keys in 935ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.31s (0.0 ms per 1000 msgs) rss=451.6 MiB live=63.1 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 14.536s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.317s, 0 failed
+published conversation keys in 1.874s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.53s (0.0 ms per 1000 msgs) rss=452.2 MiB live=118.6 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 4.596s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.102s, 0 failed
+published conversation keys in 532ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=70.3ms p90=91.3ms p99=108.0ms max=125.8ms; send rtt p50=40.4ms p99=79.9ms
+backend cpu=6.32s (1051.0 ms per 1000 msgs) rss=701.7 MiB live=39.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.649s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.143s, 0 failed
+published conversation keys in 610ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=29975 (499.6/s) errors=0 undecryptable=0 received=29975/29975
+end-to-end p50=61.0ms p90=84.3ms p99=125.1ms max=180.3ms; send rtt p50=30.7ms p99=83.0ms
+backend cpu=29.68s (990.3 ms per 1000 msgs) rss=662.7 MiB live=36.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.675s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.124s, 0 failed
+published conversation keys in 576ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=133.5ms p90=267.8ms p99=351.4ms max=564.8ms; send rtt p50=50.5ms p99=143.1ms
+backend cpu=59.85s (996.9 ms per 1000 msgs) rss=221.4 MiB live=38.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.692s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.131s, 0 failed
+published conversation keys in 572ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-882: context deadline exceeded
+send from lg-984: context deadline exceeded
+send from lg-969: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=28325 undecryptable=0 received=64869/89984
+end-to-end p50=3830.3ms p90=8388.3ms p99=9894.6ms max=10289.6ms; send rtt p50=3746.3ms p99=9805.5ms
+backend cpu=67.59s (751.1 ms per 1000 msgs) rss=250.3 MiB live=130.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.633s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.121s, 0 failed
+published conversation keys in 514ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-347: context deadline exceeded
+send from lg-356: context deadline exceeded
+send from lg-366: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=66659 undecryptable=0 received=64493/120000
+end-to-end p50=4574.4ms p90=8839.8ms p99=9970.3ms max=10334.8ms; send rtt p50=4475.3ms p99=9869.6ms
+backend cpu=71.61s (596.7 ms per 1000 msgs) rss=415.0 MiB live=184.9 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 2.476s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.069s, 0 failed
+published conversation keys in 263ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.11s (0.0 ms per 1000 msgs) rss=666.5 MiB live=23.7 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.629s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.119s, 0 failed
+published conversation keys in 473ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.17s (0.0 ms per 1000 msgs) rss=667.6 MiB live=38.0 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.26s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.25s, 0 failed
+published conversation keys in 967ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.28s (0.0 ms per 1000 msgs) rss=706.2 MiB live=67.0 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.556s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.455s, 0 failed
+published conversation keys in 2.111s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.42s (0.0 ms per 1000 msgs) rss=694.7 MiB live=114.3 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 4.635s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.137s, 0 failed
+published conversation keys in 609ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=66.9ms p90=87.8ms p99=104.9ms max=115.8ms; send rtt p50=37.4ms p99=76.3ms
+backend cpu=6.16s (1024.3 ms per 1000 msgs) rss=688.7 MiB live=35.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.775s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.118s, 0 failed
+published conversation keys in 551ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=60.5ms p90=81.4ms p99=115.5ms max=205.6ms; send rtt p50=30.5ms p99=71.0ms
+backend cpu=29.69s (989.2 ms per 1000 msgs) rss=632.6 MiB live=36.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.56s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.114s, 0 failed
+published conversation keys in 484ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=170.2ms p90=395.2ms p99=521.8ms max=1604.5ms; send rtt p50=56.4ms p99=314.4ms
+backend cpu=59.68s (994.2 ms per 1000 msgs) rss=688.7 MiB live=38.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.623s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.14s, 0 failed
+published conversation keys in 579ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-506: context deadline exceeded
+send from lg-466: context deadline exceeded
+send from lg-621: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=28898 undecryptable=0 received=64211/89984
+end-to-end p50=3887.8ms p90=8434.8ms p99=9911.9ms max=10285.1ms; send rtt p50=3783.8ms p99=9810.2ms
+backend cpu=66.70s (741.3 ms per 1000 msgs) rss=573.1 MiB live=131.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.606s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.118s, 0 failed
+published conversation keys in 505ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-207: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-273: context deadline exceeded
+send from lg-348: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=67213 undecryptable=0 received=63770/120000
+end-to-end p50=4564.2ms p90=8862.9ms p99=9979.4ms max=10320.6ms; send rtt p50=4461.4ms p99=9878.4ms
+backend cpu=71.17s (593.1 ms per 1000 msgs) rss=583.0 MiB live=185.5 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 2.473s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.058s, 0 failed
+published conversation keys in 256ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.09s (0.0 ms per 1000 msgs) rss=665.5 MiB live=21.1 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.553s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.123s, 0 failed
+published conversation keys in 507ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.17s (0.0 ms per 1000 msgs) rss=625.0 MiB live=37.7 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.294s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.225s, 0 failed
+published conversation keys in 1.021s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.29s (0.0 ms per 1000 msgs) rss=726.0 MiB live=64.9 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.529s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.463s, 0 failed
+published conversation keys in 2.058s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.54s (0.0 ms per 1000 msgs) rss=712.3 MiB live=116.3 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 4.584s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.14s, 0 failed
+published conversation keys in 574ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=69.1ms p90=89.4ms p99=106.7ms max=129.2ms; send rtt p50=39.4ms p99=78.3ms
+backend cpu=6.32s (1050.9 ms per 1000 msgs) rss=685.3 MiB live=37.8 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.7s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.129s, 0 failed
+published conversation keys in 545ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=60.6ms p90=81.4ms p99=104.9ms max=203.9ms; send rtt p50=30.8ms p99=71.4ms
+backend cpu=29.94s (997.5 ms per 1000 msgs) rss=687.4 MiB live=36.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.687s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.159s, 0 failed
+published conversation keys in 592ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=166.1ms p90=397.7ms p99=501.3ms max=1089.6ms; send rtt p50=55.7ms p99=209.2ms
+backend cpu=59.71s (994.6 ms per 1000 msgs) rss=687.4 MiB live=38.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.684s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.136s, 0 failed
+published conversation keys in 482ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-831: context deadline exceeded
+send from lg-898: context deadline exceeded
+send from lg-921: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=28980 undecryptable=0 received=64249/89984
+end-to-end p50=3919.1ms p90=8465.4ms p99=9933.5ms max=10377.4ms; send rtt p50=3810.7ms p99=9826.5ms
+backend cpu=66.54s (739.5 ms per 1000 msgs) rss=726.3 MiB live=129.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.583s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.128s, 0 failed
+published conversation keys in 568ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-397: context deadline exceeded
+send from lg-444: context deadline exceeded
+send from lg-416: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=67181 undecryptable=0 received=63574/120000
+end-to-end p50=4601.2ms p90=8888.7ms p99=9974.6ms max=10348.6ms; send rtt p50=4489.5ms p99=9864.2ms
+backend cpu=70.96s (591.3 ms per 1000 msgs) rss=337.1 MiB live=186.6 MiB connections=1000
+FRESH=1 LABEL=go-gateway loadgen/protocol.sh docs/results/2026-10-24-go-gateway.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/go/split.sh
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 1.441s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.059s, 0 failed
+published conversation keys in 265ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.06s (0.0 ms per 1000 msgs) rss=59.6 MiB live=20.4 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 3.777s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.114s, 0 failed
+published conversation keys in 525ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.13s (0.0 ms per 1000 msgs) rss=86.4 MiB live=34.9 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 7.45s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.214s, 0 failed
+published conversation keys in 966ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.27s (0.0 ms per 1000 msgs) rss=155.0 MiB live=62.1 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 14.709s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.408s, 0 failed
+published conversation keys in 1.916s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.46s (0.0 ms per 1000 msgs) rss=252.2 MiB live=112.5 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 4.779s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.139s, 0 failed
+published conversation keys in 576ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=70.9ms p90=92.1ms p99=111.2ms max=145.5ms; send rtt p50=40.9ms p99=78.5ms
+backend cpu=1.97s (327.7 ms per 1000 msgs) rss=91.6 MiB live=35.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.722s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.167s, 0 failed
+published conversation keys in 543ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=29978 (499.6/s) errors=0 undecryptable=0 received=29978/29978
+end-to-end p50=63.9ms p90=87.0ms p99=129.3ms max=205.2ms; send rtt p50=32.8ms p99=82.4ms
+backend cpu=8.69s (289.8 ms per 1000 msgs) rss=91.5 MiB live=33.9 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.719s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.139s, 0 failed
+published conversation keys in 578ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=223.2ms p90=402.7ms p99=744.1ms max=2055.4ms; send rtt p50=127.7ms p99=658.9ms
+backend cpu=18.21s (303.4 ms per 1000 msgs) rss=94.1 MiB live=36.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.615s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.13s, 0 failed
+published conversation keys in 532ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-771: context deadline exceeded
+send from lg-830: context deadline exceeded
+send from lg-801: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=32045 undecryptable=0 received=61981/89984
+end-to-end p50=4024.5ms p90=8515.5ms p99=9895.8ms max=10279.3ms; send rtt p50=3937.8ms p99=9812.9ms
+backend cpu=21.79s (242.1 ms per 1000 msgs) rss=270.8 MiB live=147.9 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.745s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.135s, 0 failed
+published conversation keys in 636ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-251: context deadline exceeded
+send from lg-281: context deadline exceeded
+send from lg-339: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=70868 undecryptable=0 received=60892/120000
+end-to-end p50=4653.0ms p90=8910.7ms p99=9975.6ms max=10316.0ms; send rtt p50=4555.1ms p99=9878.2ms
+backend cpu=25.10s (209.2 ms per 1000 msgs) rss=383.2 MiB live=217.0 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 2.482s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.092s, 0 failed
+published conversation keys in 304ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.08s (0.0 ms per 1000 msgs) rss=59.1 MiB live=20.7 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.706s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.159s, 0 failed
+published conversation keys in 545ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.13s (0.0 ms per 1000 msgs) rss=90.4 MiB live=35.9 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.272s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.311s, 0 failed
+published conversation keys in 1.133s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.31s (0.0 ms per 1000 msgs) rss=143.2 MiB live=63.5 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.832s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.561s, 0 failed
+published conversation keys in 2.296s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.45s (0.0 ms per 1000 msgs) rss=254.0 MiB live=112.4 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 4.782s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.137s, 0 failed
+published conversation keys in 541ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=70.5ms p90=91.2ms p99=116.8ms max=134.2ms; send rtt p50=41.0ms p99=83.7ms
+backend cpu=1.96s (325.0 ms per 1000 msgs) rss=90.5 MiB live=33.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.644s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.145s, 0 failed
+published conversation keys in 573ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=63.3ms p90=85.3ms p99=128.4ms max=232.9ms; send rtt p50=32.7ms p99=77.7ms
+backend cpu=8.62s (287.1 ms per 1000 msgs) rss=92.5 MiB live=33.3 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.766s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.147s, 0 failed
+published conversation keys in 689ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=464.2ms p90=1155.6ms p99=2280.9ms max=6026.2ms; send rtt p50=339.9ms p99=2175.2ms
+backend cpu=18.34s (305.5 ms per 1000 msgs) rss=102.2 MiB live=41.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.907s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.157s, 0 failed
+published conversation keys in 628ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-878: context deadline exceeded
+send from lg-920: context deadline exceeded
+send from lg-951: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=33109 undecryptable=0 received=61090/89984
+end-to-end p50=4043.9ms p90=8510.6ms p99=9915.6ms max=10334.5ms; send rtt p50=3940.6ms p99=9817.6ms
+backend cpu=21.60s (240.0 ms per 1000 msgs) rss=274.5 MiB live=148.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.79s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.141s, 0 failed
+published conversation keys in 578ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-287: context deadline exceeded
+send from lg-343: context deadline exceeded
+send from lg-398: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (1999.9/s) errors=71073 undecryptable=0 received=60493/120000
+end-to-end p50=4644.8ms p90=8913.6ms p99=9981.6ms max=10342.9ms; send rtt p50=4537.6ms p99=9875.8ms
+backend cpu=24.61s (205.1 ms per 1000 msgs) rss=381.9 MiB live=219.2 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 2.381s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.067s, 0 failed
+published conversation keys in 305ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.06s (0.0 ms per 1000 msgs) rss=58.7 MiB live=18.8 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.838s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.155s, 0 failed
+published conversation keys in 556ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.17s (0.0 ms per 1000 msgs) rss=87.0 MiB live=34.2 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.422s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.283s, 0 failed
+published conversation keys in 1.066s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.24s (0.0 ms per 1000 msgs) rss=148.1 MiB live=64.5 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.735s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.567s, 0 failed
+published conversation keys in 2.37s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.53s (0.0 ms per 1000 msgs) rss=259.7 MiB live=110.5 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 4.604s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.154s, 0 failed
+published conversation keys in 560ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=70.0ms p90=91.2ms p99=112.6ms max=142.3ms; send rtt p50=40.6ms p99=80.4ms
+backend cpu=2.04s (339.0 ms per 1000 msgs) rss=91.5 MiB live=35.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.792s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.159s, 0 failed
+published conversation keys in 558ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=63.4ms p90=84.0ms p99=108.0ms max=201.0ms; send rtt p50=32.9ms p99=72.6ms
+backend cpu=8.73s (290.8 ms per 1000 msgs) rss=92.8 MiB live=33.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.627s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.204s, 0 failed
+published conversation keys in 611ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=403.1ms p90=879.9ms p99=1605.2ms max=3956.4ms; send rtt p50=276.1ms p99=1486.8ms
+backend cpu=18.25s (304.0 ms per 1000 msgs) rss=99.4 MiB live=40.3 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.827s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.138s, 0 failed
+published conversation keys in 577ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-556: context deadline exceeded
+send from lg-570: context deadline exceeded
+send from lg-631: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=32869 undecryptable=0 received=61308/89984
+end-to-end p50=4068.1ms p90=8560.7ms p99=9946.2ms max=10460.8ms; send rtt p50=3954.8ms p99=9836.7ms
+backend cpu=21.78s (242.0 ms per 1000 msgs) rss=270.2 MiB live=147.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.655s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.167s, 0 failed
+published conversation keys in 562ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-158: context deadline exceeded
+send from lg-142: context deadline exceeded
+send from lg-222: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=71213 undecryptable=0 received=60424/120000
+end-to-end p50=4666.5ms p90=8923.7ms p99=9989.8ms max=10387.0ms; send rtt p50=4559.9ms p99=9877.5ms
+backend cpu=24.77s (206.4 ms per 1000 msgs) rss=381.8 MiB live=217.5 MiB connections=1000
+cd backends/java && ./gradlew --quiet --console=plain installDist
+FRESH=1 LABEL=java loadgen/protocol.sh docs/results/2026-10-24-java.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/java/build/install/wrinkle/bin/wrinkle
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 2.261s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.081s, 0 failed
+published conversation keys in 251ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.66s (0.0 ms per 1000 msgs) rss=667.6 MiB live=135.8 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.888s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.118s, 0 failed
+published conversation keys in 537ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.65s (0.0 ms per 1000 msgs) rss=691.0 MiB live=141.9 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.417s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.232s, 0 failed
+published conversation keys in 996ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.84s (0.0 ms per 1000 msgs) rss=572.1 MiB live=154.1 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 17.418s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.474s, 0 failed
+published conversation keys in 1.817s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=1.17s (0.0 ms per 1000 msgs) rss=658.2 MiB live=177.9 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 5.974s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.15s, 0 failed
+published conversation keys in 612ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=71.1ms p90=92.7ms p99=118.8ms max=149.3ms; send rtt p50=42.3ms p99=87.3ms
+backend cpu=9.78s (1626.2 ms per 1000 msgs) rss=528.5 MiB live=139.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.099s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.134s, 0 failed
+published conversation keys in 627ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=61.9ms p90=86.2ms p99=126.6ms max=183.0ms; send rtt p50=32.2ms p99=84.0ms
+backend cpu=33.77s (1125.2 ms per 1000 msgs) rss=474.5 MiB live=144.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 5.912s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.142s, 0 failed
+published conversation keys in 618ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=59968 (999.5/s) errors=0 undecryptable=0 received=59968/59968
+end-to-end p50=138.7ms p90=280.4ms p99=387.1ms max=591.5ms; send rtt p50=54.9ms p99=260.5ms
+backend cpu=52.50s (875.5 ms per 1000 msgs) rss=519.4 MiB live=140.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 5.846s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.13s, 0 failed
+published conversation keys in 556ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-91: ERROR_CODE_INTERNAL: internal error
+send from lg-63: ERROR_CODE_INTERNAL: internal error
+send from lg-648: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=31028 undecryptable=0 received=61265/89984
+end-to-end p50=5133.5ms p90=5286.4ms p99=5403.9ms max=5573.7ms; send rtt p50=5042.3ms p99=5151.0ms
+backend cpu=67.08s (745.5 ms per 1000 msgs) rss=626.1 MiB live=170.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 5.947s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.139s, 0 failed
+published conversation keys in 530ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-841: ERROR_CODE_INTERNAL: internal error
+send from lg-554: ERROR_CODE_INTERNAL: internal error
+send from lg-796: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=70032 undecryptable=0 received=60605/120000
+end-to-end p50=5146.7ms p90=5338.2ms p99=5451.3ms max=5566.4ms; send rtt p50=5046.6ms p99=5147.7ms
+backend cpu=79.88s (665.7 ms per 1000 msgs) rss=672.1 MiB live=178.9 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 3.472s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.074s, 0 failed
+published conversation keys in 350ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.77s (0.0 ms per 1000 msgs) rss=620.9 MiB live=136.1 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 6.021s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.137s, 0 failed
+published conversation keys in 545ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.65s (0.0 ms per 1000 msgs) rss=592.4 MiB live=141.7 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 11.147s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.252s, 0 failed
+published conversation keys in 1.181s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.79s (0.0 ms per 1000 msgs) rss=687.0 MiB live=148.5 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 21.512s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.466s, 0 failed
+published conversation keys in 2.132s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=1.14s (0.0 ms per 1000 msgs) rss=696.7 MiB live=172.1 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 5.82s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.126s, 0 failed
+published conversation keys in 594ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=71.8ms p90=93.9ms p99=115.1ms max=151.2ms; send rtt p50=42.6ms p99=87.2ms
+backend cpu=9.85s (1637.0 ms per 1000 msgs) rss=549.7 MiB live=139.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.052s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.136s, 0 failed
+published conversation keys in 680ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=61.3ms p90=83.9ms p99=113.4ms max=183.0ms; send rtt p50=32.2ms p99=74.1ms
+backend cpu=33.93s (1130.3 ms per 1000 msgs) rss=473.3 MiB live=143.8 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.381s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.145s, 0 failed
+published conversation keys in 691ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=139.2ms p90=356.2ms p99=439.4ms max=530.8ms; send rtt p50=49.9ms p99=156.6ms
+backend cpu=52.20s (869.5 ms per 1000 msgs) rss=477.1 MiB live=144.8 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.203s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.13s, 0 failed
+published conversation keys in 809ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-37: ERROR_CODE_INTERNAL: internal error
+send from lg-528: ERROR_CODE_INTERNAL: internal error
+send from lg-463: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=31090 undecryptable=0 received=61410/89984
+end-to-end p50=5138.8ms p90=5307.0ms p99=5428.3ms max=5523.5ms; send rtt p50=5042.4ms p99=5143.2ms
+backend cpu=67.00s (744.6 ms per 1000 msgs) rss=587.0 MiB live=169.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.018s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.152s, 0 failed
+published conversation keys in 610ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-945: ERROR_CODE_INTERNAL: internal error
+send from lg-919: ERROR_CODE_INTERNAL: internal error
+send from lg-15: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=70336 undecryptable=0 received=60405/120000
+end-to-end p50=5151.3ms p90=5362.9ms p99=5473.8ms max=5668.9ms; send rtt p50=5045.9ms p99=5147.6ms
+backend cpu=80.01s (666.8 ms per 1000 msgs) rss=680.0 MiB live=175.3 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 3.35s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.083s, 0 failed
+published conversation keys in 384ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.82s (0.0 ms per 1000 msgs) rss=680.8 MiB live=135.4 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 5.939s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.133s, 0 failed
+published conversation keys in 557ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.71s (0.0 ms per 1000 msgs) rss=464.8 MiB live=141.9 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 11.164s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.242s, 0 failed
+published conversation keys in 1.009s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.87s (0.0 ms per 1000 msgs) rss=757.8 MiB live=153.8 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 21.808s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.376s, 0 failed
+published conversation keys in 2.073s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.93s (0.0 ms per 1000 msgs) rss=787.1 MiB live=173.1 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 6.014s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.137s, 0 failed
+published conversation keys in 608ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=70.8ms p90=93.3ms p99=112.5ms max=143.6ms; send rtt p50=41.9ms p99=83.2ms
+backend cpu=9.82s (1631.7 ms per 1000 msgs) rss=512.4 MiB live=139.8 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.002s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.154s, 0 failed
+published conversation keys in 568ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=61.6ms p90=83.5ms p99=111.8ms max=178.4ms; send rtt p50=32.0ms p99=75.7ms
+backend cpu=33.68s (1122.0 ms per 1000 msgs) rss=498.1 MiB live=140.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.121s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.132s, 0 failed
+published conversation keys in 651ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=147.8ms p90=367.9ms p99=474.4ms max=718.7ms; send rtt p50=53.2ms p99=219.6ms
+backend cpu=52.39s (872.7 ms per 1000 msgs) rss=504.5 MiB live=145.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.264s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.131s, 0 failed
+published conversation keys in 565ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-778: ERROR_CODE_INTERNAL: internal error
+send from lg-328: ERROR_CODE_INTERNAL: internal error
+send from lg-156: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=32132 undecryptable=0 received=60445/89984
+end-to-end p50=5141.1ms p90=5336.3ms p99=5469.0ms max=5750.1ms; send rtt p50=5043.2ms p99=5156.1ms
+backend cpu=67.22s (747.0 ms per 1000 msgs) rss=602.9 MiB live=170.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.199s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.138s, 0 failed
+published conversation keys in 642ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-914: ERROR_CODE_INTERNAL: internal error
+send from lg-337: ERROR_CODE_INTERNAL: internal error
+send from lg-194: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=70855 undecryptable=0 received=59721/120000
+end-to-end p50=5154.2ms p90=5375.9ms p99=5500.4ms max=5640.2ms; send rtt p50=5047.8ms p99=5153.5ms
+backend cpu=79.99s (666.6 ms per 1000 msgs) rss=663.8 MiB live=174.9 MiB connections=1000
+FRESH=1 LABEL=java-gateway loadgen/protocol.sh docs/results/2026-10-24-java-gateway.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/java/split.sh
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 2.606s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.08s, 0 failed
+published conversation keys in 406ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.43s (0.0 ms per 1000 msgs) rss=331.3 MiB live=99.0 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 5.051s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.147s, 0 failed
+published conversation keys in 757ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.47s (0.0 ms per 1000 msgs) rss=393.7 MiB live=106.0 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.356s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.279s, 0 failed
+published conversation keys in 1.096s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.58s (0.0 ms per 1000 msgs) rss=366.1 MiB live=117.1 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 17.885s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.496s, 0 failed
+published conversation keys in 1.939s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.81s (0.0 ms per 1000 msgs) rss=495.7 MiB live=140.4 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 6.437s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.165s, 0 failed
+published conversation keys in 727ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=74.2ms p90=94.1ms p99=110.6ms max=118.1ms; send rtt p50=44.6ms p99=81.1ms
+backend cpu=3.29s (547.4 ms per 1000 msgs) rss=351.1 MiB live=106.9 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.164s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.214s, 0 failed
+published conversation keys in 819ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=63.3ms p90=86.4ms p99=137.7ms max=208.2ms; send rtt p50=33.6ms p99=88.0ms
+backend cpu=8.47s (282.3 ms per 1000 msgs) rss=376.9 MiB live=107.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.25s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.189s, 0 failed
+published conversation keys in 828ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=59968 (999.5/s) errors=0 undecryptable=0 received=59968/59968
+end-to-end p50=132.3ms p90=263.9ms p99=360.7ms max=672.4ms; send rtt p50=53.2ms p99=253.8ms
+backend cpu=15.04s (250.8 ms per 1000 msgs) rss=377.3 MiB live=108.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.449s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.181s, 0 failed
+published conversation keys in 782ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-807: ERROR_CODE_INTERNAL: internal error
+send from lg-220: ERROR_CODE_INTERNAL: internal error
+send from lg-485: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=32898 undecryptable=0 received=60070/89984
+end-to-end p50=5140.8ms p90=5283.0ms p99=5411.6ms max=5594.5ms; send rtt p50=5045.5ms p99=5151.8ms
+backend cpu=22.75s (252.8 ms per 1000 msgs) rss=864.6 MiB live=184.2 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.482s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.187s, 0 failed
+published conversation keys in 872ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-230: ERROR_CODE_INTERNAL: internal error
+send from lg-343: ERROR_CODE_INTERNAL: internal error
+send from lg-766: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=2000/s sent=120036 (2000.6/s) errors=73108 undecryptable=0 received=58476/120036
+end-to-end p50=5154.6ms p90=5350.5ms p99=5470.9ms max=5589.8ms; send rtt p50=5044.3ms p99=5159.5ms
+backend cpu=28.23s (235.2 ms per 1000 msgs) rss=1150.7 MiB live=210.1 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 3.54s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.114s, 0 failed
+published conversation keys in 358ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.38s (0.0 ms per 1000 msgs) rss=336.1 MiB live=99.8 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 6.306s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.175s, 0 failed
+published conversation keys in 770ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.44s (0.0 ms per 1000 msgs) rss=393.4 MiB live=106.3 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 11.759s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.293s, 0 failed
+published conversation keys in 1.287s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.51s (0.0 ms per 1000 msgs) rss=379.4 MiB live=118.6 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 22.743s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.501s, 0 failed
+published conversation keys in 2.022s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.75s (0.0 ms per 1000 msgs) rss=460.2 MiB live=140.3 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 6.352s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.186s, 0 failed
+published conversation keys in 837ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=73.2ms p90=94.2ms p99=108.0ms max=134.2ms; send rtt p50=44.4ms p99=80.5ms
+backend cpu=3.36s (557.8 ms per 1000 msgs) rss=364.8 MiB live=106.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.322s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.163s, 0 failed
+published conversation keys in 698ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=63.0ms p90=83.4ms p99=116.5ms max=206.4ms; send rtt p50=33.4ms p99=71.5ms
+backend cpu=8.48s (282.5 ms per 1000 msgs) rss=348.4 MiB live=107.2 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.309s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.162s, 0 failed
+published conversation keys in 737ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=145.8ms p90=362.4ms p99=453.4ms max=583.4ms; send rtt p50=53.9ms p99=170.2ms
+backend cpu=14.80s (246.6 ms per 1000 msgs) rss=399.7 MiB live=108.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.581s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.199s, 0 failed
+published conversation keys in 791ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-39: ERROR_CODE_INTERNAL: internal error
+send from lg-944: ERROR_CODE_INTERNAL: internal error
+send from lg-44: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=33124 undecryptable=0 received=60193/89984
+end-to-end p50=5144.9ms p90=5316.6ms p99=5451.7ms max=5608.1ms; send rtt p50=5043.8ms p99=5149.8ms
+backend cpu=22.83s (253.8 ms per 1000 msgs) rss=882.3 MiB live=183.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.447s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.182s, 0 failed
+published conversation keys in 910ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-848: ERROR_CODE_INTERNAL: internal error
+send from lg-479: ERROR_CODE_INTERNAL: internal error
+send from lg-964: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=73442 undecryptable=0 received=58455/120000
+end-to-end p50=5159.2ms p90=5363.1ms p99=5473.7ms max=5672.7ms; send rtt p50=5047.8ms p99=5155.5ms
+backend cpu=28.39s (236.6 ms per 1000 msgs) rss=1061.6 MiB live=210.5 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 3.571s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.105s, 0 failed
+published conversation keys in 470ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.41s (0.0 ms per 1000 msgs) rss=313.7 MiB live=99.4 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 6.395s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.215s, 0 failed
+published conversation keys in 735ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.52s (0.0 ms per 1000 msgs) rss=363.1 MiB live=105.9 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 11.989s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.326s, 0 failed
+published conversation keys in 1.2s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.51s (0.0 ms per 1000 msgs) rss=391.1 MiB live=118.7 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 22.611s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.402s, 0 failed
+published conversation keys in 2.031s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.96s (0.0 ms per 1000 msgs) rss=420.2 MiB live=133.7 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 6.221s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.168s, 0 failed
+published conversation keys in 893ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=73.3ms p90=93.7ms p99=109.9ms max=125.8ms; send rtt p50=43.6ms p99=82.2ms
+backend cpu=3.42s (568.2 ms per 1000 msgs) rss=373.3 MiB live=107.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.163s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.161s, 0 failed
+published conversation keys in 853ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=62.8ms p90=83.8ms p99=110.9ms max=229.6ms; send rtt p50=33.3ms p99=74.2ms
+backend cpu=8.61s (286.8 ms per 1000 msgs) rss=414.1 MiB live=107.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.277s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.177s, 0 failed
+published conversation keys in 882ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60026 (1000.4/s) errors=0 undecryptable=0 received=60026/60026
+end-to-end p50=140.5ms p90=359.4ms p99=442.2ms max=520.4ms; send rtt p50=51.9ms p99=144.6ms
+backend cpu=14.67s (244.3 ms per 1000 msgs) rss=389.1 MiB live=108.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.795s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.207s, 0 failed
+published conversation keys in 913ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-901: ERROR_CODE_INTERNAL: internal error
+send from lg-108: ERROR_CODE_INTERNAL: internal error
+send from lg-231: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=33214 undecryptable=0 received=59697/89984
+end-to-end p50=5147.1ms p90=5334.7ms p99=5467.7ms max=5601.5ms; send rtt p50=5044.7ms p99=5154.5ms
+backend cpu=22.86s (254.0 ms per 1000 msgs) rss=911.1 MiB live=184.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 6.373s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.253s, 0 failed
+published conversation keys in 768ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-879: ERROR_CODE_INTERNAL: internal error
+send from lg-984: ERROR_CODE_INTERNAL: internal error
+send from lg-868: ERROR_CODE_INTERNAL: internal error
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=72789 undecryptable=0 received=58427/120000
+end-to-end p50=5159.2ms p90=5377.3ms p99=5503.6ms max=5622.4ms; send rtt p50=5045.9ms p99=5160.0ms
+backend cpu=28.70s (239.2 ms per 1000 msgs) rss=1098.1 MiB live=212.4 MiB connections=1000
+cd backends/elixir && mix deps.get --quiet 2>/dev/null
+Resolving Hex dependencies...
+Resolution completed in 0.039s
+Unchanged:
+  bandit 1.12.5 VULNERABLE!
+    EEF-CVE-2026-105659 (HIGH)
+    aka: CVE-2026-105659, GHSA-69m6-wcv4-rwcf
+    HTTP/2 blocked-send deadlines reset on every WINDOW_UPDATE, letting a trickle pin stream processes indefinitely in Bandit
+    https://osv.dev/vulnerability/EEF-CVE-2026-105659
+
+    EEF-CVE-2026-105660 (MEDIUM)
+    aka: CVE-2026-105660, GHSA-v53v-9hvg-37jf
+    Unvalidated HTTP/1 request-target authority lets a client choose conn.host and conn.port in Bandit
+    https://osv.dev/vulnerability/EEF-CVE-2026-105660
+  bunt 1.0.0
+  credo 1.7.19
+  file_system 1.1.1
+  googleapis 0.1.0
+  grpc 1.0.5
+  grpc_core 1.0.5
+  hpax 1.1.0
+  jason 1.4.5
+  mime 2.0.7
+  mint 1.11.0
+  nimble_options 1.1.1
+  plug 1.20.3
+  plug_crypto 2.2.0 VULNERABLE!
+    EEF-CVE-2026-105963 (MEDIUM)
+    aka: CVE-2026-105963, GHSA-ffw9-w85g-f2vh
+    Secret key base exposed in stack trace arguments on wrong-typed Plug.Crypto arguments
+    https://osv.dev/vulnerability/EEF-CVE-2026-105963
+  protobuf 0.17.1
+  redix 1.9.2
+  telemetry 1.4.2
+  thousand_island 1.5.0
+  websock 0.5.3
+  websock_adapter 0.6.0
+[33mA new Hex version is available (2.5.1 < 2.6.0), please update with `mix local.hex`[0m
+All dependencies have been fetched
+cd backends/elixir && mix compile --quiet 2>/dev/null
+FRESH=1 LABEL=elixir loadgen/protocol.sh docs/results/2026-10-24-elixir.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/elixir/run.sh
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 1.483s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.061s, 0 failed
+published conversation keys in 310ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.06s (0.0 ms per 1000 msgs) rss=124.9 MiB live=76.1 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 3.732s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.122s, 0 failed
+published conversation keys in 578ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.07s (0.0 ms per 1000 msgs) rss=159.6 MiB live=86.3 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 7.481s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.23s, 0 failed
+published conversation keys in 1.072s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.12s (0.0 ms per 1000 msgs) rss=202.8 MiB live=112.5 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 15.038s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.423s, 0 failed
+published conversation keys in 2.078s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.14s (0.0 ms per 1000 msgs) rss=292.1 MiB live=156.7 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 4.801s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.14s, 0 failed
+published conversation keys in 662ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=75.3ms p90=95.6ms p99=111.6ms max=126.8ms; send rtt p50=44.2ms p99=80.5ms
+backend cpu=2.38s (395.4 ms per 1000 msgs) rss=192.2 MiB live=106.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.747s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.121s, 0 failed
+published conversation keys in 675ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=67.9ms p90=92.9ms p99=150.7ms max=227.8ms; send rtt p50=35.8ms p99=88.6ms
+backend cpu=8.90s (296.4 ms per 1000 msgs) rss=201.9 MiB live=109.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.651s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.131s, 0 failed
+published conversation keys in 575ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+send from lg-893: context deadline exceeded
+send from lg-351: context deadline exceeded
+send from lg-75: context deadline exceeded
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=1035 undecryptable=0 received=59000/60032
+end-to-end p50=1573.8ms p90=5119.1ms p99=8834.4ms max=10233.1ms; send rtt p50=1500.2ms p99=8757.9ms
+backend cpu=17.32s (288.4 ms per 1000 msgs) rss=265.9 MiB live=151.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.795s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.14s, 0 failed
+published conversation keys in 583ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-653: context deadline exceeded
+send from lg-676: context deadline exceeded
+send from lg-734: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=38506 undecryptable=0 received=56702/89984
+end-to-end p50=4236.1ms p90=8668.1ms p99=9945.9ms max=10292.1ms; send rtt p50=4150.0ms p99=9852.5ms
+backend cpu=24.54s (272.7 ms per 1000 msgs) rss=394.6 MiB live=231.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.755s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.121s, 0 failed
+published conversation keys in 672ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-243: context deadline exceeded
+send from lg-241: context deadline exceeded
+send from lg-229: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=78019 undecryptable=0 received=55219/120000
+end-to-end p50=4751.5ms p90=9022.4ms p99=9985.2ms max=10426.0ms; send rtt p50=4650.8ms p99=9883.1ms
+backend cpu=30.55s (254.6 ms per 1000 msgs) rss=469.0 MiB live=297.6 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 2.505s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.069s, 0 failed
+published conversation keys in 311ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.06s (0.0 ms per 1000 msgs) rss=131.8 MiB live=77.0 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.838s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.165s, 0 failed
+published conversation keys in 669ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.07s (0.0 ms per 1000 msgs) rss=157.3 MiB live=88.7 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.403s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.249s, 0 failed
+published conversation keys in 1.238s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.09s (0.0 ms per 1000 msgs) rss=202.3 MiB live=103.0 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.708s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.511s, 0 failed
+published conversation keys in 2.56s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.15s (0.0 ms per 1000 msgs) rss=292.1 MiB live=154.6 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 4.733s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.142s, 0 failed
+published conversation keys in 615ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=74.7ms p90=94.8ms p99=112.3ms max=133.0ms; send rtt p50=44.2ms p99=82.9ms
+backend cpu=2.40s (398.1 ms per 1000 msgs) rss=196.7 MiB live=101.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.637s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.138s, 0 failed
+published conversation keys in 608ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=67.4ms p90=89.7ms p99=120.3ms max=245.7ms; send rtt p50=35.7ms p99=78.2ms
+backend cpu=8.94s (297.9 ms per 1000 msgs) rss=206.0 MiB live=117.2 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.874s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.139s, 0 failed
+published conversation keys in 629ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+send from lg-999: context deadline exceeded
+send from lg-859: context deadline exceeded
+send from lg-820: context deadline exceeded
+connections=1000 devices/user=1 target=1000/s sent=59968 (999.5/s) errors=945 undecryptable=0 received=59023/59968
+end-to-end p50=1647.1ms p90=5158.5ms p99=8881.5ms max=10249.6ms; send rtt p50=1544.4ms p99=8780.3ms
+backend cpu=17.34s (289.2 ms per 1000 msgs) rss=277.2 MiB live=149.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.82s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.144s, 0 failed
+published conversation keys in 614ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-511: context deadline exceeded
+send from lg-619: context deadline exceeded
+send from lg-635: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=38708 undecryptable=0 received=56874/89984
+end-to-end p50=4216.8ms p90=8641.1ms p99=9948.0ms max=10367.0ms; send rtt p50=4118.4ms p99=9851.4ms
+backend cpu=24.76s (275.1 ms per 1000 msgs) rss=387.5 MiB live=222.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.77s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.13s, 0 failed
+published conversation keys in 605ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-135: context deadline exceeded
+send from lg-150: context deadline exceeded
+send from lg-196: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=78195 undecryptable=0 received=55177/120000
+end-to-end p50=4776.2ms p90=9005.7ms p99=9995.2ms max=10441.2ms; send rtt p50=4671.7ms p99=9885.5ms
+backend cpu=30.12s (251.0 ms per 1000 msgs) rss=510.7 MiB live=291.9 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 2.438s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.071s, 0 failed
+published conversation keys in 330ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.06s (0.0 ms per 1000 msgs) rss=126.9 MiB live=77.0 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.756s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.141s, 0 failed
+published conversation keys in 610ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.09s (0.0 ms per 1000 msgs) rss=153.8 MiB live=87.1 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.341s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.271s, 0 failed
+published conversation keys in 1.158s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.09s (0.0 ms per 1000 msgs) rss=197.3 MiB live=106.8 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.712s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.493s, 0 failed
+published conversation keys in 2.389s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.14s (0.0 ms per 1000 msgs) rss=290.9 MiB live=159.6 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 4.718s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.155s, 0 failed
+published conversation keys in 653ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=74.6ms p90=95.8ms p99=117.2ms max=142.6ms; send rtt p50=43.8ms p99=89.2ms
+backend cpu=2.35s (391.1 ms per 1000 msgs) rss=182.4 MiB live=106.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.798s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.132s, 0 failed
+published conversation keys in 635ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=67.6ms p90=90.2ms p99=115.9ms max=209.5ms; send rtt p50=36.1ms p99=79.9ms
+backend cpu=8.86s (295.3 ms per 1000 msgs) rss=213.5 MiB live=111.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.884s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.147s, 0 failed
+published conversation keys in 588ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+send from lg-791: context deadline exceeded
+send from lg-442: context deadline exceeded
+send from lg-770: context deadline exceeded
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=1424 undecryptable=0 received=58609/60032
+end-to-end p50=1756.2ms p90=5518.4ms p99=9107.5ms max=10318.0ms; send rtt p50=1652.5ms p99=8996.1ms
+backend cpu=17.35s (289.0 ms per 1000 msgs) rss=275.4 MiB live=154.9 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.709s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.127s, 0 failed
+published conversation keys in 594ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-360: context deadline exceeded
+send from lg-537: context deadline exceeded
+send from lg-545: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=39133 undecryptable=0 received=56321/89984
+end-to-end p50=4233.7ms p90=8696.7ms p99=9949.6ms max=10389.5ms; send rtt p50=4130.3ms p99=9847.5ms
+backend cpu=24.65s (273.9 ms per 1000 msgs) rss=385.0 MiB live=236.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.804s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.134s, 0 failed
+published conversation keys in 686ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-142: context deadline exceeded
+send from lg-208: context deadline exceeded
+send from lg-194: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=77832 undecryptable=0 received=55408/120000
+end-to-end p50=4730.1ms p90=8991.2ms p99=9996.0ms max=10377.1ms; send rtt p50=4615.2ms p99=9884.2ms
+backend cpu=30.17s (251.4 ms per 1000 msgs) rss=481.1 MiB live=292.2 MiB connections=1000
+cd backends/rust && cargo build --release --quiet
+FRESH=1 LABEL=rust loadgen/protocol.sh docs/results/2026-10-24-rust.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/rust/run.sh
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 1.604s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.067s, 0 failed
+published conversation keys in 235ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.01s (0.0 ms per 1000 msgs) rss=23.1 MiB live=0.0 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 3.83s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.122s, 0 failed
+published conversation keys in 477ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.03s (0.0 ms per 1000 msgs) rss=37.5 MiB live=0.0 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 7.407s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.211s, 0 failed
+published conversation keys in 968ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.05s (0.0 ms per 1000 msgs) rss=66.9 MiB live=0.0 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 14.755s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.411s, 0 failed
+published conversation keys in 1.906s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.11s (0.0 ms per 1000 msgs) rss=131.2 MiB live=0.0 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 4.742s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.118s, 0 failed
+published conversation keys in 515ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=72.5ms p90=93.2ms p99=111.0ms max=144.1ms; send rtt p50=42.4ms p99=84.1ms
+backend cpu=1.32s (220.2 ms per 1000 msgs) rss=38.4 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.725s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.165s, 0 failed
+published conversation keys in 574ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=29952 (499.2/s) errors=0 undecryptable=0 received=29952/29952
+end-to-end p50=63.4ms p90=87.2ms p99=124.7ms max=198.2ms; send rtt p50=32.7ms p99=86.0ms
+backend cpu=5.41s (180.8 ms per 1000 msgs) rss=41.3 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.691s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.144s, 0 failed
+published conversation keys in 507ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=59968 (999.5/s) errors=0 undecryptable=0 received=59968/59968
+end-to-end p50=145.6ms p90=288.8ms p99=478.6ms max=1568.0ms; send rtt p50=55.7ms p99=366.9ms
+backend cpu=11.57s (192.9 ms per 1000 msgs) rss=39.7 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.66s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.124s, 0 failed
+published conversation keys in 558ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-831: context deadline exceeded
+send from lg-830: context deadline exceeded
+send from lg-949: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=29432 undecryptable=0 received=63852/89984
+end-to-end p50=3891.2ms p90=8417.9ms p99=9914.5ms max=10333.3ms; send rtt p50=3805.1ms p99=9823.2ms
+backend cpu=15.39s (171.1 ms per 1000 msgs) rss=107.5 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.713s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.173s, 0 failed
+published conversation keys in 632ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-240: context deadline exceeded
+send from lg-298: context deadline exceeded
+send from lg-301: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=68008 undecryptable=0 received=62890/120000
+end-to-end p50=4553.4ms p90=8868.6ms p99=9966.9ms max=10327.0ms; send rtt p50=4452.9ms p99=9868.3ms
+backend cpu=18.80s (156.6 ms per 1000 msgs) rss=148.0 MiB live=0.0 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 2.434s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.069s, 0 failed
+published conversation keys in 283ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.01s (0.0 ms per 1000 msgs) rss=21.6 MiB live=0.0 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.707s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.132s, 0 failed
+published conversation keys in 488ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.03s (0.0 ms per 1000 msgs) rss=37.5 MiB live=0.0 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.33s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.266s, 0 failed
+published conversation keys in 1.158s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.05s (0.0 ms per 1000 msgs) rss=59.6 MiB live=0.0 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.657s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.496s, 0 failed
+published conversation keys in 2.19s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.15s (0.0 ms per 1000 msgs) rss=120.1 MiB live=0.0 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 4.725s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.149s, 0 failed
+published conversation keys in 567ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=69.5ms p90=90.1ms p99=104.5ms max=123.1ms; send rtt p50=40.1ms p99=77.1ms
+backend cpu=1.25s (207.3 ms per 1000 msgs) rss=41.5 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.663s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.14s, 0 failed
+published conversation keys in 577ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=29952 (499.2/s) errors=0 undecryptable=0 received=29952/29952
+end-to-end p50=62.9ms p90=83.8ms p99=116.3ms max=213.9ms; send rtt p50=32.6ms p99=72.2ms
+backend cpu=5.46s (182.2 ms per 1000 msgs) rss=38.6 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.743s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.145s, 0 failed
+published conversation keys in 528ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=59968 (999.5/s) errors=0 undecryptable=0 received=59968/59968
+end-to-end p50=195.8ms p90=424.0ms p99=597.0ms max=1644.7ms; send rtt p50=75.3ms p99=423.7ms
+backend cpu=11.34s (189.0 ms per 1000 msgs) rss=40.2 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.722s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.153s, 0 failed
+published conversation keys in 515ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-724: context deadline exceeded
+send from lg-799: context deadline exceeded
+send from lg-879: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=30701 undecryptable=0 received=62838/89984
+end-to-end p50=3955.3ms p90=8486.3ms p99=9934.5ms max=10433.6ms; send rtt p50=3851.7ms p99=9827.4ms
+backend cpu=15.18s (168.7 ms per 1000 msgs) rss=108.4 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.712s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.135s, 0 failed
+published conversation keys in 602ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-222: context deadline exceeded
+send from lg-287: context deadline exceeded
+send from lg-277: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=68816 undecryptable=0 received=62312/120000
+end-to-end p50=4638.1ms p90=8912.8ms p99=9986.0ms max=10339.5ms; send rtt p50=4531.6ms p99=9880.0ms
+backend cpu=18.76s (156.3 ms per 1000 msgs) rss=148.8 MiB live=0.0 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 2.364s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.079s, 0 failed
+published conversation keys in 290ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.02s (0.0 ms per 1000 msgs) rss=21.2 MiB live=0.0 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.656s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.136s, 0 failed
+published conversation keys in 512ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.03s (0.0 ms per 1000 msgs) rss=36.3 MiB live=0.0 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 9.422s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.27s, 0 failed
+published conversation keys in 1.131s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.06s (0.0 ms per 1000 msgs) rss=66.7 MiB live=0.0 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 18.556s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.459s, 0 failed
+published conversation keys in 2.495s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.13s (0.0 ms per 1000 msgs) rss=123.0 MiB live=0.0 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 4.753s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.138s, 0 failed
+published conversation keys in 577ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=69.9ms p90=91.2ms p99=109.9ms max=129.5ms; send rtt p50=40.9ms p99=77.8ms
+backend cpu=1.26s (210.1 ms per 1000 msgs) rss=38.7 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.822s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.146s, 0 failed
+published conversation keys in 532ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=29952 (499.2/s) errors=0 undecryptable=0 received=29952/29952
+end-to-end p50=62.8ms p90=83.5ms p99=112.0ms max=212.8ms; send rtt p50=32.3ms p99=71.5ms
+backend cpu=5.45s (182.1 ms per 1000 msgs) rss=39.9 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.721s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.176s, 0 failed
+published conversation keys in 511ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=59968 (999.5/s) errors=0 undecryptable=0 received=59968/59968
+end-to-end p50=180.9ms p90=410.3ms p99=497.7ms max=850.1ms; send rtt p50=59.3ms p99=175.6ms
+backend cpu=11.37s (189.5 ms per 1000 msgs) rss=40.0 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.727s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.138s, 0 failed
+published conversation keys in 500ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-388: context deadline exceeded
+send from lg-498: context deadline exceeded
+send from lg-507: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=30425 undecryptable=0 received=62987/89984
+end-to-end p50=3983.5ms p90=8476.3ms p99=9927.8ms max=10557.1ms; send rtt p50=3863.0ms p99=9813.3ms
+backend cpu=15.10s (167.8 ms per 1000 msgs) rss=107.3 MiB live=0.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.7s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.148s, 0 failed
+published conversation keys in 541ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-149: context deadline exceeded
+send from lg-240: context deadline exceeded
+send from lg-211: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=68551 undecryptable=0 received=62638/120000
+end-to-end p50=4629.7ms p90=8883.8ms p99=9980.2ms max=10342.2ms; send rtt p50=4509.9ms p99=9867.4ms
+backend cpu=18.78s (156.5 ms per 1000 msgs) rss=148.7 MiB live=0.0 MiB connections=1000
+FRESH=1 LABEL=ts loadgen/protocol.sh docs/results/2026-10-24-ts.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/ts/wrinkle
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 1.243s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.117s, 0 failed
+published conversation keys in 219ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.26s (0.0 ms per 1000 msgs) rss=308.0 MiB live=102.6 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 3.188s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.114s, 0 failed
+published conversation keys in 429ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.27s (0.0 ms per 1000 msgs) rss=379.0 MiB live=106.0 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 6.455s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.21s, 0 failed
+published conversation keys in 869ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.32s (0.0 ms per 1000 msgs) rss=393.8 MiB live=115.2 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 12.758s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.419s, 0 failed
+published conversation keys in 1.658s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.40s (0.0 ms per 1000 msgs) rss=446.6 MiB live=132.9 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 4.175s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.123s, 0 failed
+published conversation keys in 510ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=68.5ms p90=90.5ms p99=117.6ms max=189.5ms; send rtt p50=40.3ms p99=78.7ms
+backend cpu=5.19s (862.8 ms per 1000 msgs) rss=383.8 MiB live=110.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.275s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.141s, 0 failed
+published conversation keys in 490ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=62.6ms p90=86.9ms p99=132.5ms max=179.5ms; send rtt p50=34.5ms p99=89.8ms
+backend cpu=20.36s (678.4 ms per 1000 msgs) rss=388.4 MiB live=111.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.234s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.133s, 0 failed
+published conversation keys in 520ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=83.7ms p90=206.2ms p99=299.5ms max=489.0ms; send rtt p50=46.9ms p99=225.8ms
+backend cpu=34.22s (570.0 ms per 1000 msgs) rss=409.0 MiB live=114.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.294s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.14s, 0 failed
+published conversation keys in 551ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-341: context deadline exceeded
+send from lg-318: context deadline exceeded
+send from lg-346: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=90048 (1500.8/s) errors=82307 undecryptable=0 received=73573/90048
+end-to-end p50=20058.0ms p90=28963.0ms p99=30706.2ms max=31193.8ms; send rtt p50=8686.5ms p99=9966.8ms
+backend cpu=41.48s (460.7 ms per 1000 msgs) rss=636.9 MiB live=337.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.261s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.133s, 0 failed
+published conversation keys in 550ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-530: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-519: context deadline exceeded
+send from lg-544: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=131029 undecryptable=0 received=64085/120000
+end-to-end p50=33176.6ms p90=45430.9ms p99=47780.8ms max=48137.7ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=43.53s (362.8 ms per 1000 msgs) rss=789.9 MiB live=543.7 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 2.169s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.064s, 0 failed
+published conversation keys in 258ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.28s (0.0 ms per 1000 msgs) rss=312.8 MiB live=108.3 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.241s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.133s, 0 failed
+published conversation keys in 547ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.27s (0.0 ms per 1000 msgs) rss=446.8 MiB live=113.3 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 8.392s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.24s, 0 failed
+published conversation keys in 1.011s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.28s (0.0 ms per 1000 msgs) rss=415.5 MiB live=122.7 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 16.828s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.448s, 0 failed
+published conversation keys in 1.979s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.39s (0.0 ms per 1000 msgs) rss=445.6 MiB live=134.7 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 4.243s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.119s, 0 failed
+published conversation keys in 498ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=68.3ms p90=89.9ms p99=107.0ms max=141.8ms; send rtt p50=40.5ms p99=80.8ms
+backend cpu=5.22s (867.5 ms per 1000 msgs) rss=391.0 MiB live=110.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.267s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.122s, 0 failed
+published conversation keys in 495ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=62.4ms p90=84.6ms p99=114.7ms max=187.8ms; send rtt p50=34.1ms p99=75.8ms
+backend cpu=20.27s (675.2 ms per 1000 msgs) rss=393.4 MiB live=111.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.249s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.154s, 0 failed
+published conversation keys in 531ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=127.4ms p90=324.0ms p99=467.3ms max=645.9ms; send rtt p50=61.3ms p99=295.1ms
+backend cpu=33.75s (562.2 ms per 1000 msgs) rss=411.3 MiB live=114.9 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.23s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.127s, 0 failed
+published conversation keys in 526ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-453: context deadline exceeded
+send from lg-373: context deadline exceeded
+send from lg-462: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=90048 (1500.8/s) errors=83273 undecryptable=0 received=72717/90048
+end-to-end p50=20163.2ms p90=29765.2ms p99=31369.5ms max=31733.1ms; send rtt p50=8812.7ms p99=9944.0ms
+backend cpu=40.90s (454.2 ms per 1000 msgs) rss=652.0 MiB live=340.1 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.214s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.135s, 0 failed
+published conversation keys in 540ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-529: context deadline exceeded
+send from lg-544: context deadline exceeded
+send from lg-531: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=131037 undecryptable=0 received=64195/120000
+end-to-end p50=32811.7ms p90=45186.4ms p99=47594.6ms max=48022.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=43.66s (363.8 ms per 1000 msgs) rss=876.2 MiB live=544.6 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 2.13s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.062s, 0 failed
+published conversation keys in 250ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.27s (0.0 ms per 1000 msgs) rss=308.9 MiB live=101.7 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.219s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.136s, 0 failed
+published conversation keys in 534ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.28s (0.0 ms per 1000 msgs) rss=392.3 MiB live=106.6 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 8.437s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.226s, 0 failed
+published conversation keys in 1.011s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.30s (0.0 ms per 1000 msgs) rss=408.7 MiB live=115.9 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 16.76s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.428s, 0 failed
+published conversation keys in 1.966s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.39s (0.0 ms per 1000 msgs) rss=438.5 MiB live=134.7 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 4.241s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.133s, 0 failed
+published conversation keys in 490ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=68.9ms p90=90.5ms p99=106.3ms max=128.8ms; send rtt p50=41.0ms p99=78.9ms
+backend cpu=5.37s (891.9 ms per 1000 msgs) rss=391.5 MiB live=110.5 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.205s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.137s, 0 failed
+published conversation keys in 501ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=62.1ms p90=83.8ms p99=105.8ms max=200.2ms; send rtt p50=34.0ms p99=74.4ms
+backend cpu=20.29s (676.1 ms per 1000 msgs) rss=395.0 MiB live=111.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.243s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.129s, 0 failed
+published conversation keys in 496ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=103.2ms p90=307.5ms p99=418.1ms max=609.4ms; send rtt p50=50.3ms p99=222.6ms
+backend cpu=33.96s (565.6 ms per 1000 msgs) rss=410.4 MiB live=113.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.248s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.133s, 0 failed
+published conversation keys in 470ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-526: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-547: context deadline exceeded
+send from lg-537: context deadline exceeded
+connections=1000 devices/user=1 target=1500/s sent=90047 (1500.8/s) errors=83137 undecryptable=0 received=73642/90047
+end-to-end p50=20429.4ms p90=29242.3ms p99=30843.5ms max=31048.4ms; send rtt p50=8815.7ms p99=9974.9ms
+backend cpu=39.55s (439.3 ms per 1000 msgs) rss=658.7 MiB live=342.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.225s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.144s, 0 failed
+published conversation keys in 559ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-821: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-576: context deadline exceeded
+send from lg-595: context deadline exceeded
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=130962 undecryptable=0 received=64177/120000
+end-to-end p50=33116.5ms p90=45359.4ms p99=47681.2ms max=48192.6ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=43.08s (359.0 ms per 1000 msgs) rss=873.0 MiB live=548.1 MiB connections=1000
+FRESH=1 LABEL=ts-gateway loadgen/protocol.sh docs/results/2026-10-24-ts-gateway.jsonl /Users/vlumi/src/vlumi/wrinkle/backends/ts/split.sh
+== fresh infrastructure
+ Image wrinkle/vttestserver:v24.0.4 Building 
+ Image wrinkle/vttestserver:v24.0.4 Built 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Volume wrinkle_prometheus-data Creating 
+ Network wrinkle_default Creating 
+ Volume wrinkle_prometheus-data Created 
+ Volume wrinkle_prometheus-data Created 
+ Network wrinkle_default Created 
+ Network wrinkle_default Created 
+ Container wrinkle-vitess-1 Creating 
+ Container wrinkle-garage-1 Creating 
+ Container wrinkle-valkey-1 Creating 
+ Container wrinkle-kafka-1 Creating 
+ Container wrinkle-prometheus-1 Creating 
+ Container wrinkle-garage-1 Created 
+ Container wrinkle-blobs-1 Creating 
+ Container wrinkle-valkey-1 Created 
+ Container wrinkle-prometheus-1 Created 
+ Container wrinkle-grafana-1 Creating 
+ Container wrinkle-kafka-1 Created 
+ Container wrinkle-vitess-1 Created 
+ Container wrinkle-connect-1 Creating 
+ Container wrinkle-grafana-1 Created 
+ Container wrinkle-blobs-1 Created 
+ Container wrinkle-connect-1 Created 
+ Container wrinkle-prometheus-1 Starting 
+ Container wrinkle-kafka-1 Starting 
+ Container wrinkle-vitess-1 Starting 
+ Container wrinkle-garage-1 Starting 
+ Container wrinkle-valkey-1 Starting 
+ Container wrinkle-prometheus-1 Started 
+ Container wrinkle-grafana-1 Starting 
+ Container wrinkle-kafka-1 Started 
+ Container wrinkle-vitess-1 Started 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-garage-1 Started 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-valkey-1 Started 
+ Container wrinkle-grafana-1 Started 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-blobs-1 Starting 
+ Container wrinkle-blobs-1 Started 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-connect-1 Starting 
+ Container wrinkle-connect-1 Started 
+ Container wrinkle-valkey-1 Waiting 
+ Container wrinkle-connect-1 Waiting 
+ Container wrinkle-prometheus-1 Waiting 
+ Container wrinkle-garage-1 Waiting 
+ Container wrinkle-kafka-1 Waiting 
+ Container wrinkle-grafana-1 Waiting 
+ Container wrinkle-blobs-1 Waiting 
+ Container wrinkle-vitess-1 Waiting 
+ Container wrinkle-prometheus-1 Healthy 
+ Container wrinkle-vitess-1 Healthy 
+ Container wrinkle-garage-1 Healthy 
+ Container wrinkle-kafka-1 Healthy 
+ Container wrinkle-valkey-1 Healthy 
+ Container wrinkle-blobs-1 Healthy 
+ Container wrinkle-grafana-1 Healthy 
+ Container wrinkle-connect-1 Healthy 
+== idle connections (rep 1)
+signing in 500 devices (500 users)
+signed in in 1.258s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.079s, 0 failed
+published conversation keys in 335ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.15s (0.0 ms per 1000 msgs) rss=213.7 MiB live=36.1 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 3.285s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.116s, 0 failed
+published conversation keys in 607ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.19s (0.0 ms per 1000 msgs) rss=299.0 MiB live=37.1 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 6.505s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.22s, 0 failed
+published conversation keys in 1.177s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.22s (0.0 ms per 1000 msgs) rss=346.9 MiB live=43.0 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 13.147s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.44s, 0 failed
+published conversation keys in 2.337s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.29s (0.0 ms per 1000 msgs) rss=303.2 MiB live=53.6 MiB connections=4000
+== latency at fixed rates (rep 1)
+signing in 1000 devices (1000 users)
+signed in in 4.284s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.182s, 0 failed
+published conversation keys in 641ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=80.2ms p90=101.3ms p99=119.1ms max=146.3ms; send rtt p50=52.4ms p99=88.1ms
+backend cpu=3.72s (618.7 ms per 1000 msgs) rss=232.7 MiB live=38.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.298s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.197s, 0 failed
+published conversation keys in 649ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30016 (500.3/s) errors=0 undecryptable=0 received=30016/30016
+end-to-end p50=65.7ms p90=91.7ms p99=141.6ms max=239.2ms; send rtt p50=37.6ms p99=98.7ms
+backend cpu=9.20s (306.6 ms per 1000 msgs) rss=236.2 MiB live=40.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.319s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.238s, 0 failed
+published conversation keys in 636ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=1006.1ms p90=1729.6ms p99=1882.9ms max=2033.3ms; send rtt p50=954.6ms p99=1768.0ms
+backend cpu=17.46s (290.8 ms per 1000 msgs) rss=319.3 MiB live=71.8 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.504s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.259s, 0 failed
+published conversation keys in 748ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-666: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-675: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-181: ERROR_CODE_UNAVAILABLE: services unavailable
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=90636 undecryptable=0 received=64680/89984
+end-to-end p50=15765.5ms p90=18881.7ms p99=19606.1ms max=19849.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=17.89s (198.8 ms per 1000 msgs) rss=515.9 MiB live=165.3 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.285s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.207s, 0 failed
+published conversation keys in 667ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-953: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-948: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-955: ERROR_CODE_UNAVAILABLE: services unavailable
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=133204 undecryptable=0 received=62148/120000
+end-to-end p50=25853.4ms p90=36251.3ms p99=38799.6ms max=38987.1ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=17.83s (148.5 ms per 1000 msgs) rss=512.5 MiB live=147.3 MiB connections=1000
+== idle connections (rep 2)
+signing in 500 devices (500 users)
+signed in in 2.172s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.106s, 0 failed
+published conversation keys in 345ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.17s (0.0 ms per 1000 msgs) rss=218.2 MiB live=36.2 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.298s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.186s, 0 failed
+published conversation keys in 660ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.19s (0.0 ms per 1000 msgs) rss=323.7 MiB live=37.3 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 8.549s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.372s, 0 failed
+published conversation keys in 1.307s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.23s (0.0 ms per 1000 msgs) rss=247.8 MiB live=42.8 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 17.067s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.481s, 0 failed
+published conversation keys in 2.554s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.31s (0.0 ms per 1000 msgs) rss=306.5 MiB live=53.7 MiB connections=4000
+== latency at fixed rates (rep 2)
+signing in 1000 devices (1000 users)
+signed in in 4.29s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.184s, 0 failed
+published conversation keys in 652ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=79.4ms p90=100.7ms p99=116.8ms max=138.1ms; send rtt p50=51.6ms p99=89.3ms
+backend cpu=3.59s (596.4 ms per 1000 msgs) rss=223.1 MiB live=38.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.26s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.181s, 0 failed
+published conversation keys in 620ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=30007 (500.1/s) errors=0 undecryptable=0 received=30007/30007
+end-to-end p50=64.9ms p90=87.1ms p99=116.6ms max=247.4ms; send rtt p50=37.0ms p99=79.0ms
+backend cpu=9.62s (320.7 ms per 1000 msgs) rss=223.9 MiB live=40.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.311s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.203s, 0 failed
+published conversation keys in 705ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=2555.7ms p90=3822.0ms p99=4087.9ms max=4321.9ms; send rtt p50=2479.9ms p99=3948.2ms
+backend cpu=17.35s (289.0 ms per 1000 msgs) rss=379.2 MiB live=113.0 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.307s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.191s, 0 failed
+published conversation keys in 723ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-251: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-253: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-250: ERROR_CODE_UNAVAILABLE: services unavailable
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=88272 undecryptable=0 received=62559/89984
+end-to-end p50=12752.9ms p90=14472.1ms p99=15063.7ms max=15337.7ms; send rtt p50=9673.6ms p99=9993.7ms
+backend cpu=17.17s (190.8 ms per 1000 msgs) rss=402.9 MiB live=186.9 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.334s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.165s, 0 failed
+published conversation keys in 697ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-835: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-842: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-845: ERROR_CODE_UNAVAILABLE: services unavailable
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=133350 undecryptable=0 received=55145/120000
+end-to-end p50=21861.1ms p90=29164.2ms p99=30982.3ms max=31193.6ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=18.22s (151.8 ms per 1000 msgs) rss=550.4 MiB live=223.7 MiB connections=1000
+== idle connections (rep 3)
+signing in 500 devices (500 users)
+signed in in 2.179s, 0 failed
+connecting 500 devices at 500/s
+connected in 1.104s, 0 failed
+published conversation keys in 364ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=500 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.19s (0.0 ms per 1000 msgs) rss=219.0 MiB live=36.1 MiB connections=500
+signing in 1000 devices (1000 users)
+signed in in 4.3s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.19s, 0 failed
+published conversation keys in 662ms, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=1000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.20s (0.0 ms per 1000 msgs) rss=316.0 MiB live=37.2 MiB connections=1000
+signing in 2000 devices (2000 users)
+signed in in 8.515s, 0 failed
+connecting 2000 devices at 500/s
+connected in 4.292s, 0 failed
+published conversation keys in 1.414s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=2000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.25s (0.0 ms per 1000 msgs) rss=247.1 MiB live=42.8 MiB connections=2000
+signing in 4000 devices (4000 users)
+signed in in 16.993s, 0 failed
+connecting 4000 devices at 500/s
+connected in 8.527s, 0 failed
+published conversation keys in 2.53s, 0 failed
+warm-up 10s, then measuring 30s at 0 msg/s
+connections=4000 devices/user=1 target=0/s sent=0 (0.0/s) errors=0 undecryptable=0 received=0/0
+end-to-end p50=0.0ms p90=0.0ms p99=0.0ms max=0.0ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=0.32s (0.0 ms per 1000 msgs) rss=298.5 MiB live=53.6 MiB connections=4000
+== latency at fixed rates (rep 3)
+signing in 1000 devices (1000 users)
+signed in in 4.256s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.222s, 0 failed
+published conversation keys in 656ms, 0 failed
+warm-up 15s, then measuring 1m0s at 100 msg/s
+connections=1000 devices/user=1 target=100/s sent=6016 (100.3/s) errors=0 undecryptable=0 received=6016/6016
+end-to-end p50=78.1ms p90=99.8ms p99=116.5ms max=159.3ms; send rtt p50=50.8ms p99=88.2ms
+backend cpu=3.53s (586.5 ms per 1000 msgs) rss=222.5 MiB live=38.6 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.292s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.184s, 0 failed
+published conversation keys in 666ms, 0 failed
+warm-up 15s, then measuring 1m0s at 500 msg/s
+connections=1000 devices/user=1 target=500/s sent=29953 (499.2/s) errors=0 undecryptable=0 received=29953/29953
+end-to-end p50=64.4ms p90=86.7ms p99=110.9ms max=219.7ms; send rtt p50=36.9ms p99=79.5ms
+backend cpu=10.45s (348.7 ms per 1000 msgs) rss=230.1 MiB live=40.2 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.326s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.197s, 0 failed
+published conversation keys in 616ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1000 msg/s
+connections=1000 devices/user=1 target=1000/s sent=60032 (1000.5/s) errors=0 undecryptable=0 received=60032/60032
+end-to-end p50=1250.6ms p90=1799.0ms p99=2031.5ms max=2205.5ms; send rtt p50=1161.7ms p99=1812.9ms
+backend cpu=17.53s (292.1 ms per 1000 msgs) rss=289.9 MiB live=72.4 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.311s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.179s, 0 failed
+published conversation keys in 680ms, 0 failed
+warm-up 15s, then measuring 1m0s at 1500 msg/s
+send from lg-820: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-219: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-199: ERROR_CODE_UNAVAILABLE: services unavailable
+connections=1000 devices/user=1 target=1500/s sent=89984 (1499.7/s) errors=88341 undecryptable=0 received=63354/89984
+end-to-end p50=17973.8ms p90=20699.0ms p99=21598.5ms max=21819.9ms; send rtt p50=9717.3ms p99=9993.6ms
+backend cpu=16.77s (186.4 ms per 1000 msgs) rss=430.0 MiB live=217.7 MiB connections=1000
+signing in 1000 devices (1000 users)
+signed in in 4.33s, 0 failed
+connecting 1000 devices at 500/s
+connected in 2.19s, 0 failed
+published conversation keys in 689ms, 0 failed
+warm-up 15s, then measuring 1m0s at 2000 msg/s
+send from lg-872: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-775: ERROR_CODE_UNAVAILABLE: services unavailable
+send from lg-803: ERROR_CODE_UNAVAILABLE: services unavailable
+connections=1000 devices/user=1 target=2000/s sent=120000 (2000.0/s) errors=133794 undecryptable=0 received=63771/120000
+end-to-end p50=28110.9ms p90=36484.8ms p99=37985.6ms max=38490.2ms; send rtt p50=0.0ms p99=0.0ms
+backend cpu=18.08s (150.6 ms per 1000 msgs) rss=538.3 MiB live=103.3 MiB connections=1000

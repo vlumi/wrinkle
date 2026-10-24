@@ -42,7 +42,7 @@ The services are two, split by keyspace. The conversation service owns the conve
 
 ## Data model
 
-Two Vitess keyspaces, each sharded by the id that every query of it carries, so a request touches one shard of each keyspace it needs. Four tables are sharded by something else: the three claim tables by what they are looked up by (names; pairs of users by the first user; groups by their creator), and `sticker` by the sticker's id, since stickers are public and outlive their creator. The schemas are in [`schema/`](../schema).
+Two Vitess keyspaces, each sharded by the id that every query of it carries, so a request touches one shard of each keyspace it needs. Four tables are sharded by something else: the three claim tables by what they are looked up by (names; pairs of users by the first user; groups by their creator), and `sticker` by the sticker's id, since stickers are public and outlive their creator. The schemas are in [`schema/`](../schema). On the infrastructure's `mysql` profile (`make infra-up PROFILE=mysql`) the same schemas run unsharded on one MySQL, a database per keyspace, with Debezium's MySQL connector reading the binlog; a backend that finds no vtgate treats each keyspace as one shard, and nothing else changes.
 
 ```mermaid
 flowchart TB
