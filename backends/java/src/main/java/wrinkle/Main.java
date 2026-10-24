@@ -25,6 +25,8 @@ import wrinkle.devicesync.DeviceSyncService;
 import wrinkle.fanout.FanoutWorker;
 import wrinkle.gateway.Gateway;
 import wrinkle.presence.Presence;
+import wrinkle.push.Apns;
+import wrinkle.push.Notifier;
 import wrinkle.services.Backend;
 import wrinkle.services.LocalBackend;
 import wrinkle.services.RpcClient;
@@ -57,6 +59,9 @@ public final class Main {
 
   public static void main(String[] args) throws Exception {
     Config cfg = Config.parse(args);
+    if (cfg.settingsFile() != null) {
+      log.info("settings read from {}", cfg.settingsFile());
+    }
     Metrics.init();
     Shared shared = new Shared(cfg);
 
@@ -83,6 +88,22 @@ public final class Main {
     }
     FanoutWorker fanout = null;
     if (cfg.runsFanout()) {
+      Notifier notifier = null;
+      if (!cfg.apnsKey().isEmpty()) {
+        Apns apns =
+            new Apns(
+                new Apns.Config(
+                    cfg.apnsKey(),
+                    cfg.apnsKeyId(),
+                    cfg.apnsTeamId(),
+                    cfg.apnsTopic(),
+                    null,
+                    null,
+                    null));
+        notifier =
+            new Notifier(apns, shared.userDb(), new Contacts(shared.userDb()), shared.presence());
+        log.info("push notifications on, topic {}", cfg.apnsTopic());
+      }
       fanout =
           new FanoutWorker(
               cfg.kafka(),
@@ -90,7 +111,8 @@ public final class Main {
               shared.userDb(),
               USER_KEYSPACE,
               shared.conversationDb(),
-              shared.presence());
+              shared.presence(),
+              notifier);
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
       new UploadSweeper(shared.userDb(), shared.blobs()).start();

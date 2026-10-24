@@ -55,6 +55,15 @@ public final class Metrics {
           .classicExponentialUpperBounds(0.001, 2, 16)
           .register();
 
+  public static final Counter PUSH_SENT =
+      Counter.builder()
+          .name("wrinkle_push_sent")
+          .help(
+              "Push notifications to devices not connected, by result: ok, unregistered, error,"
+                  + " dropped.")
+          .labelNames("result")
+          .register();
+
   public static void init() {
     JvmMetrics.builder().register();
   }

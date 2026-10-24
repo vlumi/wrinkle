@@ -11,7 +11,12 @@ import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.HexFormat;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.BiConsumer;
 import org.slf4j.Logger;
@@ -138,6 +143,44 @@ public final class Presence implements AutoCloseable {
                 new byte[][] {presenceKey(userId)},
                 bytes(Long.toString(deviceId)),
                 instance));
+  }
+
+  /**
+   * The user's devices connected to a live gateway instance. Entries of instances whose key expired
+   * are removed on the way.
+   */
+  public Set<Long> connectedDevices(Uuid userId) {
+    byte[] key = presenceKey(userId);
+    Map<byte[], byte[]> entries = commands.sync().hgetall(key);
+    Map<String, CompletableFuture<Long>> checks = new HashMap<>();
+    for (byte[] instance : entries.values()) {
+      checks.computeIfAbsent(
+          new String(instance, StandardCharsets.UTF_8),
+          id -> commands.async().exists(bytes(INSTANCE_PREFIX + id)).toCompletableFuture());
+    }
+    Set<Long> connected = new HashSet<>();
+    for (Map.Entry<byte[], byte[]> e : entries.entrySet()) {
+      String instance = new String(e.getValue(), StandardCharsets.UTF_8);
+      if (checks.get(instance).join() == 0) {
+        logged(
+            "presence removal",
+            commands
+                .async()
+                .eval(
+                    REMOVE_OWN,
+                    ScriptOutputType.INTEGER,
+                    new byte[][] {key},
+                    e.getKey(),
+                    e.getValue()));
+        continue;
+      }
+      try {
+        connected.add(Long.parseUnsignedLong(new String(e.getKey(), StandardCharsets.UTF_8)));
+      } catch (NumberFormatException ex) {
+        // Not a device id; ignore the field.
+      }
+    }
+    return connected;
   }
 
   private static byte[] presenceKey(Uuid userId) {

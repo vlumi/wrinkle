@@ -25,6 +25,7 @@ import wrinkle.accounts.AccountService;
 import wrinkle.backend.v1.Push;
 import wrinkle.backend.v1.SignedOut;
 import wrinkle.presence.Presence;
+import wrinkle.push.Notifier;
 import wrinkle.v1.Event;
 import wrinkle.v1.MemberLeft;
 import wrinkle.v1.Message;
@@ -49,14 +50,20 @@ final class UserLog {
   private final DataSource db;
   private final Presence presence;
   private final AppendBatcher batcher;
+  // Null when push notifications are off.
+  private final Notifier notifier;
   // Conversation list entries known to exist; entries are never removed, so one stays true.
   private final Set<ListKey> listedCache = ConcurrentHashMap.newKeySet();
 
-  /** The shards of the user keyspace place each user's appends in batches. */
-  UserLog(DataSource db, Presence presence, Shards shards) {
+  /**
+   * The shards of the user keyspace place each user's appends in batches; the notifier, if any, is
+   * told of messages and deletions appended.
+   */
+  UserLog(DataSource db, Presence presence, Shards shards, Notifier notifier) {
     this.db = db;
     this.presence = presence;
     this.batcher = new AppendBatcher(shards, db);
+    this.notifier = notifier;
   }
 
   DataSource db() {
@@ -70,6 +77,8 @@ final class UserLog {
         o.event().hasMessage() && peerId != null
             ? peerForNewEntry(userId, o.conversationId(), peerId)
             : null;
+    // The sender of a group message being deleted, from the user's copy of it, for the notifier.
+    Uuid[] deletedSender = new Uuid[1];
     Event event =
         append(
             userId,
@@ -80,12 +89,26 @@ final class UserLog {
               switch (e.getBodyCase()) {
                 case MESSAGE -> recordMessage(c, userId, peerId, peer, o, e);
                 case READ -> recordRead(c, userId, o, e.getRead());
-                case MESSAGE_DELETED -> recordDeletion(c, userId, o, e.getMessageDeleted());
+                case MESSAGE_DELETED ->
+                    recordDeletion(c, userId, o, e.getMessageDeleted(), deletedSender);
                 default -> {}
               }
             });
-    if (event != null && event.hasMessage()) {
-      remember(userId, o.conversationId());
+    if (event == null) {
+      return;
+    }
+    if (event.hasMessage()) {
+      messageDelivered(userId, o, event);
+    } else if (event.hasMessageDeleted() && notifier != null) {
+      notifier.messageDeleted(userId, event.getMessageDeleted(), deletedSender[0]);
+    }
+  }
+
+  /** Notes a message's list entry as existing and tells the notifier. */
+  private void messageDelivered(Uuid userId, OutboxRecord o, Event event) {
+    remember(userId, o.conversationId());
+    if (notifier != null) {
+      notifier.messageDelivered(userId, event.getMessage().getMessage(), o.group());
     }
   }
 
@@ -110,7 +133,7 @@ final class UserLog {
         fallback.add(p.userId);
       } else if (p.event != null) {
         delivered(p.userId, p.event, p.payload);
-        remember(p.userId, o.conversationId());
+        messageDelivered(p.userId, o, p.event);
       }
     }
     for (Uuid userId : fallback) {
@@ -375,10 +398,12 @@ final class UserLog {
 
   /**
    * Takes the content out of the user's copy of the deleted message, so a device syncing from
-   * before it never receives the content, and out of the list when the message is the last.
+   * before it never receives the content, and out of the list when the message is the last. In a
+   * group, the copy's sender goes into sender.
    */
   private static void recordDeletion(
-      Connection c, Uuid userId, OutboxRecord o, MessageDeletedEvent deleted) throws SQLException {
+      Connection c, Uuid userId, OutboxRecord o, MessageDeletedEvent deleted, Uuid[] sender)
+      throws SQLException {
     if (o.targetOutboxId() != null) {
       long position = 0;
       Event copy = null;
@@ -401,6 +426,9 @@ final class UserLog {
         }
       }
       if (copy != null && copy.hasMessage()) {
+        if (o.group()) {
+          sender[0] = Uuid.parse(copy.getMessage().getMessage().getSenderUserId());
+        }
         Event.Builder b = copy.toBuilder();
         b.getMessageBuilder()
             .getMessageBuilder()

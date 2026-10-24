@@ -1,10 +1,18 @@
 package wrinkle;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /** Flags with the same names and defaults as the Go backend, overridable by environment. */
@@ -22,7 +30,12 @@ public record Config(
     String blobKeyId,
     String blobSecret,
     String blobRegion,
-    long ackIntervalMillis) {
+    long ackIntervalMillis,
+    String apnsKey,
+    String apnsKeyId,
+    String apnsTeamId,
+    String apnsTopic,
+    Path settingsFile) {
 
   private static final Set<String> ROLES = Set.of("gateway", "fanout", "services");
 
@@ -44,6 +57,7 @@ public record Config(
   }
 
   public static Config parse(String[] args) {
+    Path settingsFile = loadDotEnv();
     String roles = env("WRINKLE_ROLES", "gateway,fanout");
     String listen = env("WRINKLE_LISTEN", "127.0.0.1:8080");
     String mysql = env("WRINKLE_MYSQL", "127.0.0.1:15003");
@@ -62,6 +76,12 @@ public record Config(
             "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4");
     String blobRegion = env("WRINKLE_BLOB_REGION", "garage");
     String ackIntervalMs = env("WRINKLE_ACK_INTERVAL_MS", "60000");
+    // Push notifications are off without a key.
+    String apnsKey = env("WRINKLE_APNS_KEY", "");
+    // Defaults to the id in the key's file name.
+    String apnsKeyId = env("WRINKLE_APNS_KEY_ID", "");
+    String apnsTeamId = env("WRINKLE_TEAM_ID", "");
+    String apnsTopic = env("WRINKLE_APNS_TOPIC", "fi.misaki.wrinkle");
     for (int i = 0; i < args.length; i++) {
       String a = args[i];
       String value = null;
@@ -90,6 +110,10 @@ public record Config(
         case "blob-secret" -> blobSecret = value;
         case "blob-region" -> blobRegion = value;
         case "ack-interval-ms" -> ackIntervalMs = value;
+        case "apns-key" -> apnsKey = value;
+        case "apns-key-id" -> apnsKeyId = value;
+        case "apns-team-id" -> apnsTeamId = value;
+        case "apns-topic" -> apnsTopic = value;
         default -> throw new IllegalArgumentException("unknown flag " + a);
       }
     }
@@ -117,7 +141,70 @@ public record Config(
         blobKeyId,
         blobSecret,
         blobRegion,
-        ackIntervalMillis);
+        ackIntervalMillis,
+        expandHome(apnsKey),
+        apnsKeyId,
+        apnsTeamId,
+        apnsTopic,
+        settingsFile);
+  }
+
+  /** A path starting with ~ under the home directory. */
+  static String expandHome(String path) {
+    if (path.equals("~") || path.startsWith("~/")) {
+      return System.getProperty("user.home") + path.substring(1);
+    }
+    return path;
+  }
+
+  // Variables from .env, under those of the environment.
+  private static final Map<String, String> DOTENV = new HashMap<>();
+
+  /**
+   * Reads the repository's .env, which holds the local, uncommitted settings (the Apple team and
+   * APNs key), from the working directory or else the repository root above the installed
+   * distribution; returns the file read, or null.
+   */
+  private static Path loadDotEnv() {
+    List<Path> candidates = new ArrayList<>();
+    candidates.add(Path.of(".env"));
+    try {
+      // build/install/wrinkle/lib/wrinkle.jar in backends/java.
+      Path jar = Path.of(Config.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+      candidates.add(jar.resolveSibling("../../../../../../.env").normalize());
+    } catch (URISyntaxException | RuntimeException e) {
+      // Only the working directory, then.
+    }
+    for (Path p : candidates) {
+      if (!Files.isRegularFile(p)) {
+        continue;
+      }
+      try {
+        DOTENV.putAll(parseDotEnv(Files.readAllLines(p)));
+        return p;
+      } catch (IOException e) {
+        // Unreadable; try the next.
+      }
+    }
+    return null;
+  }
+
+  /** The variables of KEY=value lines, skipping blank lines and comments. */
+  static Map<String, String> parseDotEnv(List<String> lines) {
+    Map<String, String> vars = new HashMap<>();
+    for (String raw : lines) {
+      String line = raw.strip();
+      int eq = line.indexOf('=');
+      if (line.isEmpty() || line.startsWith("#") || eq < 0) {
+        continue;
+      }
+      String key = line.substring(0, eq).strip();
+      if (key.startsWith("export ")) {
+        key = key.substring("export ".length()).strip();
+      }
+      vars.put(key, line.substring(eq + 1).strip().replaceAll("^[\"']+|[\"']+$", ""));
+    }
+    return vars;
   }
 
   /** host:port, or :port for every interface. */
@@ -130,6 +217,9 @@ public record Config(
 
   private static String env(String key, String fallback) {
     String v = System.getenv(key);
+    if (v == null) {
+      v = DOTENV.get(key);
+    }
     return v == null || v.isEmpty() ? fallback : v;
   }
 

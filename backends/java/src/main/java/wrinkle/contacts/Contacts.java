@@ -53,6 +53,20 @@ public final class Contacts {
     }
   }
 
+  /** Whether the user's own side toward the other is a block. */
+  public boolean blocks(Uuid userId, Uuid otherId) throws SQLException {
+    try (Connection c = db.getConnection();
+        PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT state FROM contact WHERE user_id = ? AND other_user_id = ?",
+                userId,
+                otherId);
+        ResultSet rs = ps.executeQuery()) {
+      return rs.next() && BLOCK.equals(rs.getString(1));
+    }
+  }
+
   /** The users among the others who are not contacts of the user, each side asked. */
   public Set<Uuid> notContacts(Uuid userId, List<Uuid> others) throws SQLException {
     Set<Uuid> missing = new HashSet<>(others);

@@ -30,6 +30,7 @@ import wrinkle.Metrics;
 import wrinkle.Shards;
 import wrinkle.Uuid;
 import wrinkle.presence.Presence;
+import wrinkle.push.Notifier;
 import wrinkle.v1.Event;
 
 /**
@@ -37,7 +38,8 @@ import wrinkle.v1.Event;
  * concerned, and pushes them to connected devices: a conversation's events to the recipients its
  * outbox row names, a user's profile changes to the user and every direct conversation partner, a
  * device's key changes to the user, the partners and the members of the user's groups, a palette
- * change to the user alone, a contact change to both users concerned.
+ * change to the user alone, a contact change to both users concerned. With a notifier, messages and
+ * deletions also go to APNs for the recipients' devices that are not connected.
  */
 public final class FanoutWorker {
   // The outbox topics: conversations' rows keyed by conversation id, users' by user id.
@@ -69,7 +71,8 @@ public final class FanoutWorker {
       DataSource userDb,
       String userKeyspace,
       DataSource conversationDb,
-      Presence presence) {
+      Presence presence,
+      Notifier notifier) {
     Properties p = new Properties();
     p.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers);
     p.put(ConsumerConfig.GROUP_ID_CONFIG, group);
@@ -82,7 +85,7 @@ public final class FanoutWorker {
     p.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     p.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ByteArrayDeserializer.class.getName());
     this.consumer = new KafkaConsumer<>(p);
-    this.userLog = new UserLog(userDb, presence, Shards.load(userDb, userKeyspace));
+    this.userLog = new UserLog(userDb, presence, Shards.load(userDb, userKeyspace), notifier);
     this.profiles = new ProfileFanout(userLog, tasks);
     this.devices = new DeviceFanout(userLog, conversationDb, tasks);
     this.contacts = new ContactFanout(userLog);
