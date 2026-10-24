@@ -51,8 +51,10 @@ services:
     image: wrinkle/java:dev
     command: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
     environment:
-      <<: *infra
+      <<: [*infra, *push]
       WRINKLE_BLOB_URL: http://blobs:9200
+    volumes:
+      - ${APNS_KEY_FILE:-/dev/null}:/run/apns/key.p8:ro
     restart: unless-stopped
 
   ts-services:

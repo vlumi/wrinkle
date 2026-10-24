@@ -98,7 +98,7 @@ INSTANCE ?= 1
 run-go-services: build-go  ## Go services and fan-out, instance INSTANCE (RPC on :9100+n)
 	INSTANCE=$(INSTANCE) backends/services.sh go $(ARGS)
 
-run-java-services: build-java  ## Java services and fan-out, instance INSTANCE; no pushes yet
+run-java-services: build-java  ## Java services and fan-out, instance INSTANCE
 	INSTANCE=$(INSTANCE) backends/services.sh java $(ARGS)
 
 run-ts-services: ts-deps  ## TypeScript services and fan-out, instance INSTANCE
