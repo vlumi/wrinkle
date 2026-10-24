@@ -2,14 +2,14 @@
 # The containerized cluster: services instances and gateways in any number and
 # language behind one balancer, on the infrastructure's network.
 # Usage: cluster.sh up|down|status|logs [service]
-# Counts for up, from the environment: GO_SERVICES, JAVA_SERVICES, GO_GW,
-# ELIXIR_GW, RUST_GW, JAVA_GW (up to 8 each). A count not given keeps what is
+# Counts for up, from the environment: GO_SERVICES, JAVA_SERVICES,
+# TS_SERVICES, GO_GW, ELIXIR_GW, RUST_GW, JAVA_GW, TS_GW (up to 8 each). A count not given keeps what is
 # running, or takes its default on a fresh start. Running up again rebuilds the
 # images, replaces the containers whose image changed, and rescales.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 compose=(docker compose -f infra/docker-compose.yml -f infra/cluster.yml)
-all=(cluster-lb go-services java-services go-gw elixir-gw rust-gw java-gw)
+all=(cluster-lb go-services java-services ts-services go-gw elixir-gw rust-gw java-gw ts-gw)
 
 # The count for a kind: given, else running, else the default.
 count() {
@@ -46,10 +46,12 @@ case ${1:-} in
     "${compose[@]}" up -d --build --wait \
       --scale go-services="$(count "${GO_SERVICES:-}" go-services 2)" \
       --scale java-services="$(count "${JAVA_SERVICES:-}" java-services 1)" \
+      --scale ts-services="$(count "${TS_SERVICES:-}" ts-services 1)" \
       --scale go-gw="$(count "${GO_GW:-}" go-gw 1)" \
       --scale elixir-gw="$(count "${ELIXIR_GW:-}" elixir-gw 1)" \
       --scale rust-gw="$(count "${RUST_GW:-}" rust-gw 1)" \
       --scale java-gw="$(count "${JAVA_GW:-}" java-gw 1)" \
+      --scale ts-gw="$(count "${TS_GW:-}" ts-gw 1)" \
       "${all[@]}"
     "${compose[@]}" ps --format '{{.Service}}' "${all[@]}" | sort | uniq -c
     echo "devices: ws://<this host>:8080/v1/ws; statistics: http://localhost:8404/"

@@ -21,10 +21,7 @@ SHAPE_elixir-gw := $(CURDIR)/backends/elixir/run.sh
 SHAPE_rust-gw := $(CURDIR)/backends/rust/run.sh
 SHAPE_ts-mono := $(CURDIR)/backends/ts/wrinkle
 SHAPE_ts-gw := $(CURDIR)/backends/ts/split.sh
-SHAPES := go-mono go-gw java-mono java-gw elixir-gw rust-gw
-# Shapes with their own targets but not yet in the aggregates: the TypeScript
-# backend is being built.
-ALL_SHAPES := $(SHAPES) ts-mono ts-gw
+SHAPES := go-mono go-gw java-mono java-gw elixir-gw rust-gw ts-mono ts-gw
 GRADLE := cd backends/java && ./gradlew --quiet --console=plain
 CARGO := cd backends/rust && cargo
 MIX := cd backends/elixir && mix
@@ -131,12 +128,12 @@ lb-down:  ## Stop the balancers
 	$(COMPOSE) --profile lb stop haproxy
 
 ##@ Cluster (the side-by-side setup in containers, any number of each)
-##~ Counts: GO_SERVICES JAVA_SERVICES GO_GW ELIXIR_GW RUST_GW JAVA_GW, 0 to 8 each; a count not given keeps
-##~ what is running (defaults 2 1 1 1 1 1 on a fresh start). Devices on :8080; statistics on localhost:8404.
+##~ Counts: GO_SERVICES JAVA_SERVICES TS_SERVICES GO_GW ELIXIR_GW RUST_GW JAVA_GW TS_GW, 0 to 8 each; a count not
+##~ given keeps what is running (defaults 2 1 1 1 1 1 1 1 on a fresh start). Devices on :8080; statistics on localhost:8404.
 
 .PHONY: cluster-up cluster-down cluster-status cluster-logs
 cluster-up: infra-up  ## Rebuild the images and start, update or rescale the cluster
-	GO_SERVICES=$(GO_SERVICES) JAVA_SERVICES=$(JAVA_SERVICES) GO_GW=$(GO_GW) ELIXIR_GW=$(ELIXIR_GW) RUST_GW=$(RUST_GW) JAVA_GW=$(JAVA_GW) infra/cluster.sh up
+	GO_SERVICES=$(GO_SERVICES) JAVA_SERVICES=$(JAVA_SERVICES) TS_SERVICES=$(TS_SERVICES) GO_GW=$(GO_GW) ELIXIR_GW=$(ELIXIR_GW) RUST_GW=$(RUST_GW) JAVA_GW=$(JAVA_GW) TS_GW=$(TS_GW) infra/cluster.sh up
 
 cluster-down:  ## Remove the cluster, leaving the infrastructure running; the next start uses the defaults
 	infra/cluster.sh down
@@ -237,9 +234,9 @@ NEEDS_rust-gw := build-go build-rust
 NEEDS_ts-mono := ts-deps
 NEEDS_ts-gw := ts-deps
 
-.PHONY: $(ALL_SHAPES:%=conformance-%)
+.PHONY: $(SHAPES:%=conformance-%)
 .SECONDEXPANSION:
-$(ALL_SHAPES:%=conformance-%): conformance-%: infra-up $$(NEEDS_%)
+$(SHAPES:%=conformance-%): conformance-%: infra-up $$(NEEDS_%)
 	conformance/run.sh $(SHAPE_$*)
 
 ##@ Measure (docs/measuring.md)
@@ -249,13 +246,13 @@ RATE ?= 500
 DURATION ?= 30s
 LOADGEN_ARGS ?=
 
-.PHONY: load measure-all $(ALL_SHAPES:%=measure-%)
+.PHONY: load measure-all $(SHAPES:%=measure-%)
 load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s, LOADGEN_ARGS for any other flag)
 	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s $(LOADGEN_ARGS)
 
-measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape, each from a fresh stack (about 75 minutes per repetition)
+measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape, each from a fresh stack (about 100 minutes per repetition)
 
-##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw run the protocol for one (about 12 minutes each per repetition).
+##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw, -ts-mono, -ts-gw run the protocol for one (about 12 minutes each per repetition).
 
 # The labels name the results files, as in the earlier write-ups.
 LABEL_go-mono := go
@@ -272,7 +269,7 @@ LABEL_ts-gw := ts-gateway
 RESULTS_DATE ?= $(shell date +%Y-%m-%d)
 RESULTS_DATE := $(RESULTS_DATE)
 
-$(ALL_SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
+$(SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
 	FRESH=1 LABEL=$(LABEL_$*) loadgen/protocol.sh docs/results/$(RESULTS_DATE)-$(LABEL_$*).jsonl $(SHAPE_$*)
 
 ##@ Contract

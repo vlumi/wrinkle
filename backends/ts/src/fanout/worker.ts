@@ -64,6 +64,10 @@ export async function startFanout(deps: FanoutDeps, opts: FanoutOptions): Promis
       // session expires; keep that short.
       sessionTimeout: 10_000,
       heartbeatInterval: 3_000,
+      // The group is shared with the Go and Java workers, which use the
+      // cooperative sticky assignor (Java among others); librdkafka's default
+      // has none in common with them.
+      partitionAssigners: [KafkaJS.PartitionAssigners.cooperativeSticky],
     },
     "js.consumer.max.batch.size": maxBatch,
     // localhost resolves to ::1 first, where the brokers do not listen.

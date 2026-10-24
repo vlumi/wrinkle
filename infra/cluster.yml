@@ -55,6 +55,17 @@ services:
       WRINKLE_BLOB_URL: http://blobs:9200
     restart: unless-stopped
 
+  ts-services:
+    build: { context: .., dockerfile: backends/ts/Dockerfile }
+    image: wrinkle/ts:dev
+    command: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
+    environment:
+      <<: [*infra, *push]
+      WRINKLE_BLOB_URL: http://blobs:9200
+    volumes:
+      - ${APNS_KEY_FILE:-/dev/null}:/run/apns/key.p8:ro
+    restart: unless-stopped
+
   go-gw:
     build: { context: .., dockerfile: backends/go/Dockerfile }
     image: wrinkle/go:dev
@@ -90,6 +101,17 @@ services:
   rust-gw:
     build: { context: .., dockerfile: backends/rust/Dockerfile }
     image: wrinkle/rust:dev
+    environment:
+      <<: *gateway
+    depends_on:
+      cluster-lb:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ts-gw:
+    build: { context: .., dockerfile: backends/ts/Dockerfile }
+    image: wrinkle/ts:dev
+    command: [--roles, gateway]
     environment:
       <<: *gateway
     depends_on:
