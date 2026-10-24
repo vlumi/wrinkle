@@ -24,3 +24,6 @@ DerivedData/
 # Go binaries built in place
 loadgen/loadgen
 backends/go/wrinkle
+
+# The console output of a measurement session (docs/measuring.md)
+docs/results/measure.log
