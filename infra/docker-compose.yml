@@ -4,7 +4,10 @@
 # GRAFANA_BIND=0.0.0.0 opens Grafana to the network. The load balancer, in
 # the lb profile, serves devices on loopback port 8080 like a gateway; the
 # TLS edge, in the tls profile, faces the network on 8443. Blobs are in
-# Garage, behind a proxy on loopback port 9200.
+# Garage, behind a proxy on loopback port 9200. The database is one of two
+# profiles, chosen by infra/up.sh: vitess, the default, or mysql, the same
+# schema unsharded on one MySQL; both serve the MySQL protocol on port 15003
+# and answer to the name db on the network.
 
 name: wrinkle
 
@@ -12,6 +15,10 @@ services:
   vitess:
     build: ./vitess
     image: wrinkle/vttestserver:v24.0.4
+    profiles: [vitess]
+    networks:
+      default:
+        aliases: [db]
     environment:
       KEYSPACES: conversation,user
       NUM_SHARDS: 2,2
@@ -25,6 +32,45 @@ services:
       - ../schema:/vt/schema:ro
     healthcheck:
       test: ["CMD", "mysql", "-h", "127.0.0.1", "-P", "15003", "-e", "SELECT 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  mysql:
+    image: mysql:8.4.9
+    profiles: [mysql]
+    networks:
+      default:
+        aliases: [db]
+    # Row-based binlog with full images for Debezium's MySQL connector; the
+    # pool and connection limit as in the Vitess profile's mysqld.
+    command:
+      - --port=15003
+      - --server-id=1
+      - --log-bin=binlog
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      - --gtid-mode=ON
+      - --enforce-gtid-consistency=ON
+      - --innodb-buffer-pool-size=512M
+      - --max-connections=1000
+      - --character-set-server=utf8mb4
+      - --skip-name-resolve
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_ROOT_HOST: "%"
+    ports:
+      - "127.0.0.1:15003:15003" # MySQL protocol, where vtgate is in the other profile
+    volumes:
+      - ../schema:/schema:ro
+      - ./mysql/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    healthcheck:
+      # Only the final server listens on TCP, after the schema is loaded.
+      test: ["CMD", "mysql", "-h", "127.0.0.1", "-P", "15003", "-u", "root", "-e", "SELECT 1"]
       interval: 5s
       timeout: 5s
       retries: 60
@@ -70,6 +116,10 @@ services:
         condition: service_healthy
       vitess:
         condition: service_healthy
+        required: false
+      mysql:
+        condition: service_healthy
+        required: false
     environment:
       BOOTSTRAP_SERVERS: kafka:9092
       GROUP_ID: 1

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Smoke test of the change-data path: an outbox row written through vtgate
-# shows up on the Kafka topic, for both outboxes. Expects the stack to be up
+# Smoke test of the change-data path: an outbox row written to the database,
+# through vtgate or to MySQL, shows up on the Kafka topic, for both outboxes. Expects the stack to be up
 # (make infra-up). The connectors skip the initial snapshot, so rows written
 # before one streams are never delivered; passing here also means both
 # stream.
@@ -9,6 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 compose() { docker compose "$@"; }
 CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
+db=$(./profile.sh)
 
 wait_running() {
   local connector=$1 state=
@@ -57,9 +58,10 @@ check() {
     sleep 3
     id=$(date +%s%N)
     echo "inserting $keyspace outbox row $id (attempt $attempt)"
-    compose exec -T vitess mysql -h 127.0.0.1 -P 15003 "$keyspace" -e "$("$row" "$id")"
+    compose exec -T "$db" mysql -h 127.0.0.1 -P 15003 -u root "$keyspace" -e "$("$row" "$id")"
     for _ in $(seq 1 20); do
-      if grep -q "\"outbox_id\":\"$id\"" "$captured"; then
+      # The Vitess connector sends unsigned bigints as strings, MySQL's as numbers.
+      if grep -q -E "\"outbox_id\":\"?$id\"?[,}]" "$captured"; then
         kill "$consumer" 2>/dev/null || true
         wait "$consumer" 2>/dev/null || true
         echo "outbox row $id reached $topic"

@@ -1,9 +1,10 @@
 #!/bin/bash
 # Creates or updates the outbox connectors: the conversation keyspace's
-# outbox and the user keyspace's. Idempotent: PUT on the config.
+# outbox and the user keyspace's, from the configs for the database profile
+# given (vitess or mysql). Idempotent: PUT on the config.
 set -euo pipefail
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/${1:-vitess}"
 CONNECT_URL="${CONNECT_URL:-http://localhost:8083}"
 response=$(mktemp)
 

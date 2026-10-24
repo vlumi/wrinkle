@@ -47,17 +47,14 @@ help:
 		/^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
 
-##@ Infrastructure (Vitess, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana)
+##@ Infrastructure (Vitess or MySQL, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana)
 
 .PHONY: infra-up infra-down infra-reset infra-status infra-logs reset-fanout
-infra-up:  ## Start the stack and register the outbox connectors
-	$(COMPOSE) up -d --build --wait
-	infra/kafka-topics.sh
-	infra/garage-init.sh
-	infra/debezium/register.sh
+infra-up:  ## Start the stack and register the outbox connectors (PROFILE=mysql: plain MySQL in place of Vitess)
+	infra/up.sh
 
 infra-down:  ## Stop the stack and discard all data
-	$(COMPOSE) --profile lb --profile tls down -v --remove-orphans
+	$(COMPOSE) --profile vitess --profile mysql --profile lb --profile tls down -v --remove-orphans
 
 infra-reset: infra-down infra-up  ## Recreate the stack empty
 
@@ -66,7 +63,7 @@ infra-status:  ## Show the stack's containers, their health and resource use
 	@echo
 	@docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}' | grep -E 'NAME|wrinkle'
 
-infra-logs:  ## Follow the stack's logs (SERVICE=vitess|kafka|connect|... for one)
+infra-logs:  ## Follow the stack's logs (SERVICE=vitess|mysql|kafka|connect|... for one)
 	$(COMPOSE) logs -f --tail 100 $(SERVICE)
 
 reset-fanout:  ## Skip what is waiting in Kafka for the fan-out (stop the backend first)
@@ -264,7 +261,8 @@ measure-all: $(SHAPES:%=measure-%)  ## The protocol against every backend shape,
 
 ##~ measure-go-mono, -java-mono, -go-gw, -java-gw, -elixir-gw, -rust-gw, -ts-mono, -ts-gw run the protocol for one (about 12 minutes each per repetition).
 
-# The labels name the results files, as in the earlier write-ups.
+# The labels name the results files, as in the earlier write-ups; on the
+# mysql profile they end in -mysql.
 LABEL_go-mono := go
 LABEL_java-mono := java
 LABEL_go-gw := go-gateway
@@ -280,7 +278,8 @@ RESULTS_DATE ?= $(shell date +%Y-%m-%d)
 RESULTS_DATE := $(RESULTS_DATE)
 
 $(SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
-	FRESH=1 LABEL=$(LABEL_$*) loadgen/protocol.sh docs/results/$(RESULTS_DATE)-$(LABEL_$*).jsonl $(SHAPE_$*)
+	label=$(LABEL_$*)$$([ "$$(infra/profile.sh)" = mysql ] && echo -mysql); \
+	FRESH=1 LABEL=$$label loadgen/protocol.sh docs/results/$(RESULTS_DATE)-$$label.jsonl $(SHAPE_$*)
 
 ##@ Contract
 

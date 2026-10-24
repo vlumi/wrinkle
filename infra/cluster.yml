@@ -4,7 +4,7 @@
 # counts and the push settings.
 
 x-infra: &infra
-  WRINKLE_MYSQL: vitess:15003
+  WRINKLE_MYSQL: db:15003
   WRINKLE_KAFKA: kafka:9092
   WRINKLE_VALKEY: valkey:6379
 

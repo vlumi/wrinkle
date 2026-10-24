@@ -25,9 +25,11 @@ fi
 
 go build -o bin/loadgen ./loadgen
 if [ "${FRESH:-0}" = 1 ]; then
-  echo "== fresh infrastructure"
+  # On the database profile the stack has.
+  profile=$(infra/profile.sh)
+  echo "== fresh infrastructure ($profile)"
   make --no-print-directory infra-down >/dev/null 2>&1
-  make --no-print-directory infra-up >/dev/null
+  make --no-print-directory infra-up PROFILE="$profile" >/dev/null
 fi
 
 backend=""
