@@ -1,25 +1,34 @@
 // The TypeScript backend: any of the gateway, services and fan-out roles in
 // one process. Settings come from flags or WRINKLE_* variables.
-import { hostname } from "node:os";
+import { existsSync } from "node:fs";
+import { homedir, hostname } from "node:os";
+import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { Pool } from "mysql2/promise";
 import { accounts } from "./accounts/feature.ts";
 import { contacts } from "./contacts/feature.ts";
 import { conversation } from "./conversation/feature.ts";
 import { devicesync } from "./devicesync/feature.ts";
-import { startFanout, type Fanout } from "./fanout/worker.ts";
+import { startFanout, topics, type Fanout } from "./fanout/worker.ts";
 import { Server } from "./gateway/server.ts";
 import { Blobs } from "./internal/blobs.ts";
 import { openKeyspace } from "./internal/db.ts";
 import { serveHttp } from "./internal/http.ts";
 import { log } from "./internal/log.ts";
 import { Presence } from "./presence/presence.ts";
+import { APNs } from "./push/apns.ts";
+import { Notifier } from "./push/notifier.ts";
 import type { Backend } from "./services/backend.ts";
 import type { Deps } from "./services/deps.ts";
 import { newLocal, type Feature } from "./services/features.ts";
 import { Remote, serve } from "./services/rpc.ts";
 import { stickers } from "./stickers/feature.ts";
 import { uploads } from "./uploads/feature.ts";
+
+// Local settings from .env, in the working directory or at the repository
+// root; variables already set win.
+const dotenv = [".env", join(import.meta.dirname, "..", "..", "..", ".env")].find((p) => existsSync(p));
+if (dotenv) process.loadEnvFile(dotenv);
 
 const env = (key: string, fallback: string) => process.env[key] || fallback;
 
@@ -43,6 +52,11 @@ const { values: flags } = parseArgs({
       default: env("WRINKLE_BLOB_SECRET", "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4"),
     },
     "blob-region": { type: "string", default: env("WRINKLE_BLOB_REGION", "garage") },
+    // The fan-out's push notifications; off without a key.
+    "apns-key": { type: "string", default: env("WRINKLE_APNS_KEY", "") },
+    "apns-key-id": { type: "string", default: env("WRINKLE_APNS_KEY_ID", "") },
+    "apns-team-id": { type: "string", default: env("WRINKLE_TEAM_ID", "") },
+    "apns-topic": { type: "string", default: env("WRINKLE_APNS_TOPIC", "fi.misaki.wrinkle") },
   },
 });
 
@@ -109,11 +123,27 @@ async function main(): Promise<void> {
 
   let fanout: Fanout | undefined;
   if (roles.has("fanout")) {
+    let notifier: Notifier | undefined;
+    if (flags["apns-key"] !== "") {
+      const keyFile = flags["apns-key"].replace(/^~(?=$|\/)/, homedir());
+      const apns = new APNs({
+        keyFile,
+        keyId: flags["apns-key-id"],
+        teamId: flags["apns-team-id"],
+        topic: flags["apns-topic"],
+      });
+      closers.push(() => {
+        apns.close();
+        return Promise.resolve();
+      });
+      notifier = new Notifier(apns, deps!.users, presence!, log.with({ role: "push" }));
+      log.info("push notifications on", { topic: flags["apns-topic"] });
+    }
     fanout = await startFanout(
       { ...deps!, presence: presence!, log: log.with({ role: "fanout" }) },
-      Number(flags["fanout-concurrency"]),
+      { brokers: flags.kafka, concurrency: Number(flags["fanout-concurrency"]), notifier },
     );
-    log.info("fanout consuming");
+    log.info("fanout consuming", { topics: topics.join(",") });
   }
 
   let server: Server | undefined;
