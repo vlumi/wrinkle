@@ -218,7 +218,7 @@ sequenceDiagram
 2. **Capture.** Debezium reads the shard's change stream and publishes the outbox insert to Kafka, keyed by conversation id, and skips the delete. The row lives only within the transaction; the change stream is what carries it, so the event is published exactly when the transaction commits.
 3. **Fan out.** A fan-out worker takes the record and, for each recipient (the sender too, for their other devices), appends the event to the recipient's log at the next position and updates their conversation list, in one transaction on the recipient's shard. Copies of messages bound for one shard share that transaction: while one runs, the next gathers the copies of every record being delivered meanwhile, so under load a few statements carry many messages, and a batch that fails is appended copy by copy.
 4. **Push.** After the append, the worker publishes the event, now carrying its log position, to the recipient's Valkey channel. Each gateway holding one of that user's devices is subscribed to the channel and writes the event to those connections.
-5. **Notify.** For a recipient's devices that are not connected and have registered for push, the Go fan-out sends an APNs notification.
+5. **Notify.** For a recipient's devices that are not connected and have registered for push, the fan-out sends an APNs notification.
 
 The sender's response returns after step 1; everything after it is asynchronous. End to end, send to receipt on a connected device, took 63 to 72 ms at the median at 500 messages a second, and 153 to 250 ms at 1000, in the last results ([2026-10-21](results/2026-10-21-shapes.md)).
 

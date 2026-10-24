@@ -61,7 +61,7 @@ That builds, installs and launches the app; with several phones paired, pick one
 
 ## Push notifications
 
-The app registers for push and sends its token to the backend after every connect. While the app is in the background its connection is closed, and the Go backend's fan-out pushes new messages to it through APNs instead, with the unread count as badge. Tapping a notification opens the conversation.
+The app registers for push and sends its token to the backend after every connect. While the app is in the background its connection is closed, and the backend's fan-out pushes new messages to it through APNs instead, with the unread count as badge. Tapping a notification opens the conversation.
 
 Push needs an APNs key: in the developer account, Certificates, Identifiers & Profiles, Keys, create a key with "Apple Push Notifications service" enabled and download it (`AuthKey_<key id>.p8`). An App Store Connect API key is a different kind and does not work. Then in `.env`:
 
@@ -72,7 +72,7 @@ WRINKLE_APNS_KEY=~/path/to/AuthKey_XXXXXXXXXX.p8
 
 and restart the backend; it logs "push notifications on". Without a key everything else works and the app catches up when it is opened.
 
-Pushes are sent by the Go and TypeScript fan-out, so they need one of those monoliths or Go or TypeScript services instances; which gateway a device uses does not matter. The Java fan-out stores tokens but does not push yet. In a pool with both, such as the cluster's default of two Go and one Java services instances, the Go and Java instances split Kafka's partitions between them, so a message whose conversation falls to a Java instance gets no push; for testing push, run only Go services (`make cluster-up JAVA_SERVICES=0`, or a Go monolith).
+Pushes are sent by the fan-out of whichever monolith or services instances run, Go, Java or TypeScript; which gateway a device uses does not matter. In a pool, the instances split Kafka's partitions between them, so each sends the pushes for the conversations it consumes, and every one of them needs the key: the cluster and the side-by-side targets read it from `.env` for all of them.
 
 Message text is encrypted, so the backend sends notifications with the generic body "New message" and the sealed content; the app's notification service extension decrypts it on the phone. It reads the keys from an app group, `group.fi.misaki.wrinkle`, which the team must have and both app ids (`fi.misaki.wrinkle` and `fi.misaki.wrinkle.NotificationService`) must be allowed; automatic signing in `make ios-device` usually registers it, otherwise add App Groups under Signing & Capabilities in Xcode for both targets. Without it the app works, but notifications keep the generic body.
 
@@ -164,7 +164,7 @@ make lb-down                       # when done
 - **Devices to gateways:** the balancer on port 8080, behind the TLS edge for devices on the network, sends each connection to the healthy gateway with the fewest. Stop a gateway and the balancer marks it down within about two seconds; its devices reconnect and land on the others. The gateways listen on loopback; to reach one in particular from the Mac itself, put `ws://localhost:<port>/v1/ws` in the client's gateway field.
 - **Gateways to services:** each gateway keeps one HTTP/2 connection to the services balancer on 127.0.0.1:9100, which hands out each request separately, in turn, to the running instances. Instance *n* serves the RPC on 9100+*n*, on loopback only. Stop an instance and the rest take its requests and its share of the fan-out.
 
-`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics. Java services instances store push tokens but send no pushes; see [Push notifications](#push-notifications) for what that means in a mixed pool.
+`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics.
 
 ## What faces the network
 

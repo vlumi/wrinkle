@@ -137,7 +137,7 @@ On 2026-10-21 at commit 607dcfd ([2026-10-21-shapes.md](../../docs/results/2026-
 
 ## Gaps
 
-- Gateway only: services and fan-out in Rust are open in [ROADMAP.md](../../ROADMAP.md). Pushes to devices that are not connected depend on the services beside it, which only the Go ones send.
+- Gateway only: services and fan-out in Rust are open in [ROADMAP.md](../../ROADMAP.md). Pushes to devices that are not connected come from the services beside it.
 - No live-memory figure and no profiling endpoints; `/debug/gc` exists only so the load generator can call it.
 - No limits per user or per address, as in every gateway; they need shared state.
 - A Valkey restart loses the presence entries of devices that stay connected; they are written again only when each device reconnects. The instance key comes back with the next heartbeat.

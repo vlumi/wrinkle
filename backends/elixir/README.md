@@ -146,7 +146,7 @@ On 2026-10-21 at commit 607dcfd ([2026-10-21-shapes.md](../../docs/results/2026-
 
 ## Gaps
 
-- No services: the conversation and sync services, the fan-out and push notifications run in a Go, Java or TypeScript process. APNs pushes reach devices only through Go or TypeScript services instances.
+- No services: the conversation and sync services, the fan-out and push notifications run in a Go, Java or TypeScript process.
 - Every attach and detach goes through the one `Wrinkle.Push` process, as does every push; it is a single serialization point per gateway, though it never waits on Valkey.
 - A services channel that drops is reconnected by the Mint adapter with its own backoff, which grows to two minutes between attempts after a few minutes of outage, so recovery from a long services outage can lag.
 - At 1000 messages a second, which the other gateways sustained in front of the same services, about 5 % of its sends timed out ([2026-10-21](../../docs/results/2026-10-21-shapes.md)). The sends wait in the services, for a connection to the conversation keyspace, not in the gateway: no process in it has a queue, and the database work per message is the Go gateway's. 1000/s is at the edge of the database's limit, and the Elixir shape goes over it first; the schedulers' busy waiting, now off, explained part of the difference in a comparison on a busy machine, and the rest is not established.

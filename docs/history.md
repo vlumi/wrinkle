@@ -119,3 +119,5 @@ A dated log of how Wrinkle got to where it is: the phases, the questions settled
 ## 2026-10-24
 
 **A TypeScript backend.** A third full implementation, on Node 26 running TypeScript directly: gateway, services and fan-out, as a monolith or split, with the Go code as the reference for every feature, so the five implementations share data and the conformance tests hold it like the others. It is the one where a process has one thread for all its JavaScript, which the measurements will show the cost of. Two findings on the way: librdkafka's default partition assignors share none with franz-go's, so in a mixed group the TypeScript worker could not join until it offered the cooperative sticky assignor too; and the Kafka client's native build, with no prebuilt binary for Node 26 on Linux, has to run outside the package's scoped directory, since GNU `ar` cannot read the `@` in that path.
+
+**Pushes from Java.** The Java fan-out sends APNs notifications, a port of Go's notifier on the JDK's HTTP/2 client, and reads `.env` as the others do. Every full backend now pushes, so a mixed pool no longer loses the notifications of the conversations a Java instance consumes.
