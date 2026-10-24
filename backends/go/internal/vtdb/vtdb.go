@@ -18,6 +18,8 @@ func Open(ctx context.Context, addr, keyspace string, maxConns int) (*sql.DB, er
 	cfg := mysql.NewConfig()
 	cfg.Net = "tcp"
 	cfg.Addr = addr
+	// vtgate takes any user; plain MySQL, on the mysql profile, root.
+	cfg.User = "root"
 	cfg.DBName = keyspace
 	cfg.ParseTime = true
 	cfg.Loc = time.UTC

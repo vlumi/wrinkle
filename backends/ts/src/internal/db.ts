@@ -13,6 +13,8 @@ export async function openKeyspace(addr: string, keyspace: string, connections: 
   const pool = mysql.createPool({
     host,
     port,
+    // vtgate takes any user; plain MySQL, on the mysql profile, root.
+    user: "root",
     database: keyspace,
     connectionLimit: connections,
     maxIdle: connections,
