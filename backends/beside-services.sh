@@ -3,14 +3,15 @@
 # measurement start a split backend in. The services serve their metrics on
 # 127.0.0.1:8090 and the RPC on 127.0.0.1:9000; the gateway, started in the
 # caller's directory, serves ws://localhost:8080/v1/ws. Stops both on exit.
-# Usage: beside-services.sh go|java <gateway command...>
+# Usage: beside-services.sh go|java|ts <gateway command...>
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/.." && pwd)
 case ${1:-} in
   go) services=$repo/bin/wrinkle ;;
   java) services=$repo/backends/java/build/install/wrinkle/bin/wrinkle ;;
+  ts) services=$repo/backends/ts/wrinkle ;;
   *)
-    echo "usage: beside-services.sh go|java <gateway command...>" >&2
+    echo "usage: beside-services.sh go|java|ts <gateway command...>" >&2
     exit 2
     ;;
 esac

@@ -28,3 +28,8 @@ plugins:
     out: clients/web/src/gen
     opt:
       - target=ts
+  - local: backends/ts/node_modules/.bin/protoc-gen-es
+    out: backends/ts/src/gen
+    opt:
+      - target=js+dts
+      - import_extension=js

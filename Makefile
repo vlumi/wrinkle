@@ -19,11 +19,17 @@ SHAPE_go-gw := $(CURDIR)/backends/go/split.sh
 SHAPE_java-gw := $(CURDIR)/backends/java/split.sh
 SHAPE_elixir-gw := $(CURDIR)/backends/elixir/run.sh
 SHAPE_rust-gw := $(CURDIR)/backends/rust/run.sh
+SHAPE_ts-mono := $(CURDIR)/backends/ts/wrinkle
+SHAPE_ts-gw := $(CURDIR)/backends/ts/split.sh
 SHAPES := go-mono go-gw java-mono java-gw elixir-gw rust-gw
+# Shapes with their own targets but not yet in the aggregates: the TypeScript
+# backend is being built.
+ALL_SHAPES := $(SHAPES) ts-mono ts-gw
 GRADLE := cd backends/java && ./gradlew --quiet --console=plain
 CARGO := cd backends/rust && cargo
 MIX := cd backends/elixir && mix
 NPM := cd clients/web && npm
+NPM_TS := cd backends/ts && npm
 
 GO_MODULES := backends/go clients/go conformance loadgen proto/go
 # Conformance tests need a running backend; they run from conformance-*.
@@ -31,7 +37,7 @@ GO_UNIT_MODULES := backends/go clients/go loadgen proto/go
 # Every Swift source but the generated contract, relative to clients/ios.
 IOS_SWIFT = $(shell cd clients/ios && find Packages Sources -name '*.swift' -not -path '*/Contract/*' -not -path '*/.build*')
 # Generated code is committed; proto-check fails when it is stale.
-GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto clients/web/src/gen
+GENERATED := proto/go clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract backends/elixir/lib/wrinkle/proto clients/web/src/gen backends/ts/src/gen
 SH_FILES = $(shell git ls-files --cached --others --exclude-standard '*.sh')
 SHFMT := -i 2 -ci
 
@@ -194,7 +200,7 @@ build-loadgen:  ## Load generator (bin/loadgen)
 .PHONY: ci lint format test conformance smoke web-test ios-test
 ci: lint proto-check test build-ios smoke conformance web-test ios-test  ## The local CI: lint, unit tests, builds, conformance, client tests
 
-lint:  proto-lint go-lint java-lint elixir-lint rust-lint web-lint ios-lint shell-lint docker-lint infra-lint  ## Formatting checks and linters for everything
+lint:  proto-lint go-lint java-lint elixir-lint rust-lint ts-lint web-lint ios-lint shell-lint docker-lint infra-lint  ## Formatting checks and linters for everything
 
 format:  ## Rewrite sources with each language's formatter
 	buf format -w
@@ -206,7 +212,7 @@ format:  ## Rewrite sources with each language's formatter
 	shfmt -w $(SHFMT) $(SH_FILES)
 	cd clients/ios && swift format --in-place --recursive --configuration .swift-format $(IOS_SWIFT)
 
-test: go-test java-test elixir-test rust-test web-unit  ## Unit tests for everything
+test: go-test java-test elixir-test rust-test ts-test web-unit  ## Unit tests for everything
 
 conformance: $(SHAPES:%=conformance-%)  ## The conformance tests against every backend shape
 
@@ -219,7 +225,7 @@ web-test: infra-up web-deps build-go  ## The web client in headless Chrome again
 ios-test: infra-up build-go  ## The iOS client's package tests, headless, against the Go backend
 	clients/ios/Scripts/test-backend.sh $(GO_BACKEND)
 
-##~ conformance-go-mono, -go-gw, -java-mono, -java-gw, -elixir-gw, -rust-gw test one shape.
+##~ conformance-go-mono, -go-gw, -java-mono, -java-gw, -elixir-gw, -rust-gw, -ts-mono, -ts-gw test one shape.
 
 # What each shape needs built: Go's services run beside every gateway but Java's.
 NEEDS_go-mono := build-go
@@ -228,10 +234,12 @@ NEEDS_java-mono := build-java
 NEEDS_java-gw := build-java
 NEEDS_elixir-gw := build-go build-elixir
 NEEDS_rust-gw := build-go build-rust
+NEEDS_ts-mono := ts-deps
+NEEDS_ts-gw := ts-deps
 
-.PHONY: $(SHAPES:%=conformance-%)
+.PHONY: $(ALL_SHAPES:%=conformance-%)
 .SECONDEXPANSION:
-$(SHAPES:%=conformance-%): conformance-%: infra-up $$(NEEDS_%)
+$(ALL_SHAPES:%=conformance-%): conformance-%: infra-up $$(NEEDS_%)
 	conformance/run.sh $(SHAPE_$*)
 
 ##@ Measure (docs/measuring.md)
@@ -241,7 +249,7 @@ RATE ?= 500
 DURATION ?= 30s
 LOADGEN_ARGS ?=
 
-.PHONY: load measure-all $(SHAPES:%=measure-%)
+.PHONY: load measure-all $(ALL_SHAPES:%=measure-%)
 load: build-loadgen  ## A quick load run against the running backend (CONNECTIONS=1000 RATE=500 DURATION=30s, LOADGEN_ARGS for any other flag)
 	bin/loadgen --connections $(CONNECTIONS) --rate $(RATE) --duration $(DURATION) --warmup 10s $(LOADGEN_ARGS)
 
@@ -256,19 +264,21 @@ LABEL_go-gw := go-gateway
 LABEL_java-gw := java-gateway
 LABEL_elixir-gw := elixir
 LABEL_rust-gw := rust
+LABEL_ts-mono := ts
+LABEL_ts-gw := ts-gateway
 
 # One make invocation is one session: every shape's file carries the date it
 # started. RESULTS_DATE, from the environment too, continues an earlier session.
 RESULTS_DATE ?= $(shell date +%Y-%m-%d)
 RESULTS_DATE := $(RESULTS_DATE)
 
-$(SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
+$(ALL_SHAPES:%=measure-%): measure-%: infra-up $$(NEEDS_%)
 	FRESH=1 LABEL=$(LABEL_$*) loadgen/protocol.sh docs/results/$(RESULTS_DATE)-$(LABEL_$*).jsonl $(SHAPE_$*)
 
 ##@ Contract
 
 .PHONY: proto proto-check
-proto: web-deps  ## Regenerate code from proto/ for every language
+proto: web-deps ts-deps  ## Regenerate code from proto/ for every language
 	buf generate
 	# The clients speak the device contract only.
 	rm -f clients/ios/Packages/WrinkleCore/Sources/WrinkleCore/Contract/services.pb.swift
@@ -293,7 +303,7 @@ clean:  ## Remove build output (not dependencies, not the stack)
 
 # Parts the targets above are made of.
 
-.PHONY: proto-lint go-lint go-test java-lint java-test elixir-deps elixir-lint elixir-test rust-lint rust-test web-deps web-lint web-unit ios-lint shell-lint docker-lint infra-lint
+.PHONY: proto-lint go-lint go-test java-lint java-test elixir-deps elixir-lint elixir-test rust-lint rust-test ts-deps ts-lint ts-test web-deps web-lint web-unit ios-lint shell-lint docker-lint infra-lint
 proto-lint:
 	buf lint
 	buf format --diff --exit-code
@@ -328,6 +338,20 @@ rust-lint:
 
 rust-test:
 	$(CARGO) test --release --quiet 2>&1 | grep -E "^test result|FAILED|panicked"
+
+# npm ci rebuilds the Kafka client's librdkafka, minutes of compiling; only
+# a changed lockfile runs it.
+ts-deps: backends/ts/node_modules/.package-lock.json
+backends/ts/node_modules/.package-lock.json: backends/ts/package-lock.json
+	$(NPM_TS) ci --no-audit --no-fund --silent
+
+ts-lint: ts-deps
+	$(NPM_TS) run --silent typecheck
+	$(NPM_TS) run --silent lint
+	$(NPM_TS) run --silent format-check
+
+ts-test: ts-deps
+	$(NPM_TS) test --silent
 
 web-deps:
 	$(NPM) ci --no-audit --no-fund --silent
