@@ -75,7 +75,8 @@ func parseMetrics(r io.Reader) sample {
 			s.cpu = v
 		case "process_resident_memory_bytes":
 			s.rss = v
-		case "go_memstats_heap_alloc_bytes", "go_memstats_stack_inuse_bytes", "jvm_memory_used_bytes", "erlang_vm_memory_bytes_total":
+		case "go_memstats_heap_alloc_bytes", "go_memstats_stack_inuse_bytes", "jvm_memory_used_bytes", "erlang_vm_memory_bytes_total",
+			"nodejs_heap_size_used_bytes", "nodejs_external_memory_bytes":
 			s.live += v
 		case "wrinkle_connections":
 			s.connections += v

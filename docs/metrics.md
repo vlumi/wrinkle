@@ -21,5 +21,6 @@ Process metrics:
 | Java | `process_cpu_seconds_total` | `ps` on macOS (the JVM exporter reports it only on Linux) | `jvm_memory_used_bytes`, all pools |
 | Elixir | `process_cpu_seconds_total` | `ps` | `erlang_vm_memory_bytes_total`, processes and system (counts allocator carriers, so it can exceed RSS) |
 | Rust | `process_cpu_seconds_total` | `process_resident_memory_bytes` | none: no collector |
+| TypeScript (Node) | `process_cpu_seconds_total` | `process_resident_memory_bytes` | `nodejs_heap_size_used_bytes` + `nodejs_external_memory_bytes` (buffers outside the heap, the sockets' among them) |
 
 Where a backend lacks resident memory, the load generator measures the process listening on the metrics port with `ps`.
