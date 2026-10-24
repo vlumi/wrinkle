@@ -9,6 +9,7 @@ import { conversation } from "./conversation/feature.ts";
 import { devicesync } from "./devicesync/feature.ts";
 import { startFanout, type Fanout } from "./fanout/worker.ts";
 import { Server } from "./gateway/server.ts";
+import { Blobs } from "./internal/blobs.ts";
 import { openKeyspace } from "./internal/db.ts";
 import { serveHttp } from "./internal/http.ts";
 import { log } from "./internal/log.ts";
@@ -67,12 +68,12 @@ async function main(): Promise<void> {
     deps = {
       users: pools[0]!,
       conversations: pools[1]!,
-      blobs: {
+      blobs: new Blobs({
         url: flags["blob-url"],
         keyId: flags["blob-key-id"],
         secret: flags["blob-secret"],
         region: flags["blob-region"],
-      },
+      }),
       log: log.with({ role: "services" }),
     };
     const built = newLocal(deps, [accounts, devicesync, conversation, contacts, uploads, stickers]);

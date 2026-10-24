@@ -2,6 +2,7 @@
 # Runs the conformance tests against a backend started by the given command.
 # The command must serve ws://localhost:8080/v1/ws against the shared
 # infrastructure. Usage: conformance/run.sh <backend command...>
+# CONFORMANCE_RUN, a go test -run pattern, runs only the tests it matches.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -40,7 +41,7 @@ for _ in $(seq 1 60); do
   sleep 1
 done
 
-if ! go test -count=1 ./...; then
+if ! go test -count=1 ${CONFORMANCE_RUN:+-run "$CONFORMANCE_RUN"} ./...; then
   echo "backend log:" >&2
   tail -50 "$log" >&2
   exit 1

@@ -1,6 +1,7 @@
 // What the services and the fan-out share: the keyspaces, Valkey and the blob
 // storage settings.
 import type { Pool } from "mysql2/promise";
+import type { Blobs } from "../internal/blobs.ts";
 import type { Logger } from "../internal/log.ts";
 import type { Presence } from "../presence/presence.ts";
 
@@ -16,7 +17,7 @@ export interface Deps {
   users: Pool;
   /** The conversation keyspace. */
   conversations: Pool;
-  blobs: BlobConfig;
+  blobs: Blobs;
   log: Logger;
 }
 
