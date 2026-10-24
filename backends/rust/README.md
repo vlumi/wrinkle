@@ -133,7 +133,7 @@ The unit tests are small: the listen address, the token bucket's burst and refil
 
 ## Measured
 
-On 2026-10-21 at commit 607dcfd ([2026-10-21-shapes.md](../../docs/results/2026-10-21-shapes.md), raw runs in [2026-10-21-rust.jsonl](../../docs/results/2026-10-21-rust.jsonl)), medians of three: at 1000 connections, 66 ms p50 and 127 ms p99 end to end at 500 messages per second and 167 / 510 ms at 1000, every message delivered, with 201 ms of gateway CPU per 1000 messages at 500 and 31 MiB resident, the least of the four gateways on every count. Idle, 4000 connections took 47 to 112 MiB resident across the repetitions, from a baseline of a few megabytes; the allocator returns memory unevenly. Earlier rounds: [2026-10-15-shapes.md](../../docs/results/2026-10-15-shapes.md), [2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md).
+On 2026-10-24 at commit 7e6a395 ([2026-10-24-shapes.md](../../docs/results/2026-10-24-shapes.md), raw runs in [2026-10-24-rust.jsonl](../../docs/results/2026-10-24-rust.jsonl)), medians of three: at 1000 connections, 63 ms p50 and 116 ms p99 end to end at 500 messages per second and 181 / 498 ms at 1000, every message delivered, with 182 ms of gateway CPU per 1000 messages at 500 and 40 MiB resident, the least of the five gateways on both. Idle, 4000 connections took 120 to 131 MiB resident, from a baseline of a few megabytes; in earlier rounds it was 47 to 129 MiB, as the allocator returns memory unevenly. Earlier rounds: [2026-10-21-shapes.md](../../docs/results/2026-10-21-shapes.md), [2026-10-15-shapes.md](../../docs/results/2026-10-15-shapes.md), [2026-10-11-gateways.md](../../docs/results/2026-10-11-gateways.md).
 
 ## Gaps
 

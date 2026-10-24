@@ -220,7 +220,7 @@ sequenceDiagram
 4. **Push.** After the append, the worker publishes the event, now carrying its log position, to the recipient's Valkey channel. Each gateway holding one of that user's devices is subscribed to the channel and writes the event to those connections.
 5. **Notify.** For a recipient's devices that are not connected and have registered for push, the fan-out sends an APNs notification.
 
-The sender's response returns after step 1; everything after it is asynchronous. End to end, send to receipt on a connected device, took 63 to 72 ms at the median at 500 messages a second, and 153 to 250 ms at 1000, in the last results ([2026-10-21](results/2026-10-21-shapes.md)).
+The sender's response returns after step 1; everything after it is asynchronous. End to end, send to receipt on a connected device, took 61 to 68 ms at the median at 500 messages a second, and 103 to 181 ms at 1000, in the last results ([2026-10-24](results/2026-10-24-shapes.md)).
 
 ### Read marks
 

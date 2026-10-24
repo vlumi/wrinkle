@@ -18,16 +18,16 @@ The sizing the design was made for, and how the measured prototype compares. Ass
 
 ## Measured against the estimates
 
-From [results/2026-10-21-shapes.md](results/2026-10-21-shapes.md) (commit 607dcfd, six shapes, three repetitions each) and, for the database, the investigation of its ceiling before encryption (ROADMAP.md, "Database ceiling"); scaled to the per-node and per-shard assumptions above. The prototype runs the whole database as one `mysqld` on about five cores with two shards per keyspace, so per-shard figures are read off per `mysqld`.
+From [results/2026-10-24-shapes.md](results/2026-10-24-shapes.md) (commit 7e6a395, eight shapes, three repetitions each) and, for the database, the investigation of its ceiling before encryption (ROADMAP.md, "Database ceiling"); scaled to the per-node and per-shard assumptions above. The prototype runs the whole database as one `mysqld` on about five cores with two shards per keyspace, so per-shard figures are read off per `mysqld`.
 
 | Estimate | Measured |
 |---|---|
-| ~100k connections per gateway node | Resident memory at 4000 idle connections ([shapes](results/2026-10-21-shapes.md)): the Rust gateway about 50 to 130 MiB, Go 226, Elixir 258, Java 454. By slope, 13 to 48 KiB of resident memory per connection for the four gateways, 10 to 27 KiB live, which is 3 to 5 GB for 100k: every one fits a 16 GB node. Go's cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps ([idle memory](results/2026-10-10-idle-memory.md)); going lower needs a poller-driven library. |
+| ~100k connections per gateway node | Resident memory at 4000 idle connections ([shapes](results/2026-10-24-shapes.md)): the Rust gateway about 50 to 130 MiB across rounds, Go 254, Elixir 292, TypeScript 303, Java 460. By slope, 14 to 57 KiB of resident memory per connection for the five gateways, 5 to 27 KiB live, which is 1.5 to 6 GB for 100k: every one fits a 16 GB node. Go's cost is two goroutine stacks and the HTTP buffers its WebSocket library keeps ([idle memory](results/2026-10-10-idle-memory.md)); going lower needs a poller-driven library. |
 | ~1.5k writes/s per shard | The single `mysqld` ran about 3400 transactions/s at 1000 messages/s, one send, two fan-out appends and the acks per message, at 1.7 cores; the Vitess layer in front of it, all in one vtcombo process, was the limit at 2.7 cores (ROADMAP.md, "Database ceiling"). More than twice the per-shard assumption on one process; a real shard has its own `mysqld` and disk. |
 | ~3k user-log appends/s per shard | 2000/s, two per message at 1000 messages/s, sustained alongside the sends on the same `mysqld` since the fan-out batches its appends. Same order. |
 | ~230 pushes/s per gateway node | 1000/s from one process acting as gateway and fan-out worker, far from any limit. |
-| 100 to 300 ms end to end | 63 to 72 ms p50 at 500/s across all six measured shapes from a fresh stack, p99 123 to 179 ms; 153 to 250 ms p50 at 1000/s for the five that sustain it ([shapes](results/2026-10-21-shapes.md)), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
-| JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap. The live slope, 11 to 12 KiB per connection, is the lowest of the runtimes; the Java gateway's resident memory starts at almost 300 MiB. |
+| 100 to 300 ms end to end | 61 to 68 ms p50 at 500/s across all eight measured shapes from a fresh stack, p99 113 to 128 ms; 103 to 181 ms p50 at 1000/s for the five that sustain it ([shapes](results/2026-10-24-shapes.md)), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
+| JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap. The live slope, 11 to 12 KiB per connection, is the lowest after V8's 5 KiB; the Java gateway's resident memory starts at about 320 MiB. |
 
 Where the prototype departs from the design, and what it means for extrapolating:
 

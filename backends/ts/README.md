@@ -83,8 +83,13 @@ Unit tests ([`*.test.ts`](src/)) hold the vectors every backend shares: argon2id
 
 In the image, the Kafka client builds librdkafka from source, since it has no prebuilt binary for this Node; the [Dockerfile](Dockerfile) builds it outside the package's scoped path, because GNU `ar`'s script mode cannot read the `@` in it.
 
+## Measured
+
+On 2026-10-24 at commit 7e6a395, from a fresh stack, medians of three ([2026-10-24-shapes.md](../../docs/results/2026-10-24-shapes.md)): the monolith delivered 500 messages per second at 62 ms p50 and 115 ms p99 end to end and 1000 at 103 / 418 ms, the lowest of any shape at that rate, with 676 ms of CPU per thousand messages at 500 for every role, about two thirds of Go's, and keeps 9 KiB of live memory per idle connection; the split gateway (`ts-gw`) delivered 500/s at 65 / 117 ms with 321 ms of gateway CPU per thousand messages, and 1000/s at 1251 / 2032 ms, every message but its sends waiting 1.2 s at the median, and held 4000 idle connections in 303 MiB with 5 KiB of live memory each, the least of the runtimes. Past the limit it keeps working on every send it accepted, so latency grows into tens of seconds rather than sends failing.
+
 ## Gaps
 
 - A batch transaction has no timeout of its own: mysql2 cannot cancel a query, so a hung one stalls its shard's queue until the connection fails.
-- Not measured yet.
+- Split, the gateway's sends queue at 1000 messages a second while the monolith's do not; whether in the internal RPC or the services process's one thread is not established ([ROADMAP.md](../../ROADMAP.md), Parity).
+- The gateway answers a request that takes over 10 s with an error, but the work behind it goes on, and the database pool queues for a connection without a limit: past the database's limit, sends the client gave up on still run.
 - As for every gateway: no limits per user or per address, which need shared state ([ROADMAP.md](../../ROADMAP.md)).
