@@ -12,7 +12,7 @@ src/gateway/        WebSocket connections, limits, coalesced acks, push subscrip
 src/services/       the Backend interface; Local (in-process, a handler per request from each feature) and the gRPC server and client
 src/accounts/       Register, SignIn, Connect, passwords and device tokens, devices and their keys, profiles, name claims, deletion
 src/devicesync/     acks, Sync and the trimmer of the logs, the conversation list, opening conversations and groups on the user's side, push tokens
-src/conversation/   direct conversations and notes, groups and notices, key epochs, send, read marks, history, reactions, deletion
+src/conversation/   direct conversations and notes, groups and notices, key epochs, send, read marks, history and its cold tier, reactions, deletion
 src/contacts/       each user's side toward another (a request or a block), the list, and the block and contact checks
 src/uploads/        upload slots for blobs, the attachments a message uses, and the sweeper of unused uploads
 src/stickers/       stickers made from uploads, palettes and their events
@@ -28,7 +28,7 @@ Dockerfile          the image for the cluster, built from the repository root
 
 ## Roles and startup
 
-[main.ts](src/main.ts) takes `--roles`, a comma-separated list of `gateway`, `services` and `fanout`, as the Go binary does: `gateway,fanout` (the default) is the monolith; `gateway` with `--services <addr>` forwards every request over gRPC and opens no database pools; `services,fanout` is a services instance. The services role also runs the uploads sweeper and the trimmer of the user logs. SIGTERM or SIGINT drains the gateway, stops the fan-out, and exits.
+[main.ts](src/main.ts) takes `--roles`, a comma-separated list of `gateway`, `services` and `fanout`, as the Go binary does: `gateway,fanout` (the default) is the monolith; `gateway` with `--services <addr>` forwards every request over gRPC and opens no database pools; `services,fanout` is a services instance. The services role also runs the uploads sweeper, the trimmer of the user logs and the mover of old history to the cold tier. SIGTERM or SIGINT drains the gateway, stops the fan-out, and exits.
 
 | Flag | Variable | Default | Meaning |
 |---|---|---|---|
@@ -37,6 +37,7 @@ Dockerfile          the image for the cluster, built from the repository root
 | `--mysql` | `WRINKLE_MYSQL` | `127.0.0.1:15003` | vtgate |
 | `--kafka` | `WRINKLE_KAFKA` | `localhost:19092` | brokers, comma-separated |
 | `--valkey` | `WRINKLE_VALKEY` | `localhost:6379` | Valkey |
+| `--hbase-rest` | `WRINKLE_HBASE_REST` | `http://127.0.0.1:8086` | the cold tier's HBase, by its REST server |
 | `--services` | `WRINKLE_SERVICES` | | gateway: the services RPC to forward to |
 | `--services-listen` | `WRINKLE_SERVICES_LISTEN` | `127.0.0.1:9000` | services: the gRPC address |
 | `--node` | `WRINKLE_NODE` | the host name | this node's name in presence |
@@ -45,6 +46,8 @@ Dockerfile          the image for the cluster, built from the repository root
 | `--ack-interval-ms` | `WRINKLE_ACK_INTERVAL_MS` | 60000 | least time between two ack writes of a connection; 0 writes each as it comes |
 | `--log-retention-s` | `WRINKLE_LOG_RETENTION_S` | 2592000 (30 days) | how long the user logs keep events |
 | `--log-trim-interval-s` | `WRINKLE_LOG_TRIM_INTERVAL_S` | 3600 | time between two trims of the user logs |
+| `--history-hot-s` | `WRINKLE_HISTORY_HOT_S` | 2592000 (30 days) | how long messages stay in MySQL before moving to the cold tier |
+| `--cold-move-interval-s` | `WRINKLE_COLD_MOVE_INTERVAL_S` | 3600 | time between two moves to the cold tier |
 | `--blob-url`, `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_*` | the local Garage | blob storage, as for Go |
 | `--apns-key`, `--apns-key-id`, `--apns-team-id`, `--apns-topic` | `WRINKLE_APNS_KEY`, `WRINKLE_APNS_KEY_ID`, `WRINKLE_TEAM_ID`, `WRINKLE_APNS_TOPIC` | off | APNs from the fan-out, as for Go |
 
@@ -63,6 +66,7 @@ Each feature's `feature.ts` maps its requests to handlers; [local.ts](src/servic
 - Times are written at millisecond precision, since JavaScript's `Date` has no microseconds. Reads keep what the database holds ([db.ts](src/internal/db.ts) reads DATETIME columns as strings and keeps their microseconds), and the fan-out writes the event times of Go-written outboxes as they came.
 - Strings arrive decoded, so Go's checks for invalid UTF-8 become checks that a string is well formed.
 - Password hashes run on libuv's thread pool, which bounds how many run at once, as Go bounds them by cores.
+- The cold tier ([cold.ts](src/conversation/cold.ts), [mover.ts](src/conversation/mover.ts)) goes through HBase's REST server with the built-in `fetch`, since Node has no maintained native client: puts as JSON with base64 keys, columns and values, and every read through a scanner, since binary keys do not fit a URL; a point read is a scan of one key. The REST scanner reads only forward, so a page of the newest n messages in a cold range is a forward scan of its last n seqs, turned around; this relies on a conversation's cold seqs being contiguous, which they are, since messages are only tombstoned and the mover moves every seq up to the watermark. The mover runs in the services role, beside the trimmer, rather than the fan-out's.
 
 ## Fan-out
 
@@ -81,7 +85,7 @@ make conformance-ts-mono conformance-ts-gw
 make measure-ts-mono measure-ts-gw
 ```
 
-Unit tests ([`*.test.ts`](src/)) hold the vectors every backend shares: argon2id and device tokens, SigV4 presigning, the vindex keyspace ids; and Debezium record parsing, membership flags, sticker and notice ids, the ack writer and the token bucket. Everything else is covered by the conformance tests.
+Unit tests ([`*.test.ts`](src/)) hold the vectors every backend shares: argon2id and device tokens, SigV4 presigning, the vindex keyspace ids; and Debezium record parsing, membership flags, sticker and notice ids, the ack writer and the token bucket, the cold tier's row keys and cells and where a page goes on in it. Everything else is covered by the conformance tests.
 
 In the image, the Kafka client builds librdkafka from source, since it has no prebuilt binary for this Node; the [Dockerfile](Dockerfile) builds it outside the package's scoped path, because GNU `ar`'s script mode cannot read the `@` in it.
 

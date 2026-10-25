@@ -75,7 +75,7 @@ test("client group id", () => {
 });
 
 test("membership change rotates only after the first epoch", () => {
-  const st: State = { kind: "group", topic: "", members: [], lastSeq: 0n, keyEpoch: 0, rotate: false };
+  const st: State = { kind: "group", topic: "", members: [], lastSeq: 0n, keyEpoch: 0, rotate: false, coldSeq: 0n };
   membershipChanged(st);
   assert.ok(!st.rotate, "rotate before any epoch");
   st.keyEpoch = 1;

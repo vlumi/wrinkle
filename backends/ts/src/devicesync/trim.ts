@@ -2,10 +2,10 @@
 // on each shard, oldest first. Any number may run: raising a tail and
 // dropping what is under it can be done twice.
 import type { Pool } from "mysql2/promise";
-import { exec, now, openKeyspace, rows, tx } from "../internal/db.ts";
+import { exec, now, rows, tx } from "../internal/db.ts";
 import type { UUID } from "../internal/ids.ts";
 import type { Logger } from "../internal/log.ts";
-import { loadShards } from "../internal/shards.ts";
+import { closeShardPools, openShardPools } from "../internal/shards.ts";
 
 const trimFirst = 60_000;
 const pageSize = 1000;
@@ -26,7 +26,7 @@ export function startTrimmer(db: Pool, log: Logger, opts: TrimOptions): () => vo
   let stopped = false;
   let timer = setTimeout(
     function run() {
-      shards ??= openShards(db, opts.mysql).catch((err: unknown) => {
+      shards ??= openShardPools(db, opts.mysql, "user").catch((err: unknown) => {
         shards = undefined;
         throw err;
       });
@@ -47,27 +47,9 @@ export function startTrimmer(db: Pool, log: Logger, opts: TrimOptions): () => vo
   return () => {
     stopped = true;
     clearTimeout(timer);
-    void shards?.then((s) => closeShards(db, s)).catch(() => undefined);
+    void shards?.then((s) => closeShardPools(db, s)).catch(() => undefined);
   };
 }
-
-/**
- * A pool of one connection to each shard of the user keyspace, so a page
- * never spans shards; without vtgate the keyspace is one shard.
- */
-async function openShards(db: Pool, mysql: string): Promise<Pool[]> {
-  const names = (await loadShards(db, "user")).names;
-  const opened = await Promise.allSettled(names.map((name) => openKeyspace(mysql, `user:${name}`, 1)));
-  const pools = opened.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
-  const failed = opened.find((r) => r.status === "rejected");
-  if (failed) {
-    await Promise.all(pools.map((p) => p.end()));
-    throw failed.reason;
-  }
-  return pools.length > 0 ? pools : [db];
-}
-
-const closeShards = (db: Pool, shards: Pool[]) => Promise.all(shards.filter((s) => s !== db).map((s) => s.end()));
 
 /** Drops every event older than the retention and returns how many. */
 export async function trim(db: Pool, shards: Pool[], retentionMs: number): Promise<number> {

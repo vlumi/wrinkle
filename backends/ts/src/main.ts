@@ -7,7 +7,8 @@ import { parseArgs } from "node:util";
 import type { Pool } from "mysql2/promise";
 import { accountsFeature } from "./accounts/feature.ts";
 import { contacts } from "./contacts/feature.ts";
-import { conversation, leaveAllGroups } from "./conversation/feature.ts";
+import { Cold } from "./conversation/cold.ts";
+import { conversationFeature, leaveAllGroups } from "./conversation/feature.ts";
 import { devicesyncFeature } from "./devicesync/feature.ts";
 import { startFanout, topics, type Fanout } from "./fanout/worker.ts";
 import { Server } from "./gateway/server.ts";
@@ -39,6 +40,7 @@ const { values: flags } = parseArgs({
     mysql: { type: "string", default: env("WRINKLE_MYSQL", "127.0.0.1:15003") },
     kafka: { type: "string", default: env("WRINKLE_KAFKA", "localhost:19092") },
     valkey: { type: "string", default: env("WRINKLE_VALKEY", "localhost:6379") },
+    "hbase-rest": { type: "string", default: env("WRINKLE_HBASE_REST", "http://127.0.0.1:8086") },
     services: { type: "string", default: env("WRINKLE_SERVICES", "") },
     "services-listen": { type: "string", default: env("WRINKLE_SERVICES_LISTEN", "127.0.0.1:9000") },
     node: { type: "string", default: env("WRINKLE_NODE", hostname()) },
@@ -47,6 +49,8 @@ const { values: flags } = parseArgs({
     "ack-interval-ms": { type: "string", default: env("WRINKLE_ACK_INTERVAL_MS", "60000") },
     "log-retention-s": { type: "string", default: env("WRINKLE_LOG_RETENTION_S", String(30 * 24 * 3600)) },
     "log-trim-interval-s": { type: "string", default: env("WRINKLE_LOG_TRIM_INTERVAL_S", "3600") },
+    "history-hot-s": { type: "string", default: env("WRINKLE_HISTORY_HOT_S", String(30 * 24 * 3600)) },
+    "cold-move-interval-s": { type: "string", default: env("WRINKLE_COLD_MOVE_INTERVAL_S", "3600") },
     "blob-url": { type: "string", default: env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200") },
     "blob-key-id": { type: "string", default: env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000") },
     "blob-secret": {
@@ -84,6 +88,7 @@ async function main(): Promise<void> {
     deps = {
       users: pools[0]!,
       conversations: pools[1]!,
+      cold: new Cold(flags["hbase-rest"]),
       blobs: new Blobs({
         url: flags["blob-url"],
         keyId: flags["blob-key-id"],
@@ -99,7 +104,11 @@ async function main(): Promise<void> {
         retentionMs: Number(flags["log-retention-s"]) * 1000,
         intervalMs: Number(flags["log-trim-interval-s"]) * 1000,
       }),
-      conversation,
+      conversationFeature({
+        mysql: flags.mysql,
+        hotMs: Number(flags["history-hot-s"]) * 1000,
+        intervalMs: Number(flags["cold-move-interval-s"]) * 1000,
+      }),
       contacts,
       uploads,
       stickers,

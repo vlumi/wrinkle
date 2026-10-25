@@ -1,6 +1,7 @@
 // Where Vitess's xxhash vindex places ids among a keyspace's shards, so work
 // can be grouped into one transaction per shard.
-import { rows, type Querier } from "./db.ts";
+import type { Pool } from "mysql2/promise";
+import { openKeyspace, rows, type Querier } from "./db.ts";
 import { xxh64 } from "./xxhash.ts";
 
 /** Where the xxhash vindex places an id: its 64-bit xxhash, little-endian. */
@@ -58,3 +59,22 @@ export async function loadShards(q: Querier, keyspace: string): Promise<Shards> 
     shards.map((s) => s.start),
   );
 }
+
+/**
+ * A pool of one connection to each shard of the keyspace that db reaches,
+ * so a query sees that shard alone; without vtgate, db itself.
+ */
+export async function openShardPools(db: Pool, mysql: string, keyspace: string): Promise<Pool[]> {
+  const names = (await loadShards(db, keyspace)).names;
+  const opened = await Promise.allSettled(names.map((name) => openKeyspace(mysql, `${keyspace}:${name}`, 1)));
+  const pools = opened.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  const failed = opened.find((r) => r.status === "rejected");
+  if (failed) {
+    await Promise.all(pools.map((p) => p.end()));
+    throw failed.reason;
+  }
+  return pools.length > 0 ? pools : [db];
+}
+
+export const closeShardPools = (db: Pool, shards: Pool[]) =>
+  Promise.all(shards.filter((s) => s !== db).map((s) => s.end()));

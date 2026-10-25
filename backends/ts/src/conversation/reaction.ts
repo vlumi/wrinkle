@@ -2,10 +2,18 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Pool } from "mysql2/promise";
 import { ReactionEventSchema } from "../gen/wrinkle/v1/event_pb.js";
-import { MessageSchema, ReactionSchema, SealedSchema, type Message, type Sealed } from "../gen/wrinkle/v1/model_pb.js";
+import {
+  MessageSchema,
+  ReactionSchema,
+  SealedSchema,
+  type Message,
+  type Reaction,
+  type Sealed,
+} from "../gen/wrinkle/v1/model_pb.js";
 import { failedPrecondition, invalidArgument, notFound } from "../internal/apierror.ts";
-import { exec, now, row, timedRows, timestampOf, tx, type DbTime, type Querier } from "../internal/db.ts";
+import { exec, now, row, timedRows, timestampOf, type DbTime, type Querier } from "../internal/db.ts";
 import { hex, randomId, type UUID } from "../internal/ids.ts";
+import { coldTx, encodeReactions, reactionList } from "./cold.ts";
 import { checkBlocks, checkEpoch, checkSealed, copySealed, type Conversations } from "./service.ts";
 import { decodeBody, event, insertOutbox, member } from "./state.ts";
 
@@ -14,7 +22,8 @@ const maxReactionCiphertext = 1 << 10;
 /**
  * Replaces the user's sealed reactions to a message, or removes them when
  * sealed is undefined. Setting the same bytes again, or removing none,
- * changes nothing and tells no one.
+ * changes nothing and tells no one. A message in the cold tier is changed
+ * there, under the conversation's row lock as in MySQL.
  */
 export async function setReaction(
   cs: Conversations,
@@ -26,7 +35,7 @@ export async function setReaction(
   if (seq === 0n) throw invalidArgument("seq must be positive");
   if (sealed) checkSealed(sealed, maxReactionCiphertext);
   await checkBlocks(cs, userId, conversationId);
-  await tx(cs.deps.conversations, async (c) => {
+  await coldTx(cs.deps.conversations, cs.deps.cold, async (c, change) => {
     const st = await member(c, conversationId, userId);
     const m = await row<{ joined_seq: bigint }>(
       c,
@@ -36,10 +45,14 @@ export async function setReaction(
     if (!m) throw new Error(`member row of ${hex(userId)} missing`);
     const missing = notFound(`message ${seq} of conversation ${hex(conversationId)} does not exist`);
     if (seq < m.joined_seq) throw missing;
-    const stored = await row<{ body: Buffer }>(c, `SELECT body FROM message WHERE conversation_id = ? AND seq = ?`, [
-      conversationId,
-      seq,
-    ]);
+    const inCold = seq <= st.coldSeq;
+    const cold = inCold ? await cs.deps.cold.get(conversationId, seq) : undefined;
+    const stored = inCold
+      ? cold
+      : await row<{ body: Buffer }>(c, `SELECT body FROM message WHERE conversation_id = ? AND seq = ?`, [
+          conversationId,
+          seq,
+        ]);
     if (!stored) throw missing;
     const msg = create(MessageSchema);
     decodeBody(stored.body, msg);
@@ -51,15 +64,27 @@ export async function setReaction(
       sealed = copySealed(sealed);
       newBody = Buffer.from(toBinary(SealedSchema, sealed));
     }
-    const old = await row<{ body: Buffer }>(
-      c,
-      `SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`,
-      [conversationId, seq, userId],
-    );
+    let old: { body: Buffer } | undefined;
+    const others: Reaction[] = [];
+    if (cold) {
+      for (const r of reactionList(cold))
+        if (!userId.equals(r.userId)) others.push(r);
+        else old = { body: Buffer.from(toBinary(SealedSchema, r.sealed ?? create(SealedSchema))) };
+    } else {
+      old = await row<{ body: Buffer }>(
+        c,
+        `SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`,
+        [conversationId, seq, userId],
+      );
+    }
     if ((!sealed && !old) || (newBody && old && old.body.equals(newBody))) return;
     // The column keeps microseconds; the event carries the stored time.
     const at = now();
-    if (!newBody) {
+    const updatedAt = timestampOf(at);
+    if (cold) {
+      if (sealed) others.push(create(ReactionSchema, { userId, sealed, updatedAt }));
+      await change(conversationId, cold, { ...cold, reactions: encodeReactions(others) });
+    } else if (!newBody) {
       await exec(c, `DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`, [
         conversationId,
         seq,
@@ -73,7 +98,6 @@ export async function setReaction(
         [conversationId, seq, userId, newBody, at, newBody, at],
       );
     }
-    const updatedAt = timestampOf(at);
     await insertOutbox(c, {
       conversationId,
       outboxId: randomId(),

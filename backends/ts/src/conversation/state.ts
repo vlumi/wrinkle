@@ -25,6 +25,8 @@ export interface State {
   keyEpoch: number;
   /** Whether the membership changed since the current epoch. */
   rotate: boolean;
+  /** The history up to this seq is in the cold tier. */
+  coldSeq: bigint;
 }
 
 export const compareIds = (a: UUID, b: UUID): number => Buffer.compare(a, b);
@@ -62,7 +64,7 @@ export function membershipChanged(st: State): void {
   if (st.keyEpoch > 0) st.rotate = true;
 }
 
-export const selectState = `SELECT kind, topic, members, last_seq, key_epoch, rotate FROM conversation WHERE conversation_id = ?`;
+export const selectState = `SELECT kind, topic, members, last_seq, key_epoch, rotate, cold_seq FROM conversation WHERE conversation_id = ?`;
 export const selectStateForUpdate = selectState + ` FOR UPDATE`;
 
 interface StateRow {
@@ -72,6 +74,7 @@ interface StateRow {
   last_seq: bigint;
   key_epoch: number;
   rotate: number;
+  cold_seq: bigint;
 }
 
 /** Reads the conversation's row with the given query. */
@@ -85,6 +88,7 @@ export async function load(q: Querier, query: string, conversationId: UUID): Pro
     lastSeq: r.last_seq,
     keyEpoch: r.key_epoch,
     rotate: Boolean(r.rotate),
+    coldSeq: r.cold_seq,
   };
 }
 

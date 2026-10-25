@@ -1,6 +1,6 @@
 // The conversation feature's request handlers, with the requests that start
 // in the user keyspace: opening conversations, creating groups and adding
-// members.
+// members; and the mover of old history to the cold tier.
 import { create } from "@bufbuild/protobuf";
 import {
   AddMembersResponseSchema,
@@ -39,6 +39,7 @@ import {
   setTopic,
 } from "./group.ts";
 import { conversationKeys, publishKeys } from "./keys.ts";
+import { startMover, type MoveOptions } from "./mover.ts";
 import { setReaction } from "./reaction.ts";
 import { markRead, messages, newConversations, open, openNotes, send } from "./service.ts";
 
@@ -58,9 +59,17 @@ function userIdOf(b: Uint8Array): UUID {
 export const leaveAllGroups: LeaveGroups = (deps, userId) =>
   leaveGroups(deps.users, userId, (u, c) => leave(deps, u, c));
 
-export const conversation: FeatureFactory = (deps) => {
+/** History moves to the cold tier only with the options. */
+export const conversationFeature =
+  (moving?: MoveOptions): FeatureFactory =>
+  (deps) => ({
+    ...handlersOf(deps),
+    start: moving && (() => startMover(deps.conversations, deps.cold, deps.log.with({ role: "mover" }), moving)),
+  });
+
+const handlersOf: FeatureFactory = (deps) => {
   const cs = newConversations(deps);
-  const { users, conversations: db } = deps;
+  const { users, conversations: db, cold } = deps;
   return {
     handlers: {
       openConversation: async (c, req) => ({
@@ -143,7 +152,7 @@ export const conversation: FeatureFactory = (deps) => {
       getMessages: async (c, req) => ({
         case: "getMessages",
         value: create(GetMessagesResponseSchema, {
-          messages: await messages(db, c.userId, conversationIdOf(req.conversationId), req.beforeSeq, req.limit),
+          messages: await messages(db, cold, c.userId, conversationIdOf(req.conversationId), req.beforeSeq, req.limit),
         }),
       }),
       publishKeys: async (c, req) => {

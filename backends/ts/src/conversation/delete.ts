@@ -3,10 +3,11 @@ import { create } from "@bufbuild/protobuf";
 import { MessageDeletedEventSchema } from "../gen/wrinkle/v1/event_pb.js";
 import { MessageSchema } from "../gen/wrinkle/v1/model_pb.js";
 import { invalidArgument, notFound, permissionDenied } from "../internal/apierror.ts";
-import { exec, now, row, timestampOf, tx } from "../internal/db.ts";
+import { exec, now, row, timestampOf } from "../internal/db.ts";
 import { hex, randomId, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
 import { releaseAttachments } from "../uploads/uploads.ts";
+import { coldTx } from "./cold.ts";
 import {
   decodeBlobIds,
   decodeBody,
@@ -25,11 +26,12 @@ import {
  * when no longer one, so that their logs and lists drop the content. A
  * former member may delete what they sent before leaving. Deleting a
  * deleted message again does nothing. The attachments' uploads are
- * released after the commit, for the sweeper to delete.
+ * released after the commit, for the sweeper to delete. A message in the
+ * cold tier is changed there, under the conversation's row lock as in MySQL.
  */
 export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UUID, seq: bigint): Promise<void> {
   if (seq === 0n) throw invalidArgument("seq must be positive");
-  const released = await tx(deps.conversations, async (c) => {
+  const released = await coldTx(deps.conversations, deps.cold, async (c, change) => {
     const st = await load(c, selectStateForUpdate, conversationId);
     const m = await row<{ joined_seq: bigint; left_seq: bigint | null }>(
       c,
@@ -39,11 +41,15 @@ export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UU
     if (!m) throw notInConversation(userId, conversationId);
     const missing = notFound(`message ${seq} of conversation ${hex(conversationId)} does not exist`);
     if (seq < m.joined_seq || (m.left_seq !== null && seq > m.left_seq)) throw missing;
-    const stored = await row<{ sender_user_id: Buffer; body: Buffer; blob_ids: Buffer | null; outbox_id: bigint }>(
-      c,
-      `SELECT sender_user_id, body, blob_ids, outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR UPDATE`,
-      [conversationId, seq],
-    );
+    const inCold = seq <= st.coldSeq;
+    const cold = inCold ? await deps.cold.get(conversationId, seq) : undefined;
+    const stored = inCold
+      ? cold && { sender_user_id: cold.sender, body: cold.body, blob_ids: cold.blobIds, outbox_id: cold.outboxId }
+      : await row<{ sender_user_id: Buffer; body: Buffer; blob_ids: Buffer | null; outbox_id: bigint }>(
+          c,
+          `SELECT sender_user_id, body, blob_ids, outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR UPDATE`,
+          [conversationId, seq],
+        );
     if (!stored) throw missing;
     const msg = create(MessageSchema);
     decodeBody(stored.body, msg);
@@ -52,12 +58,18 @@ export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UU
     if (msg.deletedAt) return [];
     const at = now();
     const deletedAt = timestampOf(at);
-    await exec(c, `UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?`, [
-      Buffer.from(encodeBody({ content: { case: undefined }, deletedAt })),
-      conversationId,
-      seq,
-    ]);
-    await exec(c, `DELETE FROM reaction WHERE conversation_id = ? AND seq = ?`, [conversationId, seq]);
+    const body = Buffer.from(encodeBody({ content: { case: undefined }, deletedAt }));
+    if (cold) {
+      const deleted = { ...cold, body, blobIds: Buffer.alloc(0), reactions: Buffer.alloc(0) };
+      await change(conversationId, cold, deleted);
+    } else {
+      await exec(c, `UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?`, [
+        body,
+        conversationId,
+        seq,
+      ]);
+      await exec(c, `DELETE FROM reaction WHERE conversation_id = ? AND seq = ?`, [conversationId, seq]);
+    }
     const recipients = has(st.members, userId) ? st.members : [...st.members, userId];
     await insertOutbox(c, {
       conversationId,

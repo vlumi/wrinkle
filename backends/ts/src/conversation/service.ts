@@ -1,6 +1,7 @@
 // The conversation keyspace's services: direct conversations and notes,
-// sending, read marks and history. Every change writes an outbox row in the
-// same transaction, which change data capture carries to the fan-out.
+// sending, read marks and history, with its cold tier. Every change writes
+// an outbox row in the same transaction, which change data capture carries
+// to the fan-out.
 import { create } from "@bufbuild/protobuf";
 import type { Pool } from "mysql2/promise";
 import { ReadEventSchema } from "../gen/wrinkle/v1/event_pb.js";
@@ -23,6 +24,7 @@ import {
 import { newUUID, parseUUID, randomId, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
 import { releaseAttachments, useAttachments } from "../uploads/uploads.ts";
+import { coldMessage, type Cold } from "./cold.ts";
 import { DirectMembers } from "./direct.ts";
 import { addReactions } from "./reaction.ts";
 import {
@@ -327,10 +329,12 @@ async function readRecipients(
 
 /**
  * Messages with seq below beforeSeq, newest first: in a group, those since
- * the user joined and, for a former member, until they left.
+ * the user joined and, for a former member, until they left. The newer ones
+ * are in MySQL; the page goes on in the cold tier below the watermark.
  */
 export async function messages(
   db: Pool,
+  cold: Cold,
   userId: UUID,
   conversationId: UUID,
   beforeSeq: bigint,
@@ -348,13 +352,68 @@ export async function messages(
   const upTo = m.left_seq ?? maxUint64;
   const before = beforeSeq === 0n ? maxUint64 : beforeSeq;
   const n = Math.min(limit === 0 ? defaultPageSize : limit, maxPageSize);
+  for (;;) {
+    const page = await messagePage(db, cold, conversationId, m.joined_seq, upTo, before, n);
+    if (page) return page;
+  }
+}
+
+const min = (...xs: bigint[]): bigint => xs.reduce((a, b) => (b < a ? b : a));
+
+/**
+ * Where a page that MySQL gave goes on in the cold tier: from joinedSeq up
+ * to hi, when there is room and anything there. A page with a message the
+ * watermark has since passed is read again.
+ */
+export function coldRange(
+  page: Message[],
+  joinedSeq: bigint,
+  upTo: bigint,
+  beforeSeq: bigint,
+  coldSeq: bigint,
+  limit: number,
+): { hi: bigint; more: boolean; again: boolean } {
+  let hi = min(upTo, beforeSeq - 1n, coldSeq);
+  const lowest = page[page.length - 1]?.seq;
+  if (lowest !== undefined) {
+    if (lowest <= coldSeq) return { hi: 0n, more: false, again: true };
+    hi = min(hi, lowest - 1n);
+  }
+  return { hi, more: page.length < limit && hi >= joinedSeq, again: false };
+}
+
+/**
+ * A page of history: MySQL first, then the watermark, then the cold tier
+ * below the lowest seq MySQL gave; undefined when it must be read again.
+ * The watermark only rises, and what it covers is in the cold tier before
+ * it does, so nothing falls between the two. A move that overlapped the
+ * read may have taken the reactions of what MySQL gave, so the read is
+ * made again then.
+ */
+async function messagePage(
+  db: Pool,
+  cold: Cold,
+  conversationId: UUID,
+  joinedSeq: bigint,
+  upTo: bigint,
+  beforeSeq: bigint,
+  limit: number,
+): Promise<Message[] | undefined> {
   const list = await timedRows<MessageRow>(
     db,
     `SELECT seq, sender_user_id, client_message_id, body, blob_ids, sent_at FROM message
      WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
-    [conversationId, m.joined_seq, upTo, before, n],
+    [conversationId, joinedSeq, upTo, beforeSeq, limit],
   );
   const result = list.map((r) => toMessage(conversationId, r));
   await addReactions(db, conversationId, result);
+  const c = await row<{ cold_seq: bigint }>(db, `SELECT cold_seq FROM conversation WHERE conversation_id = ?`, [
+    conversationId,
+  ]);
+  const { hi, more, again } = coldRange(result, joinedSeq, upTo, beforeSeq, c?.cold_seq ?? 0n, limit);
+  if (again) return undefined;
+  if (!more) return result;
+  for (const m of await cold.scan(conversationId, joinedSeq, hi, limit - result.length))
+    result.push(coldMessage(conversationId, m));
   return result;
 }

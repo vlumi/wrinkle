@@ -36,6 +36,7 @@ import {
 import { hex, newUUID, type UUID } from "../internal/ids.ts";
 import { validLabel } from "../internal/label.ts";
 import type { Deps } from "../services/deps.ts";
+import { coldMessage, type Cold } from "./cold.ts";
 import {
   decodeBlobIds,
   decodeBody,
@@ -104,7 +105,15 @@ export async function createGroup(
     }
     const at = now();
     const joining = [creatorId, ...invitees];
-    const st: State = { kind: kindGroup, topic, members: sorted(joining), lastSeq: 1n, keyEpoch: 0, rotate: false };
+    const st: State = {
+      kind: kindGroup,
+      topic,
+      members: sorted(joining),
+      lastSeq: 1n,
+      keyEpoch: 0,
+      rotate: false,
+      coldSeq: 0n,
+    };
     await exec(
       c,
       `INSERT INTO conversation (conversation_id, kind, topic, members, last_seq, created_at)
@@ -123,7 +132,7 @@ export async function createGroup(
     });
     await storeNotice(c, conversationId, st, creatorId, created, st.members);
   });
-  return describe(db, conversationId, creatorId);
+  return describe(db, deps.cold, conversationId, creatorId);
 }
 
 async function findClaim(db: Querier, creatorId: UUID, clientGroupId: string): Promise<UUID | undefined> {
@@ -362,7 +371,7 @@ export async function members(deps: Deps, userId: UUID, conversationId: UUID): P
 }
 
 /** The conversation as the user sees it now, from the conversation keyspace. */
-export async function describe(db: Pool, conversationId: UUID, userId: UUID): Promise<Conversation> {
+export async function describe(db: Pool, cold: Cold, conversationId: UUID, userId: UUID): Promise<Conversation> {
   const st = await load(db, selectState, conversationId);
   const c = create(ConversationSchema, {
     conversationId,
@@ -401,6 +410,13 @@ export async function describe(db: Pool, conversationId: UUID, userId: UUID): Pr
       });
       decodeBody(last.body, msg);
       c.lastMessage = msg;
+    } else {
+      // Moved to the cold tier, which has it before MySQL lets go.
+      const moved = await cold.get(conversationId, st.lastSeq);
+      if (moved) {
+        c.lastMessage = coldMessage(conversationId, moved);
+        c.lastMessage.reactions = [];
+      }
     }
   }
   const read = await row<{ seq: bigint }>(db, `SELECT seq FROM read_mark WHERE conversation_id = ? AND user_id = ?`, [
