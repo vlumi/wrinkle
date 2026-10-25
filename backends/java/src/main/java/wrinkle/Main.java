@@ -8,6 +8,8 @@ import com.linecorp.armeria.server.grpc.GrpcService;
 import com.linecorp.armeria.server.prometheus.PrometheusExpositionService;
 import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -91,6 +93,7 @@ public final class Main {
       log.info("services listening on {}", cfg.servicesListen());
     }
     FanoutWorker fanout = null;
+    List<ShardWork> shardWork = new ArrayList<>();
     if (cfg.runsFanout()) {
       Notifier notifier = null;
       if (!cfg.apnsKey().isEmpty()) {
@@ -120,21 +123,37 @@ public final class Main {
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
       new UploadSweeper(shared.userDb(), shared.blobs()).start();
-      new LogTrimmer(
-              cfg.mysql(),
+      // Each shard's trim and move is taken by one instance at a time.
+      LogTrimmer trimmer =
+          new LogTrimmer(cfg.mysql(), USER_KEYSPACE, shared.userDb(), cfg.logRetention());
+      shardWork.add(
+          new ShardWork(
+              "trimming the user logs",
               USER_KEYSPACE,
-              shared.userDb(),
-              cfg.logRetention(),
-              cfg.logTrimInterval())
-          .start();
-      new ColdMover(
+              trimmer.shards(),
+              cfg.logTrimInterval(),
+              "events",
+              trimmer::trimShard,
+              shared.presence(),
+              LoggerFactory.getLogger(LogTrimmer.class)));
+      ColdMover mover =
+          new ColdMover(
               cfg.mysql(),
               "conversation",
               shared.conversationDb(),
               shared.cold(),
-              cfg.historyHot(),
-              cfg.coldMoveInterval())
-          .start();
+              cfg.historyHot());
+      shardWork.add(
+          new ShardWork(
+              "moving history to the cold tier",
+              "conversation",
+              mover.shards(),
+              cfg.coldMoveInterval(),
+              "messages",
+              mover::moveShard,
+              shared.presence(),
+              LoggerFactory.getLogger(ColdMover.class)));
+      shardWork.forEach(ShardWork::start);
     }
 
     Server server = sb.build();
@@ -148,7 +167,8 @@ public final class Main {
     FanoutWorker f = fanout;
     Runtime.getRuntime()
         .addShutdownHook(
-            Thread.ofPlatform().unstarted(() -> shutDown(draining, server, g, f, shared)));
+            Thread.ofPlatform()
+                .unstarted(() -> shutDown(draining, server, g, f, shardWork, shared)));
     // Until the shutdown hook halts the process.
     new CountDownLatch(1).await();
   }
@@ -264,10 +284,16 @@ public final class Main {
   /**
    * Drains on SIGTERM or SIGINT: refuses new work, closes the connections and lets requests in
    * flight finish, stops the roles that run, and exits 0 within the limit. The fan-out consumer
-   * stops alongside the rest and is waited for, so it leaves its group before the exit.
+   * stops alongside the rest and is waited for, so it leaves its group before the exit; so is the
+   * work per shard, so it drops its leases.
    */
   private static void shutDown(
-      AtomicBoolean draining, Server server, Gateway gateway, FanoutWorker fanout, Shared shared) {
+      AtomicBoolean draining,
+      Server server,
+      Gateway gateway,
+      FanoutWorker fanout,
+      List<ShardWork> shardWork,
+      Shared shared) {
     log.info("shutting down");
     long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SHUTDOWN_LIMIT_MILLIS);
     draining.set(true);
@@ -287,6 +313,7 @@ public final class Main {
       if (fanout != null) {
         fanout.stop();
       }
+      shardWork.forEach(ShardWork::stop);
       if (gateway != null) {
         gateway.drain();
       }
@@ -296,6 +323,12 @@ public final class Main {
             TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()) - FANOUT_STOP_MARGIN_MILLIS;
         if (!fanout.awaitStopped(left)) {
           log.warn("fanout consumer did not stop in time");
+        }
+      }
+      for (ShardWork w : shardWork) {
+        long left = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+        if (!w.awaitStopped(left)) {
+          log.warn("work per shard did not stop in time");
         }
       }
       shared.close();

@@ -10,12 +10,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import javax.sql.DataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import wrinkle.ShardPools;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
@@ -26,8 +22,6 @@ import wrinkle.Uuid;
  * first. Any number may run: raising a tail and dropping what is under it can be done twice.
  */
 public final class LogTrimmer {
-  private static final Logger log = LoggerFactory.getLogger(LogTrimmer.class);
-  private static final Duration FIRST_RUN = Duration.ofMinutes(1);
   static final int TRIM_PAGE = 1000;
 
   record Event(Uuid userId, long position) {}
@@ -35,55 +29,35 @@ public final class LogTrimmer {
   private final DataSource db;
   private final ShardPools shards;
   private final Duration retention;
-  private final Duration interval;
-  private final ScheduledExecutorService timer =
-      Executors.newSingleThreadScheduledExecutor(
-          Thread.ofPlatform().name("log-trimmer").daemon().factory());
 
   /**
    * Finds the oldest events of each shard of the keyspace through a connection to that shard alone,
    * so a page never spans shards; without vtgate the keyspace is one shard.
    */
-  public LogTrimmer(
-      String addr, String keyspace, DataSource db, Duration retention, Duration interval) {
+  public LogTrimmer(String addr, String keyspace, DataSource db, Duration retention) {
     this.db = db;
     this.retention = retention;
-    this.interval = interval;
     this.shards = new ShardPools(addr, keyspace, db);
   }
 
-  public void start() {
-    long first = Math.min(FIRST_RUN.toMillis(), interval.toMillis());
-    timer.scheduleWithFixedDelay(this::run, first, interval.toMillis(), TimeUnit.MILLISECONDS);
+  /** The keyspace's shards, each a pool to that shard alone. */
+  public List<ShardPools.Shard> shards() {
+    return shards.all();
   }
 
-  public void stop() {
-    timer.shutdownNow();
+  public void close() {
     shards.close();
   }
 
-  private void run() {
-    try {
-      int n = trim();
-      if (n > 0) {
-        log.info("trimmed {} events from the user logs", n);
-      }
-    } catch (SQLException | RuntimeException e) {
-      log.warn("trimming the user logs failed", e);
-    }
-  }
-
-  /** Drops every event older than the retention and returns how many. */
-  int trim() throws SQLException {
+  /** Drops the shard's events older than the retention, until stopped, and returns how many. */
+  public int trimShard(ShardPools.Shard shard, BooleanSupplier stopped) throws SQLException {
     LocalDateTime cutoff = Timestamps.now().minus(retention);
     int total = 0;
-    for (DataSource shard : shards.all()) {
-      int n;
-      do {
-        n = trimPage(shard, cutoff);
-        total += n;
-      } while (n == TRIM_PAGE);
-    }
+    int n;
+    do {
+      n = trimPage(shard.db(), cutoff);
+      total += n;
+    } while (n == TRIM_PAGE && !stopped.getAsBoolean());
     return total;
   }
 

@@ -13,12 +13,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.function.BooleanSupplier;
 import javax.sql.DataSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import wrinkle.ShardPools;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
@@ -31,8 +27,6 @@ import wrinkle.v1.Sealed;
  * first on each shard. Any number may run: each move happens under the conversation's row lock.
  */
 public final class ColdMover {
-  private static final Logger log = LoggerFactory.getLogger(ColdMover.class);
-  private static final Duration FIRST_RUN = Duration.ofMinutes(1);
   private static final int MOVE_PAGE = 1000;
   // Bounds the messages one transaction moves, and so how long it holds the conversation's row.
   private static final int MOVE_BATCH = 200;
@@ -44,53 +38,30 @@ public final class ColdMover {
   private final ShardPools shards;
   private final Cold cold;
   private final Duration window;
-  private final Duration interval;
-  private final ScheduledExecutorService timer =
-      Executors.newSingleThreadScheduledExecutor(
-          Thread.ofPlatform().name("cold-mover").daemon().factory());
 
   /**
    * Finds the oldest messages of each shard of the keyspace through a connection to that shard
    * alone.
    */
-  public ColdMover(
-      String addr, String keyspace, DataSource db, Cold cold, Duration window, Duration interval) {
+  public ColdMover(String addr, String keyspace, DataSource db, Cold cold, Duration window) {
     this.db = db;
     this.cold = cold;
     this.window = window;
-    this.interval = interval;
     this.shards = new ShardPools(addr, keyspace, db);
   }
 
-  public void start() {
-    long first = Math.min(FIRST_RUN.toMillis(), interval.toMillis());
-    timer.scheduleWithFixedDelay(this::run, first, interval.toMillis(), TimeUnit.MILLISECONDS);
+  /** The keyspace's shards, each a pool to that shard alone. */
+  public List<ShardPools.Shard> shards() {
+    return shards.all();
   }
 
-  public void stop() {
-    timer.shutdownNow();
+  public void close() {
     shards.close();
   }
 
-  private void run() {
-    try {
-      int n = move();
-      if (n > 0) {
-        log.info("moved {} messages to the cold tier", n);
-      }
-    } catch (SQLException | RuntimeException e) {
-      log.warn("moving history to the cold tier failed", e);
-    }
-  }
-
-  /** Moves every message older than the hot window and returns how many. */
-  int move() throws SQLException {
-    LocalDateTime cutoff = Timestamps.now().minus(window);
-    int total = 0;
-    for (DataSource shard : shards.all()) {
-      total += moveShard(shard, cutoff);
-    }
-    return total;
+  /** Moves the shard's messages older than the hot window, until stopped, and returns how many. */
+  public int moveShard(ShardPools.Shard shard, BooleanSupplier stopped) throws SQLException {
+    return moveShard(shard.db(), Timestamps.now().minus(window), stopped);
   }
 
   /**
@@ -98,7 +69,8 @@ public final class ColdMover {
    * once. A conversation stops at its first message within the window, so one sent a little out of
    * time order waits for the next round; the pages go on after the last one's time.
    */
-  private int moveShard(DataSource shard, LocalDateTime cutoff) throws SQLException {
+  private int moveShard(DataSource shard, LocalDateTime cutoff, BooleanSupplier stopped)
+      throws SQLException {
     int total = 0;
     Set<Uuid> done = new HashSet<>();
     LocalDateTime after = BEGINNING;
@@ -120,9 +92,12 @@ public final class ColdMover {
       }
       boolean fresh = false;
       for (Aged a : page) {
+        if (stopped.getAsBoolean()) {
+          return total;
+        }
         if (done.add(a.conversationId())) {
           fresh = true;
-          total += moveConversation(a.conversationId(), cutoff);
+          total += moveConversation(a.conversationId(), cutoff, stopped);
         }
       }
       if (page.size() < MOVE_PAGE || !fresh) {
@@ -133,12 +108,13 @@ public final class ColdMover {
   }
 
   /** Moves the conversation's messages older than the cutoff, in seq order, a batch at a time. */
-  private int moveConversation(Uuid conversationId, LocalDateTime cutoff) throws SQLException {
+  private int moveConversation(Uuid conversationId, LocalDateTime cutoff, BooleanSupplier stopped)
+      throws SQLException {
     int total = 0;
     while (true) {
       int n = moveBatch(conversationId, cutoff);
       total += n;
-      if (n < MOVE_BATCH) {
+      if (n < MOVE_BATCH || stopped.getAsBoolean()) {
         return total;
       }
     }

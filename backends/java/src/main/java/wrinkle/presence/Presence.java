@@ -18,18 +18,23 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import wrinkle.ShardWork;
 import wrinkle.Uuid;
 import wrinkle.backend.v1.Push;
 
 /**
- * Which device is connected to which gateway instance, and the push channel from fan-out workers to
- * gateways, through Valkey: one pub/sub channel per user. A device's entry names the gateway
- * instance, which counts as alive while its own key exists.
+ * Which device is connected to which gateway instance, the push channel from fan-out workers to
+ * gateways, and the leases that share background work among instances, through Valkey: one pub/sub
+ * channel per user. A device's entry names the gateway instance, which counts as alive while its
+ * own key exists.
  */
-public final class Presence implements AutoCloseable {
+public final class Presence implements AutoCloseable, ShardWork.Leases {
   private static final Logger log = LoggerFactory.getLogger(Presence.class);
   private static final String CHANNEL_PREFIX = "push:";
   private static final String INSTANCE_PREFIX = "gateway:";
@@ -41,6 +46,15 @@ public final class Presence implements AutoCloseable {
       bytes(
           "if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then"
               + " return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0");
+  // Change a lease only while this instance holds it.
+  private static final byte[] RENEW_LEASE =
+      bytes(
+          "if redis.call('GET', KEYS[1]) == ARGV[1] then"
+              + " return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0");
+  private static final byte[] DROP_LEASE =
+      bytes(
+          "if redis.call('GET', KEYS[1]) == ARGV[1] then"
+              + " return redis.call('DEL', KEYS[1]) end return 0");
 
   private final RedisClient client;
   private final StatefulRedisConnection<byte[], byte[]> commands;
@@ -181,6 +195,46 @@ public final class Presence implements AutoCloseable {
       }
     }
     return connected;
+  }
+
+  @Override
+  public boolean takeLease(String name, Duration ttl) {
+    return "OK"
+        .equals(
+            commands.sync().set(leaseKey(name), instance, SetArgs.Builder.nx().px(ttl.toMillis())));
+  }
+
+  @Override
+  public boolean renewLease(String name, Duration ttl) {
+    Long n =
+        commands
+            .sync()
+            .eval(
+                RENEW_LEASE,
+                ScriptOutputType.INTEGER,
+                new byte[][] {leaseKey(name)},
+                instance,
+                bytes(Long.toString(ttl.toMillis())));
+    return n == 1;
+  }
+
+  @Override
+  public void dropLease(String name, Duration deadline) {
+    try {
+      commands
+          .async()
+          .eval(DROP_LEASE, ScriptOutputType.INTEGER, new byte[][] {leaseKey(name)}, instance)
+          .toCompletableFuture()
+          .get(deadline.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } catch (ExecutionException | TimeoutException e) {
+      throw new IllegalStateException("dropping lease " + name + " failed", e);
+    }
+  }
+
+  private static byte[] leaseKey(String name) {
+    return bytes("lease:" + name);
   }
 
   private static byte[] presenceKey(Uuid userId) {

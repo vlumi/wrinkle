@@ -85,9 +85,9 @@ public record Config(
     String blobRegion = env("WRINKLE_BLOB_REGION", "garage");
     String ackIntervalMs = env("WRINKLE_ACK_INTERVAL_MS", "60000");
     String logRetentionS = env("WRINKLE_LOG_RETENTION_S", String.valueOf(30 * 24 * 3600));
-    String logTrimIntervalS = env("WRINKLE_LOG_TRIM_INTERVAL_S", "3600");
+    String logTrimIntervalS = env("WRINKLE_LOG_TRIM_INTERVAL_S", "60");
     String historyHotS = env("WRINKLE_HISTORY_HOT_S", String.valueOf(30 * 24 * 3600));
-    String coldMoveIntervalS = env("WRINKLE_COLD_MOVE_INTERVAL_S", "3600");
+    String coldMoveIntervalS = env("WRINKLE_COLD_MOVE_INTERVAL_S", "60");
     // Push notifications are off without a key.
     String apnsKey = env("WRINKLE_APNS_KEY", "");
     // Defaults to the id in the key's file name.
