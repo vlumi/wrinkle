@@ -19,6 +19,9 @@ CREATE TABLE conversation (
   -- The membership changed since the current epoch: sends wait for the
   -- next one.
   rotate BOOLEAN NOT NULL DEFAULT FALSE,
+  -- The history up to this seq is in the cold tier (HBase), the rest in
+  -- message; raised by the mover with the conversation's row locked.
+  cold_seq BIGINT UNSIGNED NOT NULL DEFAULT 0,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (conversation_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
@@ -95,7 +98,9 @@ CREATE TABLE message (
   blob_ids VARBINARY(160) NOT NULL DEFAULT '',
   PRIMARY KEY (conversation_id, seq),
   -- Resending with the same client id finds the stored message.
-  UNIQUE KEY message_client_id (conversation_id, sender_user_id, client_message_id)
+  UNIQUE KEY message_client_id (conversation_id, sender_user_id, client_message_id),
+  -- The mover finds the messages past the hot window by this.
+  KEY message_age (sent_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- Each member's sealed reactions to a message, replaced as a whole.
