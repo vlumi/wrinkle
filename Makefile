@@ -47,7 +47,7 @@ help:
 		/^[a-zA-Z0-9_-]+:.*## / {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
 
-##@ Infrastructure (Vitess or MySQL, Kafka, Debezium, Valkey, Garage, Prometheus, Grafana)
+##@ Infrastructure (Vitess or MySQL, Kafka, Debezium, Valkey, Garage, HBase, Prometheus, Grafana)
 
 .PHONY: infra-up infra-down infra-reset infra-status infra-logs reset-fanout
 infra-up:  ## Start the stack and register the outbox connectors (PROFILE=mysql: plain MySQL in place of Vitess)

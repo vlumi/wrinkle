@@ -4,12 +4,12 @@ Run the stack and the backends on a Mac, then connect to them from phones and ot
 
 ## The path
 
-Before the first run: install Docker Desktop and give it at least 8 GB of memory, 12 GB for the cluster (Settings, Resources); `brew install git mkcert`; clone the repository (while it is private, the Mac needs an SSH key or token that GitHub accepts); and keep the Mac awake (System Settings, Energy, "Prevent automatic sleeping when the display is off"). The generated code is committed, so the code generators (`make tools`) are not needed to run anything. Then, top to bottom:
+Before the first run: install Docker Desktop and give it at least 8 GB of memory, 12 GB for the cluster (Settings, Resources): the stack's memory caps in `infra/docker-compose.yml` add up to about 6.4 GB, and the cluster adds nine backend containers by default, without caps; `brew install git mkcert`; clone the repository (while it is private, the Mac needs an SSH key or token that GitHub accepts); and keep the Mac awake (System Settings, Energy, "Prevent automatic sleeping when the display is off"). The generated code is committed, so the code generators (`make tools`) are not needed to run anything. Then, top to bottom:
 
 1. `mkcert -install`, once: makes a local certificate authority and trusts it on this Mac; asks for your password.
 2. `make certs`: a certificate for this Mac's names and addresses, into `infra/certs`; again when the LAN address changes.
-3. `make infra-up`: the shared stack. The first run builds the arm64 Vitess image from source and takes a few minutes; later runs start in about 20 seconds. `make infra-status` shows how it is doing.
-4. `make cluster-up`: the whole backend in containers, serving devices on loopback port 8080. A native backend instead: `make run-go-mono` or `make run-java-mono` ([Backends](#backends)).
+3. `make infra-up`: the shared stack. The first run builds the arm64 Vitess image from source and the HBase image from the 2.6.7 release, which it downloads, and takes a few minutes; later runs start in about 20 seconds. Each run creates the HBase table if it is missing. `make infra-up PROFILE=mysql` runs plain MySQL in place of Vitess and builds no Vitess image, so its first run is faster. `make infra-status` shows how it is doing.
+4. `make cluster-up`: the whole backend in containers, serving devices on loopback port 8080. A native backend instead: `make run-go-mono`, `make run-java-mono` or `make run-ts-mono` ([Backends](#backends)).
 5. `make web`: the web client on port 8081, over HTTPS with the certificate, at `https://<address>:8081/`, and with it the TLS edge on port 8443 (`make tls-up`, which `make web` runs first; running it again changes nothing), in front of whatever serves port 8080. Devices connect to `wss://<address>:8443/v1/ws` and read and upload blobs at `https://<address>:8443/blobs/` on the same edge; port 8080 itself listens on loopback only, for the clients, tests and load runs on the Mac.
 6. Trust the certificate on each device, once ([below](#trusting-the-certificate)), and open `https://<address>:8081/` on it. The address is the Mac's Bonjour name or its LAN IP:
 
@@ -111,20 +111,20 @@ Three ways to run them, all against the same database, so users and conversation
 The side-by-side setup in containers, from one command: the balancer, the services instances and the gateways, each in any number, on the infrastructure's network. The first run builds an image per backend, a few minutes; later runs take seconds.
 
 ```sh
-make cluster-up                                  # 2 Go and 1 Java services, one gateway of each language
+make cluster-up                                  # 2 Go, 1 Java and 1 TypeScript services, one gateway of each of the five languages
 make cluster-up GO_GW=3 RUST_GW=0 JAVA_SERVICES=0  # rescales in place; counts not given stay as they are
 make cluster-status                              # every container
 make cluster-logs SERVICE=go-gw                  # follow one kind, or all without SERVICE
 make cluster-down                                # remove the cluster; the infrastructure keeps running
 ```
 
-The counts are `GO_SERVICES`, `JAVA_SERVICES`, `GO_GW`, `ELIXIR_GW`, `RUST_GW` and `JAVA_GW`, 0 to 8 each. A count not given keeps what is running, so after a code change a plain `make cluster-up` rebuilds the images and replaces the containers whose image changed, at the same counts. The defaults apply on a fresh start, after `cluster-down`. Devices connect through the TLS edge as before, and `http://localhost:8404/` shows every replica the balancer has found. The balancer finds them by name through Docker's DNS: a kind scaled up joins within a few seconds, one scaled down drops out. Push settings come from `.env` as for the other targets.
+The counts are `GO_SERVICES`, `JAVA_SERVICES`, `TS_SERVICES`, `GO_GW`, `ELIXIR_GW`, `RUST_GW`, `JAVA_GW` and `TS_GW`, 0 to 8 each. A count not given keeps what is running, so after a code change a plain `make cluster-up` rebuilds the images and replaces the containers whose image changed, at the same counts. The defaults apply on a fresh start, after `cluster-down`. Devices connect through the TLS edge as before, and `http://localhost:8404/` shows every replica the balancer has found. The balancer finds them by name through Docker's DNS: a kind scaled up joins within a few seconds, one scaled down drops out. Push settings come from `.env` as for the other targets.
 
 The cluster is for trying the scaled shape, not for measuring: the containers run in Docker Desktop's virtual machine, behind its networking, so their numbers are not comparable with the native processes the measurements use. Its processes don't show in Grafana.
 
 ### Monoliths
 
-`make run-go-mono` or `make run-java-mono`: one native process with every role on port 8080, on loopback. Go needs `brew install go`; Java the Homebrew JDK, which the Makefile finds through `java_home` once the symlink exists:
+`make run-go-mono`, `make run-java-mono` or `make run-ts-mono`: one native process with every role on port 8080, on loopback. Go needs `brew install go`; TypeScript Node 26 or later (the web client needs only 22); Java the Homebrew JDK, which the Makefile finds through `java_home` once the symlink exists:
 
 ```sh
 brew install openjdk@25
@@ -132,9 +132,9 @@ mkdir -p ~/Library/Java/JavaVirtualMachines
 ln -sfn /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk ~/Library/Java/JavaVirtualMachines/openjdk-25.jdk
 ```
 
-The first Java build downloads Gradle and the dependencies.
+The first Java build downloads Gradle and the dependencies; the first TypeScript one, `make ts-deps`, compiles the Kafka client's librdkafka, which takes minutes.
 
-The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
+The first time each program listens, macOS asks whether to accept incoming connections; allow it. If the prompt was missed, add the program under System Settings, Network, Firewall, Options. Each backend is a different program to the firewall: `bin/wrinkle`, `java`, `node`, `beam.smp` and the Rust binary. The make targets build to fixed paths, so each is asked about once; `go run` would build to a new temporary path every time and ask again.
 
 ### Side by side
 
@@ -153,24 +153,26 @@ rustup default stable
 ```sh
 make lb-up                         # the balancers; leave them running
 make run-go-services               # services instance 1, in another terminal
-make run-java-services INSTANCE=2  # another, in Java (instances 1 to 4, either language)
+make run-java-services INSTANCE=2  # another, in Java (instances 1 to 4, in any of the three languages)
+make run-ts-services INSTANCE=3    # and one in TypeScript
 make run-go-gw                     # gateways, each in its own terminal: ws://localhost:8180/v1/ws
 make run-elixir-gw                 # :8181
 make run-rust-gw                   # :8182
 make run-java-gw                   # :8183
+make run-ts-gw                     # :8184
 make lb-down                       # when done
 ```
 
 - **Devices to gateways:** the balancer on port 8080, behind the TLS edge for devices on the network, sends each connection to the healthy gateway with the fewest. Stop a gateway and the balancer marks it down within about two seconds; its devices reconnect and land on the others. The gateways listen on loopback; to reach one in particular from the Mac itself, put `ws://localhost:<port>/v1/ws` in the client's gateway field.
 - **Gateways to services:** each gateway keeps one HTTP/2 connection to the services balancer on 127.0.0.1:9100, which hands out each request separately, in turn, to the running instances. Instance *n* serves the RPC on 9100+*n*, on loopback only. Stop an instance and the rest take its requests and its share of the fan-out.
 
-`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before `run-go-mono` or `run-java-mono`. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics.
+`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before a monolith. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics.
 
 ## What faces the network
 
-- Only the TLS edge (8443) and the web client's server (8081) face the network. The backends, the balancer and the cluster serve devices on loopback port 8080, and side-by-side gateways on loopback 8180 to 8183. The infrastructure's ports (MySQL through vtgate without a password, Kafka, Kafka Connect, Valkey, the blob proxy, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
+- Only the TLS edge (8443) and the web client's server (8081) face the network. The backends, the balancer and the cluster serve devices on loopback port 8080, and side-by-side gateways on loopback 8180 to 8184. The infrastructure's ports (MySQL through vtgate without a password, or on the mysql profile MySQL itself as `root` without one; Kafka, Kafka Connect, Valkey, the blob proxy, HBase's ZooKeeper 2181, master 16000, master UI 16010 and region server 16020, HBase's REST server 8086, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too.
 - Accounts have passwords, stored as argon2id hashes, and sign-in gives each device a token. There is no password recovery: a forgotten password means a new account, or `make infra-reset` for everyone.
-- `http://localhost:8081/monitor` on the host, with `make web` running, links to every monitoring page (Grafana, Prometheus, the balancers' statistics, Kafka Connect, Vitess, each native backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
+- `make monitor`, or `https://localhost:8081/monitor` on the host (`http://` before `make certs`), with `make web` running, links to every monitoring page (Grafana, Prometheus, the balancers' statistics, Kafka Connect, Vitess, each native backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.
 
 ## Troubleshooting
@@ -179,3 +181,8 @@ make lb-down                       # when done
 - **No event is delivered**, though sends succeed, and the conformance tests fail at their readiness probe with "no event delivered": the Vitess container restarted (a Docker Desktop restart does it, as does rebuilding the image after a change under `infra/vitess/`). The test server starts empty, while Debezium's stored offsets point into history that no longer exists, so both connectors retry forever (`failed to find a PRIMARY tablet for VStream` in `make infra-logs SERVICE=connect`). `make infra-reset` recreates the stack empty, which is the fix. The plain MySQL profile (`make infra-up PROFILE=mysql`) keeps its data and binlog across a restart and has no such problem.
 - **The web client signs in but cannot send**, with "End-to-end encryption needs a secure page": the page was opened over plain HTTP from another device, where browsers give no WebCrypto. Open it over HTTPS, as `make web` serves it, with the certificate trusted on the device. A page over HTTPS cannot use a plain `ws://` gateway either, except `localhost`; the default `wss://` edge is the one to use.
 - **The phone cannot connect** to `wss://<address>:8443/v1/ws`: the authority is not trusted on it yet ([above](#trusting-the-certificate)), the Mac is asleep, or `make tls-up` is not running.
+- **`make infra-up` fails with "the stack runs the vitess profile"** (or mysql): the two profiles hold different data, so a stack switches only from empty. `make infra-down`, then `make infra-up PROFILE=...`.
+- **HBase or its REST server stays unhealthy**, or a backend cannot reach the region server: clients find it by the name it advertises, `hbase.localhost`, an alias of the container on Docker's network and, on the host, loopback through the macOS system resolver, which maps every `.localhost` name there. A resolver that skips the system's misses it. `make infra-logs SERVICE=hbase` shows whether the region server reported to the master.
+- **Accounts and history are gone after the stack was recreated:** HBase, like the database, keeps its data in its container, not in a volume, so `make infra-down`, `make infra-reset` or a rebuilt image discards both, the old history in HBase with the rest.
+- **The first `make ts-deps`, or any TypeScript target, sits for minutes**: `npm ci` compiles the Kafka client's librdkafka. Later runs skip it until the lockfile changes.
+- **A device away for more than 30 days starts over:** the user logs keep 30 days of events, so its sync cursor fails with `ERROR_CODE_CURSOR_EXPIRED`, and the client lists its conversations and contacts and fetches history again. Nothing is lost; the history stays with the conversations.

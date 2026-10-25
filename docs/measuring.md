@@ -4,8 +4,8 @@ How backends are compared. Absolute numbers depend on the machine and say little
 
 ## Setup
 
-- The shared infrastructure runs in Docker Desktop (`make infra-up`) with the memory caps in `infra/docker-compose.yml`. Record Docker's CPU and memory allocation. The database is Vitess, or with `PROFILE=mysql` plain MySQL; the profile is part of the configuration, and runs on it are labeled with `-mysql`.
-- The backend under test runs natively on the host, listening on port 8080, without the balancers: the monoliths (Go, Java, TypeScript) as one process with every role; the gateways (Go, Java, TypeScript, Elixir, Rust) with one services process beside them, Java's own for the Java gateway, TypeScript's for the TypeScript gateway and Go's for the others, where only the gateway is measured. It is restarted fresh before every run, so memory figures start from the same baseline. The side-by-side setup and the cluster are for trying the scaled shape, not for these measurements.
+- The shared infrastructure runs in Docker Desktop (`make infra-up`) with the memory caps in `infra/docker-compose.yml`. Record Docker's CPU and memory allocation. The database is Vitess, or with `PROFILE=mysql` plain MySQL; the profile is part of the configuration, and runs on it are labeled with `-mysql`. The stack includes HBase, the history's cold tier, and its REST server, which the TypeScript backend uses.
+- The backend under test runs natively on the host, listening on port 8080, without the balancers: the monoliths (Go, Java, TypeScript) as one process with every role; the gateways (Go, Java, TypeScript, Elixir, Rust) with one services process beside them, Java's own for the Java gateway, TypeScript's for the TypeScript gateway and Go's for the others, where only the gateway is measured. It is restarted fresh before every run, so memory figures start from the same baseline. The monolith, or the services process beside a gateway, also runs the log trimmer and the history mover on each shard every 60 s, under leases in Valkey; on a fresh stack within a run they find nothing old enough to remove or move, but their rounds are part of the load. Results before 2026-10-25 ran without them. The side-by-side setup and the cluster are for trying the scaled shape, not for these measurements.
 - macOS starts shells with a limit of 256 open files. Go and the JVM raise their own limit; for the Elixir and Rust gateways, the launcher they share (`backends/beside-services.sh`) raises it, or they would refuse connections past about 200.
 - The load generator runs natively on the host too. It shares the CPU with the backend; keep the load far from saturating the machine, and compare backends against each other rather than against the hardware.
 - Each backend's protocol run starts from a freshly created stack (`FRESH=1`, which `make measure-*` sets): end-to-end latency at 500 messages per second went from 66 ms on an empty database to 1.4 s after a day of runs, with a million rows in the user logs, so runs on a grown stack are not comparable with runs on a fresh one.
@@ -13,7 +13,7 @@ How backends are compared. Absolute numbers depend on the machine and say little
 
 ## Runs
 
-`make measure-<backend>` (`go-mono`, `java-mono`, `ts-mono`, `go-gw`, `java-gw`, `ts-gw`, `elixir-gw`, `rust-gw`, or `all`) runs `loadgen/protocol.sh`, which performs these, appending one JSON line per run to `docs/results/<date>-<backend>.jsonl` (`<date>-<backend>-mysql.jsonl` on the mysql profile, which the fresh stacks keep). For a single ad-hoc run against whatever backend is running, `make load CONNECTIONS=… RATE=… DURATION=…`, with any other flag in `LOADGEN_ARGS` (for example `LOADGEN_ARGS="--group-share 0.5"`).
+`make measure-<backend>` (`go-mono`, `java-mono`, `ts-mono`, `go-gw`, `java-gw`, `ts-gw`, `elixir-gw`, `rust-gw`, or `all`) runs `loadgen/protocol.sh`, which performs these, appending one JSON line per run to `docs/results/<date>-<backend>.jsonl` (`<date>-<backend>-mysql.jsonl` on the mysql profile, which the fresh stacks keep). The date is the day the make invocation started, so one `make measure-all` is one session; `RESULTS_DATE=<date>` continues an earlier one. `SERIES=idle` or `SERIES=rates` runs only that series. The script refuses to append to a results file that holds runs from another commit; move it aside first. Before each run it resets the fan-out's Kafka offsets (`infra/reset-fanout.sh`), so a run does not start by draining what the previous one left. For a single ad-hoc run against whatever backend is running, `make load CONNECTIONS=… RATE=… DURATION=…`, with any other flag in `LOADGEN_ARGS` (for example `LOADGEN_ARGS="--group-share 0.5"`).
 
 The load generator's users are `lg-0`, `lg-1`, ... with a fixed password. Before connecting, it registers them, or signs in those that exist, and connects with the device tokens; that phase is outside every window. Each sign-in hashes a password (about 19 MiB, tens of milliseconds), which inflates the services' resident memory after the phase; the live-memory figures, taken after a forced collection, are unaffected. Results from before accounts (2026-10-11 and earlier) connected by name without that phase.
 
@@ -31,7 +31,7 @@ Each series is run `REPS` times (default 1); report the median run.
 
 ## Recording
 
-Results live in `docs/results/<date>-<backend>.md` with the raw JSON lines beside them. Each file records:
+Each session's write-up is `docs/results/<date>-<topic>.md` (for example `2026-10-24-shapes.md`), with each backend's raw JSON lines beside it in `<date>-<backend>.jsonl`. Each file records:
 
 - date, commit, backend and its version of the runtime (Go, JDK, ...);
 - machine: model, chip, memory, OS version, Docker Desktop CPU and memory allocation;
@@ -41,5 +41,5 @@ Never compare numbers taken on different machines or infrastructure settings; ta
 
 ## Caveats
 
-- End-to-end latency includes the change-data path: Debezium reading the binlog through vtgate, Kafka, and the fan-out worker. That part is shared by every backend and dominates at low load. Its own figure is the backend's `wrinkle_fanout_lag_seconds` histogram.
-- The database and brokers are capped in memory and run under Docker Desktop's virtual machine; they may saturate before a backend does, and on a laptop they do, between 1000 and 1500 messages per second (between 500 and 1000 before 2026-10-21) (ROADMAP.md, "Database ceiling"). Watch their CPU with `make infra-status` during the high-rate runs and note it.
+- End-to-end latency includes the change-data path: Debezium reading the binlog (through vtgate on Vitess; on the mysql profile its MySQL connector reads MySQL's binlog directly), Kafka, and the fan-out worker. That part is shared by every backend and dominates at low load. Its own figure is the backend's `wrinkle_fanout_lag_seconds` histogram.
+- The database and brokers are capped in memory and run under Docker Desktop's virtual machine; they may saturate before a backend does, and on a laptop they do: on Vitess between 1000 and 1500 messages per second (between 500 and 1000 before 2026-10-21) (ROADMAP.md, "Database ceiling"). The mysql profile is not measured yet. Watch their CPU with `make infra-status` during the high-rate runs and note it.

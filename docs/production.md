@@ -31,24 +31,24 @@ Done: accounts with random ids and changeable names, passwords hashed with argon
 
 The services already refuse requests about conversations the user is not in. Missing for an open service:
 
-- Blocking a user, and reporting a message or a user, with someone to read the reports. App Store review requires both of apps with user-generated content, and account deletion of apps with accounts.
+- Reporting a message or a user, with someone to read the reports. Blocking is done ([architecture](architecture.md#contacts-and-blocking)). App Store review requires both of apps with user-generated content, and account deletion of apps with accounts.
 - Limits on new accounts and on conversations opened with strangers, against spam.
 
 ### 5. Data
 
 - Object storage from the provider (S3, GCS or another S3-compatible service) in place of the local Garage node, with blobs served through a CDN; uploads stay signed by the services.
 - Backups taken automatically, kept off the machine, and restored on a schedule to prove they work.
-- A retention policy: the capacity estimates assume two weeks of history on the server; the prototype keeps everything.
-- Privacy obligations where users are in the EU (GDPR): a privacy policy, export and deletion of a user's data (including the copies in partners' logs and in backups as they age out), data processing agreements with the hosting providers, and an EU region.
+- A retention policy. The user logs are trimmed after 30 days (`WRINKLE_LOG_RETENTION_S`); history is kept for good, the last 30 days in MySQL (`WRINKLE_HISTORY_HOT_S`) and older messages in HBase ([architecture](architecture.md#history-and-the-cold-tier)). How long a public service keeps history and attachment blobs is a decision left for it (ROADMAP.md, Open, 2. Retention and history in cold storage).
+- Privacy obligations where users are in the EU (GDPR): a privacy policy, export and deletion of a user's data (including the copies in partners' logs, the history in the HBase cold tier, and backups as they age out; a deleted account's messages stay with their conversations, as the prototype keeps them), data processing agreements with the hosting providers, and an EU region.
 
 ### 6. Operations
 
-- One implementation in production. Go is the only one whose fan-out sends push notifications; a Rust gateway in front of Go services is the leanest pairing measured.
+- One implementation in production. A Rust gateway in front of Go services is the leanest pairing measured.
 - Images built and pushed by CI to a registry, tagged by commit; deploys by tag, rolling one gateway at a time.
 - Secrets (database credentials, the production APNs key) in the platform's secret store, not in files on the host.
 - Metrics scraped from every process, alerts on error rates, latency, consumer lag and disk, logs collected, and an outside uptime check.
 - Schema changes applied as versioned migrations, compatible with the running version, not loaded at startup.
-- The prototype's Vitess test server, which starts empty when its container restarts and strands Debezium's offsets ([local-network.md](local-network.md#troubleshooting); ROADMAP.md, Open, Operations), replaced by a real Vitess topology or by plain MySQL as below, whose binlog survives a restart.
+- The prototype's Vitess test server, which starts empty when its container restarts and strands Debezium's offsets ([local-network.md](local-network.md#troubleshooting); ROADMAP.md, Open, 3. Stray blobs and the Vitess restart), replaced by a real Vitess topology or by plain MySQL as below, whose binlog survives a restart.
 
 ### 7. Clients
 
@@ -61,7 +61,8 @@ The prototype's infrastructure is shaped for the scale the design was sized for 
 
 - **Vitess**: managed clouds offer plain MySQL, not Vitess. The schema runs unsharded on one MySQL; Debezium uses its MySQL connector, reading the binlog, instead of the Vitess one, as the infrastructure's `mysql` profile does locally (`make infra-up PROFILE=mysql`). Managed Vitess exists (PlanetScale, on AWS or GCP) and keeps the sharding path open.
 - **Kafka**: managed Kafka has a high floor (below). A single broker, or Redpanda as one binary, carries a small service; it is the simplest piece to move to a managed service later.
-- **Valkey** is cheap everywhere.
+- **HBase**, the cold tier of the history: Bigtable speaks the HBase API, the managed path on Google Cloud; elsewhere HBase self-hosted, standalone at first, or on Amazon EMR. Its REST server is needed only for the TypeScript backend.
+- **Valkey** is cheap everywhere. Besides presence, it holds the leases that share the per-shard background work, the log trimmer and the history mover, between instances: without it no logs are trimmed and no history moves.
 
 ## Deployment options
 
@@ -71,7 +72,7 @@ Every option needs a domain (about €1 a month) and an Apple developer account 
 
 ### A. One server, everything in containers
 
-The cluster's Compose files on one machine, HAProxy terminating TLS, nightly backups to storage elsewhere. Locally the infrastructure runs in 8 GB of Docker memory and the cluster with the backends in 12; 16 GB leaves room.
+The cluster's Compose files on one machine, HAProxy terminating TLS, nightly backups to storage elsewhere. Locally the infrastructure's caps add up to about 6.4 GB, HBase and its REST server about 1.4 GB of it, and the cluster with the backends runs in 12 GB of Docker memory; 16 GB leaves room. Locally neither the database nor HBase keeps its data in a volume; on a server both need one, and the backups must cover HBase as well as MySQL.
 
 | Item | Cost |
 |---|---|
@@ -86,7 +87,7 @@ The arm64 images the prototype builds for Apple Silicon run unchanged on Hetzner
 
 ### B. Three servers
 
-Three of the same servers behind Hetzner's load balancer: gateways and services on each, Kafka as a three-broker cluster, MySQL with a replica, Valkey with a replica. Survives losing a machine, after real work: a replicated database (a primary and replica MySQL, or a real Vitess topology, both still open items) and failover for each piece.
+Three of the same servers behind Hetzner's load balancer: gateways and services on each, Kafka as a three-broker cluster, MySQL with a replica, Valkey with a replica, and HBase: standalone on one of them, sized around the local cap of about 1.4 GB with its REST server, or a replicated cluster on HDFS. Survives losing a machine, after real work: a replicated database (a primary and replica MySQL, or a real Vitess topology, both still open items) and failover for each piece.
 
 | Item | Cost |
 |---|---|
@@ -119,11 +120,12 @@ Two ways, by how much is managed. us-east-1 prices; Frankfurt is about 10 to 20 
 | Kafka | MSK Serverless, about $580 with partitions | one broker and Debezium on a t4g.medium, $25 |
 | Debezium | MSK Connect, about $80 | (on the broker's instance) |
 | Valkey: ElastiCache Serverless | about $10 | about $10 |
+| Cold tier: HBase and its REST server on a t4g.medium | $25 | $25 |
 | Network Load Balancer | about $25 | about $25 |
 | Public IPv4 addresses ($3.65 each) | about $11 | about $11 |
-| **Total** | **about $810** | **about $175** |
+| **Total** | **about $835** | **about $200** |
 
-Managed Kafka is three quarters of the first column, at a traffic level it will not notice. Keep instances in public subnets or behind IPv6: a NAT gateway adds about $33 a month plus traffic. Outbound traffic past the first 100 GB a month costs $0.09 per GB. PlanetScale's smallest Vitess cluster is listed by trackers at about $39 a month in place of RDS, which keeps the sharded schema and Debezium's Vitess connector; its own price page has the current figure.
+AWS has no managed HBase short of an EMR cluster, so both columns run it on an instance. Managed Kafka is three quarters of the first column, at a traffic level it will not notice. Keep instances in public subnets or behind IPv6: a NAT gateway adds about $33 a month plus traffic. Outbound traffic past the first 100 GB a month costs $0.09 per GB. PlanetScale's smallest Vitess cluster is listed by trackers at about $39 a month in place of RDS, which keeps the sharded schema and Debezium's Vitess connector; its own price page has the current figure.
 
 ### E. Google Cloud
 
@@ -134,10 +136,11 @@ Managed Kafka is three quarters of the first column, at a traffic level it will 
 | Kafka: Managed Service for Apache Kafka, the minimum of 3 vCPUs and 3 GiB | about $140 plus storage | one broker and Debezium on an e2-medium, $25 |
 | Debezium | on one of the VMs | (on the broker's instance) |
 | Valkey: Memorystore, the smallest node | about $23 | about $23 |
+| Cold tier | Bigtable, one node, billed by the node-hour (not priced here) | HBase and its REST server on an e2-medium, $25 |
 | External network load balancer, one forwarding rule | about $18 | about $18 |
-| **Total** | **about $300** | **about $175** |
+| **Total** | **about $300** plus Bigtable | **about $200** |
 
-Google's managed Kafka has a lower floor than AWS's. Cloud Run would host the gateways without VMs, holding WebSockets up to its 60-minute request limit, after which clients reconnect; with instances kept warm for the connections it saves little at this size.
+Google's managed Kafka has a lower floor than AWS's. Bigtable bills at least one node around the clock, a floor of its own at this traffic; its price page has the current figure. Cloud Run would host the gateways without VMs, holding WebSockets up to its 60-minute request limit, after which clients reconnect; with instances kept warm for the connections it saves little at this size.
 
 ### Which one
 
