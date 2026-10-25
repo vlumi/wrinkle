@@ -1,6 +1,6 @@
 # TypeScript backend
 
-The TypeScript backend is a full implementation, like Go and Java: one program, [`wrinkle`](wrinkle), that runs any of the three roles (the WebSocket gateway, the services, and the fan-out worker, with APNs push from the fan-out) as a monolith or split into gateways and services instances over the internal gRPC contract. Its services instances serve any gateway, and its gateway any services. Node 26 runs the TypeScript sources directly, with no build step; `tsc` only checks the types. It uses [ws](https://github.com/websockets/ws) for the connections, mysql2 against vtgate, [@confluentinc/kafka-javascript](https://github.com/confluentinc/confluent-kafka-javascript) (librdkafka) for Kafka, the official `redis` client for Valkey, [Connect](https://connectrpc.com/) speaking gRPC for the internal RPC with the same generated code ([protobuf-es](https://github.com/bufbuild/protobuf-es)) as the web client, `@node-rs/argon2` for passwords, and prom-client for metrics. A process runs all its JavaScript on one thread; the database, Kafka and password hashing work on libuv's threads and librdkafka's own. Scaling past one core is more processes, which the split shape and the cluster provide.
+The TypeScript backend is a full implementation, like Go and Java: one program, [`wrinkle`](wrinkle), that runs any of the three roles (the WebSocket gateway, the services, and the fan-out worker, with APNs push from the fan-out) as a monolith or split into gateways and services instances over the internal gRPC contract. Its services instances serve any gateway, and its gateway any services. Node 26 runs the TypeScript sources directly, with no build step; `tsc` only checks the types. It uses [ws](https://github.com/websockets/ws) for the connections, mysql2 against vtgate (or MySQL itself on the infrastructure's `PROFILE=mysql` stack, connecting as `root` either way), [@confluentinc/kafka-javascript](https://github.com/confluentinc/confluent-kafka-javascript) (librdkafka) for Kafka, the official `redis` client for Valkey, [Connect](https://connectrpc.com/) speaking gRPC for the internal RPC with the same generated code ([protobuf-es](https://github.com/bufbuild/protobuf-es)) as the web client, `@node-rs/argon2` for passwords, and prom-client for metrics. A process runs all its JavaScript on one thread; the database, Kafka and password hashing work on libuv's threads and librdkafka's own. Scaling past one core is more processes, which the split shape and the cluster provide.
 
 The design common to every backend (data model, flows, guarantees, failure handling) is in [docs/architecture.md](../../docs/architecture.md); this page covers how the TypeScript code realizes it. The Go code was the reference for every feature: the same SQL, validation, error codes and outbox rows, so the backends share data, and conformance holds this one to the contract like the others.
 
@@ -28,13 +28,13 @@ Dockerfile          the image for the cluster, built from the repository root
 
 ## Roles and startup
 
-[main.ts](src/main.ts) takes `--roles`, a comma-separated list of `gateway`, `services` and `fanout`, as the Go binary does: `gateway,fanout` (the default) is the monolith; `gateway` with `--services <addr>` forwards every request over gRPC and opens no database pools; `services,fanout` is a services instance. The services role also runs the uploads sweeper, the trimmer of the user logs and the mover of old history to the cold tier. SIGTERM or SIGINT drains the gateway, stops the fan-out, and exits.
+[main.ts](src/main.ts) takes `--roles`, a comma-separated list of `gateway`, `services` and `fanout`, as the Go binary does: `gateway,fanout` (the default) is the monolith; `gateway` with `--services <addr>` forwards every request over gRPC and opens no database pools; `services,fanout` is a services instance. Wherever the services run, as the `services` role or in-process in the monolith, they also run the uploads sweeper, the trimmer of the user logs and the mover of old history to the cold tier; a fan-out-only process runs none of them. Every role connects to Valkey: the gateway for presence, the fan-out for pushes, the services for the leases of their background work. SIGTERM or SIGINT drains the gateway, stops the fan-out, and exits.
 
 | Flag | Variable | Default | Meaning |
 |---|---|---|---|
 | `--roles` | `WRINKLE_ROLES` | `gateway,fanout` | the roles of this process |
 | `--listen` | `WRINKLE_LISTEN` | `127.0.0.1:8080` | HTTP: `/v1/ws` (gateway), `/metrics`, `/healthz`, `POST /debug/gc` on loopback |
-| `--mysql` | `WRINKLE_MYSQL` | `127.0.0.1:15003` | vtgate |
+| `--mysql` | `WRINKLE_MYSQL` | `127.0.0.1:15003` | vtgate, or MySQL on the `mysql` profile |
 | `--kafka` | `WRINKLE_KAFKA` | `localhost:19092` | brokers, comma-separated |
 | `--valkey` | `WRINKLE_VALKEY` | `localhost:6379` | Valkey |
 | `--hbase-rest` | `WRINKLE_HBASE_REST` | `http://127.0.0.1:8086` | the cold tier's HBase, by its REST server |
@@ -51,7 +51,7 @@ Dockerfile          the image for the cluster, built from the repository root
 | `--blob-url`, `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_*` | the local Garage | blob storage, as for Go |
 | `--apns-key`, `--apns-key-id`, `--apns-team-id`, `--apns-topic` | `WRINKLE_APNS_KEY`, `WRINKLE_APNS_KEY_ID`, `WRINKLE_TEAM_ID`, `WRINKLE_APNS_TOPIC` | off | APNs from the fan-out, as for Go |
 
-`.env` at the repository root is read first; variables already set win. `WRINKLE_LOG_LEVEL` (`debug`, `info`, `warn`, `error`) sets the logging, as `key=value` lines on stderr.
+`.env` in the working directory, or else at the repository root, is read first; variables already set win. `WRINKLE_LOG_LEVEL` (`debug`, `info`, `warn`, `error`) sets the logging, as `key=value` lines on stderr.
 
 ## Gateway
 
@@ -66,8 +66,8 @@ Each feature's `feature.ts` maps its requests to handlers; [local.ts](src/servic
 - Times are written at millisecond precision, since JavaScript's `Date` has no microseconds. Reads keep what the database holds ([db.ts](src/internal/db.ts) reads DATETIME columns as strings and keeps their microseconds), and the fan-out writes the event times of Go-written outboxes as they came.
 - Strings arrive decoded, so Go's checks for invalid UTF-8 become checks that a string is well formed.
 - Password hashes run on libuv's thread pool, which bounds how many run at once, as Go bounds them by cores.
-- The cold tier ([cold.ts](src/conversation/cold.ts), [mover.ts](src/conversation/mover.ts)) goes through HBase's REST server with the built-in `fetch`, since Node has no maintained native client: puts as JSON with base64 keys, columns and values, and every read through a scanner, since binary keys do not fit a URL; a point read is a scan of one key. The REST scanner reads only forward, so a page of the newest n messages in a cold range is a forward scan of its last n seqs, turned around; this relies on a conversation's cold seqs being contiguous, which they are, since messages are only tombstoned and the mover moves every seq up to the watermark. The mover runs in the services role, beside the trimmer, rather than the fan-out's, so the services role connects to Valkey too, for their leases.
-- The trimmer and the mover run through [shardwork.ts](src/internal/shardwork.ts) as Go's do through `shardwork`: the shards are found a minute after start (again after each interval while that fails), then each shard has its own loop, a round at once and then every interval, under the shard's lease in Valkey (`lease:<job>:<keyspace>/<shard>`, 30 s, renewed every 10 s and dropped after the round). A lost lease aborts the round between pages and transactions, since mysql2 cannot cancel a query; stopping waits for the rounds and drops their leases.
+- The cold tier ([cold.ts](src/conversation/cold.ts), [mover.ts](src/conversation/mover.ts)) goes through HBase's REST server with the built-in `fetch`, since Node has no maintained native client: puts as JSON with base64 keys, columns and values, and every read through a scanner, since binary keys do not fit a URL; a point read is a scan of one key. The REST scanner reads only forward, so a page of the newest n messages in a cold range is a forward scan of its last n seqs, turned around; this relies on a conversation's cold seqs being contiguous, which they are, since messages are only tombstoned and the mover moves every seq up to the watermark. The mover runs with the services, beside the trimmer, rather than in the fan-out.
+- The trimmer and the mover run through [shardwork.ts](src/internal/shardwork.ts) as Go's do through `shardwork`: the shards are found a minute after start, or the interval when shorter (again after each interval while that fails), then each shard has its own loop, a round at once and then every interval, under the shard's lease in Valkey (`lease:<job>:<keyspace>/<shard>`, 30 s, renewed every 10 s and dropped after the round). A lost lease aborts the round between pages and transactions, since mysql2 cannot cancel a query; stopping waits for the rounds and drops their leases.
 
 ## Fan-out
 
@@ -86,7 +86,7 @@ make conformance-ts-mono conformance-ts-gw
 make measure-ts-mono measure-ts-gw
 ```
 
-Unit tests ([`*.test.ts`](src/)) hold the vectors every backend shares: argon2id and device tokens, SigV4 presigning, the vindex keyspace ids; and Debezium record parsing, membership flags, sticker and notice ids, the ack writer and the token bucket, the cold tier's row keys and cells and where a page goes on in it. Everything else is covered by the conformance tests.
+Unit tests ([`*.test.ts`](src/)) hold the vectors every backend shares: argon2id and device tokens, SigV4 presigning, the vindex keyspace ids and XXH64; and malformed hashes, name, icon and label validation, Debezium record parsing, membership flags, direct members, topics, notice and client group ids, blob ids, rotation only after the first epoch, contact views and sides, upload media types, DATETIME values keeping their microseconds, the ack writer and the token bucket, the wrapping of a pushed event into a frame, the worker's grouping by key and its concurrency limit, shard leases (a round run once that drops its lease, a shard leased elsewhere skipped, a lost lease stopping the round), the trimmer's tail per user, APNs signing, addressing, background sends, unregistered tokens and token reuse, the sealed content in alerts and its omission when too large, and the cold tier's row keys and cells and where a page goes on in it. Everything else is covered by the conformance tests.
 
 In the image, the Kafka client builds librdkafka from source, since it has no prebuilt binary for this Node; the [Dockerfile](Dockerfile) builds it outside the package's scoped path, because GNU `ar`'s script mode cannot read the `@` in it.
 
@@ -96,6 +96,7 @@ On 2026-10-24 at commit 7e6a395, from a fresh stack, medians of three ([2026-10-
 
 ## Gaps
 
+- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good, as in Go and Java ([ROADMAP.md](../../ROADMAP.md), "Stray blobs and the Vitess restart").
 - A batch transaction has no timeout of its own: mysql2 cannot cancel a query, so a hung one stalls its shard's queue until the connection fails.
 - Split, the gateway's sends queue at 1000 messages a second while the monolith's do not; whether in the internal RPC or the services process's one thread is not established ([ROADMAP.md](../../ROADMAP.md), Parity).
 - The gateway answers a request that takes over 10 s with an error, but the work behind it goes on, and the database pool queues for a connection without a limit: past the database's limit, sends the client gave up on still run.

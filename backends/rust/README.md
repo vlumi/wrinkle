@@ -1,6 +1,6 @@
 # Rust gateway
 
-The Rust implementation is a gateway only: it holds the devices' WebSocket connections, enforces the contract's per-connection limits, forwards every request to a Go, Java or TypeScript services process over the internal RPC (`proto/wrinkle/backend/v1`), and delivers pushes that the fan-out publishes to Valkey. It runs beside a services process, never alone. It is built on tokio, with axum for HTTP and WebSocket, tonic and prost for the RPC and the contract, and redis-rs for Valkey. ROADMAP.md explains why Elixir and Rust implement only the gateway: connection handling is where the languages differ most, while the services are SQL and a Kafka consumer. The overall architecture, its flows and its guarantees are in [docs/architecture.md](../../docs/architecture.md); this page covers how this code realizes them.
+The Rust implementation is a gateway only: it holds the devices' WebSocket connections, enforces the contract's per-connection limits, forwards every request to a Go, Java or TypeScript services process over the internal RPC (`proto/wrinkle/backend/v1`), and delivers pushes that the fan-out publishes to Valkey. It runs beside a services process, never alone. It is built on tokio, with axum for HTTP and WebSocket, tonic and prost for the RPC and the contract, and redis-rs for Valkey. [ROADMAP.md](../../ROADMAP.md) explains why Elixir and Rust implement only the gateway: connection handling is where the languages differ most, while the services are SQL and a Kafka consumer. The overall architecture, its flows and its guarantees are in [docs/architecture.md](../../docs/architecture.md); this page covers how this code realizes them.
 
 ## Layout
 
@@ -26,7 +26,7 @@ There are no roles to choose: the binary is always a gateway. [main.rs](src/main
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `WRINKLE_LISTEN` | `:8080` | `host:port` to listen on; `:port` means every interface |
+| `WRINKLE_LISTEN` | `127.0.0.1:8080` | `host:port` to listen on; `:port` means every interface |
 | `WRINKLE_SERVICES` | `localhost:9000` | The services RPC, or the services balancer |
 | `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
 | `WRINKLE_NODE` | the host name | The node part of the instance id |
@@ -127,9 +127,9 @@ There is no live-memory metric and no profiling endpoint.
 | `make rust-test` | the unit tests |
 | `make cluster-up RUST_GW=n` | n gateways in containers, from the [Dockerfile](Dockerfile) |
 
-[run.sh](run.sh) hands the release binary to [beside-services.sh](../beside-services.sh), which starts Go services and fan-out on 127.0.0.1:9000 and 8090, waits for them, and runs the gateway on :8080; on exit it stops the gateway first so it drains while the services still answer.
+[run.sh](run.sh) hands the release binary to [beside-services.sh](../beside-services.sh), which starts Go services and fan-out on 127.0.0.1:9000 and 8090 (that process also runs the log trimmer and the history mover, so it needs the stack's HBase), waits for them, and runs the gateway on :8080; on exit it stops the gateway first so it drains while the services still answer.
 
-The unit tests are small: the listen address, the token bucket's burst and refill, the ack interval and its coalescing on paused time, the instance id format, and the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`. Everything that involves a connection is left to the conformance tests.
+The unit tests are small: the listen address, the token bucket's burst and refill, the ack interval and its coalescing on paused time, the instance id format, user ids in hex (the round trip, and refusing other forms), the event wrapping across varint length boundaries, checked by decoding the result as a `Frame`, and decoding pushes (an event wrapped undecoded, the fallback to a full decode, `signed_out`, garbage). Everything that involves a connection is left to the conformance tests.
 
 ## Measured
 

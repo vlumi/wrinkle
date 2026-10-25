@@ -29,7 +29,7 @@ There is one role, the gateway, so there are no role flags. [config/runtime.exs]
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `WRINKLE_LISTEN` | `:8080` | HTTP and WebSocket address, host:port; an empty host means every interface (IPv4), a name is resolved at startup, an IPv6 address goes in brackets |
+| `WRINKLE_LISTEN` | `127.0.0.1:8080` | HTTP and WebSocket address, host:port; an empty host means every interface (IPv4), a name is resolved at startup, an IPv6 address goes in brackets |
 | `WRINKLE_SERVICES` | `localhost:9000` | services RPC address, a services process or the services balancer |
 | `WRINKLE_VALKEY` | `localhost:6379` | Valkey, for presence and pushes |
 | `WRINKLE_NODE` | the host name | first part of the instance id in presence entries |
@@ -136,7 +136,7 @@ The make targets for this backend:
 | `make elixir-test` | the unit tests |
 | `make proto` | regenerates `lib/wrinkle/proto` with the other languages |
 
-[run.sh](run.sh) starts the gateway through [beside-services.sh](../beside-services.sh): a Go services process with the fan-out on 127.0.0.1:9000 (metrics on 8090), then the gateway on :8080 pointed at it; on exit the gateway stops first, so it drains while the services still answer. It runs `mix run --no-halt` in the default environment; the [Dockerfile](Dockerfile) builds and runs it with `MIX_ENV=prod`. There is no release build.
+[run.sh](run.sh) starts the gateway through [beside-services.sh](../beside-services.sh): a Go services process with the fan-out on 127.0.0.1:9000 (metrics on 8090), which also runs the log trimmer and the history mover and so needs the stack's HBase, then the gateway on :8080 pointed at it; on exit the gateway stops first, so it drains while the services still answer. It runs `mix run --no-halt` in the default environment; the [Dockerfile](Dockerfile) builds and runs it with `MIX_ENV=prod`. There is no release build.
 
 The unit tests run with `mix test --no-start`, without the application, Valkey or the services: [token_bucket_test.exs](test/token_bucket_test.exs) covers bursts, refill, the cap and partial refills; [ack_writer_test.exs](test/ack_writer_test.exs) the interval, coalescing, one write in flight, the flush on close and interval 0; [push_test.exs](test/push_test.exs) the frame wrapping across varint boundaries, decoding pushes (events, sign-outs, garbage) and the hex of a user id. Everything else is covered by the conformance tests.
 
