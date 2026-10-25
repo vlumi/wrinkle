@@ -60,10 +60,10 @@ public final class AppState {
     let deviceVault = Vaults.device()
     let sharedVault = Vaults.shared()
 
-    private var credentials: Credentials?
-    private var connection: Connection?
+    var credentials: Credentials?
+    var connection: Connection?
     private(set) var store: Store?
-    private var cursor: UInt64 = 0
+    var cursor: UInt64 = 0
     private var sessionTask: Task<Void, Never>?
     private var pushToken: (service: Wrinkle_V1_PushService, token: String)?
 
@@ -71,7 +71,7 @@ public final class AppState {
     public static let defaultURL = "ws://localhost:8080/v1/ws"
     /// A device on the network goes through the TLS edge on the Mac.
     public static let networkURLHint = "wss://<mac>.local:8443/v1/ws"
-    private static let syncLimit: UInt32 = 200
+    static let syncLimit: UInt32 = 200
     static let historyPage: UInt32 = 50
     private static let signOutWait: Duration = .seconds(3)
     private static let rejectedNotice =
@@ -276,7 +276,15 @@ public final class AppState {
         }
         try await refreshConversations(conn)
         if !devices.isEmpty { devices = try await conn.listDevices() }
-        try await syncFromCursor(conn)
+        do {
+            try await syncFromCursor(conn)
+        } catch is CursorExpired {
+            // From the head as of Connect, then listing again: nothing in between is missed.
+            startOver()
+            advanceCursor(to: resp.logHead)
+            try await refreshConversations(conn)
+            try await syncFromCursor(conn)
+        }
         // After the sync, whose palette events may be older.
         palette = try await conn.getPalette().map(\.stickerID)
         contacts = ContactBook(try await conn.listContacts())
@@ -308,89 +316,6 @@ extension AppState {
         pushToken = (service, token)
         if let connection, me != nil {
             Task { try? await connection.registerPushToken(service: service, token: token) }
-        }
-    }
-}
-
-// MARK: Sync
-
-extension AppState {
-    /// The open connection and the store, or an error when not connected.
-    func connected() throws -> (Connection, Store) {
-        guard let connection, let store, me != nil else { throw AccountError("Not connected.") }
-        return (connection, store)
-    }
-
-    private func advanceCursor(to next: UInt64) {
-        cursor = next
-        if let credentials { SavedSession.setCursor(cursor, for: credentials.deviceID) }
-    }
-
-    private func refreshConversations(_ conn: Connection) async throws {
-        let list = try await conn.listConversations()
-        guard let store else { return }
-        for c in list { _ = store.upsert(c) }
-        store.save()
-        await openLocked(conn)
-    }
-
-    private func syncFromCursor(_ conn: Connection) async throws {
-        guard let store, me != nil else { return }
-        while true {
-            let resp = try await conn.sync(cursor: cursor, limit: Self.syncLimit)
-            for e in resp.events { apply(e, store) }
-            store.save()
-            refreshMembers(after: resp.events, store)
-            advanceCursor(to: resp.cursor)
-            if !resp.hasMore_p { break }
-        }
-        try await conn.ack(cursor: cursor)
-        await openLocked(conn)
-    }
-
-    @discardableResult
-    private func apply(_ event: Wrinkle_V1_Event, _ store: Store) -> StoredConversation? {
-        switch event.body {
-        case .profile(let p) where p.user.userID.hex == myUserID:
-            me = p.user
-        case .device(let d):
-            followDevice(d)
-        case .palette(let p):
-            palette = p.stickerIds
-        case .contact(let c):
-            followContact(c.contact)
-        case .messageDeleted(let d):
-            onMessageDeleted?(d.conversationID.hex, d.seq)
-        // Synced from before the deletion: the message arrives already deleted.
-        case .message(let m) where m.message.hasDeletedAt:
-            onMessageDeleted?(m.message.conversationID.hex, m.message.seq)
-        default:
-            break
-        }
-        return store.apply(event, me: myUserID)
-    }
-
-    private func onEvent(_ event: Wrinkle_V1_Event, _ conn: Connection) async {
-        guard let store, me != nil else { return }
-        // Pushes and sync overlap; the cursor tells them apart. A gap means
-        // something was missed: sync fills it.
-        guard event.cursor > cursor else { return }
-        if event.cursor != cursor + 1 {
-            try? await syncFromCursor(conn)
-            return
-        }
-        if apply(event, store) == nil, case .message = event.body {
-            // The first message of a conversation the peer opened.
-            try? await refreshConversations(conn)
-        }
-        store.save()
-        refreshMembers(after: [event], store)
-        advanceCursor(to: event.cursor)
-        try? await conn.ack(cursor: cursor)
-        if case .message(let m) = event.body, case .sealed = m.message.content {
-            await openLocked(conn)
-        } else if case .reaction(let r) = event.body, r.hasSealed {
-            await openLocked(conn)
         }
     }
 }

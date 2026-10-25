@@ -275,11 +275,17 @@ public struct Store {
 
     /// Forgets everything stored, as on signing out.
     public func reset() {
+        try? context.delete(model: StoredVerification.self)
+        resetHistory()
+    }
+
+    /// Forgets what the backend can give again, the conversations and their messages, and keeps
+    /// what only the device knows, the verified contacts.
+    public func resetHistory() {
         try? context.delete(model: StoredReaction.self)
         try? context.delete(model: StoredMessage.self)
         try? context.delete(model: StoredMember.self)
         try? context.delete(model: StoredConversation.self)
-        try? context.delete(model: StoredVerification.self)
         save()
     }
 

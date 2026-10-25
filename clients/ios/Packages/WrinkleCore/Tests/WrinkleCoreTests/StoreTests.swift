@@ -134,6 +134,18 @@ final class StoreTests: XCTestCase {
         XCTAssertEqual(try store.context.fetchCount(FetchDescriptor<StoredMessage>()), 0)
     }
 
+    func testResetHistoryKeepsVerifications() throws {
+        let store = try Store.inMemory(keys: TestSealing.keys(conv7))
+        var conv = Wrinkle_V1_Conversation()
+        conv.conversationID = conv7
+        _ = store.upsert(conv)
+        store.verify(bob.hex, fingerprint: Data(repeating: 9, count: 32))
+        store.save()
+        store.resetHistory()
+        XCTAssertEqual(try store.context.fetchCount(FetchDescriptor<StoredConversation>()), 0)
+        XCTAssertNotNil(store.verification(bob.hex))
+    }
+
     func testOnlyOlderStoresAreDiscarded() {
         let current = "wrinkle-v2.store"
         XCTAssertTrue(Store.isOldStore("default.store", current: current))
