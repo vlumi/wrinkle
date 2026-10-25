@@ -28,6 +28,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 | Kafka and Debezium | committed outbox rows of both keyspaces, in commit order per conversation or user | the topics | partitions |
 | Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
 | Object storage | blobs: avatars, stickers, encrypted attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
+| History cold tier (being built) | messages older than the hot window | HBase, standalone locally; an HBase cluster or Bigtable in production | regions, split by conversation id |
 
 The services are two, split by keyspace. The conversation service owns the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs. The sync service owns the user keyspace: accounts, devices and profiles, sync and conversation lists, uploads, stickers and push tokens; the code splits it further (accounts, uploads and stickers are packages of their own in Go, Java and TypeScript). The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
 
