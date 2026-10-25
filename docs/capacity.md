@@ -11,7 +11,7 @@ The sizing the design was made for, and how the measured prototype compares. Ass
 - **Pushes**: ~3 devices per chat event on average → **~300k/s**, ~230 per gateway node.
 - **Messages**: average 40 % of peak (assumed) = 20k/s → 1.7 billion a day → **~24 billion in 2 weeks** of retention.
 - **Message size**: ~300 B (assumed): 200 B of text, well above a typical chat message, plus metadata. The API caps text at 10 KB; storage is sized for the average.
-- **Storage**: ~7 TB in the conversation store + ~15 TB in the user logs (a copy per participant) + ~5 TB of read events → **~27 TB, ~80 TB with 3 replicas**, the steady state for 2 weeks of retention.
+- **Storage**: ~7 TB in the conversation store + ~15 TB in the user logs (a copy per participant) + ~5 TB of read events → **~27 TB, ~80 TB with 3 replicas**, the steady state for 2 weeks of retention. The prototype has since settled on 30 days in the logs and in MySQL, about twice these figures there, with older history kept for good in HBase, growing by about 0.5 TB a day ([ROADMAP.md](../ROADMAP.md), "Retention and history in cold storage").
 - **Shards**: ~64 per keyspace → ~1.5k writes/s and 100 to 250 GB each.
 - **Bandwidth**: 15 MB/s in, ~45 MB/s out at peak: not a constraint.
 - **End to end**, send on one device to receipt on a connected recipient, through the change-data path: ~100 to 300 ms.
@@ -27,10 +27,10 @@ From [results/2026-10-24-shapes.md](results/2026-10-24-shapes.md) (commit 7e6a39
 | ~3k user-log appends/s per shard | 2000/s, two per message at 1000 messages/s, sustained alongside the sends on the same `mysqld` since the fan-out batches its appends. Same order. |
 | ~230 pushes/s per gateway node | 1000/s from one process acting as gateway and fan-out worker, far from any limit. |
 | 100 to 300 ms end to end | 61 to 68 ms p50 at 500/s across all eight measured shapes from a fresh stack, p99 113 to 128 ms; 103 to 181 ms p50 at 1000/s for the five that sustain it ([shapes](results/2026-10-24-shapes.md)), with Debezium polling every 20 ms. With its default 500 ms it was 441 ms. Skipping the change-data hop, listed as a later optimization, may not be needed. |
-| JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap. The live slope, 11 to 12 KiB per connection, is the lowest after V8's 5 KiB; the Java gateway's resident memory starts at about 320 MiB. |
+| JVM gateway on ZGC | Not tried yet; the Java runs used the default collector and a JVM-sized heap. The live slope, 11 to 12 KiB per connection, is the lowest after V8's 5 to 9 KiB; the Java gateway's resident memory starts at about 320 MiB. |
 
 Where the prototype departs from the design, and what it means for extrapolating:
 
 - **Push routing.** The design routes a push directly to the gateway nodes holding the user's devices, found in Presence, one RPC per node, and rejects a subscription per user because of the count at 100M connections. The prototype uses a Valkey pub/sub channel per user. Invisible at the prototype's size; the design's point at scale.
-- **Acks.** The design forwards a device's ack at most once a minute and on disconnect; the gateways did not when these results were taken, writing them as they came, and the load generator acks once a second per device, so the measured load included more ack writes than the design would see. The gateways now forward at most one a minute per connection.
+- **Acks.** The design forwards a device's ack at most once a minute and on disconnect; every gateway has done so since the 2026-10-21 results, including those above. The load generator acks once a second per device, which the gateways coalesce.
 - **Rate limits** (50 frames a second per connection) are far above what the load generator sends per device, so they did not shape its traffic.

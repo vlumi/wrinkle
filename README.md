@@ -29,11 +29,12 @@ Users register with a name and a password, sign in on any number of devices, eac
 
 ## How it works
 
-Three ideas carry the design:
+Four ideas carry the design:
 
-- **Per-conversation sequence.** Every message gets a sequence number from a counter owned by its conversation, assigned in the transaction that stores it. Every device orders a conversation by it, so all participants converge on the same order, and a device can tell when it is missing a message.
-- **Per-user event log.** Everything a user's devices need to know (messages, read receipts, deletions and reactions in any of their conversations, and changes to their profile, devices and sticker palette) is appended to that user's log. A device keeps one cursor into it, and sync returns what came after.
+- **Per-conversation sequence.** Every message gets the next number of its conversation's counter, in the transaction that stores it. Every device orders a conversation by it, so all participants converge on the same order, and a device can tell when it is missing a message.
+- **Per-user event log.** Everything a user's devices need to know (messages, read receipts, deletions and reactions in any of their conversations, and changes to their profile, devices, contacts and sticker palette) is appended to that user's log. A device keeps one cursor into it, and sync returns what came after.
 - **Push is an optimization, sync is the guarantee.** Connected devices get events over WebSocket as they happen. A device that misses a push gets the same events from its log on the next sync.
+- **The log delivers, the conversations keep the history.** A log keeps 30 days of events; a device away longer starts over from its conversations. History is kept for good: the last 30 days in MySQL, older messages in HBase, where a conversation's history reads as one range.
 
 ```mermaid
 flowchart TB
@@ -44,16 +45,18 @@ flowchart TB
   subgraph services ["Services"]
     conv["Conversation"]
     sync["Sync"]
+    fanout["Fan-out"]
+    jobs["Per-shard jobs"]
   end
   convdb[("Conversation DB")]
   userdb[("User DB")]
+  hbase[("HBase")]
   kafka[["Kafka"]]
-  fanout["Fan-out"]
   valkey[("Valkey")]
   apns["APNs"]
 
   devices <-- "WebSocket" --> lb <--> gw
-  gw -- "gRPC" --> slb --> services
+  gw -- "gRPC" --> slb --> conv & sync
   conv -- "message + outbox" --> convdb
   sync --> userdb
   convdb -- "CDC" --> kafka --> fanout
@@ -61,24 +64,26 @@ flowchart TB
   fanout -- "publish" --> valkey
   valkey -- "push" --> gw
   fanout -- "offline iOS" --> apns
+  jobs -- "history past 30 days" --> hbase
+  conv -. "old history" .-> hbase
 
   classDef user fill:#2f7d4a,stroke:#2f7d4a,color:#fff,font-weight:bold
   class devices user
 ```
 
-The diagram shows the split shape, which scales by adding gateways and services instances. A monolith runs the gateway, the services and the fan-out in one process, without the balancers. The full picture, with the data model, the flows, the guarantees and what happens when a part fails, is in [docs/architecture.md](docs/architecture.md).
+A message's path: the gateway passes the send to the conversation service, which stores the message with an outbox row in one transaction. Debezium carries the committed outbox row through Kafka to the fan-out, which appends the event to every participant's log and publishes it to the gateways holding their devices; devices that are not connected get an APNs notification. The diagram shows the split shape, which scales by adding gateways and services instances; a monolith runs everything in one process, without the balancers. The full picture, with the data model, the flows, the guarantees and what happens when a part fails, is in [docs/architecture.md](docs/architecture.md).
 
 Components:
 
-- **Load balancers:** one sends each device's connection to the gateway with the fewest and stops sending to a gateway that fails its check; the other spreads the gateways' requests over the services instances, one request at a time, since each gateway keeps a single connection. Both are HAProxy. TLS ends at the edge: locally a separate HAProxy on port 8443 in front of the device balancer, which a deployment folds into the balancer.
-- **Gateway:** holds the WebSocket connections, tracks which device is connected where, and forwards requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`). It enforces the limits the contract sets per connection and drains on shutdown, closing connections so devices reconnect elsewhere.
-- **Conversation service:** everything on the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs; each change is stored with an outbox row in one transaction. Message content is encrypted end to end: the services store and relay ciphertext and the keys devices wrap for each other.
-- **Sync service:** everything on the user keyspace: accounts (registration and sign-in with passwords, a token per device, profiles, devices), incremental sync, conversation lists, uploads, stickers and push token registration.
-- **Fan-out workers** (the `fanout` role): run in the services processes, one Kafka consumer group across them. They read committed changes from Kafka (captured from the outbox by Debezium), append them to each participant's event log, and publish them to the gateways holding the participants' devices. Devices that are not connected and have registered for push get an APNs notification instead.
-- **Conversation DB and user DB:** messages, reactions, wrapped keys and the outbox, sharded by conversation; event logs, conversation lists, devices, uploads and stickers, sharded by user.
-- **Presence:** which device is connected to which gateway process, kept only while that process keeps announcing itself, and one push channel per user, in Valkey.
+- **Load balancers** (HAProxy): one sends each device's connection to the gateway with the fewest; the other spreads the gateways' requests over the services instances, one request at a time. TLS ends at an edge in front of the device balancer, locally on port 8443.
+- **Gateways** hold the WebSocket connections, track in Valkey which device is connected where, and forward requests to the services, in-process or over an internal gRPC contract (`proto/wrinkle/backend/v1`). They enforce the contract's limits per connection and drain on shutdown.
+- **Services**, stateless: the *conversation service* owns the conversation keyspace (sends, read marks, groups, deletions, reactions, key epochs, history in both tiers); the *sync service* owns the user keyspace (accounts, devices, profiles, contacts, sync, conversation lists, uploads, stickers, push tokens).
+- **Background work**, in the services processes: the *fan-out*, one Kafka consumer group across them; per shard, the *log trimmer* and the *history mover*, each shard's round leased in Valkey to one instance at a time, so instances share the shards; and a sweeper of unused uploads.
+- **Storage:** MySQL in two keyspaces, by conversation and by user, sharded with Vitess or on one plain MySQL; HBase for history older than 30 days; object storage for blobs (avatars, stickers, attachments); Valkey for presence, push channels and the leases; Kafka for the change stream.
 
-Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, Garage for blobs (avatars, stickers and attachments), HBase for history older than 30 days, and Prometheus with Grafana for the metrics every backend exposes under the same names.
+Message content is encrypted end to end: the services store and relay ciphertext and the keys devices wrap for each other, which they cannot unwrap.
+
+Infrastructure locally: Vitess (or MySQL), Kafka, Debezium, Valkey, Garage for blobs, HBase and its REST server, and Prometheus with Grafana for the metrics every backend exposes under the same names.
 
 ## Implementations
 
@@ -92,7 +97,7 @@ All backends implement the same Protobuf contract and pass the same conformance 
 | [Elixir](backends/elixir/README.md) | gateways, beside Go, Java or TypeScript services | through the services |
 | [Rust](backends/rust/README.md) | gateways, beside Go, Java or TypeScript services | through the services |
 
-Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
+Clients: a [web client](clients/web/README.md) (React and TypeScript, served as a static site) and an [iOS client](clients/ios/README.md) (SwiftUI), both working against any backend, and the [Go client library](clients/go/README.md) the tests and the load generator use.
 
 ## Measuring
 
@@ -110,11 +115,11 @@ Absolute numbers depend on the machine and say little about production. Comparis
 Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client (26 or later for the TypeScript backend), and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
 
 1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, HBase and its REST server, Prometheus, Grafana). `make infra-up PROFILE=mysql` runs plain MySQL in place of Vitess, the same schema unsharded.
-2. `make cluster-up`: the whole backend in containers, two Go and one Java services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono` or `make run-java-mono`; `mono` in a target name is the monolith, `gw` a gateway.
+2. `make cluster-up`: the whole backend in containers, two Go, one Java and one TypeScript services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono`, `make run-java-mono` or `make run-ts-mono`; `mono` in a target name is the monolith, `gw` a gateway.
 3. `make web`: the web client, built and served over HTTPS on port 8081, together with the TLS edge on port 8443 in front of whatever serves port 8080 (`make tls-up`, which makes the certificate with mkcert if there is none yet). Devices reach the backend only through the edge: port 8080 listens on loopback, and the web server refuses to serve the network without a certificate.
 4. Open `https://localhost:8081/` on the Mac. Phones and other computers on the network open the Mac's address instead and must trust the certificate first: [docs/local-network.md](docs/local-network.md), which also covers the iOS app, push notifications and running the backends natively.
 
-Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090, and http://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer. `make ci` is the gate before every push: lint, tests, conformance against every backend. `make measure-go-mono` runs the measurement protocol for one backend, `make measure-all` for every one. `make infra-down` stops the stack and discards all data; `make infra-reset` recreates it empty, which is also the fix when the Vitess container has restarted and no event is delivered any more. Plain `make` lists every routine operation, grouped.
+Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090, and https://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer. `make ci` is the gate before every push: lint, tests, conformance against every backend. `make measure-go-mono` runs the measurement protocol for one backend, `make measure-all` for every one. `make infra-down` stops the stack and discards all data; `make infra-reset` recreates it empty, which is also the fix when the Vitess container has restarted and no event is delivered any more. Plain `make` lists every routine operation, grouped.
 
 ## Layout
 

@@ -1,6 +1,8 @@
 # Architecture
 
-How Wrinkle is put together, independent of the language a backend is written in. The [README](../README.md) gives the short version; each backend's README describes its own code: [Go](../backends/go/README.md), [Java](../backends/java/README.md), [Elixir](../backends/elixir/README.md), [Rust](../backends/rust/README.md). The design is sized for the figures in [capacity.md](capacity.md), and design choices are weighed at that scale, even where a small deployment could do with less.
+How Wrinkle is put together, independent of the language a backend is written in. The [README](../README.md) gives the short version; each backend's README describes its own code: [Go](../backends/go/README.md), [Java](../backends/java/README.md), [TypeScript](../backends/ts/README.md), [Elixir](../backends/elixir/README.md), [Rust](../backends/rust/README.md). The design is sized for the figures in [capacity.md](capacity.md), and design choices are weighed at that scale, even where a small deployment could do with less.
+
+In brief: devices hold a WebSocket to a gateway, which forwards their requests to stateless services. A change, such as a message, is stored in MySQL with an outbox row in one transaction; Debezium carries the committed outbox rows through Kafka to the fan-out, which appends events to each recipient's log and pushes them to the gateways holding their devices. A device reads what it missed from its log by cursor. The logs keep 30 days of events; message history is kept for good, the last 30 days in MySQL and older messages in HBase. Background work (the fan-out, the log trimmer, the history mover, the upload sweeper) runs in the services processes, the per-shard jobs each shard leased to one instance at a time.
 
 ## Principles
 
@@ -12,7 +14,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 ## Choices
 
 - **Debezium over a relay.** The services could produce to Kafka themselves, from an outbox they poll. A relay gives the same guarantee with fewer moving parts, but it loses the order of a conversation's events unless it polls each shard in order, has to be written in every services language, and must follow resharding by itself. Reading the change log keeps commit order for free, which at the scale the design aims for outweighs the extra process.
-- **Requests balanced one at a time.** Each gateway keeps one HTTP/2 connection to the services. A balancer that spread connections would pin each gateway to one services instance, so the services balancer is HAProxy in HTTP/2 mode, which spreads requests. Client-side balancing in each gateway would save the hop but needs doing in three gRPC clients of uneven support.
+- **Requests balanced one at a time.** Each gateway keeps one HTTP/2 connection to the services. A balancer that spread connections would pin each gateway to one services instance, so the services balancer is HAProxy in HTTP/2 mode, which spreads requests. Client-side balancing in each gateway would save the hop but needs doing in five gRPC clients of uneven support.
 - **No Kubernetes.** Its Services balance connections too, so it would not replace HAProxy for the RPC, and it would add image builds and networking layers to a project whose point is comparing processes measured natively. The cluster is plain Compose.
 - **A key per conversation and epoch** for end-to-end encryption, rather than an established protocol: simple enough to follow end to end and the same for two users and for groups. MLS could replace it behind the same requests ([below](#end-to-end-encryption)).
 
@@ -23,21 +25,22 @@ How Wrinkle is put together, independent of the language a backend is written in
 | Gateway | devices' WebSocket connections | connections in memory; presence in Valkey | more gateways behind the device balancer |
 | Services | the conversation service and the sync service | none; all in the databases | more instances behind the services balancer |
 | Fan-out | the outbox stream from Kafka | consumer offsets in Kafka | partitions of the topic, shared by one consumer group |
+| Per-shard jobs | the log trimmer and the history mover, a loop per shard | a lease per shard in Valkey | shards, shared among the services instances |
 | Conversation DB | conversations, messages, read marks, reactions, wrapped keys, the outbox | sharded by conversation id | Vitess shards |
 | User DB | users, devices, event logs, conversation lists, uploads, stickers and palettes | sharded by user id | Vitess shards |
 | Kafka and Debezium | committed outbox rows of both keyspaces, in commit order per conversation or user | the topics | partitions |
-| Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
+| Valkey | presence, push channels, gateway instance keys, leases of the per-shard work | in memory, rebuildable | cluster or more instances |
 | Object storage | blobs: avatars, stickers, encrypted attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
 | History cold tier | messages older than the hot window | HBase, standalone locally; an HBase cluster or Bigtable in production | regions, split by conversation id |
 
-The services are two, split by keyspace. The conversation service owns the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs. The sync service owns the user keyspace: accounts, devices and profiles, sync and conversation lists, uploads, stickers and push tokens; the code splits it further (accounts, uploads and stickers are packages of their own in Go, Java and TypeScript). The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
+The services are two, split by keyspace. The conversation service owns the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs. The sync service owns the user keyspace: accounts, devices and profiles, sync and conversation lists, uploads, stickers and push tokens; the code splits it further (accounts, uploads and stickers are packages of their own in Go, Java and TypeScript). The fan-out runs inside the services processes, and so do the background jobs: the upload sweeper, and per shard the log trimmer and the history mover (with the fan-out role in Go and Java, wherever the services run in TypeScript). Each shard has its own loop, by default every minute (`WRINKLE_LOG_TRIM_INTERVAL_S`, `WRINKLE_COLD_MOVE_INTERVAL_S`), and a round needs the shard's lease in Valkey (`lease:<job>:<keyspace>/<shard>`, 30 s, renewed every 10 s, dropped after the round), so several instances share the shards instead of repeating each other's work, and the shards of one that stops are taken over within 30 s. A round that loses its lease stops; repeating one is harmless anyway. The jobs find the shards through vtgate and reach each over a connection to that shard alone; on the `mysql` profile a keyspace is one shard. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
 
 ### Shapes
 
 | Shape | What runs | Used for |
 |---|---|---|
-| Monolith | one process with every role (Go, Java) | the simplest run; conformance and measurement |
-| Split | a gateway and a services process beside it, no balancers | conformance and measurement of a gateway (all four languages) |
+| Monolith | one process with every role (Go, Java, TypeScript) | the simplest run; conformance and measurement |
+| Split | a gateway and a services process beside it, no balancers | conformance and measurement of a gateway (all five languages; Elixir and Rust beside Go services) |
 | Side by side | any number of gateways and services instances on the host, two HAProxy balancers in Docker | the scaled shape, natively ([local-network.md](local-network.md)) |
 | Cluster | the same in containers, counts per language and role | trying the scaled shape without native toolchains |
 
@@ -157,9 +160,9 @@ What the services still see: who talks to whom and when, sizes, group topics and
 
 ## Blobs
 
-Avatars, stickers and attachments are blobs in object storage, never in the databases or through the WebSocket. A device asks the services for an upload slot with CreateUpload, giving the purpose, media type and size; the services record the upload in the user keyspace and answer with a path signed for an HTTP PUT of exactly that type and size (AWS signature version 4, by hand in Go and Java, with shared test vectors). The device uploads, then refers to the blob, as UpdateProfile does for an avatar; the services check that the blob is the user's and is there. Blobs are read with a plain GET by their random id and never change, so clients cache them for good.
+Avatars, stickers and attachments are blobs in object storage, never in the databases or through the WebSocket. A device asks the services for an upload slot with CreateUpload, giving the purpose, media type and size; the services record the upload in the user keyspace and answer with a path signed for an HTTP PUT of exactly that type and size (AWS signature version 4, by hand in Go, Java and TypeScript, with shared test vectors). The device uploads, then refers to the blob, as UpdateProfile does for an avatar; the services check that the blob is the user's and is there. Blobs are read with a plain GET by their random id and never change, so clients cache them for good.
 
-Locally the store is Garage, behind an HAProxy on loopback port 9200 that also takes `/blobs/` from the TLS edge, so devices use one address for the WebSocket and the blobs. Uploads are signed for a fixed host name that the proxy sets, whatever address a device used. Uploads nothing refers to are deleted by a sweeper in the fan-out a day after their slot was made; a replaced avatar, or an attachment of a deleted message, goes back to unused and is deleted the same way.
+Locally the store is Garage, behind an HAProxy on loopback port 9200 that also takes `/blobs/` from the TLS edge, so devices use one address for the WebSocket and the blobs. Uploads are signed for a fixed host name that the proxy sets, whatever address a device used. Uploads nothing refers to are deleted by a sweeper in the services processes a day after their slot was made; a replaced avatar, or an attachment of a deleted message, goes back to unused and is deleted the same way.
 
 ## Flows
 
@@ -192,9 +195,9 @@ sequenceDiagram
 
 Until Connect completes, the gateway answers anything but Register, SignIn and Connect with `UNAUTHENTICATED`, and closes a connection that has not connected within 5 seconds of opening or of its last Register or SignIn. The gateway answers Connect only once the user's push channel is subscribed, so no push that follows is missed; if that does not happen within 5 seconds (Valkey unreachable), Connect fails with `UNAVAILABLE` and may be retried. The response carries the cursor the device last acked and the head of the user's log, so a device knows at once how far behind it is. Sync pages through the log, up to 1000 events at a time.
 
-The log is for delivery, not the archive: it keeps events for 30 days (`WRINKLE_LOG_RETENTION_S`), and the conversations keep the history. A trimmer beside the upload sweeper (the fan-out role in Go and Java, the services in TypeScript) drops older events every hour (`WRINKLE_LOG_TRIM_INTERVAL_S`), a page at a time on each shard of the user keyspace, oldest first through an index on the events' time, over a connection to that shard alone. For each user in a page, one transaction raises `user.log_tail` to the newest position dropped and deletes the events up to it, so a log stays contiguous. Sync reads the tail after the events, and a cursor before it fails with `CURSOR_EXPIRED`: either the events read were all there, or the drop came first and the tail shows it, so a device never gets a log with a hole. A device whose cursor expired starts again as one without history: from the head given by Connect, then the conversation list, contacts and history fetched again, which leaves nothing in between unseen. Any number of trimmers may run; raising a tail and dropping what is under it can be done twice.
+The log is for delivery, not the archive: it keeps events for 30 days (`WRINKLE_LOG_RETENTION_S`), and the conversations keep the history. A trimmer, one of the per-shard jobs ([Processes](#processes)), drops older events a page at a time on each shard of the user keyspace, oldest first through an index on the events' time. For each user in a page, one transaction raises `user.log_tail` to the newest position dropped and deletes the events up to it, so a log stays contiguous. Sync reads the tail after the events, and a cursor before it fails with `CURSOR_EXPIRED`: either the events read were all there, or the drop came first and the tail shows it, so a device never gets a log with a hole. A device whose cursor expired starts again as one without history: from the head given by Connect, then the conversation list, contacts and history fetched again, which leaves nothing in between unseen.
 
-The contract has one event kind nothing produces: `MessageFailedEvent`, reserved for a message that SendMessage accepted but could not be delivered. The design has no such case: a send fails synchronously or not at all, and the fan-out retries until every participant's log has the event. Dropping it from the contract, or giving it a producer, is open (ROADMAP.md, Open, Contract).
+The contract has one event kind nothing produces: `MessageFailedEvent`, reserved for a message that SendMessage accepted but could not be delivered. The design has no such case: a send fails synchronously or not at all, and the fan-out retries until every participant's log has the event. Dropping it from the contract, or giving it a producer, is open ([ROADMAP.md](../ROADMAP.md), "Contract clean-up").
 
 ### Sending a message
 
@@ -235,7 +238,7 @@ The sender's response returns after step 1; everything after it is asynchronous.
 
 ### Deleting a message
 
-A sender deletes their own message for everyone with `DeleteMessage`. The message keeps its seq, since sequences are dense and devices find gaps by them; its content and blob ids are cleared and `deleted_at` set, in the conversation keyspace, with an outbox row that names the outbox row which carried the message. The fan-out appends a `MessageDeletedEvent` to each member's log and, in the same transaction, rewrites the member's earlier copy of the message (found by that outbox row, through the log's source key) and the conversation list's preview if it was the last message; its attachments go back to unused for the sweeper.
+A sender deletes their own message for everyone with `DeleteMessage`. The message keeps its seq, since sequences are dense and devices find gaps by them; its body is replaced by one holding only `deleted_at` and its blob ids are cleared, in the conversation keyspace, with an outbox row that names the outbox row which carried the message. The fan-out appends a `MessageDeletedEvent` to each member's log and, in the same transaction, rewrites the member's earlier copy of the message (found by that outbox row, through the log's source key) and the conversation list's preview if it was the last message; its attachments go back to unused for the sweeper.
 
 What is guaranteed: once the deletion is in a member's log, no Sync and no GetMessages returns the content again, from any backend. What is not: a device that already holds the content keeps it until it processes the deletion event, which is the client's job, and a notification already shown stays shown. For the latter, devices that are not connected get a background push so the iOS app can withdraw the alert, but iOS delivers background pushes at its discretion and the backend does not retry them.
 
@@ -247,7 +250,7 @@ A user's reactions to a message are one sealed set of up to three emoji, under t
 
 Message history is kept for good, but only the last 30 days of it (`WRINKLE_HISTORY_HOT_S`) in MySQL; older messages move to HBase, in a table keyed by conversation id and seq, so a conversation's history is one range ([schema](../schema/hbase/schema.rb)). A row holds the message's columns and its reactions as one cell, and every write puts a whole row, so any write can be repeated. `conversation.cold_seq` is the watermark: the history up to it is in HBase, the rest in MySQL.
 
-A mover in Go, Java and TypeScript, beside the log trimmer, runs every hour (`WRINKLE_COLD_MOVE_INTERVAL_S`). On each shard of the conversation keyspace it pages through the messages by age, through an index on their time, and takes each conversation once: up to 200 messages at a time in seq order, it locks the conversation's row, puts the messages to HBase, raises `cold_seq` and deletes them from MySQL in one transaction, stopping at the first message within the window. A failure after the puts leaves copies of rows still in MySQL, which the next move puts again.
+A mover, one of the per-shard jobs ([Processes](#processes)), pages, on each shard of the conversation keyspace, through the messages by age, through an index on their time, and takes each conversation once: up to 200 messages at a time in seq order, it locks the conversation's row, puts the messages to HBase, raises `cold_seq` and deletes them from MySQL in one transaction, stopping at the first message within the window. A failure after the puts leaves copies of rows still in MySQL, which the next move puts again.
 
 GetMessages reads MySQL first, then the watermark, then HBase below the lowest seq MySQL gave. The watermark only rises, and what it covers is in HBase before it does, so nothing falls between the two reads; a page whose messages the watermark has passed meanwhile is read again, for their reactions. A point read that misses in MySQL, the conversation list's last message, tries HBase. Deleting and reacting take the conversation's row lock as before and, for a message at or below `cold_seq`, rewrite its HBase row before the transaction commits, putting the old row back if it does not; the outbox row is written in MySQL as before, so the events and the fan-out do not change. What stays in MySQL: a resend is recognized while its original is there, and a group read event tells the senders found there. Go and Java use HBase's native clients; Node has none maintained, so TypeScript goes through HBase's REST server, whose scanners read forward only, which works because a conversation's seqs in HBase have no gaps.
 
@@ -303,7 +306,7 @@ Devices connect over TLS, terminated at the edge, since they send passwords; pla
 - Frames up to 64 KiB; Connect within 5 seconds of opening, or of the last Register or SignIn.
 - Per connection, 50 protobuf frames a second on average in bursts of 100, and 32 requests in flight. Requests beyond the limits get `RESOURCE_EXHAUSTED`; other frames beyond them are dropped. WebSocket control frames are not counted.
 - WebSocket pings every 30 seconds; a connection silent for 90 seconds is closed.
-- Each way a connection ends has a close code, and clients reconnect with backoff after any of them, then sync.
+- Each way a connection ends has a close code, and clients reconnect with backoff after any of them but 4001 (signed out), then sync.
 - A device that does not keep up with its pushed events is closed (1013, with 32 events queued) rather than buffered for; it syncs on reconnect.
 
 ### Presence
@@ -327,9 +330,9 @@ Each gateway keeps one HTTP/2 connection to the services balancer, which spreads
 | What fails | Effect | Recovery |
 |---|---|---|
 | A gateway | its devices disconnect | they reconnect through the balancer to another gateway and sync; presence entries expire within 90 s |
-| A services instance | requests in flight on it fail with `UNAVAILABLE` | the balancer drops it within 2 s; Kafka moves its fan-out partitions to the other instances |
+| A services instance | requests in flight on it fail with `UNAVAILABLE` | the balancer drops it within 2 s; Kafka moves its fan-out partitions to the other instances, and its shard leases expire within 30 s for others to take |
 | Kafka or Debezium | sends still succeed; nothing is fanned out | the stream resumes from where it was; the logs catch up and devices get the events then |
-| Valkey | no pushes; presence unknown | devices still sync; when it is back, gateways resubscribe and announce themselves again, but devices that stayed connected have no presence entry until they reconnect, so they may get notifications meanwhile |
+| Valkey | no pushes; presence unknown; log trimming and history moves pause | devices still sync; when it is back, gateways resubscribe and announce themselves again, but devices that stayed connected have no presence entry until they reconnect, so they may get notifications meanwhile |
 | APNs | no notifications | none needed; devices sync when opened |
 | Object storage | uploads and downloads fail; sends with attachments fail | messages without attachments are unaffected; clients retry |
 | HBase | history older than the hot window cannot be read or changed; the mover stops | recent history and sends are unaffected; the mover catches up |
@@ -344,7 +347,8 @@ The prototype's single Vitess process has one known weakness: it starts empty wh
 - **Requests** scale with services instances, which hold no state.
 - **Writes** scale with shards. A send is one transaction on one conversation shard; its fan-out is one transaction per participant on their user shards.
 - **Fan-out** scales with Kafka partitions, keyed by conversation, so different conversations proceed in parallel and each stays in order.
-- **The database** is where a laptop runs out first: above about 1000 messages a second the single Vitess process limits every backend ([ROADMAP.md](../ROADMAP.md), "Database ceiling").
+- **Background work** scales with shards: each shard's trim and move runs on its own, and the services instances share the shards through the leases.
+- **The database** is where a laptop runs out first: above about 1000 messages a second the single Vitess process limits every backend ([ROADMAP.md](../ROADMAP.md), "Database ceiling"; the plain MySQL profile is not measured yet).
 
 Where the prototype departs from the design it was sized on, push routing through a channel per user and frequent acks, is listed in [capacity.md](capacity.md).
 
@@ -352,9 +356,9 @@ Where the prototype departs from the design it was sized on, push routing throug
 
 | | Gateway | Services and fan-out | Push |
 |---|---|---|---|
-| [Go](../backends/go/README.md) | goroutines, coder/websocket | database/sql, franz-go | APNs |
-| [Java](../backends/java/README.md) | Armeria on Netty, virtual threads | HikariCP, the Kafka client | not yet |
-| [TypeScript](../backends/ts/README.md) | ws on Node, one event loop | mysql2, librdkafka | APNs |
+| [Go](../backends/go/README.md) | goroutines, coder/websocket | database/sql, franz-go, gohbase | APNs |
+| [Java](../backends/java/README.md) | Armeria on Netty, virtual threads | HikariCP, the Kafka client, the HBase client | APNs |
+| [TypeScript](../backends/ts/README.md) | ws on Node, one event loop | mysql2, librdkafka, HBase's REST server | APNs |
 | [Elixir](../backends/elixir/README.md) | Bandit, a process per connection | beside Go, Java or TypeScript services | through the services |
 | [Rust](../backends/rust/README.md) | axum on tokio, a task per connection | beside Go, Java or TypeScript services | through the services |
 
