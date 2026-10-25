@@ -43,24 +43,34 @@ const services = [
           ["status", "http://localhost:15000/debug/status"],
           ["variables", "http://localhost:15000/debug/vars"],
         ],
+        note: "the vitess profile",
+      },
+      {
+        name: "HBase (the cold tier)",
+        probe: "http://127.0.0.1:16010/jmx?qry=Hadoop:service=HBase,name=Master,sub=Server",
+        links: [
+          ["master", "http://localhost:16010/"],
+          ["REST server", "http://localhost:8086/version/cluster"],
+        ],
       },
     ],
   },
   {
     group: "Backends",
     items: [
-      backend("Backend or load balancer :8080", 8080, "make run-go-mono, run-java-mono or lb-up"),
+      backend("Backend or load balancer :8080", 8080, "make run-go-mono, run-java-mono, run-ts-mono or lb-up"),
       ...[1, 2, 3, 4].map((n) =>
         backend(
           `Services instance ${n} :${8190 + n} (RPC :${9100 + n})`,
           8190 + n,
-          n === 1 ? "make run-go-services or run-java-services" : `INSTANCE=${n}`,
+          n === 1 ? "make run-go-services, run-java-services or run-ts-services" : `INSTANCE=${n}`,
         ),
       ),
       backend("Go gateway :8180", 8180, "make run-go-gw"),
       backend("Elixir gateway :8181", 8181, "make run-elixir-gw", { pprof: false }),
       backend("Rust gateway :8182", 8182, "make run-rust-gw", { pprof: false }),
       backend("Java gateway :8183", 8183, "make run-java-gw", { pprof: false }),
+      backend("TypeScript gateway :8184", 8184, "make run-ts-gw", { pprof: false }),
     ],
   },
 ];
