@@ -58,7 +58,7 @@ flowchart TB
     o["outbox: change events with their recipients, deleted on insert"]
   end
   subgraph user ["User keyspace, by user_id"]
-    u["user: name, icon, avatar, password hash, log_head"]
+    u["user: name, icon, avatar, password hash, log_head, log_tail"]
     n["user_name: claim of a name, by name"]
     d["device: token hash, public key, acked position, push token"]
     e["user_event: the log, by position"]
@@ -187,6 +187,8 @@ sequenceDiagram
 
 Until Connect completes, the gateway answers anything but Register, SignIn and Connect with `UNAUTHENTICATED`, and closes a connection that has not connected within 5 seconds of opening or of its last Register or SignIn. The gateway answers Connect only once the user's push channel is subscribed, so no push that follows is missed; if that does not happen within 5 seconds (Valkey unreachable), Connect fails with `UNAVAILABLE` and may be retried. The response carries the cursor the device last acked and the head of the user's log, so a device knows at once how far behind it is. Sync pages through the log, up to 1000 events at a time.
 
+The log is for delivery, not the archive: it keeps events for 30 days (`WRINKLE_LOG_RETENTION_S`), and the conversations keep the history. A trimmer beside the upload sweeper (the fan-out role in Go and Java, the services in TypeScript) drops older events every hour (`WRINKLE_LOG_TRIM_INTERVAL_S`), a page at a time on each shard of the user keyspace, oldest first through an index on the events' time, over a connection to that shard alone. For each user in a page, one transaction raises `user.log_tail` to the newest position dropped and deletes the events up to it, so a log stays contiguous. Sync reads the tail after the events, and a cursor before it fails with `CURSOR_EXPIRED`: either the events read were all there, or the drop came first and the tail shows it, so a device never gets a log with a hole. A device whose cursor expired starts again as one without history: from the head given by Connect, then the conversation list, contacts and history fetched again, which leaves nothing in between unseen. Any number of trimmers may run; raising a tail and dropping what is under it can be done twice.
+
 The contract has one event kind nothing produces: `MessageFailedEvent`, reserved for a message that SendMessage accepted but could not be delivered. The design has no such case: a send fails synchronously or not at all, and the fan-out retries until every participant's log has the event. Dropping it from the contract, or giving it a producer, is open (ROADMAP.md, Open, Contract).
 
 ### Sending a message
@@ -277,7 +279,7 @@ A device acks the cursor it has processed; the gateway writes it to the device's
 - **Order within a conversation.** Sequence numbers are dense and assigned under the conversation's row lock. Debezium publishes a shard's changes in commit order, all of a conversation's records go to one Kafka partition, and a fan-out worker handles one conversation's records in order, so each participant's log has them in sequence order.
 - **At least once, without duplicates.** A fan-out worker commits its Kafka offsets only after every record of a batch is in every log; a failed batch is fetched again. A redelivered record finds its source key (conversation id and outbox id) already in the log and is skipped.
 - **Idempotent sends.** The client's message id makes a retried send return the original message.
-- **Nothing lost to a missed push.** Pushes go only to devices connected at the moment; anything a device did not receive is in its log, and Sync from its cursor returns it.
+- **Nothing lost to a missed push.** Pushes go only to devices connected at the moment; anything a device did not receive is in its log, and Sync from its cursor returns it, or, after the log's retention, fails with `CURSOR_EXPIRED` and the device rebuilds from the conversations.
 - **Monotonic positions.** Read positions and acked cursors only move forward.
 - **A removed member reads nothing new.** Sends are refused until the next epoch, which is wrapped for current members only, and the member's log gets no further events of the group.
 

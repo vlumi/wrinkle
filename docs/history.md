@@ -123,3 +123,9 @@ A dated log of how Wrinkle got to where it is: the phases, the questions settled
 **Pushes from Java.** The Java fan-out sends APNs notifications, a port of Go's notifier on the JDK's HTTP/2 client, and reads `.env` as the others do. Every full backend now pushes, so a mixed pool no longer loses the notifications of the conversations a Java instance consumes.
 
 **Eight shapes measured** ([results](results/2026-10-24-shapes.md)), at 7e6a395, the TypeScript backend for the first time. Five sustained 1000 messages per second: the Rust and Java gateways and the three monoliths, the TypeScript one with the lowest latency at that rate and about two thirds of the Go monolith's CPU per message. The Go, TypeScript and Elixir gateways delivered everything, or nearly, at 1000/s but with tails past a second, each queueing on the gateway's side of the RPC while the monolith of the same language did not; the TypeScript gateway kept the least live memory per idle connection, 5 KiB. With its schedulers no longer spinning, the Elixir gateway used 27 % less CPU per message and delivered 98 % at 1000/s, up from 95.
+
+## 2026-10-25
+
+**A plain MySQL profile.** `make infra-up PROFILE=mysql` runs the schema unsharded on one MySQL in place of Vitess, with Debezium's MySQL connector reading the binlog into the same topics; the backends needed only to connect as `root`, since without vtgate each keyspace is one shard. Every shape passes `make ci` on both.
+
+**Bounded user logs.** The first step of keeping history for good: the user logs, the delivery path, keep events for 30 days, and Sync before the log's tail fails with a new error, `CURSOR_EXPIRED`, after which a device starts again from the conversations. The trimmer finds old events per shard, over a connection to that shard alone, and raises the tail in the transaction that deletes them, so a sync either sees every event after its cursor or the error, never a gap.
