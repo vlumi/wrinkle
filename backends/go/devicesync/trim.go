@@ -17,7 +17,7 @@ const trimPage = 1000
 // and dropping what is under it can be done twice.
 type Trimmer struct {
 	db        *sql.DB
-	shards    []*sql.DB
+	shards    *vtdb.ShardPools
 	retention time.Duration
 	interval  time.Duration
 	log       *slog.Logger
@@ -27,32 +27,14 @@ type Trimmer struct {
 // connection to that shard alone, so a page never spans shards; without
 // vtgate the keyspace is one shard.
 func NewTrimmer(ctx context.Context, addr, keyspace string, db *sql.DB, retention, interval time.Duration, log *slog.Logger) (*Trimmer, error) {
-	s, err := vtdb.LoadShards(ctx, db, keyspace)
+	shards, err := vtdb.OpenShardPools(ctx, addr, keyspace, db)
 	if err != nil {
 		return nil, err
 	}
-	t := &Trimmer{db: db, retention: retention, interval: interval, log: log}
-	for _, name := range s.Names() {
-		shard, err := vtdb.Open(ctx, addr, keyspace+":"+name, 1)
-		if err != nil {
-			t.Close()
-			return nil, err
-		}
-		t.shards = append(t.shards, shard)
-	}
-	if len(t.shards) == 0 {
-		t.shards = []*sql.DB{db}
-	}
-	return t, nil
+	return &Trimmer{db: db, shards: shards, retention: retention, interval: interval, log: log}, nil
 }
 
-func (t *Trimmer) Close() {
-	for _, shard := range t.shards {
-		if shard != t.db {
-			shard.Close()
-		}
-	}
-}
+func (t *Trimmer) Close() { t.shards.Close() }
 
 // Run trims after a minute, or the interval when shorter, then at every
 // interval, until the context ends.
@@ -78,7 +60,7 @@ func (t *Trimmer) Run(ctx context.Context) error {
 func (t *Trimmer) Trim(ctx context.Context) (int, error) {
 	cutoff := vtdb.Now().Add(-t.retention)
 	total := 0
-	for _, shard := range t.shards {
+	for _, shard := range t.shards.All() {
 		for {
 			n, err := t.trimPage(ctx, shard, cutoff)
 			total += n
