@@ -64,7 +64,9 @@ export const conversationFeature =
   (moving?: MoveOptions): FeatureFactory =>
   (deps) => ({
     ...handlersOf(deps),
-    start: moving && (() => startMover(deps.conversations, deps.cold, deps.log.with({ role: "mover" }), moving)),
+    start:
+      moving &&
+      (() => startMover(deps.conversations, deps.cold, deps.leases, deps.log.with({ role: "mover" }), moving)),
   });
 
 const handlersOf: FeatureFactory = (deps) => {

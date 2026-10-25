@@ -18,8 +18,8 @@ src/uploads/        upload slots for blobs, the attachments a message uses, and 
 src/stickers/       stickers made from uploads, palettes and their events
 src/fanout/         the Kafka consumer: both outboxes to the recipients' logs and lists, batched per shard, then published
 src/push/           APNs (token auth, HTTP/2) and the notifier for devices not connected
-src/presence/       Valkey: device-to-instance hash, instance liveness keys, per-user push channels
-src/internal/       ids, contract errors, the keyspace pools and their time helpers, blob storage, shards, metrics, logging, HTTP
+src/presence/       Valkey: device-to-instance hash, instance liveness keys, per-user push channels, leases
+src/internal/       ids, contract errors, the keyspace pools and their time helpers, blob storage, shards and a pool per shard, background work per shard, metrics, logging, HTTP
 src/gen/            the generated contract (make proto), as JavaScript with type declarations
 wrinkle             runs src/main.ts with node --expose-gc
 split.sh            a TypeScript gateway beside a TypeScript services process, for conformance and measurement
@@ -45,9 +45,9 @@ Dockerfile          the image for the cluster, built from the repository root
 | `--fanout-concurrency` | `WRINKLE_FANOUT_CONCURRENCY` | 64 | conversations or users delivered at a time |
 | `--ack-interval-ms` | `WRINKLE_ACK_INTERVAL_MS` | 60000 | least time between two ack writes of a connection; 0 writes each as it comes |
 | `--log-retention-s` | `WRINKLE_LOG_RETENTION_S` | 2592000 (30 days) | how long the user logs keep events |
-| `--log-trim-interval-s` | `WRINKLE_LOG_TRIM_INTERVAL_S` | 3600 | time between two trims of the user logs |
+| `--log-trim-interval-s` | `WRINKLE_LOG_TRIM_INTERVAL_S` | 60 | time between two trims of each shard of the user logs |
 | `--history-hot-s` | `WRINKLE_HISTORY_HOT_S` | 2592000 (30 days) | how long messages stay in MySQL before moving to the cold tier |
-| `--cold-move-interval-s` | `WRINKLE_COLD_MOVE_INTERVAL_S` | 3600 | time between two moves to the cold tier |
+| `--cold-move-interval-s` | `WRINKLE_COLD_MOVE_INTERVAL_S` | 60 | time between two moves of each shard to the cold tier |
 | `--blob-url`, `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_*` | the local Garage | blob storage, as for Go |
 | `--apns-key`, `--apns-key-id`, `--apns-team-id`, `--apns-topic` | `WRINKLE_APNS_KEY`, `WRINKLE_APNS_KEY_ID`, `WRINKLE_TEAM_ID`, `WRINKLE_APNS_TOPIC` | off | APNs from the fan-out, as for Go |
 
@@ -66,7 +66,8 @@ Each feature's `feature.ts` maps its requests to handlers; [local.ts](src/servic
 - Times are written at millisecond precision, since JavaScript's `Date` has no microseconds. Reads keep what the database holds ([db.ts](src/internal/db.ts) reads DATETIME columns as strings and keeps their microseconds), and the fan-out writes the event times of Go-written outboxes as they came.
 - Strings arrive decoded, so Go's checks for invalid UTF-8 become checks that a string is well formed.
 - Password hashes run on libuv's thread pool, which bounds how many run at once, as Go bounds them by cores.
-- The cold tier ([cold.ts](src/conversation/cold.ts), [mover.ts](src/conversation/mover.ts)) goes through HBase's REST server with the built-in `fetch`, since Node has no maintained native client: puts as JSON with base64 keys, columns and values, and every read through a scanner, since binary keys do not fit a URL; a point read is a scan of one key. The REST scanner reads only forward, so a page of the newest n messages in a cold range is a forward scan of its last n seqs, turned around; this relies on a conversation's cold seqs being contiguous, which they are, since messages are only tombstoned and the mover moves every seq up to the watermark. The mover runs in the services role, beside the trimmer, rather than the fan-out's.
+- The cold tier ([cold.ts](src/conversation/cold.ts), [mover.ts](src/conversation/mover.ts)) goes through HBase's REST server with the built-in `fetch`, since Node has no maintained native client: puts as JSON with base64 keys, columns and values, and every read through a scanner, since binary keys do not fit a URL; a point read is a scan of one key. The REST scanner reads only forward, so a page of the newest n messages in a cold range is a forward scan of its last n seqs, turned around; this relies on a conversation's cold seqs being contiguous, which they are, since messages are only tombstoned and the mover moves every seq up to the watermark. The mover runs in the services role, beside the trimmer, rather than the fan-out's, so the services role connects to Valkey too, for their leases.
+- The trimmer and the mover run through [shardwork.ts](src/internal/shardwork.ts) as Go's do through `shardwork`: the shards are found a minute after start (again after each interval while that fails), then each shard has its own loop, a round at once and then every interval, under the shard's lease in Valkey (`lease:<job>:<keyspace>/<shard>`, 30 s, renewed every 10 s and dropped after the round). A lost lease aborts the round between pages and transactions, since mysql2 cannot cancel a query; stopping waits for the rounds and drops their leases.
 
 ## Fan-out
 

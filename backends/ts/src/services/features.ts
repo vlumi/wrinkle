@@ -9,7 +9,7 @@ export interface Feature {
   signIn?: SignInHandlers;
   ack?: (userId: Buffer, deviceId: bigint, cursor: bigint) => Promise<void>;
   /** Background work of the services role (sweepers); returns a stop function. */
-  start?: () => () => void;
+  start?: () => () => void | Promise<void>;
 }
 
 export type FeatureFactory = (deps: Deps) => Feature;

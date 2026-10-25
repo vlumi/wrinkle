@@ -1,8 +1,10 @@
 // Presence in Valkey: which instance holds each connected device, whether
-// an instance is alive, and a pub/sub channel per user for pushes.
+// an instance is alive, a pub/sub channel per user for pushes, and the
+// leases that share background work among instances.
 import { randomBytes } from "node:crypto";
 import { createClient } from "redis";
 import { fromHex, hex, type UUID } from "../internal/ids.ts";
+import type { Leases } from "../internal/shardwork.ts";
 
 export const heartbeatInterval = 30_000;
 const instanceTTL = 90;
@@ -12,6 +14,10 @@ const channelPrefix = "push:";
 // that reconnected elsewhere keeps its new entry.
 const release = `if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0`;
 
+// Change a lease only while this instance holds it.
+const renewLease = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0`;
+const dropLease = `if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`;
+
 const newClient = (addr: string) => createClient({ url: `redis://${addr}` });
 export type Redis = ReturnType<typeof newClient>;
 
@@ -20,8 +26,9 @@ export const userOf = (channel: string): UUID | undefined =>
   channel.startsWith(channelPrefix) ? fromHex(channel.slice(channelPrefix.length)) : undefined;
 const presenceKey = (userId: UUID) => "presence:" + hex(userId);
 const instanceKey = (instance: string) => "gateway:" + instance;
+const leaseKey = (name: string) => "lease:" + name;
 
-export class Presence {
+export class Presence implements Leases {
   readonly instance: string;
   readonly redis: Redis;
 
@@ -88,6 +95,24 @@ export class Presence {
       out.add(BigInt(field));
     }
     return out;
+  }
+
+  /** Takes the named lease for this instance, unless another instance holds it. */
+  async takeLease(name: string, ttlMs: number): Promise<boolean> {
+    const set = await this.redis.set(leaseKey(name), this.instance, {
+      condition: "NX",
+      expiration: { type: "PX", value: ttlMs },
+    });
+    return set === "OK";
+  }
+
+  async renewLease(name: string, ttlMs: number): Promise<boolean> {
+    const n = await this.redis.eval(renewLease, { keys: [leaseKey(name)], arguments: [this.instance, String(ttlMs)] });
+    return n === 1;
+  }
+
+  async dropLease(name: string, signal: AbortSignal): Promise<void> {
+    await this.redis.withAbortSignal(signal).eval(dropLease, { keys: [leaseKey(name)], arguments: [this.instance] });
   }
 
   async close(): Promise<void> {

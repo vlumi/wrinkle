@@ -48,9 +48,9 @@ const { values: flags } = parseArgs({
     "fanout-concurrency": { type: "string", default: env("WRINKLE_FANOUT_CONCURRENCY", "64") },
     "ack-interval-ms": { type: "string", default: env("WRINKLE_ACK_INTERVAL_MS", "60000") },
     "log-retention-s": { type: "string", default: env("WRINKLE_LOG_RETENTION_S", String(30 * 24 * 3600)) },
-    "log-trim-interval-s": { type: "string", default: env("WRINKLE_LOG_TRIM_INTERVAL_S", "3600") },
+    "log-trim-interval-s": { type: "string", default: env("WRINKLE_LOG_TRIM_INTERVAL_S", "60") },
     "history-hot-s": { type: "string", default: env("WRINKLE_HISTORY_HOT_S", String(30 * 24 * 3600)) },
-    "cold-move-interval-s": { type: "string", default: env("WRINKLE_COLD_MOVE_INTERVAL_S", "3600") },
+    "cold-move-interval-s": { type: "string", default: env("WRINKLE_COLD_MOVE_INTERVAL_S", "60") },
     "blob-url": { type: "string", default: env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200") },
     "blob-key-id": { type: "string", default: env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000") },
     "blob-secret": {
@@ -72,6 +72,14 @@ async function main(): Promise<void> {
   const gateway = roles.has("gateway");
   const remote = gateway && flags.services !== "";
   const closers: (() => Promise<unknown>)[] = [];
+
+  // Valkey holds the gateway's presence, the fan-out's pushes and the
+  // leases of the services' background work.
+  let presence: Presence | undefined;
+  if (gateway || roles.has("services") || roles.has("fanout")) {
+    presence = await Presence.connect(flags.valkey, flags.node);
+    closers.push(() => presence!.close());
+  }
 
   // The database is needed by the services (in-process or as a role) and by
   // the fan-out; a gateway forwarding to a services process does without.
@@ -95,6 +103,7 @@ async function main(): Promise<void> {
         secret: flags["blob-secret"],
         region: flags["blob-region"],
       }),
+      leases: presence!,
       log: log.with({ role: "services" }),
     };
     const built = newLocal(deps, [
@@ -121,12 +130,6 @@ async function main(): Promise<void> {
     log.info("gateway forwarding to services", { addr: flags.services });
   }
 
-  let presence: Presence | undefined;
-  if (gateway || roles.has("fanout")) {
-    presence = await Presence.connect(flags.valkey, flags.node);
-    closers.push(() => presence!.close());
-  }
-
   if (roles.has("services")) {
     const rpc = await serve(backend!, flags["services-listen"]);
     log.info("services listening", { addr: flags["services-listen"] });
@@ -135,11 +138,7 @@ async function main(): Promise<void> {
   if (roles.has("services") || (gateway && !remote)) {
     for (const f of features) {
       const stop = f.start?.();
-      if (stop)
-        closers.push(() => {
-          stop();
-          return Promise.resolve();
-        });
+      if (stop) closers.push(async () => stop());
     }
   }
 

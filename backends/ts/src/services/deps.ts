@@ -4,6 +4,7 @@ import type { Pool } from "mysql2/promise";
 import type { Cold } from "../conversation/cold.ts";
 import type { Blobs } from "../internal/blobs.ts";
 import type { Logger } from "../internal/log.ts";
+import type { Leases } from "../internal/shardwork.ts";
 import type { Presence } from "../presence/presence.ts";
 
 export interface BlobConfig {
@@ -21,6 +22,8 @@ export interface Deps {
   /** The history past the hot window. */
   cold: Cold;
   blobs: Blobs;
+  /** Valkey's leases, which share the background work per shard among instances. */
+  leases: Leases;
   log: Logger;
 }
 

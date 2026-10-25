@@ -60,11 +60,17 @@ export async function loadShards(q: Querier, keyspace: string): Promise<Shards> 
   );
 }
 
+/** A pool of one shard, by its name; "-" for a keyspace that is not sharded. */
+export interface Shard {
+  name: string;
+  pool: Pool;
+}
+
 /**
  * A pool of one connection to each shard of the keyspace that db reaches,
  * so a query sees that shard alone; without vtgate, db itself.
  */
-export async function openShardPools(db: Pool, mysql: string, keyspace: string): Promise<Pool[]> {
+export async function openShardPools(db: Pool, mysql: string, keyspace: string): Promise<Shard[]> {
   const names = (await loadShards(db, keyspace)).names;
   const opened = await Promise.allSettled(names.map((name) => openKeyspace(mysql, `${keyspace}:${name}`, 1)));
   const pools = opened.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
@@ -73,8 +79,8 @@ export async function openShardPools(db: Pool, mysql: string, keyspace: string):
     await Promise.all(pools.map((p) => p.end()));
     throw failed.reason;
   }
-  return pools.length > 0 ? pools : [db];
+  return pools.length > 0 ? names.map((name, i) => ({ name, pool: pools[i]! })) : [{ name: "-", pool: db }];
 }
 
-export const closeShardPools = (db: Pool, shards: Pool[]) =>
-  Promise.all(shards.filter((s) => s !== db).map((s) => s.end()));
+export const closeShardPools = (db: Pool, shards: Shard[]) =>
+  Promise.all(shards.filter((s) => s.pool !== db).map((s) => s.pool.end()));

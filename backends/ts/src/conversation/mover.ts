@@ -7,10 +7,9 @@ import { ReactionSchema, SealedSchema, type Reaction, type Sealed } from "../gen
 import { exec, now, row, timedRows, timestampOf, tx, type DbTime } from "../internal/db.ts";
 import { hex, type UUID } from "../internal/ids.ts";
 import type { Logger } from "../internal/log.ts";
-import { closeShardPools, openShardPools } from "../internal/shards.ts";
+import { startShardWork, type Leases } from "../internal/shardwork.ts";
 import { encodeReactions, type Cold, type ColdMessage } from "./cold.ts";
 
-const moveFirst = 60_000;
 const movePage = 1000;
 // Bounds the messages one transaction moves, and so how long it holds the
 // conversation's row.
@@ -20,67 +19,45 @@ export interface MoveOptions {
   /** vtgate, for a connection to each shard alone. */
   mysql: string;
   hotMs: number;
+  /** Time between two moves of each shard. */
   intervalMs: number;
 }
 
-/**
- * Moves after a minute, or the interval when shorter, then at every
- * interval. The shards are found on the first round, and again after that
- * failed.
- */
-export function startMover(db: Pool, cold: Cold, log: Logger, opts: MoveOptions): () => void {
-  let shards: Promise<Pool[]> | undefined;
-  let stopped = false;
-  let timer = setTimeout(
-    function run() {
-      shards ??= openShardPools(db, opts.mysql, "conversation").catch((err: unknown) => {
-        shards = undefined;
-        throw err;
-      });
-      shards
-        .then((s) => move(db, s, cold, opts.hotMs))
-        .then((n) => {
-          if (n > 0) log.info("moved history to the cold tier", { messages: n });
-        })
-        .catch((err: unknown) => {
-          if (!stopped) log.warn("moving history to the cold tier failed", { err });
-        })
-        .finally(() => {
-          if (!stopped) timer = setTimeout(run, opts.intervalMs);
-        });
-    },
-    Math.min(moveFirst, opts.intervalMs),
-  );
-  return () => {
-    stopped = true;
-    clearTimeout(timer);
-    void shards?.then((s) => closeShardPools(db, s)).catch(() => undefined);
-  };
-}
-
-/** Moves every message older than the hot window and returns how many. */
-export async function move(db: Pool, shards: Pool[], cold: Cold, hotMs: number): Promise<number> {
-  const cutoff = new Date(now().getTime() - hotMs);
-  let total = 0;
-  for (const shard of shards) total += await moveShard(db, shard, cold, cutoff);
-  return total;
-}
+/** Moves each shard under its lease, so instances share the shards. */
+export const startMover = (
+  db: Pool,
+  cold: Cold,
+  leases: Leases,
+  log: Logger,
+  opts: MoveOptions,
+): (() => Promise<void>) =>
+  startShardWork(db, opts.mysql, {
+    name: "moving history to the cold tier",
+    keyspace: "conversation",
+    intervalMs: opts.intervalMs,
+    unit: "messages",
+    round: (shard, signal) => moveShard(db, shard.pool, cold, new Date(now().getTime() - opts.hotMs), signal),
+    leases,
+    log,
+  });
 
 // Takes the shard's conversations in the order of their oldest messages, a
 // page at a time, each once. A conversation stops at its first message
 // within the window, so one sent a little out of time order waits for the
 // next round; the pages go on after the last one's time.
-async function moveShard(db: Pool, shard: Pool, cold: Cold, cutoff: Date): Promise<number> {
+async function moveShard(db: Pool, shard: Pool, cold: Cold, cutoff: Date, signal: AbortSignal): Promise<number> {
   let total = 0;
   const done = new Set<string>();
   let after = new Date(0);
   for (;;) {
+    signal.throwIfAborted();
     const page = await agedPage(shard, cutoff, after);
     let fresh = false;
     for (const { conversation_id: id } of page) {
       if (done.has(hex(id))) continue;
       done.add(hex(id));
       fresh = true;
+      signal.throwIfAborted();
       total += await moveConversation(db, cold, id, cutoff);
     }
     if (page.length < movePage || !fresh) return total;

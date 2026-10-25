@@ -10,7 +10,7 @@ import { startTrimmer, type TrimOptions } from "./trim.ts";
 
 /** The logs are trimmed only with the options. */
 export function devicesyncFeature(trimming?: TrimOptions): FeatureFactory {
-  return ({ users: db, log }) => ({
+  return ({ users: db, leases, log }) => ({
     ack: (userId, deviceId, cursor) => ack(db, userId, deviceId, cursor),
     handlers: {
       sync: async (c, req) => ({ case: "sync", value: await sync(db, c.userId, req.cursor, req.limit) }),
@@ -23,6 +23,6 @@ export function devicesyncFeature(trimming?: TrimOptions): FeatureFactory {
         return { case: "registerPushToken", value: create(RegisterPushTokenResponseSchema) };
       },
     },
-    start: trimming && (() => startTrimmer(db, log.with({ role: "trimmer" }), trimming)),
+    start: trimming && (() => startTrimmer(db, leases, log.with({ role: "trimmer" }), trimming)),
   });
 }
