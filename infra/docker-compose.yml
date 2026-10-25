@@ -1,5 +1,5 @@
-# Shared infrastructure for every backend. Memory is capped so the whole
-# stack fits in about 4 GB; backends run beside it. Every port is published
+# Shared infrastructure for every backend. Memory is capped, about 6 GB in
+# all, so the stack fits in Docker's 8 GB; backends run beside it. Every port is published
 # on loopback only: the backends run on the host and reach it there.
 # GRAFANA_BIND=0.0.0.0 opens Grafana to the network. The load balancer, in
 # the lb profile, serves devices on loopback port 8080 like a gateway; the
@@ -78,6 +78,34 @@ services:
       resources:
         limits:
           memory: 1536M
+
+  # The cold tier of the history, standalone. Clients find the region
+  # server by the name it advertises, hbase.localhost: on the network an
+  # alias of this container, on the host loopback, where its ports are.
+  hbase:
+    build: ./hbase
+    image: wrinkle/hbase:2.6.7
+    hostname: hbase.localhost
+    networks:
+      default:
+        aliases: [hbase.localhost]
+    environment:
+      HBASE_HEAPSIZE: 512m
+    ports:
+      - "127.0.0.1:2181:2181" # ZooKeeper, where clients start
+      - "127.0.0.1:16000:16000" # master
+      - "127.0.0.1:16010:16010" # master web UI
+      - "127.0.0.1:16020:16020" # region server
+    healthcheck:
+      # Ready once the region server has reported to the master.
+      test: ["CMD-SHELL", "wget -qO- 'http://localhost:16010/jmx?qry=Hadoop:service=HBase,name=Master,sub=Server' | grep -q '\"numRegionServers\": 1'"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
 
   kafka:
     image: apache/kafka:4.3.1

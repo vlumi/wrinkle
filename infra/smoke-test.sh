@@ -1,7 +1,8 @@
 #!/bin/bash
 # Smoke test of the change-data path: an outbox row written to the database,
-# through vtgate or to MySQL, shows up on the Kafka topic, for both outboxes. Expects the stack to be up
-# (make infra-up). The connectors skip the initial snapshot, so rows written
+# through vtgate or to MySQL, shows up on the Kafka topic, for both outboxes;
+# and a row round-trips through HBase's message table. Expects the stack to
+# be up (make infra-up). The connectors skip the initial snapshot, so rows written
 # before one streams are never delivered; passing here also means both
 # stream.
 set -euo pipefail
@@ -78,4 +79,17 @@ check() {
 
 check wrinkle-outbox wrinkle.conversation.outbox conversation conversation_row
 check wrinkle-user-outbox wrinkle.user.user_outbox user user_row
+
+echo "writing, reading and deleting an HBase row"
+row=$(
+  compose exec -T hbase hbase shell -n <<'EOF'
+put 'message', "\x2asmoke", 'm:body', 'smoke'
+get 'message', "\x2asmoke"
+deleteall 'message', "\x2asmoke"
+EOF
+)
+if ! grep -q 'm:body.*value=smoke' <<<"$row"; then
+  echo "smoke test failed: the HBase row did not read back" >&2
+  exit 1
+fi
 echo "smoke test passed"

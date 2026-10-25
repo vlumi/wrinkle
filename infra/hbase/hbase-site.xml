@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<!-- Standalone on the local filesystem. The region server advertises
+     hbase.localhost, which the network resolves to this container and the
+     host to loopback, where its ports are published, so clients on either
+     side find it. -->
+<configuration>
+  <property><name>hbase.cluster.distributed</name><value>false</value></property>
+  <property><name>hbase.rootdir</name><value>file:///data/hbase</value></property>
+  <property><name>hbase.zookeeper.property.dataDir</name><value>/data/zookeeper</value></property>
+  <property><name>hbase.zookeeper.quorum</name><value>hbase.localhost</value></property>
+  <property><name>hbase.zookeeper.property.clientPortAddress</name><value>0.0.0.0</value></property>
+  <!-- The local filesystem has no hflush; the write-ahead log works without it. -->
+  <property><name>hbase.unsafe.stream.capability.enforce</name><value>false</value></property>
+  <!-- Fixed ports, so they can be published. -->
+  <property><name>hbase.localcluster.assign.random.ports</name><value>false</value></property>
+  <property><name>hbase.master.port</name><value>16000</value></property>
+  <property><name>hbase.master.info.port</name><value>16010</value></property>
+  <property><name>hbase.regionserver.port</name><value>16020</value></property>
+  <property><name>hbase.regionserver.info.port</name><value>16030</value></property>
+  <property><name>hbase.master.hostname</name><value>hbase.localhost</value></property>
+  <property><name>hbase.regionserver.hostname</name><value>hbase.localhost</value></property>
+</configuration>

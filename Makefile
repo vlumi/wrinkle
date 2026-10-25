@@ -220,7 +220,7 @@ test: go-test java-test elixir-test rust-test ts-test web-unit  ## Unit tests fo
 
 conformance: $(SHAPES:%=conformance-%)  ## The conformance tests against every backend shape
 
-smoke: infra-up  ## The change-data path: an outbox insert reaches Kafka
+smoke: infra-up  ## The change-data path: an outbox insert reaches Kafka; a row round-trips through HBase
 	infra/smoke-test.sh
 
 web-test: infra-up web-deps build-go  ## The web client in headless Chrome against the Go backend
