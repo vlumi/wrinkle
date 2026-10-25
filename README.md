@@ -78,7 +78,7 @@ Components:
 - **Conversation DB and user DB:** messages, reactions, wrapped keys and the outbox, sharded by conversation; event logs, conversation lists, devices, uploads and stickers, sharded by user.
 - **Presence:** which device is connected to which gateway process, kept only while that process keeps announcing itself, and one push channel per user, in Valkey.
 
-Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, Garage for blobs (avatars, stickers and attachments), HBase for the cold tier of the history (being built), and Prometheus with Grafana for the metrics every backend exposes under the same names.
+Infrastructure: MySQL sharded with Vitess (one keyspace by conversation, one by user), Apache Kafka, Debezium, Valkey, Garage for blobs (avatars, stickers and attachments), HBase for history older than 30 days, and Prometheus with Grafana for the metrics every backend exposes under the same names.
 
 ## Implementations
 
@@ -109,7 +109,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client (26 or later for the TypeScript backend), and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
 
-1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, HBase, Prometheus, Grafana). `make infra-up PROFILE=mysql` runs plain MySQL in place of Vitess, the same schema unsharded.
+1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, HBase and its REST server, Prometheus, Grafana). `make infra-up PROFILE=mysql` runs plain MySQL in place of Vitess, the same schema unsharded.
 2. `make cluster-up`: the whole backend in containers, two Go and one Java services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono` or `make run-java-mono`; `mono` in a target name is the monolith, `gw` a gateway.
 3. `make web`: the web client, built and served over HTTPS on port 8081, together with the TLS edge on port 8443 in front of whatever serves port 8080 (`make tls-up`, which makes the certificate with mkcert if there is none yet). Devices reach the backend only through the edge: port 8080 listens on loopback, and the web server refuses to serve the network without a certificate.
 4. Open `https://localhost:8081/` on the Mac. Phones and other computers on the network open the Mac's address instead and must trust the certificate first: [docs/local-network.md](docs/local-network.md), which also covers the iOS app, push notifications and running the backends natively.

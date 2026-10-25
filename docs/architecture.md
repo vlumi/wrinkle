@@ -28,7 +28,7 @@ How Wrinkle is put together, independent of the language a backend is written in
 | Kafka and Debezium | committed outbox rows of both keyspaces, in commit order per conversation or user | the topics | partitions |
 | Valkey | presence, push channels, gateway instance keys | in memory, rebuildable | cluster or more instances |
 | Object storage | blobs: avatars, stickers, encrypted attachments | Garage locally behind a proxy; S3 or GCS in production | the storage service |
-| History cold tier (being built) | messages older than the hot window | HBase, standalone locally; an HBase cluster or Bigtable in production | regions, split by conversation id |
+| History cold tier | messages older than the hot window | HBase, standalone locally; an HBase cluster or Bigtable in production | regions, split by conversation id |
 
 The services are two, split by keyspace. The conversation service owns the conversation keyspace: sends, read marks, groups, deletions, reactions and key epochs. The sync service owns the user keyspace: accounts, devices and profiles, sync and conversation lists, uploads, stickers and push tokens; the code splits it further (accounts, uploads and stickers are packages of their own in Go, Java and TypeScript). The fan-out runs inside the services processes. A gateway, the services and the fan-out can also run as one process, the monolith, in which the gateway calls the services directly.
 
@@ -48,7 +48,7 @@ Two Vitess keyspaces, each sharded by the id that every query of it carries, so 
 ```mermaid
 flowchart TB
   subgraph conv ["Conversation keyspace, by conversation_id"]
-    c["conversation: kind, topic, current members, last_seq, key_epoch, rotate"]
+    c["conversation: kind, topic, current members, last_seq, key_epoch, rotate, cold_seq"]
     cm["conversation_member: role, joined and left seq"]
     ck["conversation_key: an epoch key wrapped for one recipient device"]
     p["conversation_pair: claim of a pair, by user_a"]
@@ -71,6 +71,10 @@ flowchart TB
     ct["contact: the user's own side toward another, a request or a block"]
     cp["contact_peer: the other's side, copied by the fan-out"]
   end
+  subgraph cold ["HBase, by conversation_id and seq"]
+    h["message: the history up to cold_seq, with its reactions"]
+  end
+  m -- "moved past the hot window" --> h
 ```
 
 Ids:
@@ -239,6 +243,14 @@ What is guaranteed: once the deletion is in a member's log, no Sync and no GetMe
 
 A user's reactions to a message are one sealed set of up to three emoji, under the conversation's current key epoch, which `SetReaction` replaces as a whole or removes. The services keep one row per message and user in the conversation keyspace, with an outbox row like any change, so the fan-out appends a `ReactionEvent` to every current member's log in the conversation's order. Reactions take no seq and are never unread; `GetMessages` returns them with each message, and deleting a message deletes them. The services cannot see or count the emoji: clients decrypt and count, and nobody is notified of a reaction, since the services cannot say what it was.
 
+### History and the cold tier
+
+Message history is kept for good, but only the last 30 days of it (`WRINKLE_HISTORY_HOT_S`) in MySQL; older messages move to HBase, in a table keyed by conversation id and seq, so a conversation's history is one range ([schema](../schema/hbase/schema.rb)). A row holds the message's columns and its reactions as one cell, and every write puts a whole row, so any write can be repeated. `conversation.cold_seq` is the watermark: the history up to it is in HBase, the rest in MySQL.
+
+A mover in Go, Java and TypeScript, beside the log trimmer, runs every hour (`WRINKLE_COLD_MOVE_INTERVAL_S`). On each shard of the conversation keyspace it pages through the messages by age, through an index on their time, and takes each conversation once: up to 200 messages at a time in seq order, it locks the conversation's row, puts the messages to HBase, raises `cold_seq` and deletes them from MySQL in one transaction, stopping at the first message within the window. A failure after the puts leaves copies of rows still in MySQL, which the next move puts again.
+
+GetMessages reads MySQL first, then the watermark, then HBase below the lowest seq MySQL gave. The watermark only rises, and what it covers is in HBase before it does, so nothing falls between the two reads; a page whose messages the watermark has passed meanwhile is read again, for their reactions. A point read that misses in MySQL, the conversation list's last message, tries HBase. Deleting and reacting take the conversation's row lock as before and, for a message at or below `cold_seq`, rewrite its HBase row before the transaction commits, putting the old row back if it does not; the outbox row is written in MySQL as before, so the events and the fan-out do not change. What stays in MySQL: a resend is recognized while its original is there, and a group read event tells the senders found there. Go and Java use HBase's native clients; Node has none maintained, so TypeScript goes through HBase's REST server, whose scanners read forward only, which works because a conversation's seqs in HBase have no gaps.
+
 ### Attachments
 
 Attachments are blobs the sending device encrypts first: each file gets its own key, and the device uploads only the ciphertext, through the blob proxy, before sending. The message's sealed content carries each file's key, the ciphertext's digest, its name, type and size, and for images a small thumbnail, all made on the device, since the services cannot read the file to resize it. The message also lists the blob ids in clear: the services check that each is the sender's own, unused attachment upload, mark them used before storing the message and release them again if the send then fails, keep them while the message exists, and release them when it is deleted, for the sweeper. Recipients download a blob by id, check the digest, decrypt and cache it.
@@ -279,7 +291,7 @@ A device acks the cursor it has processed; the gateway writes it to the device's
 
 - **Order within a conversation.** Sequence numbers are dense and assigned under the conversation's row lock. Debezium publishes a shard's changes in commit order, all of a conversation's records go to one Kafka partition, and a fan-out worker handles one conversation's records in order, so each participant's log has them in sequence order.
 - **At least once, without duplicates.** A fan-out worker commits its Kafka offsets only after every record of a batch is in every log; a failed batch is fetched again. A redelivered record finds its source key (conversation id and outbox id) already in the log and is skipped.
-- **Idempotent sends.** The client's message id makes a retried send return the original message.
+- **Idempotent sends.** The client's message id makes a retried send return the original message, while the original is within the hot window.
 - **Nothing lost to a missed push.** Pushes go only to devices connected at the moment; anything a device did not receive is in its log, and Sync from its cursor returns it, or, after the log's retention, fails with `CURSOR_EXPIRED` and the device rebuilds from the conversations.
 - **Monotonic positions.** Read positions and acked cursors only move forward.
 - **A removed member reads nothing new.** Sends are refused until the next epoch, which is wrapped for current members only, and the member's log gets no further events of the group.
@@ -320,6 +332,7 @@ Each gateway keeps one HTTP/2 connection to the services balancer, which spreads
 | Valkey | no pushes; presence unknown | devices still sync; when it is back, gateways resubscribe and announce themselves again, but devices that stayed connected have no presence entry until they reconnect, so they may get notifications meanwhile |
 | APNs | no notifications | none needed; devices sync when opened |
 | Object storage | uploads and downloads fail; sends with attachments fail | messages without attachments are unaffected; clients retry |
+| HBase | history older than the hot window cannot be read or changed; the mover stops | recent history and sends are unaffected; the mover catches up |
 | A conversation shard | sends and reads in its conversations fail | the shard's replica takes over (a real Vitess topology; the prototype runs one process) |
 | A user shard | Connect, Sync and fan-out to its users fail | fan-out retries the batch until the shard is back |
 
