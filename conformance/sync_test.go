@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -99,5 +100,42 @@ func TestSyncFillsGapAfterReconnect(t *testing.T) {
 		if ev.GetMessage().GetMessage().GetSeq() != uint64(i+1) {
 			t.Fatalf("missed events out of order: %v", resp.GetEvents())
 		}
+	}
+}
+
+// logRetention is how long the backends keep events in the user logs during
+// the conformance tests, set in run.sh.
+const logRetention = 20 * time.Second
+
+// The readiness probe's cursor, from before the tests ran, expires once the
+// retention drops the probe's message from the log; a device then starts
+// again from the head, and the conversation's history is still there.
+func TestSyncFromBeforeTheRetentionExpires(t *testing.T) {
+	d := connectToken(t, probed.token)
+	deadline := time.Now().Add(2*logRetention + eventTimeout)
+	for {
+		_, err := d.Sync(ctx(t), probed.cursor, 0)
+		if err != nil {
+			wantCode(t, err, pb.ErrorCode_ERROR_CODE_CURSOR_EXPIRED)
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("sync from cursor %d still succeeds, %s after the retention", probed.cursor, logRetention+eventTimeout)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	resp, err := d.Sync(ctx(t), d.cursor, 0)
+	if err != nil {
+		t.Fatalf("sync from the head: %v", err)
+	}
+	if len(resp.GetEvents()) != 0 {
+		t.Fatalf("sync from the head returned %d events", len(resp.GetEvents()))
+	}
+	msgs, err := d.GetMessages(ctx(t), probed.conversationID, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("history has %d messages after the log was trimmed, want the probe's", len(msgs))
 	}
 }
