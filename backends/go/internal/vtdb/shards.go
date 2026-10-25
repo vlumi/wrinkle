@@ -57,6 +57,10 @@ func LoadShards(ctx context.Context, db *sql.DB, keyspace string) (Shards, error
 	return s, rows.Err()
 }
 
+// Names returns the shards' names in keyspace order; none when the keyspace
+// is not sharded.
+func (s Shards) Names() []string { return s.names }
+
 // Of returns the name of the shard holding the id.
 func (s Shards) Of(id []byte) string {
 	ksid := KeyspaceID(id)

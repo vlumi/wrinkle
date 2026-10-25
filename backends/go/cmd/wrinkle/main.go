@@ -56,6 +56,8 @@ func run() error {
 		dbConns = flag.Int("db-conns", envInt("WRINKLE_DB_CONNS", 64), "connections per keyspace")
 		fanoutN = flag.Int("fanout-concurrency", envInt("WRINKLE_FANOUT_CONCURRENCY", 64), "fanout: conversations delivered at a time")
 		ackMS   = flag.Int("ack-interval-ms", envInt("WRINKLE_ACK_INTERVAL_MS", 60000), "gateway: least time between two ack writes of a connection, in milliseconds")
+		logKeep = flag.Int("log-retention-s", envInt("WRINKLE_LOG_RETENTION_S", 30*24*3600), "fanout: how long the user logs keep events, in seconds")
+		trimS   = flag.Int("log-trim-interval-s", envInt("WRINKLE_LOG_TRIM_INTERVAL_S", 3600), "fanout: time between two trims of the user logs, in seconds")
 		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
 		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
@@ -171,6 +173,13 @@ func run() error {
 		add("fanout", func() error { return worker.Run(ctx) })
 		sweeper := uploads.NewSweeper(userDB, store, log.With("role", "sweeper"))
 		add("upload sweeper", func() error { return sweeper.Run(ctx) })
+		trimmer, err := devicesync.NewTrimmer(ctx, *mysql, "user", userDB,
+			time.Duration(*logKeep)*time.Second, time.Duration(*trimS)*time.Second, log.With("role", "trimmer"))
+		if err != nil {
+			return err
+		}
+		defer trimmer.Close()
+		add("log trimmer", func() error { return trimmer.Run(ctx) })
 	}
 
 	// One slot per role, so every failing role can report without blocking.
