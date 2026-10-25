@@ -27,6 +27,7 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/fanout"
 	"github.com/vlumi/wrinkle/backends/go/gateway"
 	"github.com/vlumi/wrinkle/backends/go/internal/blobs"
+	"github.com/vlumi/wrinkle/backends/go/internal/shardwork"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	"github.com/vlumi/wrinkle/backends/go/presence"
 	"github.com/vlumi/wrinkle/backends/go/push"
@@ -59,9 +60,9 @@ func run() error {
 		fanoutN = flag.Int("fanout-concurrency", envInt("WRINKLE_FANOUT_CONCURRENCY", 64), "fanout: conversations delivered at a time")
 		ackMS   = flag.Int("ack-interval-ms", envInt("WRINKLE_ACK_INTERVAL_MS", 60000), "gateway: least time between two ack writes of a connection, in milliseconds")
 		logKeep = flag.Int("log-retention-s", envInt("WRINKLE_LOG_RETENTION_S", 30*24*3600), "fanout: how long the user logs keep events, in seconds")
-		trimS   = flag.Int("log-trim-interval-s", envInt("WRINKLE_LOG_TRIM_INTERVAL_S", 3600), "fanout: time between two trims of the user logs, in seconds")
+		trimS   = flag.Int("log-trim-interval-s", envInt("WRINKLE_LOG_TRIM_INTERVAL_S", 60), "fanout: time between two trims of each shard of the user logs, in seconds")
 		hotS    = flag.Int("history-hot-s", envInt("WRINKLE_HISTORY_HOT_S", 30*24*3600), "fanout: how long messages stay in MySQL before moving to the cold tier, in seconds")
-		moveS   = flag.Int("cold-move-interval-s", envInt("WRINKLE_COLD_MOVE_INTERVAL_S", 3600), "fanout: time between two moves to the cold tier, in seconds")
+		moveS   = flag.Int("cold-move-interval-s", envInt("WRINKLE_COLD_MOVE_INTERVAL_S", 60), "fanout: time between two moves of each shard to the cold tier, in seconds")
 		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
 		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
@@ -180,20 +181,27 @@ func run() error {
 		add("fanout", func() error { return worker.Run(ctx) })
 		sweeper := uploads.NewSweeper(userDB, store, log.With("role", "sweeper"))
 		add("upload sweeper", func() error { return sweeper.Run(ctx) })
-		trimmer, err := devicesync.NewTrimmer(ctx, *mysql, "user", userDB,
-			time.Duration(*logKeep)*time.Second, time.Duration(*trimS)*time.Second, log.With("role", "trimmer"))
+		// Each shard's trim and move is taken by one instance at a time.
+		trimmer, err := devicesync.NewTrimmer(ctx, *mysql, "user", userDB, time.Duration(*logKeep)*time.Second)
 		if err != nil {
 			return err
 		}
 		defer trimmer.Close()
-		add("log trimmer", func() error { return trimmer.Run(ctx) })
-		mover, err := conversation.NewMover(ctx, *mysql, "conversation", conversationDB, cold,
-			time.Duration(*hotS)*time.Second, time.Duration(*moveS)*time.Second, log.With("role", "mover"))
+		trims := shardwork.Job{
+			Name: "trimming the user logs", Keyspace: "user", Shards: trimmer.Shards(), Interval: time.Duration(*trimS) * time.Second,
+			Unit: "events", Round: trimmer.TrimShard, Leases: pres, Log: log.With("role", "trimmer"),
+		}
+		add("log trimmer", func() error { return trims.Run(ctx) })
+		mover, err := conversation.NewMover(ctx, *mysql, "conversation", conversationDB, cold, time.Duration(*hotS)*time.Second)
 		if err != nil {
 			return err
 		}
 		defer mover.Close()
-		add("cold mover", func() error { return mover.Run(ctx) })
+		moves := shardwork.Job{
+			Name: "moving history to the cold tier", Keyspace: "conversation", Shards: mover.Shards(), Interval: time.Duration(*moveS) * time.Second,
+			Unit: "messages", Round: mover.MoveShard, Leases: pres, Log: log.With("role", "mover"),
+		}
+		add("cold mover", func() error { return moves.Run(ctx) })
 	}
 
 	// One slot per role, so every failing role can report without blocking.

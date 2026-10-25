@@ -3,7 +3,6 @@ package devicesync
 import (
 	"context"
 	"database/sql"
-	"log/slog"
 	"time"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
@@ -19,60 +18,36 @@ type Trimmer struct {
 	db        *sql.DB
 	shards    *vtdb.ShardPools
 	retention time.Duration
-	interval  time.Duration
-	log       *slog.Logger
 }
 
 // NewTrimmer finds the oldest events of each shard of the keyspace through a
 // connection to that shard alone, so a page never spans shards; without
 // vtgate the keyspace is one shard.
-func NewTrimmer(ctx context.Context, addr, keyspace string, db *sql.DB, retention, interval time.Duration, log *slog.Logger) (*Trimmer, error) {
+func NewTrimmer(ctx context.Context, addr, keyspace string, db *sql.DB, retention time.Duration) (*Trimmer, error) {
 	shards, err := vtdb.OpenShardPools(ctx, addr, keyspace, db)
 	if err != nil {
 		return nil, err
 	}
-	return &Trimmer{db: db, shards: shards, retention: retention, interval: interval, log: log}, nil
+	return &Trimmer{db: db, shards: shards, retention: retention}, nil
 }
 
 func (t *Trimmer) Close() { t.shards.Close() }
 
-// Run trims after a minute, or the interval when shorter, then at every
-// interval, until the context ends.
-func (t *Trimmer) Run(ctx context.Context) error {
-	timer := time.NewTimer(min(time.Minute, t.interval))
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
-		}
-		if n, err := t.Trim(ctx); err != nil && ctx.Err() == nil {
-			t.log.Warn("trimming the user logs failed", "err", err)
-		} else if n > 0 {
-			t.log.Info("trimmed the user logs", "events", n)
-		}
-		timer.Reset(t.interval)
-	}
-}
+// Shards are the keyspace's shards, each a pool to that shard alone.
+func (t *Trimmer) Shards() []vtdb.Shard { return t.shards.All() }
 
-// Trim drops every event older than the retention and returns how many.
-func (t *Trimmer) Trim(ctx context.Context) (int, error) {
+// TrimShard drops the shard's events older than the retention and returns
+// how many.
+func (t *Trimmer) TrimShard(ctx context.Context, shard vtdb.Shard) (int, error) {
 	cutoff := vtdb.Now().Add(-t.retention)
 	total := 0
-	for _, shard := range t.shards.All() {
-		for {
-			n, err := t.trimPage(ctx, shard, cutoff)
-			total += n
-			if err != nil {
-				return total, err
-			}
-			if n < trimPage {
-				break
-			}
+	for {
+		n, err := t.trimPage(ctx, shard.DB, cutoff)
+		total += n
+		if err != nil || n < trimPage {
+			return total, err
 		}
 	}
-	return total, nil
 }
 
 type trimmed struct {

@@ -1,6 +1,6 @@
 // Package presence tracks which device is connected to which gateway
-// instance, and carries pushes from fan-out workers to gateways, through
-// Valkey.
+// instance, carries pushes from fan-out workers to gateways, and holds the
+// leases that share background work among instances, through Valkey.
 package presence
 
 import (
@@ -28,6 +28,12 @@ const (
 // release deletes a device's presence field only if it still names the
 // given instance, so a device that reconnected elsewhere keeps its entry.
 var release = redis.NewScript(`if redis.call('HGET', KEYS[1], ARGV[1]) == ARGV[2] then return redis.call('HDEL', KEYS[1], ARGV[1]) end return 0`)
+
+// renewLease and dropLease change a lease only while this instance holds it.
+var (
+	renewLease = redis.NewScript(`if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('PEXPIRE', KEYS[1], ARGV[2]) end return 0`)
+	dropLease  = redis.NewScript(`if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0`)
+)
 
 type Client struct {
 	rdb *redis.Client
@@ -147,6 +153,28 @@ func (c *Client) alive(ctx context.Context, entries map[string]string) (map[stri
 		alive[instance] = cmd.Val() > 0
 	}
 	return alive, nil
+}
+
+// TakeLease takes the named lease for this instance for ttl, unless another
+// instance holds it.
+func (c *Client) TakeLease(ctx context.Context, name string, ttl time.Duration) (bool, error) {
+	return c.rdb.SetNX(ctx, leaseKey(name), c.instance, ttl).Result()
+}
+
+// RenewLease extends a lease this instance holds, and reports whether it
+// still did.
+func (c *Client) RenewLease(ctx context.Context, name string, ttl time.Duration) (bool, error) {
+	n, err := renewLease.Run(ctx, c.rdb, []string{leaseKey(name)}, c.instance, ttl.Milliseconds()).Int()
+	return n == 1, err
+}
+
+// DropLease gives up a lease this instance holds.
+func (c *Client) DropLease(ctx context.Context, name string) error {
+	return dropLease.Run(ctx, c.rdb, []string{leaseKey(name)}, c.instance).Err()
+}
+
+func leaseKey(name string) string {
+	return "lease:" + name
 }
 
 func presenceKey(userID ids.UUID) string {

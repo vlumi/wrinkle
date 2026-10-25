@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -26,58 +25,31 @@ const (
 // conversation by conversation, oldest first on each shard. Any number may
 // run: each move happens under the conversation's row lock.
 type Mover struct {
-	db       *sql.DB
-	shards   *vtdb.ShardPools
-	cold     *Cold
-	window   time.Duration
-	interval time.Duration
-	log      *slog.Logger
+	db     *sql.DB
+	shards *vtdb.ShardPools
+	cold   *Cold
+	window time.Duration
 }
 
 // NewMover finds the oldest messages of each shard of the keyspace through
 // a connection to that shard alone.
-func NewMover(ctx context.Context, addr, keyspace string, db *sql.DB, cold *Cold, window, interval time.Duration, log *slog.Logger) (*Mover, error) {
+func NewMover(ctx context.Context, addr, keyspace string, db *sql.DB, cold *Cold, window time.Duration) (*Mover, error) {
 	shards, err := vtdb.OpenShardPools(ctx, addr, keyspace, db)
 	if err != nil {
 		return nil, err
 	}
-	return &Mover{db: db, shards: shards, cold: cold, window: window, interval: interval, log: log}, nil
+	return &Mover{db: db, shards: shards, cold: cold, window: window}, nil
 }
 
 func (m *Mover) Close() { m.shards.Close() }
 
-// Run moves after a minute, or the interval when shorter, then at every
-// interval, until the context ends.
-func (m *Mover) Run(ctx context.Context) error {
-	timer := time.NewTimer(min(time.Minute, m.interval))
-	defer timer.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-timer.C:
-		}
-		if n, err := m.Move(ctx); err != nil && ctx.Err() == nil {
-			m.log.Warn("moving history to the cold tier failed", "err", err)
-		} else if n > 0 {
-			m.log.Info("moved history to the cold tier", "messages", n)
-		}
-		timer.Reset(m.interval)
-	}
-}
+// Shards are the keyspace's shards, each a pool to that shard alone.
+func (m *Mover) Shards() []vtdb.Shard { return m.shards.All() }
 
-// Move moves every message older than the hot window and returns how many.
-func (m *Mover) Move(ctx context.Context) (int, error) {
-	cutoff := vtdb.Now().Add(-m.window)
-	total := 0
-	for _, shard := range m.shards.All() {
-		n, err := m.moveShard(ctx, shard, cutoff)
-		total += n
-		if err != nil {
-			return total, err
-		}
-	}
-	return total, nil
+// MoveShard moves the shard's messages older than the hot window and
+// returns how many.
+func (m *Mover) MoveShard(ctx context.Context, shard vtdb.Shard) (int, error) {
+	return m.moveShard(ctx, shard.DB, vtdb.Now().Add(-m.window))
 }
 
 type aged struct {

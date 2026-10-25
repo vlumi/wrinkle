@@ -76,8 +76,15 @@ func (s Shards) Of(id []byte) string {
 // ShardPools are pools of one connection to each shard of a keyspace, so a
 // query sees that shard alone; without vtgate, the keyspace's own pool.
 type ShardPools struct {
-	db    *sql.DB
-	pools []*sql.DB
+	db     *sql.DB
+	shards []Shard
+}
+
+// Shard is a pool of one shard, by its name; "-" for a keyspace that is
+// not sharded.
+type Shard struct {
+	Name string
+	DB   *sql.DB
 }
 
 // OpenShardPools opens a pool per shard of the keyspace that db reaches.
@@ -93,21 +100,21 @@ func OpenShardPools(ctx context.Context, addr, keyspace string, db *sql.DB) (*Sh
 			p.Close()
 			return nil, err
 		}
-		p.pools = append(p.pools, shard)
+		p.shards = append(p.shards, Shard{Name: name, DB: shard})
 	}
-	if len(p.pools) == 0 {
-		p.pools = []*sql.DB{db}
+	if len(p.shards) == 0 {
+		p.shards = []Shard{{Name: "-", DB: db}}
 	}
 	return p, nil
 }
 
 // All returns one pool per shard.
-func (p *ShardPools) All() []*sql.DB { return p.pools }
+func (p *ShardPools) All() []Shard { return p.shards }
 
 func (p *ShardPools) Close() {
-	for _, shard := range p.pools {
-		if shard != p.db {
-			shard.Close()
+	for _, shard := range p.shards {
+		if shard.DB != p.db {
+			shard.DB.Close()
 		}
 	}
 }
