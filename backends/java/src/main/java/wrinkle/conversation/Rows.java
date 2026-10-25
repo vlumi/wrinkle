@@ -31,10 +31,17 @@ final class Rows {
 
   /**
    * The conversation row: its kind, topic, current members (sorted bytewise), last seq, current key
-   * epoch, and whether the membership changed since that epoch.
+   * epoch, whether the membership changed since that epoch, and the seq up to which the history is
+   * in the cold tier.
    */
   record Header(
-      String kind, String topic, List<Uuid> members, long lastSeq, long keyEpoch, boolean rotate) {
+      String kind,
+      String topic,
+      List<Uuid> members,
+      long lastSeq,
+      long keyEpoch,
+      boolean rotate,
+      long coldSeq) {
     boolean includes(Uuid userId) {
       return members.contains(userId);
     }
@@ -49,8 +56,8 @@ final class Rows {
     try (PreparedStatement ps =
             Sql.prepare(
                 c,
-                "SELECT kind, topic, members, last_seq, key_epoch, rotate FROM conversation WHERE"
-                    + " conversation_id = ?"
+                "SELECT kind, topic, members, last_seq, key_epoch, rotate, cold_seq FROM conversation"
+                    + " WHERE conversation_id = ?"
                     + (locking ? " FOR UPDATE" : ""),
                 conversationId);
         ResultSet rs = ps.executeQuery()) {
@@ -63,7 +70,8 @@ final class Rows {
           Uuid.split(rs.getBytes(3)),
           rs.getLong(4),
           rs.getLong(5),
-          rs.getBoolean(6));
+          rs.getBoolean(6),
+          rs.getLong(7));
     }
   }
 

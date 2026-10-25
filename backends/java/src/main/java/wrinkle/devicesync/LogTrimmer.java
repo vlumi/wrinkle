@@ -1,6 +1,5 @@
 package wrinkle.devicesync;
 
-import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -17,8 +16,7 @@ import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import wrinkle.Db;
-import wrinkle.Shards;
+import wrinkle.ShardPools;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
@@ -35,7 +33,7 @@ public final class LogTrimmer {
   record Event(Uuid userId, long position) {}
 
   private final DataSource db;
-  private final List<DataSource> shards = new ArrayList<>();
+  private final ShardPools shards;
   private final Duration retention;
   private final Duration interval;
   private final ScheduledExecutorService timer =
@@ -51,12 +49,7 @@ public final class LogTrimmer {
     this.db = db;
     this.retention = retention;
     this.interval = interval;
-    for (String name : Shards.load(db, keyspace).names()) {
-      shards.add(Db.open(addr, keyspace + ":" + name, 1));
-    }
-    if (shards.isEmpty()) {
-      shards.add(db);
-    }
+    this.shards = new ShardPools(addr, keyspace, db);
   }
 
   public void start() {
@@ -66,11 +59,7 @@ public final class LogTrimmer {
 
   public void stop() {
     timer.shutdownNow();
-    for (DataSource shard : shards) {
-      if (shard != db && shard instanceof HikariDataSource h) {
-        h.close();
-      }
-    }
+    shards.close();
   }
 
   private void run() {
@@ -88,7 +77,7 @@ public final class LogTrimmer {
   int trim() throws SQLException {
     LocalDateTime cutoff = Timestamps.now().minus(retention);
     int total = 0;
-    for (DataSource shard : shards) {
+    for (DataSource shard : shards.all()) {
       int n;
       do {
         n = trimPage(shard, cutoff);

@@ -58,13 +58,15 @@ public final class ConversationService {
   private final DataSource db;
   private final UploadService uploads;
   private final Contacts contacts;
+  private final Cold cold;
   // A direct conversation's two members, or no one for a group: neither ever changes.
   private final Map<Uuid, List<Uuid>> directMembers = new ConcurrentHashMap<>();
 
-  public ConversationService(DataSource db, UploadService uploads, Contacts contacts) {
+  public ConversationService(DataSource db, UploadService uploads, Contacts contacts, Cold cold) {
     this.db = db;
     this.uploads = uploads;
     this.contacts = contacts;
+    this.cold = cold;
   }
 
   /**
@@ -288,7 +290,8 @@ public final class ConversationService {
   /**
    * Deletes one of the user's own messages for everyone: its content gives way to deleted_at, and
    * the members, with the user even after leaving, learn of it. Deleting again does nothing. The
-   * attachments' uploads become unused, for the sweeper.
+   * attachments' uploads become unused, for the sweeper. A message in the cold tier is changed
+   * there, under the conversation's row lock as in MySQL.
    */
   public void deleteMessage(Uuid userId, Uuid conversationId, long seq) throws SQLException {
     if (seq <= 0) {
@@ -301,28 +304,41 @@ public final class ConversationService {
   /** Deletes the message, returning the attachment ids it had. */
   private List<Uuid> deleteMessageRow(Uuid userId, Uuid conversationId, long seq)
       throws SQLException {
-    return Sql.inTransaction(
+    return cold.inTransaction(
         db,
-        c -> {
+        (c, changes) -> {
           Header h = Rows.header(c, conversationId, true);
           Readable r = readable(c, conversationId, userId);
+          if (!r.covers(seq)) {
+            throw ApiError.notFound("message " + seq + " does not exist");
+          }
           Message msg;
           long targetOutboxId;
-          try (PreparedStatement ps =
-                  Sql.prepare(
-                      c,
-                      "SELECT "
-                          + Rows.MESSAGE_COLUMNS
-                          + ", outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR"
-                          + " UPDATE",
-                      conversationId,
-                      seq);
-              ResultSet rs = ps.executeQuery()) {
-            if (!rs.next() || !r.covers(seq)) {
+          Cold.Row coldRow = null;
+          if (seq <= h.coldSeq()) {
+            coldRow = cold.get(conversationId, seq);
+            if (coldRow == null) {
               throw ApiError.notFound("message " + seq + " does not exist");
             }
-            msg = Rows.message(conversationId, rs);
-            targetOutboxId = rs.getLong(Rows.MESSAGE_COLUMN_COUNT + 1);
+            msg = coldRow.message(conversationId);
+            targetOutboxId = coldRow.outboxId();
+          } else {
+            try (PreparedStatement ps =
+                    Sql.prepare(
+                        c,
+                        "SELECT "
+                            + Rows.MESSAGE_COLUMNS
+                            + ", outbox_id FROM message WHERE conversation_id = ? AND seq = ? FOR"
+                            + " UPDATE",
+                        conversationId,
+                        seq);
+                ResultSet rs = ps.executeQuery()) {
+              if (!rs.next()) {
+                throw ApiError.notFound("message " + seq + " does not exist");
+              }
+              msg = Rows.message(conversationId, rs);
+              targetOutboxId = rs.getLong(Rows.MESSAGE_COLUMN_COUNT + 1);
+            }
           }
           if (msg.hasNotice()) {
             throw ApiError.invalidArgument("a notice cannot be deleted");
@@ -335,15 +351,24 @@ public final class ConversationService {
           }
           LocalDateTime at = Timestamps.now();
           Message deleted = Message.newBuilder().setDeletedAt(Timestamps.toProto(at)).build();
-          Sql.update(
-              c,
-              "UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?",
-              MessageBody.encode(deleted),
-              conversationId,
-              seq);
+          byte[] body = MessageBody.encode(deleted);
           // The deleted event tells the members to drop the reactions too.
-          Sql.update(
-              c, "DELETE FROM reaction WHERE conversation_id = ? AND seq = ?", conversationId, seq);
+          if (coldRow != null) {
+            changes.change(
+                conversationId, coldRow, coldRow.withBody(body, new byte[0], new byte[0]));
+          } else {
+            Sql.update(
+                c,
+                "UPDATE message SET body = ?, blob_ids = '' WHERE conversation_id = ? AND seq = ?",
+                body,
+                conversationId,
+                seq);
+            Sql.update(
+                c,
+                "DELETE FROM reaction WHERE conversation_id = ? AND seq = ?",
+                conversationId,
+                seq);
+          }
           Event event =
               Event.newBuilder()
                   .setOccurredAt(deleted.getDeletedAt())
@@ -376,7 +401,8 @@ public final class ConversationService {
   /**
    * Sets the user's sealed reactions to a message, replacing earlier ones; without sealed, removes
    * them. Only current members may react, with the current key epoch, and not to notices or deleted
-   * messages. A change reaches the current members; no change sends nothing.
+   * messages. A change reaches the current members; no change sends nothing. A message in the cold
+   * tier is changed there, under the conversation's row lock as in MySQL.
    */
   public void setReaction(Uuid userId, Uuid conversationId, long seq, Sealed sealed)
       throws SQLException {
@@ -394,25 +420,37 @@ public final class ConversationService {
       }
     }
     checkBlocks(userId, conversationId);
-    Sql.inTransaction(
+    cold.inTransaction(
         db,
-        c -> {
+        (c, changes) -> {
           Header h = Rows.memberHeader(c, conversationId, userId, true);
           Readable r = readable(c, conversationId, userId);
+          if (!r.covers(seq)) {
+            throw ApiError.notFound("message " + seq + " does not exist");
+          }
           Message msg;
-          try (PreparedStatement ps =
-                  Sql.prepare(
-                      c,
-                      "SELECT "
-                          + Rows.MESSAGE_COLUMNS
-                          + " FROM message WHERE conversation_id = ? AND seq = ?",
-                      conversationId,
-                      seq);
-              ResultSet rs = ps.executeQuery()) {
-            if (!rs.next() || !r.covers(seq)) {
+          Cold.Row coldRow = null;
+          if (seq <= h.coldSeq()) {
+            coldRow = cold.get(conversationId, seq);
+            if (coldRow == null) {
               throw ApiError.notFound("message " + seq + " does not exist");
             }
-            msg = Rows.message(conversationId, rs);
+            msg = coldRow.message(conversationId);
+          } else {
+            try (PreparedStatement ps =
+                    Sql.prepare(
+                        c,
+                        "SELECT "
+                            + Rows.MESSAGE_COLUMNS
+                            + " FROM message WHERE conversation_id = ? AND seq = ?",
+                        conversationId,
+                        seq);
+                ResultSet rs = ps.executeQuery()) {
+              if (!rs.next()) {
+                throw ApiError.notFound("message " + seq + " does not exist");
+              }
+              msg = Rows.message(conversationId, rs);
+            }
           }
           if (msg.hasNotice()) {
             throw ApiError.invalidArgument("a notice cannot be reacted to");
@@ -428,24 +466,46 @@ public final class ConversationService {
               throw ApiError.failedPrecondition("keys must rotate");
             }
           }
-          byte[] previous;
-          try (PreparedStatement ps =
-                  Sql.prepare(
-                      c,
-                      "SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?"
-                          + " FOR UPDATE",
-                      conversationId,
-                      seq,
-                      userId);
-              ResultSet rs = ps.executeQuery()) {
-            previous = rs.next() ? rs.getBytes(1) : null;
+          byte[] previous = null;
+          List<Reaction> others = new ArrayList<>();
+          if (coldRow != null) {
+            for (Reaction reaction : msg.getReactionsList()) {
+              if (userId.matches(reaction.getUserId())) {
+                previous = reaction.getSealed().toByteArray();
+              } else {
+                others.add(reaction);
+              }
+            }
+          } else {
+            try (PreparedStatement ps =
+                    Sql.prepare(
+                        c,
+                        "SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id"
+                            + " = ? FOR UPDATE",
+                        conversationId,
+                        seq,
+                        userId);
+                ResultSet rs = ps.executeQuery()) {
+              previous = rs.next() ? rs.getBytes(1) : null;
+            }
           }
           byte[] body = sealed == null ? null : sealed.toByteArray();
           if (Arrays.equals(previous, body)) {
             return null;
           }
           LocalDateTime at = Timestamps.now();
-          if (body == null) {
+          if (coldRow != null) {
+            if (sealed != null) {
+              others.add(
+                  Reaction.newBuilder()
+                      .setUserId(userId.toByteString())
+                      .setSealed(sealed)
+                      .setUpdatedAt(Timestamps.toProto(at))
+                      .build());
+            }
+            changes.change(
+                conversationId, coldRow, coldRow.withReactions(Cold.encodeReactions(others)));
+          } else if (body == null) {
             Sql.update(
                 c,
                 "DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?",
@@ -612,7 +672,8 @@ public final class ConversationService {
 
   /**
    * Messages with seq below beforeSeq, newest first, within the part of the sequence the user may
-   * read: from the notice that added them on, and up to the one that removed them.
+   * read: from the notice that added them on, and up to the one that removed them. The newer ones
+   * are in MySQL; the page goes on in the cold tier below the watermark.
    */
   public List<Message> messages(Uuid userId, Uuid conversationId, long beforeSeq, int limit)
       throws SQLException {
@@ -621,30 +682,65 @@ public final class ConversationService {
     try (Connection c = db.getConnection()) {
       Rows.header(c, conversationId, false);
       Readable r = readable(c, conversationId, userId);
-      List<Message> page = new ArrayList<>();
-      try (PreparedStatement ps =
-              Sql.prepare(
-                  c,
-                  "SELECT "
-                      + Rows.MESSAGE_COLUMNS
-                      + " FROM message WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq"
-                      + " < ? ORDER BY seq DESC LIMIT ?",
-                  conversationId,
-                  r.from(),
-                  r.to(),
-                  before,
-                  pageSize);
-          ResultSet rs = ps.executeQuery()) {
-        while (rs.next()) {
-          page.add(Rows.message(conversationId, rs));
+      while (true) {
+        List<Message> page = messages(c, conversationId, r, before, pageSize);
+        if (page != null) {
+          return page;
         }
       }
-      if (page.isEmpty()) {
-        return page;
+    }
+  }
+
+  /**
+   * Where a page that MySQL gave goes on in the cold tier: from joinedSeq up to hi, when there is
+   * room and anything there. A page with a message the watermark has since passed is read again.
+   */
+  record ColdRange(long hi, boolean more, boolean again) {}
+
+  static ColdRange coldRange(
+      List<Message> page, long joinedSeq, long upTo, long beforeSeq, long coldSeq, int limit) {
+    long hi = Math.min(Math.min(upTo, beforeSeq - 1), coldSeq);
+    if (!page.isEmpty()) {
+      long lowest = page.getLast().getSeq();
+      if (lowest <= coldSeq) {
+        return new ColdRange(0, false, true);
       }
+      hi = Math.min(hi, lowest - 1);
+    }
+    return new ColdRange(hi, page.size() < limit && hi >= joinedSeq, false);
+  }
+
+  /**
+   * A page of history: MySQL first, then the watermark, then the cold tier below the lowest seq
+   * MySQL gave; null to read again. The watermark only rises, and what it covers is in the cold
+   * tier before it does, so nothing falls between the two. A move that overlapped the read may have
+   * taken the reactions of what MySQL gave, so the read is made again then.
+   */
+  private List<Message> messages(
+      Connection c, Uuid conversationId, Readable r, long before, int pageSize)
+      throws SQLException {
+    List<Message> page = new ArrayList<>();
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT "
+                    + Rows.MESSAGE_COLUMNS
+                    + " FROM message WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq"
+                    + " < ? ORDER BY seq DESC LIMIT ?",
+                conversationId,
+                r.from(),
+                r.to(),
+                before,
+                pageSize);
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        page.add(Rows.message(conversationId, rs));
+      }
+    }
+    List<Message> out = new ArrayList<>(page.size());
+    if (!page.isEmpty()) {
       Map<Long, List<Reaction>> reactions =
           reactions(c, conversationId, page.getLast().getSeq(), page.getFirst().getSeq());
-      List<Message> out = new ArrayList<>(page.size());
       for (Message m : page) {
         List<Reaction> forMessage = reactions.get(m.getSeq());
         out.add(
@@ -652,8 +748,27 @@ public final class ConversationService {
                 ? m
                 : m.toBuilder().addAllReactions(forMessage).build());
       }
-      return out;
     }
+    long coldSeq;
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c, "SELECT cold_seq FROM conversation WHERE conversation_id = ?", conversationId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw ApiError.notFound("conversation " + conversationId + " does not exist");
+      }
+      coldSeq = rs.getLong(1);
+    }
+    ColdRange range = coldRange(out, r.from(), r.to(), before, coldSeq, pageSize);
+    if (range.again()) {
+      return null;
+    }
+    if (range.more()) {
+      for (Cold.Row row : cold.scan(conversationId, r.from(), range.hi(), pageSize - out.size())) {
+        out.add(row.message(conversationId));
+      }
+    }
+    return out;
   }
 
   /** The reactions to the messages from seq from to seq to, by seq, oldest first. */

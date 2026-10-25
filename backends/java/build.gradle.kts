@@ -38,6 +38,10 @@ dependencies {
     implementation("io.prometheus:prometheus-metrics-core:$prometheusVersion")
     implementation("io.prometheus:prometheus-metrics-instrumentation-jvm:$prometheusVersion")
     implementation("org.bouncycastle:bcprov-jdk18on:1.86")
+    // The cold tier; the client logs through slf4j-simple like the rest.
+    implementation("org.apache.hbase:hbase-shaded-client:2.6.7") {
+        exclude(group = "org.apache.logging.log4j")
+    }
     implementation("org.slf4j:slf4j-api:2.0.20")
     runtimeOnly("org.slf4j:slf4j-simple:2.0.20")
 
@@ -81,7 +85,15 @@ application {
             "-Dorg.slf4j.simpleLogger.showDateTime=true",
             "-Dorg.slf4j.simpleLogger.log.org.apache.kafka=warn",
             "-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn",
+            // The HBase client: its ZooKeeper client and startup notes say little worth reading.
+            "-Dorg.slf4j.simpleLogger.log.org.apache.hadoop=warn",
+            "-Dorg.slf4j.simpleLogger.log.org.apache.hadoop.hbase.shaded.org.apache.zookeeper=error",
+            "-Dorg.slf4j.simpleLogger.log.org.apache.hadoop.hbase.zookeeper=error",
+            "-Dorg.slf4j.simpleLogger.log.org.apache.hadoop.hbase.client.ZKConnectionRegistry=error",
+            "-Dorg.slf4j.simpleLogger.log.org.apache.hadoop.util.NativeCodeLoader=error",
             "--enable-native-access=ALL-UNNAMED",
+            // The HBase client reads byte arrays through sun.misc.Unsafe.
+            "--sun-misc-unsafe-memory-access=allow",
         )
 }
 
@@ -93,6 +105,7 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    jvmArgs("--sun-misc-unsafe-memory-access=allow")
 }
 
 spotless {

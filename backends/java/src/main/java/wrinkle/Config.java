@@ -23,6 +23,7 @@ public record Config(
     String mysql,
     String kafka,
     String valkey,
+    String hbase,
     String services,
     InetSocketAddress servicesListen,
     String node,
@@ -34,6 +35,8 @@ public record Config(
     long ackIntervalMillis,
     Duration logRetention,
     Duration logTrimInterval,
+    Duration historyHot,
+    Duration coldMoveInterval,
     String apnsKey,
     String apnsKeyId,
     String apnsTeamId,
@@ -66,6 +69,8 @@ public record Config(
     String mysql = env("WRINKLE_MYSQL", "127.0.0.1:15003");
     String kafka = env("WRINKLE_KAFKA", "localhost:19092");
     String valkey = env("WRINKLE_VALKEY", "localhost:6379");
+    // The cold tier's HBase, by its ZooKeeper quorum.
+    String hbase = env("WRINKLE_HBASE", "hbase.localhost:2181");
     String services = env("WRINKLE_SERVICES", "");
     String servicesListen = env("WRINKLE_SERVICES_LISTEN", "127.0.0.1:9000");
     String node = env("WRINKLE_NODE", hostname());
@@ -81,6 +86,8 @@ public record Config(
     String ackIntervalMs = env("WRINKLE_ACK_INTERVAL_MS", "60000");
     String logRetentionS = env("WRINKLE_LOG_RETENTION_S", String.valueOf(30 * 24 * 3600));
     String logTrimIntervalS = env("WRINKLE_LOG_TRIM_INTERVAL_S", "3600");
+    String historyHotS = env("WRINKLE_HISTORY_HOT_S", String.valueOf(30 * 24 * 3600));
+    String coldMoveIntervalS = env("WRINKLE_COLD_MOVE_INTERVAL_S", "3600");
     // Push notifications are off without a key.
     String apnsKey = env("WRINKLE_APNS_KEY", "");
     // Defaults to the id in the key's file name.
@@ -106,6 +113,7 @@ public record Config(
         case "mysql" -> mysql = value;
         case "kafka" -> kafka = value;
         case "valkey" -> valkey = value;
+        case "hbase" -> hbase = value;
         case "services" -> services = value;
         case "services-listen" -> servicesListen = value;
         case "node" -> node = value;
@@ -117,6 +125,8 @@ public record Config(
         case "ack-interval-ms" -> ackIntervalMs = value;
         case "log-retention-s" -> logRetentionS = value;
         case "log-trim-interval-s" -> logTrimIntervalS = value;
+        case "history-hot-s" -> historyHotS = value;
+        case "cold-move-interval-s" -> coldMoveIntervalS = value;
         case "apns-key" -> apnsKey = value;
         case "apns-key-id" -> apnsKeyId = value;
         case "apns-team-id" -> apnsTeamId = value;
@@ -140,12 +150,19 @@ public record Config(
       throw new IllegalArgumentException(
           "log retention must not be negative and the trim interval must be positive");
     }
+    Duration historyHot = Duration.ofSeconds(Long.parseLong(historyHotS));
+    Duration coldMoveInterval = Duration.ofSeconds(Long.parseLong(coldMoveIntervalS));
+    if (historyHot.isNegative() || !coldMoveInterval.isPositive()) {
+      throw new IllegalArgumentException(
+          "the hot window must not be negative and the cold move interval must be positive");
+    }
     return new Config(
         roleSet,
         address(listen),
         mysql,
         kafka,
         valkey,
+        hbase,
         services,
         address(servicesListen),
         node,
@@ -157,6 +174,8 @@ public record Config(
         ackIntervalMillis,
         logRetention,
         logTrimInterval,
+        historyHot,
+        coldMoveInterval,
         expandHome(apnsKey),
         apnsKeyId,
         apnsTeamId,

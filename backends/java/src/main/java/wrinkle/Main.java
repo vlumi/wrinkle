@@ -18,6 +18,8 @@ import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
 import wrinkle.contacts.ContactService;
 import wrinkle.contacts.Contacts;
+import wrinkle.conversation.Cold;
+import wrinkle.conversation.ColdMover;
 import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
@@ -42,7 +44,8 @@ import wrinkle.uploads.UploadSweeper;
  * The Java backend: one binary whose roles are chosen by configuration. The gateway role serves
  * WebSocket connections, with the account, conversation and sync services in the same process or
  * forwarding to a services process; the services role serves the internal RPC; the fanout role
- * consumes the outbox from Kafka.
+ * consumes the outbox from Kafka, deletes unused blobs, trims the user logs and moves old history
+ * to the cold tier.
  */
 public final class Main {
   private static final Logger log = LoggerFactory.getLogger(Main.class);
@@ -124,6 +127,14 @@ public final class Main {
               cfg.logRetention(),
               cfg.logTrimInterval())
           .start();
+      new ColdMover(
+              cfg.mysql(),
+              "conversation",
+              shared.conversationDb(),
+              shared.cold(),
+              cfg.historyHot(),
+              cfg.coldMoveInterval())
+          .start();
     }
 
     Server server = sb.build();
@@ -143,15 +154,16 @@ public final class Main {
   }
 
   /**
-   * What the roles share, opened when the first role asks: the pools of the two keyspaces and the
-   * services on them, and Valkey. So a gateway that forwards opens no pool, and a services-only
-   * process never connects to Valkey.
+   * What the roles share, opened when the first role asks: the pools of the two keyspaces, the cold
+   * tier and the services on them, and Valkey. So a gateway that forwards opens no pool, and a
+   * services-only process never connects to Valkey.
    */
   private static final class Shared {
     private final Config cfg;
     private final Blobs blobs;
     private DataSource userDb;
     private DataSource conversationDb;
+    private Cold cold;
     private LocalBackend local;
     private Presence presence;
 
@@ -180,12 +192,19 @@ public final class Main {
       return conversationDb;
     }
 
+    Cold cold() {
+      if (cold == null) {
+        cold = new Cold(cfg.hbase());
+      }
+      return cold;
+    }
+
     LocalBackend local() {
       if (local == null) {
         UploadService uploads = new UploadService(userDb(), blobs);
         Contacts contacts = new Contacts(userDb());
         ConversationService conversations =
-            new ConversationService(conversationDb(), uploads, contacts);
+            new ConversationService(conversationDb(), uploads, contacts, cold());
         AccountService accounts = new AccountService(userDb(), uploads);
         local =
             new LocalBackend(
@@ -193,7 +212,7 @@ public final class Main {
                 new Devices(userDb()),
                 uploads,
                 conversations,
-                new GroupService(conversationDb(), userDb(), accounts, contacts),
+                new GroupService(conversationDb(), userDb(), accounts, contacts, cold()),
                 new ConversationKeys(conversationDb(), userDb()),
                 new DeviceSyncService(userDb(), accounts, conversations, contacts),
                 new StickerService(userDb(), uploads),
@@ -212,6 +231,9 @@ public final class Main {
     void close() {
       if (presence != null) {
         presence.close();
+      }
+      if (cold != null) {
+        cold.close();
       }
     }
   }

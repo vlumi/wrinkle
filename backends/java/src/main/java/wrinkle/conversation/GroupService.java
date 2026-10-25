@@ -54,13 +54,19 @@ public final class GroupService {
   private final DataSource userDb;
   private final AccountService accounts;
   private final Contacts contacts;
+  private final Cold cold;
 
   public GroupService(
-      DataSource conversationDb, DataSource userDb, AccountService accounts, Contacts contacts) {
+      DataSource conversationDb,
+      DataSource userDb,
+      AccountService accounts,
+      Contacts contacts,
+      Cold cold) {
     this.db = conversationDb;
     this.userDb = userDb;
     this.accounts = accounts;
     this.contacts = contacts;
+    this.cold = cold;
   }
 
   /** Whether a topic is acceptable: as a name, but up to 200 bytes. */
@@ -283,7 +289,7 @@ public final class GroupService {
           notice(
               c,
               conversationId,
-              new Header(Kinds.GROUP, topic, List.copyOf(members), 0, 0, false),
+              new Header(Kinds.GROUP, topic, List.copyOf(members), 0, 0, false, 0),
               userId,
               Notice.newBuilder().setGroupCreated(created).build(),
               members,
@@ -394,6 +400,12 @@ public final class GroupService {
             ResultSet rs = ps.executeQuery()) {
           if (rs.next()) {
             conv.setLastMessage(Rows.message(conversationId, rs));
+          } else {
+            // Moved to the cold tier, which has it before MySQL lets go.
+            Cold.Row last = cold.get(conversationId, h.lastSeq());
+            if (last != null) {
+              conv.setLastMessage(last.message(conversationId).toBuilder().clearReactions());
+            }
           }
         }
       }
