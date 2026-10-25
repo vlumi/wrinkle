@@ -92,21 +92,24 @@ const (
 	ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED ErrorCode = 8
 	// The name is taken.
 	ErrorCode_ERROR_CODE_ALREADY_EXISTS ErrorCode = 9
+	// Sync's cursor is older than the oldest event the user's log keeps.
+	ErrorCode_ERROR_CODE_CURSOR_EXPIRED ErrorCode = 10
 )
 
 // Enum value maps for ErrorCode.
 var (
 	ErrorCode_name = map[int32]string{
-		0: "ERROR_CODE_UNSPECIFIED",
-		1: "ERROR_CODE_INVALID_ARGUMENT",
-		2: "ERROR_CODE_UNAUTHENTICATED",
-		3: "ERROR_CODE_PERMISSION_DENIED",
-		4: "ERROR_CODE_NOT_FOUND",
-		5: "ERROR_CODE_FAILED_PRECONDITION",
-		6: "ERROR_CODE_UNAVAILABLE",
-		7: "ERROR_CODE_INTERNAL",
-		8: "ERROR_CODE_RESOURCE_EXHAUSTED",
-		9: "ERROR_CODE_ALREADY_EXISTS",
+		0:  "ERROR_CODE_UNSPECIFIED",
+		1:  "ERROR_CODE_INVALID_ARGUMENT",
+		2:  "ERROR_CODE_UNAUTHENTICATED",
+		3:  "ERROR_CODE_PERMISSION_DENIED",
+		4:  "ERROR_CODE_NOT_FOUND",
+		5:  "ERROR_CODE_FAILED_PRECONDITION",
+		6:  "ERROR_CODE_UNAVAILABLE",
+		7:  "ERROR_CODE_INTERNAL",
+		8:  "ERROR_CODE_RESOURCE_EXHAUSTED",
+		9:  "ERROR_CODE_ALREADY_EXISTS",
+		10: "ERROR_CODE_CURSOR_EXPIRED",
 	}
 	ErrorCode_value = map[string]int32{
 		"ERROR_CODE_UNSPECIFIED":         0,
@@ -119,6 +122,7 @@ var (
 		"ERROR_CODE_INTERNAL":            7,
 		"ERROR_CODE_RESOURCE_EXHAUSTED":  8,
 		"ERROR_CODE_ALREADY_EXISTS":      9,
+		"ERROR_CODE_CURSOR_EXPIRED":      10,
 	}
 )
 
@@ -2107,7 +2111,7 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x03Ack\x12\x16\n" +
 	"\x06cursor\x18\x01 \x01(\x04R\x06cursor\"\x06\n" +
 	"\x04Ping\"\x06\n" +
-	"\x04Pong*\xbf\x02\n" +
+	"\x04Pong*\xde\x02\n" +
 	"\tErrorCode\x12\x1a\n" +
 	"\x16ERROR_CODE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bERROR_CODE_INVALID_ARGUMENT\x10\x01\x12\x1e\n" +
@@ -2118,7 +2122,9 @@ const file_wrinkle_v1_frame_proto_rawDesc = "" +
 	"\x16ERROR_CODE_UNAVAILABLE\x10\x06\x12\x17\n" +
 	"\x13ERROR_CODE_INTERNAL\x10\a\x12!\n" +
 	"\x1dERROR_CODE_RESOURCE_EXHAUSTED\x10\b\x12\x1d\n" +
-	"\x19ERROR_CODE_ALREADY_EXISTS\x10\tB\x9d\x01\n" +
+	"\x19ERROR_CODE_ALREADY_EXISTS\x10\t\x12\x1d\n" +
+	"\x19ERROR_CODE_CURSOR_EXPIRED\x10\n" +
+	"B\x9d\x01\n" +
 	"\x0ecom.wrinkle.v1B\n" +
 	"FrameProtoP\x01Z6github.com/vlumi/wrinkle/proto/go/wrinkle/v1;wrinklev1\xa2\x02\x03WXX\xaa\x02\n" +
 	"Wrinkle.V1\xca\x02\n" +

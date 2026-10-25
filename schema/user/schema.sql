@@ -14,6 +14,10 @@ CREATE TABLE user (
   password_hash VARCHAR(255) NOT NULL,
   -- Position counter of the event log; the next event gets log_head + 1.
   log_head BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  -- The newest position dropped from the log by its retention: events up to
+  -- it are gone, and a sync from before it has expired. Raised in the
+  -- transaction that drops them.
+  log_tail BIGINT UNSIGNED NOT NULL DEFAULT 0,
   -- Outbox id counter for this user's profile changes.
   last_outbox_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
   created_at DATETIME(6) NOT NULL,
@@ -53,7 +57,8 @@ CREATE TABLE device (
   PRIMARY KEY (user_id, device_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
--- The per-user event log. Devices read it by position.
+-- The per-user event log. Devices read it by position. Events older than
+-- the retention are dropped, oldest first, through the index on their age.
 CREATE TABLE user_event (
   user_id BINARY(16) NOT NULL,
   position BIGINT UNSIGNED NOT NULL,
@@ -65,7 +70,8 @@ CREATE TABLE user_event (
   payload BLOB NOT NULL,
   occurred_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, position),
-  UNIQUE KEY user_event_source (user_id, source_id, outbox_id)
+  UNIQUE KEY user_event_source (user_id, source_id, outbox_id),
+  KEY user_event_age (occurred_at)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- The user's conversation list, maintained by fan-out workers.

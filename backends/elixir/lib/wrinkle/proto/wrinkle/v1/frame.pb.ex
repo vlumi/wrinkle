@@ -17,6 +17,7 @@ defmodule Wrinkle.V1.ErrorCode do
   field :ERROR_CODE_INTERNAL, 7
   field :ERROR_CODE_RESOURCE_EXHAUSTED, 8
   field :ERROR_CODE_ALREADY_EXISTS, 9
+  field :ERROR_CODE_CURSOR_EXPIRED, 10
 end
 
 defmodule Wrinkle.V1.Frame do

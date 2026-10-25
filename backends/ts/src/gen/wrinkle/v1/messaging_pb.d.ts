@@ -182,7 +182,8 @@ export declare type ConnectResponse = Message<"wrinkle.v1.ConnectResponse"> & {
   deviceCursor: bigint;
 
   /**
-   * The newest position in the user's log; 0 when the log is empty.
+   * The newest position in the user's log; 0 when the log is empty. A device
+   * without history starts syncing here, after listing its conversations.
    *
    * @generated from field: uint64 log_head = 4;
    */
@@ -1530,7 +1531,13 @@ export declare type MarkReadResponse = Message<"wrinkle.v1.MarkReadResponse"> & 
 export declare const MarkReadResponseSchema: GenMessage<MarkReadResponse>;
 
 /**
- * Returns events from the user's log after the cursor, oldest first.
+ * Returns events from the user's log after the cursor, oldest first. The
+ * log keeps events for a retention period, 30 days by default, and drops
+ * older ones; a cursor before the oldest kept event fails with
+ * ERROR_CODE_CURSOR_EXPIRED, since events after it are gone. The device then
+ * starts over as one without history: from ConnectResponse.log_head, with
+ * the conversation list, contacts and history fetched again, as anything it
+ * kept may have changed meanwhile.
  *
  * @generated from message wrinkle.v1.SyncRequest
  */

@@ -818,6 +818,13 @@ export enum ErrorCode {
    * @generated from enum value: ERROR_CODE_ALREADY_EXISTS = 9;
    */
   ALREADY_EXISTS = 9,
+
+  /**
+   * Sync's cursor is older than the oldest event the user's log keeps.
+   *
+   * @generated from enum value: ERROR_CODE_CURSOR_EXPIRED = 10;
+   */
+  CURSOR_EXPIRED = 10,
 }
 
 /**

@@ -61,7 +61,8 @@ message ConnectResponse {
   uint64 device_id = 2;
   // The cursor this device last acked; 0 for a new device.
   uint64 device_cursor = 3;
-  // The newest position in the user's log; 0 when the log is empty.
+  // The newest position in the user's log; 0 when the log is empty. A device
+  // without history starts syncing here, after listing its conversations.
   uint64 log_head = 4;
 }
 
@@ -487,7 +488,13 @@ message MarkReadRequest {
 
 message MarkReadResponse {}
 
-// Returns events from the user's log after the cursor, oldest first.
+// Returns events from the user's log after the cursor, oldest first. The
+// log keeps events for a retention period, 30 days by default, and drops
+// older ones; a cursor before the oldest kept event fails with
+// ERROR_CODE_CURSOR_EXPIRED, since events after it are gone. The device then
+// starts over as one without history: from ConnectResponse.log_head, with
+// the conversation list, contacts and history fetched again, as anything it
+// kept may have changed meanwhile.
 message SyncRequest {
   uint64 cursor = 1;
   // Maximum number of events to return; the server may return fewer.

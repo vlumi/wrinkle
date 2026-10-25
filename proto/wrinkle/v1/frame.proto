@@ -195,6 +195,8 @@ enum ErrorCode {
   ERROR_CODE_RESOURCE_EXHAUSTED = 8;
   // The name is taken.
   ERROR_CODE_ALREADY_EXISTS = 9;
+  // Sync's cursor is older than the oldest event the user's log keeps.
+  ERROR_CODE_CURSOR_EXPIRED = 10;
 }
 
 // The device has processed its user's log up to this cursor. The server

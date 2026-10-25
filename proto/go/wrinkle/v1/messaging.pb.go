@@ -459,7 +459,8 @@ type ConnectResponse struct {
 	DeviceId uint64                 `protobuf:"varint,2,opt,name=device_id,json=deviceId,proto3" json:"device_id,omitempty"`
 	// The cursor this device last acked; 0 for a new device.
 	DeviceCursor uint64 `protobuf:"varint,3,opt,name=device_cursor,json=deviceCursor,proto3" json:"device_cursor,omitempty"`
-	// The newest position in the user's log; 0 when the log is empty.
+	// The newest position in the user's log; 0 when the log is empty. A device
+	// without history starts syncing here, after listing its conversations.
 	LogHead       uint64 `protobuf:"varint,4,opt,name=log_head,json=logHead,proto3" json:"log_head,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3692,7 +3693,13 @@ func (*MarkReadResponse) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{72}
 }
 
-// Returns events from the user's log after the cursor, oldest first.
+// Returns events from the user's log after the cursor, oldest first. The
+// log keeps events for a retention period, 30 days by default, and drops
+// older ones; a cursor before the oldest kept event fails with
+// ERROR_CODE_CURSOR_EXPIRED, since events after it are gone. The device then
+// starts over as one without history: from ConnectResponse.log_head, with
+// the conversation list, contacts and history fetched again, as anything it
+// kept may have changed meanwhile.
 type SyncRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Cursor uint64                 `protobuf:"varint,1,opt,name=cursor,proto3" json:"cursor,omitempty"`

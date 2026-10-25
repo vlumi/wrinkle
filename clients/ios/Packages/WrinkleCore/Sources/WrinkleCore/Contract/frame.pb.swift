@@ -98,6 +98,9 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
 
   /// The name is taken.
   case alreadyExists // = 9
+
+  /// Sync's cursor is older than the oldest event the user's log keeps.
+  case cursorExpired // = 10
   case UNRECOGNIZED(Int)
 
   public init() {
@@ -116,6 +119,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     case 7: self = .internal
     case 8: self = .resourceExhausted
     case 9: self = .alreadyExists
+    case 10: self = .cursorExpired
     default: self = .UNRECOGNIZED(rawValue)
     }
   }
@@ -132,6 +136,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     case .internal: return 7
     case .resourceExhausted: return 8
     case .alreadyExists: return 9
+    case .cursorExpired: return 10
     case .UNRECOGNIZED(let i): return i
     }
   }
@@ -148,6 +153,7 @@ public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIter
     .internal,
     .resourceExhausted,
     .alreadyExists,
+    .cursorExpired,
   ]
 
 }
@@ -1106,7 +1112,7 @@ public nonisolated struct Wrinkle_V1_Pong: Sendable {
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_ErrorCode: SwiftProtobuf._ProtoNameProviding {
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0\u{1}ERROR_CODE_RESOURCE_EXHAUSTED\0\u{1}ERROR_CODE_ALREADY_EXISTS\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0\u{1}ERROR_CODE_RESOURCE_EXHAUSTED\0\u{1}ERROR_CODE_ALREADY_EXISTS\0\u{1}ERROR_CODE_CURSOR_EXPIRED\0")
 }
 
 nonisolated extension Wrinkle_V1_Frame: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
