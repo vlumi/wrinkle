@@ -111,6 +111,8 @@ const logRetention = 20 * time.Second
 // retention drops the probe's message from the log; a device then starts
 // again from the head, and the conversation's history is still there.
 func TestSyncFromBeforeTheRetentionExpires(t *testing.T) {
+	// Parallel, so the wait for the retention overlaps the hot window's.
+	t.Parallel()
 	d := connectToken(t, probed.token)
 	deadline := time.Now().Add(2*logRetention + eventTimeout)
 	for {

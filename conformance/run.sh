@@ -18,9 +18,12 @@ fi
 ../infra/reset-fanout.sh
 
 log=$(mktemp -t wrinkle-backend.XXXXXX)
-# A short log retention, which TestSyncFromBeforeTheRetentionExpires relies on
-# (logRetention there); the other tests finish with their users well within it.
-WRINKLE_LOG_RETENTION_S=20 WRINKLE_LOG_TRIM_INTERVAL_S=1 "$@" >"$log" 2>&1 &
+# A short log retention and hot window, which TestSyncFromBeforeTheRetentionExpires
+# and TestHistoryAcrossTheColdTier rely on (logRetention and hotWindow there);
+# the other tests finish with their users well within them.
+WRINKLE_LOG_RETENTION_S=20 WRINKLE_LOG_TRIM_INTERVAL_S=1 \
+  WRINKLE_HISTORY_HOT_S=20 WRINKLE_COLD_MOVE_INTERVAL_S=1 \
+  "$@" >"$log" 2>&1 &
 backend=$!
 cleanup() {
   kill "$backend" 2>/dev/null || true
