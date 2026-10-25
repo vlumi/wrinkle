@@ -1,14 +1,16 @@
 // The flow of events into the model: synced from the cursor on connect and
 // after a gap, pushed over the connection in between.
 
+import { BackendError } from "../connection/connection";
 import type { contactActions } from "../contacts/actions";
 import type { conversationActions } from "../conversations/actions";
-import { applyEvent, key } from "../conversations/model";
+import { applyEvent, emptyData, key } from "../conversations/model";
 import { confirmPending } from "../conversations/pending";
 import { withDevice } from "../devices/model";
 import type { opening } from "../e2ee/opening";
 import type { sharingActions } from "../e2ee/sharing";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
+import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { groupActions } from "../groups/actions";
 import { hex, sameId } from "../ids";
 import type { Api } from "./api";
@@ -26,13 +28,31 @@ export function sync(
   async function syncFromCursor() {
     if (!link.conn) return;
     for (;;) {
-      const resp = await link.conn.call("sync", { case: "sync", value: { cursor: link.cursor, limit: SYNC_LIMIT } });
+      let resp;
+      try {
+        resp = await link.conn.call("sync", { case: "sync", value: { cursor: link.cursor, limit: SYNC_LIMIT } });
+      } catch (err) {
+        if (err instanceof BackendError && err.code === ErrorCode.CURSOR_EXPIRED) {
+          startOver();
+          return;
+        }
+        throw err;
+      }
       for (const ev of resp.events) apply(ev);
       link.saveCursor(resp.cursor);
       if (!resp.hasMore) break;
     }
     link.conn.ack(link.cursor);
     get().markReadIfVisible();
+  }
+
+  // The log no longer reaches back to the cursor: everything held may be
+  // stale, so the device starts again as one without history, from the
+  // head on the next connect, which lists and loads it all again.
+  function startOver() {
+    link.saveCursor(0n);
+    set({ ...emptyData(), complete: {} });
+    link.conn?.restart();
   }
 
   function apply(event: Event) {
