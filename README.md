@@ -87,10 +87,10 @@ All backends implement the same Protobuf contract and pass the same conformance 
 | Backend | Shape | Push |
 |---|---|---|
 | [Go](backends/go/README.md) | all roles in one process, or gateways and services instances | yes |
-| [Java](backends/java/README.md) | all roles in one process, or gateways and services instances | stores tokens, does not send yet |
+| [Java](backends/java/README.md) | all roles in one process, or gateways and services instances | yes |
 | [TypeScript](backends/ts/README.md) | all roles in one process, or gateways and services instances | yes |
-| [Elixir](backends/elixir/README.md) | gateways, beside Go, Java or TypeScript services | through the Go or TypeScript services |
-| [Rust](backends/rust/README.md) | gateways, beside Go, Java or TypeScript services | through the Go or TypeScript services |
+| [Elixir](backends/elixir/README.md) | gateways, beside Go, Java or TypeScript services | through the services |
+| [Rust](backends/rust/README.md) | gateways, beside Go, Java or TypeScript services | through the services |
 
 Clients: a web client (React and TypeScript, served as a static site) and an iOS client (SwiftUI), both working against any backend.
 
@@ -122,7 +122,7 @@ Grafana is at http://localhost:3000 with a dashboard over the backend's metrics,
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas and Vitess keyspace definitions
 infra/        Docker Compose for Vitess or MySQL, Kafka, Debezium, Valkey, Garage, Prometheus and Grafana, HAProxy for the TLS edge and the side-by-side setup, and the cluster; the arm64 Vitess image
-backends/     go/, java/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
+backends/     go/, java/, ts/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)
 conformance/  backend-agnostic tests against the contract
