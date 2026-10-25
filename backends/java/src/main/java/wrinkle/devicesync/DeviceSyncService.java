@@ -99,12 +99,39 @@ public final class DeviceSyncService {
     }
   }
 
-  /** Events after the cursor, oldest first. */
+  /**
+   * Events after the cursor, oldest first, or CURSOR_EXPIRED when the retention dropped some of
+   * them.
+   */
   public SyncResponse sync(Uuid userId, long cursor, int limit) throws SQLException {
     int pageSize = limit == 0 ? DEFAULT_SYNC_LIMIT : Math.min(limit, MAX_SYNC_LIMIT);
     SyncResponse.Builder resp = SyncResponse.newBuilder().setCursor(cursor);
-    try (Connection c = db.getConnection();
-        PreparedStatement ps =
+    try (Connection c = db.getConnection()) {
+      readEvents(c, userId, cursor, pageSize, resp);
+      // After the events: the trimmer raises the tail in the transaction that drops them, so
+      // events read before the drop are all there, and a drop that came first shows here.
+      long tail = logTail(c, userId);
+      if (cursor < tail) {
+        throw ApiError.cursorExpired(
+            "cursor " + cursor + " is before the log's oldest kept event, after " + tail);
+      }
+    }
+    return resp.build();
+  }
+
+  /** The newest position the retention dropped from the user's log; 0 without a user row. */
+  private static long logTail(Connection c, Uuid userId) throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(c, "SELECT log_tail FROM user WHERE user_id = ?", userId);
+        ResultSet rs = ps.executeQuery()) {
+      return rs.next() ? rs.getLong(1) : 0;
+    }
+  }
+
+  private static void readEvents(
+      Connection c, Uuid userId, long cursor, int pageSize, SyncResponse.Builder resp)
+      throws SQLException {
+    try (PreparedStatement ps =
             Sql.prepare(
                 c,
                 "SELECT payload FROM user_event WHERE user_id = ? AND position > ? ORDER BY"
@@ -128,7 +155,6 @@ public final class DeviceSyncService {
         resp.setCursor(event.getCursor());
       }
     }
-    return resp.build();
   }
 
   /**

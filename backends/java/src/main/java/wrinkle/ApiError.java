@@ -49,6 +49,10 @@ public final class ApiError extends RuntimeException {
     return new ApiError(ErrorCode.ERROR_CODE_ALREADY_EXISTS, message);
   }
 
+  public static ApiError cursorExpired(String message) {
+    return new ApiError(ErrorCode.ERROR_CODE_CURSOR_EXPIRED, message);
+  }
+
   /** The wire form of any error; internal ones keep their detail out of the response. */
   public static wrinkle.v1.Error toProto(Throwable t) {
     if (t instanceof ApiError e) {

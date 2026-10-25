@@ -7,6 +7,7 @@ import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -31,6 +32,8 @@ public record Config(
     String blobSecret,
     String blobRegion,
     long ackIntervalMillis,
+    Duration logRetention,
+    Duration logTrimInterval,
     String apnsKey,
     String apnsKeyId,
     String apnsTeamId,
@@ -76,6 +79,8 @@ public record Config(
             "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4");
     String blobRegion = env("WRINKLE_BLOB_REGION", "garage");
     String ackIntervalMs = env("WRINKLE_ACK_INTERVAL_MS", "60000");
+    String logRetentionS = env("WRINKLE_LOG_RETENTION_S", String.valueOf(30 * 24 * 3600));
+    String logTrimIntervalS = env("WRINKLE_LOG_TRIM_INTERVAL_S", "3600");
     // Push notifications are off without a key.
     String apnsKey = env("WRINKLE_APNS_KEY", "");
     // Defaults to the id in the key's file name.
@@ -110,6 +115,8 @@ public record Config(
         case "blob-secret" -> blobSecret = value;
         case "blob-region" -> blobRegion = value;
         case "ack-interval-ms" -> ackIntervalMs = value;
+        case "log-retention-s" -> logRetentionS = value;
+        case "log-trim-interval-s" -> logTrimIntervalS = value;
         case "apns-key" -> apnsKey = value;
         case "apns-key-id" -> apnsKeyId = value;
         case "apns-team-id" -> apnsTeamId = value;
@@ -127,6 +134,12 @@ public record Config(
     if (ackIntervalMillis < 0) {
       throw new IllegalArgumentException("ack interval must not be negative");
     }
+    Duration logRetention = Duration.ofSeconds(Long.parseLong(logRetentionS));
+    Duration logTrimInterval = Duration.ofSeconds(Long.parseLong(logTrimIntervalS));
+    if (logRetention.isNegative() || !logTrimInterval.isPositive()) {
+      throw new IllegalArgumentException(
+          "log retention must not be negative and the trim interval must be positive");
+    }
     return new Config(
         roleSet,
         address(listen),
@@ -142,6 +155,8 @@ public record Config(
         blobSecret,
         blobRegion,
         ackIntervalMillis,
+        logRetention,
+        logTrimInterval,
         expandHome(apnsKey),
         apnsKeyId,
         apnsTeamId,

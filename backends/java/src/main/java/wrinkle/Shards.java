@@ -57,6 +57,11 @@ public final class Shards {
     return fromNames(names);
   }
 
+  /** The shards' names in keyspace order; none when the keyspace is not sharded. */
+  public List<String> names() {
+    return names;
+  }
+
   /** Where the xxhash vindex places an id: its XXH64, little-endian. */
   public static byte[] keyspaceId(byte[] id) {
     long h = XxHash64.hash(id);

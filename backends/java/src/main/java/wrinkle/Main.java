@@ -22,6 +22,7 @@ import wrinkle.conversation.ConversationKeys;
 import wrinkle.conversation.ConversationService;
 import wrinkle.conversation.GroupService;
 import wrinkle.devicesync.DeviceSyncService;
+import wrinkle.devicesync.LogTrimmer;
 import wrinkle.fanout.FanoutWorker;
 import wrinkle.gateway.Gateway;
 import wrinkle.presence.Presence;
@@ -116,6 +117,13 @@ public final class Main {
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
       new UploadSweeper(shared.userDb(), shared.blobs()).start();
+      new LogTrimmer(
+              cfg.mysql(),
+              USER_KEYSPACE,
+              shared.userDb(),
+              cfg.logRetention(),
+              cfg.logTrimInterval())
+          .start();
     }
 
     Server server = sb.build();
