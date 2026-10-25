@@ -2,7 +2,8 @@
 // configuration. The gateway role serves WebSocket connections, with the
 // conversation and sync services in the same process unless it forwards to
 // a services process; the services role serves them over the internal RPC;
-// the fanout role consumes the outbox from Kafka and deletes unused blobs.
+// the fanout role consumes the outbox from Kafka, deletes unused blobs,
+// trims the user logs and moves old history to the cold tier.
 package main
 
 import (
@@ -50,6 +51,7 @@ func run() error {
 		mysql   = flag.String("mysql", env("WRINKLE_MYSQL", "127.0.0.1:15003"), "vtgate MySQL address")
 		brokers = flag.String("kafka", env("WRINKLE_KAFKA", "localhost:19092"), "comma-separated Kafka brokers")
 		valkey  = flag.String("valkey", env("WRINKLE_VALKEY", "localhost:6379"), "Valkey address")
+		hbase   = flag.String("hbase", env("WRINKLE_HBASE", "hbase.localhost:2181"), "the cold tier's HBase, by its ZooKeeper quorum")
 		svcAddr = flag.String("services", env("WRINKLE_SERVICES", ""), "gateway: forward requests to a services process at this address instead of running the services in-process")
 		svcLsn  = flag.String("services-listen", env("WRINKLE_SERVICES_LISTEN", "127.0.0.1:9000"), "services role: gRPC listen address")
 		node    = flag.String("node", env("WRINKLE_NODE", hostname), "this node's name in presence")
@@ -58,6 +60,8 @@ func run() error {
 		ackMS   = flag.Int("ack-interval-ms", envInt("WRINKLE_ACK_INTERVAL_MS", 60000), "gateway: least time between two ack writes of a connection, in milliseconds")
 		logKeep = flag.Int("log-retention-s", envInt("WRINKLE_LOG_RETENTION_S", 30*24*3600), "fanout: how long the user logs keep events, in seconds")
 		trimS   = flag.Int("log-trim-interval-s", envInt("WRINKLE_LOG_TRIM_INTERVAL_S", 3600), "fanout: time between two trims of the user logs, in seconds")
+		hotS    = flag.Int("history-hot-s", envInt("WRINKLE_HISTORY_HOT_S", 30*24*3600), "fanout: how long messages stay in MySQL before moving to the cold tier, in seconds")
+		moveS   = flag.Int("cold-move-interval-s", envInt("WRINKLE_COLD_MOVE_INTERVAL_S", 3600), "fanout: time between two moves to the cold tier, in seconds")
 		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
 		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
@@ -87,6 +91,7 @@ func run() error {
 	// by fan-out; a gateway forwarding to a services process does without.
 	var local *services.Local
 	var userDB, conversationDB *sql.DB
+	var cold *conversation.Cold
 	store := blobs.New(blobs.Config{URL: *blobURL, KeyID: *blobKey, Secret: *blobSec, Region: *blobReg})
 	if want.services || want.fanout || (want.gateway && *svcAddr == "") {
 		conversationDB, err = vtdb.Open(ctx, *mysql, "conversation", *dbConns)
@@ -99,11 +104,13 @@ func run() error {
 			return err
 		}
 		defer userDB.Close()
+		cold = conversation.NewCold(*hbase)
+		defer cold.Close()
 		servicesLog := log.With("role", "services")
 		accts := accounts.New(userDB, store, servicesLog)
 		uploadService := uploads.New(userDB, store)
 		contactService := contacts.New(userDB, accts)
-		conversations := conversation.New(conversationDB, accts, accts, uploadService, contactService)
+		conversations := conversation.New(conversationDB, accts, accts, uploadService, contactService, cold)
 		users := devicesync.New(userDB, accts, conversations, contactService)
 		local = services.NewLocal(accts, conversations, users, uploadService, stickers.New(userDB, store), contactService, servicesLog)
 	}
@@ -180,6 +187,13 @@ func run() error {
 		}
 		defer trimmer.Close()
 		add("log trimmer", func() error { return trimmer.Run(ctx) })
+		mover, err := conversation.NewMover(ctx, *mysql, "conversation", conversationDB, cold,
+			time.Duration(*hotS)*time.Second, time.Duration(*moveS)*time.Second, log.With("role", "mover"))
+		if err != nil {
+			return err
+		}
+		defer mover.Close()
+		add("cold mover", func() error { return mover.Run(ctx) })
 	}
 
 	// One slot per role, so every failing role can report without blocking.

@@ -21,7 +21,8 @@ const maxReactionCiphertext = 1 << 10
 
 // SetReaction replaces the user's sealed reactions to a message, or
 // removes them when sealed is nil. Setting the same bytes again, or
-// removing none, changes nothing and tells no one.
+// removing none, changes nothing and tells no one. A message in the cold
+// tier is changed there, under the conversation's row lock as in MySQL.
 func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UUID, seq uint64, sealed *pb.Sealed) error {
 	if seq == 0 {
 		return apierror.InvalidArgument("seq must be positive")
@@ -58,14 +59,27 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 		return notFound
 	}
 	var body []byte
-	err = tx.QueryRowContext(ctx, `
-		SELECT body FROM message WHERE conversation_id = ? AND seq = ?`,
-		conversationID, seq).Scan(&body)
-	if errors.Is(err, sql.ErrNoRows) {
-		return notFound
-	}
-	if err != nil {
-		return err
+	var cold coldMessage
+	inCold := seq <= st.coldSeq
+	if inCold {
+		var found bool
+		if cold, found, err = s.cold.Get(ctx, conversationID, seq); err != nil {
+			return err
+		}
+		if !found {
+			return notFound
+		}
+		body = cold.body
+	} else {
+		err = tx.QueryRowContext(ctx, `
+			SELECT body FROM message WHERE conversation_id = ? AND seq = ?`,
+			conversationID, seq).Scan(&body)
+		if errors.Is(err, sql.ErrNoRows) {
+			return notFound
+		}
+		if err != nil {
+			return err
+		}
 	}
 	msg := &pb.Message{}
 	if err := decodeBody(body, msg); err != nil {
@@ -91,23 +105,58 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 		}
 	}
 	var oldBody []byte
-	err = tx.QueryRowContext(ctx, `
-		SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`,
-		conversationID, seq, userID).Scan(&oldBody)
-	found := err == nil
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
+	var found bool
+	var others []*pb.Reaction
+	if inCold {
+		list, err := cold.reactionList()
+		if err != nil {
+			return err
+		}
+		for _, r := range list {
+			if !bytes.Equal(r.GetUserId(), userID[:]) {
+				others = append(others, r)
+				continue
+			}
+			found = true
+			if oldBody, err = (proto.MarshalOptions{Deterministic: true}).Marshal(r.GetSealed()); err != nil {
+				return fmt.Errorf("marshal reaction: %w", err)
+			}
+		}
+	} else {
+		err = tx.QueryRowContext(ctx, `
+			SELECT body FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`,
+			conversationID, seq, userID).Scan(&oldBody)
+		found = err == nil
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 	}
 	if (sealed == nil && !found) || (sealed != nil && found && bytes.Equal(oldBody, newBody)) {
 		return nil
 	}
 	// The column keeps microseconds; the event carries the stored time.
 	now := vtdb.Now()
-	if sealed == nil {
+	updatedAt := timestamppb.New(now)
+	committed := false
+	switch {
+	case inCold:
+		if sealed != nil {
+			others = append(others, &pb.Reaction{UserId: userID.Bytes(), Sealed: sealed, UpdatedAt: updatedAt})
+		}
+		changed := cold
+		if changed.reactions, err = encodeReactions(others); err != nil {
+			return err
+		}
+		undo, err := s.cold.change(ctx, conversationID, cold, changed)
+		if err != nil {
+			return err
+		}
+		defer undo(&committed)
+	case sealed == nil:
 		_, err = tx.ExecContext(ctx, `
 			DELETE FROM reaction WHERE conversation_id = ? AND seq = ? AND user_id = ?`,
 			conversationID, seq, userID)
-	} else {
+	default:
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO reaction (conversation_id, seq, user_id, body, updated_at) VALUES (?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE body = ?, updated_at = ?`,
@@ -116,7 +165,6 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 	if err != nil {
 		return err
 	}
-	updatedAt := timestamppb.New(now)
 	event := &pb.Event{
 		OccurredAt: updatedAt,
 		Body: &pb.Event_Reaction{Reaction: &pb.ReactionEvent{
@@ -127,7 +175,11 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 	if err := row.insert(ctx, tx); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
+	return nil
 }
 
 // addReactions fills in the reactions of the messages, which are of one

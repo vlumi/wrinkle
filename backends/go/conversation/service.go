@@ -59,11 +59,12 @@ type Service struct {
 	keys        DeviceKeys
 	attachments Attachments
 	blocks      Blocks
+	cold        *Cold
 	direct      directMembers
 }
 
-func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments, blocks Blocks) *Service {
-	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments, blocks: blocks}
+func New(db *sql.DB, profiles Profiles, keys DeviceKeys, attachments Attachments, blocks Blocks, cold *Cold) *Service {
+	return &Service{db: db, profiles: profiles, keys: keys, attachments: attachments, blocks: blocks, cold: cold}
 }
 
 // Open finds or creates the direct conversation between two users, user_a
@@ -385,7 +386,8 @@ func readRecipients(ctx context.Context, tx *sql.Tx, st state, conversationID, r
 
 // Messages returns messages with seq below beforeSeq, newest first: in a
 // group, those since the user joined and, for a former member, until they
-// left.
+// left. The newer ones are in MySQL; the page goes on in the cold tier
+// below the watermark.
 func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
 	var joinedSeq uint64
 	var leftSeq sql.NullInt64
@@ -412,12 +414,41 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 		limit = defaultPageSize
 	}
 	limit = min(limit, maxPageSize)
+	for {
+		messages, again, err := s.messages(ctx, conversationID, joinedSeq, upTo, beforeSeq, limit)
+		if !again {
+			return messages, err
+		}
+	}
+}
+
+// coldRange is where a page that MySQL gave goes on in the cold tier: from
+// joinedSeq up to hi, when there is room and anything there. A page with a
+// message the watermark has since passed is read again.
+func coldRange(page []*pb.Message, joinedSeq, upTo, beforeSeq, coldSeq uint64, limit uint32) (hi uint64, more, again bool) {
+	hi = min(upTo, beforeSeq-1, coldSeq)
+	if len(page) > 0 {
+		lowest := page[len(page)-1].GetSeq()
+		if lowest <= coldSeq {
+			return 0, false, true
+		}
+		hi = min(hi, lowest-1)
+	}
+	return hi, len(page) < int(limit) && hi >= joinedSeq, false
+}
+
+// messages reads a page of history: MySQL first, then the watermark, then
+// the cold tier below the lowest seq MySQL gave. The watermark only rises,
+// and what it covers is in the cold tier before it does, so nothing falls
+// between the two. A move that overlapped the read may have taken the
+// reactions of what MySQL gave, so the read is made again then.
+func (s *Service) messages(ctx context.Context, conversationID ids.UUID, joinedSeq, upTo, beforeSeq uint64, limit uint32) ([]*pb.Message, bool, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT seq, sender_user_id, client_message_id, body, blob_ids, sent_at FROM message
 		WHERE conversation_id = ? AND seq >= ? AND seq <= ? AND seq < ? ORDER BY seq DESC LIMIT ?`,
 		conversationID, joinedSeq, upTo, beforeSeq, limit)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer rows.Close()
 	var messages []*pb.Message
@@ -426,22 +457,42 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 		var body, blobs []byte
 		var sentAt time.Time
 		if err := rows.Scan(&msg.Seq, &msg.SenderUserId, &msg.ClientMessageId, &body, &blobs, &sentAt); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		msg.SentAt = timestamppb.New(sentAt)
 		msg.BlobIds = decodeBlobIDs(blobs)
 		if err := decodeBody(body, msg); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		messages = append(messages, msg)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	// Closed before the next query, which frees the connection for it.
 	rows.Close()
 	if err := addReactions(ctx, s.db, conversationID, messages); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return messages, nil
+	var coldSeq uint64
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT cold_seq FROM conversation WHERE conversation_id = ?`, conversationID).Scan(&coldSeq); err != nil {
+		return nil, false, err
+	}
+	hi, more, again := coldRange(messages, joinedSeq, upTo, beforeSeq, coldSeq, limit)
+	if again || !more {
+		return messages, again, nil
+	}
+	cold, err := s.cold.Scan(ctx, conversationID, joinedSeq, hi, int(limit)-len(messages))
+	if err != nil {
+		return nil, false, err
+	}
+	for _, c := range cold {
+		msg, err := c.message(conversationID)
+		if err != nil {
+			return nil, false, err
+		}
+		messages = append(messages, msg)
+	}
+	return messages, false, nil
 }

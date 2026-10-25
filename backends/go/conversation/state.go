@@ -37,6 +37,8 @@ type state struct {
 	// membership changed since it.
 	keyEpoch uint32
 	rotate   bool
+	// The history up to coldSeq is in the cold tier.
+	coldSeq uint64
 }
 
 func (st state) has(userID ids.UUID) bool {
@@ -68,7 +70,7 @@ func decodeMembers(b []byte) ([]ids.UUID, error) {
 }
 
 const (
-	selectState          = `SELECT kind, topic, members, last_seq, key_epoch, rotate FROM conversation WHERE conversation_id = ?`
+	selectState          = `SELECT kind, topic, members, last_seq, key_epoch, rotate, cold_seq FROM conversation WHERE conversation_id = ?`
 	selectStateForUpdate = selectState + ` FOR UPDATE`
 )
 
@@ -76,7 +78,7 @@ const (
 func load(ctx context.Context, q vtdb.RowQuerier, query string, conversationID ids.UUID) (state, error) {
 	var st state
 	var members []byte
-	err := q.QueryRowContext(ctx, query, conversationID).Scan(&st.kind, &st.topic, &members, &st.lastSeq, &st.keyEpoch, &st.rotate)
+	err := q.QueryRowContext(ctx, query, conversationID).Scan(&st.kind, &st.topic, &members, &st.lastSeq, &st.keyEpoch, &st.rotate, &st.coldSeq)
 	if errors.Is(err, sql.ErrNoRows) {
 		return st, apierror.NotFound("conversation %s does not exist", conversationID)
 	}

@@ -520,7 +520,19 @@ func (s *Service) Describe(ctx context.Context, conversationID, userID ids.UUID)
 				return nil, err
 			}
 			c.LastMessage = msg
-		case !errors.Is(err, sql.ErrNoRows):
+		case errors.Is(err, sql.ErrNoRows):
+			// Moved to the cold tier, which has it before MySQL lets go.
+			cold, found, err := s.cold.Get(ctx, conversationID, st.lastSeq)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				if c.LastMessage, err = cold.message(conversationID); err != nil {
+					return nil, err
+				}
+				c.LastMessage.Reactions = nil
+			}
+		default:
 			return nil, err
 		}
 	}
