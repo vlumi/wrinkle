@@ -7,6 +7,8 @@ x-infra: &infra
   WRINKLE_MYSQL: db:15003
   WRINKLE_KAFKA: kafka:9092
   WRINKLE_VALKEY: valkey:6379
+  WRINKLE_HBASE: hbase.localhost:2181
+  WRINKLE_HBASE_REST: http://hbase-rest:8086
 
 x-push: &push
   WRINKLE_TEAM_ID: ${WRINKLE_TEAM_ID:-}

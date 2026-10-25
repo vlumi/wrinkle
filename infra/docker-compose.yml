@@ -107,6 +107,27 @@ services:
         limits:
           memory: 1024M
 
+  # HBase's REST server, for the backends without a native client.
+  hbase-rest:
+    image: wrinkle/hbase:2.6.7
+    command: ["hbase", "rest", "start", "-p", "8086", "--infoport", "8087"]
+    environment:
+      HBASE_HEAPSIZE: 192m
+    ports:
+      - "127.0.0.1:8086:8086"
+    depends_on:
+      hbase:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8086/version/cluster >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+    deploy:
+      resources:
+        limits:
+          memory: 384M
+
   kafka:
     image: apache/kafka:4.3.1
     environment:
