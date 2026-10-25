@@ -18,6 +18,7 @@ export const failedPrecondition = (m: string) => new ApiError(ErrorCode.FAILED_P
 export const unavailable = (m: string) => new ApiError(ErrorCode.UNAVAILABLE, m);
 export const resourceExhausted = (m: string) => new ApiError(ErrorCode.RESOURCE_EXHAUSTED, m);
 export const alreadyExists = (m: string) => new ApiError(ErrorCode.ALREADY_EXISTS, m);
+export const cursorExpired = (m: string) => new ApiError(ErrorCode.CURSOR_EXPIRED, m);
 
 /** The code of an error; anything that is not an ApiError is internal. */
 export const codeOf = (err: unknown): ErrorCode => (err instanceof ApiError ? err.code : ErrorCode.INTERNAL);

@@ -8,7 +8,7 @@ import type { Pool } from "mysql2/promise";
 import { accountsFeature } from "./accounts/feature.ts";
 import { contacts } from "./contacts/feature.ts";
 import { conversation, leaveAllGroups } from "./conversation/feature.ts";
-import { devicesync } from "./devicesync/feature.ts";
+import { devicesyncFeature } from "./devicesync/feature.ts";
 import { startFanout, topics, type Fanout } from "./fanout/worker.ts";
 import { Server } from "./gateway/server.ts";
 import { Blobs } from "./internal/blobs.ts";
@@ -45,6 +45,8 @@ const { values: flags } = parseArgs({
     "db-conns": { type: "string", default: env("WRINKLE_DB_CONNS", "64") },
     "fanout-concurrency": { type: "string", default: env("WRINKLE_FANOUT_CONCURRENCY", "64") },
     "ack-interval-ms": { type: "string", default: env("WRINKLE_ACK_INTERVAL_MS", "60000") },
+    "log-retention-s": { type: "string", default: env("WRINKLE_LOG_RETENTION_S", String(30 * 24 * 3600)) },
+    "log-trim-interval-s": { type: "string", default: env("WRINKLE_LOG_TRIM_INTERVAL_S", "3600") },
     "blob-url": { type: "string", default: env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200") },
     "blob-key-id": { type: "string", default: env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000") },
     "blob-secret": {
@@ -92,7 +94,11 @@ async function main(): Promise<void> {
     };
     const built = newLocal(deps, [
       accountsFeature({ leaveGroups: leaveAllGroups }),
-      devicesync,
+      devicesyncFeature({
+        mysql: flags.mysql,
+        retentionMs: Number(flags["log-retention-s"]) * 1000,
+        intervalMs: Number(flags["log-trim-interval-s"]) * 1000,
+      }),
       conversation,
       contacts,
       uploads,

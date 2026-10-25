@@ -11,7 +11,8 @@ export function keyspaceId(id: Uint8Array): Buffer {
 }
 
 export class Shards {
-  private readonly names: string[];
+  /** The shards' names in keyspace order; none when the keyspace is not sharded. */
+  readonly names: string[];
   // Each shard's first keyspace id, ascending; empty for the first.
   private readonly starts: Buffer[];
 
