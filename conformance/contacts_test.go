@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/vlumi/wrinkle/clients/go/e2ee"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -192,6 +193,11 @@ func TestBlockUser(t *testing.T) {
 	_, err = a.SendText(ctx(t), conv, "m2", "anyone?")
 	wantCode(t, err, denied)
 	wantCode(t, a.SetReaction(ctx(t), conv, first.GetSeq(), junkSealed(1)), denied)
+	wantCode(t, publish(t, a, conv, 2, e2ee.NewEpochKey(), a, b), denied)
+	// A read still counts, but tells only the reader's own devices.
+	if err := a.MarkRead(ctx(t), conv, first.GetSeq()); err != nil {
+		t.Fatal(err)
+	}
 
 	// The blocker is told to unblock first.
 	fp := pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION
@@ -201,6 +207,7 @@ func TestBlockUser(t *testing.T) {
 	wantCode(t, err, fp)
 	_, err = b.AddContact(ctx(t), a.user.GetName())
 	wantCode(t, err, fp)
+	wantCode(t, publish(t, b, conv, 2, e2ee.NewEpochKey(), a, b), fp)
 
 	// Unblocking restores messaging, not the contact.
 	if err := b.UnblockUser(ctx(t), a.user.GetUserId()); err != nil {
@@ -213,8 +220,13 @@ func TestBlockUser(t *testing.T) {
 	if _, err := a.OpenConversation(ctx(t), b.user.GetName()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.SendText(ctx(t), conv, "m2", "hello again"); err != nil {
+	again, err := a.SendText(ctx(t), conv, "m2", "hello again")
+	if err != nil {
 		t.Fatal(err)
+	}
+	// The read while blocked never reached Bob: his next event is this.
+	if ev := nextEvent(t, b, func(*pb.Event) bool { return true }); ev.GetMessage().GetMessage().GetSeq() != again.GetSeq() {
+		t.Fatalf("Bob's event after the block: %v", ev)
 	}
 	if _, err := b.SendText(ctx(t), conv, "m1", "hi"); err != nil {
 		t.Fatal(err)

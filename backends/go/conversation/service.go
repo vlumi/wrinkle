@@ -310,6 +310,11 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 	if seq == 0 {
 		return apierror.InvalidArgument("seq must be positive")
 	}
+	// Across a block, either way, a read tells only the reader's devices.
+	var blocked *apierror.Error
+	if err := s.checkBlocks(ctx, userID, conversationID); err != nil && !errors.As(err, &blocked) {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -341,10 +346,13 @@ func (s *Service) MarkRead(ctx context.Context, userID, conversationID ids.UUID,
 		return err
 	}
 	recipients := st.members
-	if st.kind == kindGroup {
+	switch {
+	case st.kind == kindGroup:
 		if recipients, err = readRecipients(ctx, tx, st, conversationID, userID, current, seq); err != nil {
 			return err
 		}
+	case blocked != nil:
+		recipients = []ids.UUID{userID}
 	}
 	event := &pb.Event{
 		OccurredAt: timestamppb.New(now),

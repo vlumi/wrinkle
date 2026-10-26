@@ -21,6 +21,8 @@ const (
 type DeviceKeys interface {
 	// DeviceKey returns nil when the device has no key.
 	DeviceKey(ctx context.Context, userID ids.UUID, deviceID uint64) ([]byte, error)
+	// DeviceKeys returns the signed-in devices with keys of the users.
+	DeviceKeys(ctx context.Context, userIDs [][]byte) ([]*pb.UserDevices, error)
 }
 
 type wrap struct {
@@ -40,7 +42,7 @@ func (s *Service) PublishKeys(ctx context.Context, userID ids.UUID, deviceID uin
 		return apierror.InvalidArgument("keys must have 1 to %d wrapped keys", maxWrappedKeys)
 	}
 	wraps := make([]wrap, len(keys))
-	self := false
+	self, others := false, false
 	for i, k := range keys {
 		id, ok := ids.Parse(k.GetRecipientUserId())
 		if !ok {
@@ -54,9 +56,20 @@ func (s *Service) PublishKeys(ctx context.Context, userID ids.UUID, deviceID uin
 		}
 		wraps[i] = wrap{id, k.GetRecipientDeviceId(), k.GetWrapped()}
 		self = self || (id == userID && k.GetRecipientDeviceId() == deviceID)
+		others = others || id != userID
+	}
+	// Across a block, either way, no keys go to the other side; the user's
+	// own devices may still share the history.
+	if others {
+		if err := s.checkBlocks(ctx, userID, conversationID); err != nil {
+			return err
+		}
 	}
 	senderKey, err := s.keys.DeviceKey(ctx, userID, deviceID)
 	if err != nil {
+		return err
+	}
+	if err := s.recipientsHaveKeys(ctx, wraps); err != nil {
 		return err
 	}
 
@@ -116,6 +129,41 @@ func (s *Service) PublishKeys(ctx context.Context, userID ids.UUID, deviceID uin
 	return tx.Commit()
 }
 
+// recipientsHaveKeys checks that every wrap is for a signed-in device with
+// a key, so the epoch holds rows for real devices only.
+func (s *Service) recipientsHaveKeys(ctx context.Context, wraps []wrap) error {
+	var users [][]byte
+	seen := map[ids.UUID]bool{}
+	for _, w := range wraps {
+		if !seen[w.userID] {
+			seen[w.userID] = true
+			users = append(users, w.userID.Bytes())
+		}
+	}
+	// More users than a conversation's members is refused there.
+	found, err := s.keys.DeviceKeys(ctx, users)
+	if err != nil {
+		return err
+	}
+	type device struct {
+		userID ids.UUID
+		id     uint64
+	}
+	keyed := map[device]bool{}
+	for _, u := range found {
+		userID, _ := ids.Parse(u.GetUserId())
+		for _, d := range u.GetDevices() {
+			keyed[device{userID, d.GetDeviceId()}] = true
+		}
+	}
+	for _, w := range wraps {
+		if !keyed[device{w.userID, w.deviceID}] {
+			return apierror.InvalidArgument("device %d of %s is not a signed-in device with a key", w.deviceID, w.userID)
+		}
+	}
+	return nil
+}
+
 func recipientsAreMembers(st state, wraps []wrap) error {
 	for _, w := range wraps {
 		if !st.has(w.userID) {
@@ -172,24 +220,26 @@ func (p publication) insert(ctx context.Context, tx *sql.Tx) error {
 
 // Keys returns the conversation's key state and the keys wrapped for the
 // device in epochs after afterEpoch, oldest first. Former members may ask:
-// no wraps reach them after they leave.
+// no wraps reach them after they leave, and they get none of the current
+// membership.
 func (s *Service) Keys(ctx context.Context, userID ids.UUID, deviceID uint64, conversationID ids.UUID, afterEpoch uint32) (*pb.GetConversationKeysResponse, error) {
 	st, err := load(ctx, s.db, selectState, conversationID)
 	if err != nil {
 		return nil, err
 	}
-	var one int
+	var leftSeq sql.NullInt64
 	err = s.db.QueryRowContext(ctx, `
-		SELECT 1 FROM conversation_member WHERE conversation_id = ? AND user_id = ?`,
-		conversationID, userID).Scan(&one)
+		SELECT left_seq FROM conversation_member WHERE conversation_id = ? AND user_id = ?`,
+		conversationID, userID).Scan(&leftSeq)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
 	}
 	if err != nil {
 		return nil, err
 	}
-	resp := &pb.GetConversationKeysResponse{CurrentEpoch: st.keyEpoch, Rotate: st.rotate}
-	if st.keyEpoch > 0 {
+	current := !leftSeq.Valid
+	resp := &pb.GetConversationKeysResponse{CurrentEpoch: st.keyEpoch, Rotate: current && st.rotate}
+	if current && st.keyEpoch > 0 {
 		rows, err := s.db.QueryContext(ctx, `
 			SELECT recipient_user_id, recipient_device_id FROM conversation_key
 			WHERE conversation_id = ? AND epoch = ? ORDER BY recipient_user_id, recipient_device_id`,

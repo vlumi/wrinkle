@@ -1187,8 +1187,10 @@ public nonisolated struct Wrinkle_V1_UserDevices: Sendable {
 /// unless that device made the epoch: a device publishing a new epoch
 /// includes itself, so the loser of two publishing the same epoch learns it
 /// lost instead of joining the winner's epoch with its own key. Wraps a
-/// recipient already has are kept. At most 500 keys; a new epoch with more
-/// recipients continues as the current epoch.
+/// recipient already has are kept. At most 500 keys, each for a signed-in
+/// device with a key (ERROR_CODE_INVALID_ARGUMENT otherwise); a new epoch with
+/// more recipients continues as the current epoch. In a direct conversation
+/// with a block either way, keys for the other user fail as SendMessage does.
 public nonisolated struct Wrinkle_V1_PublishKeysRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1261,7 +1263,8 @@ public nonisolated struct Wrinkle_V1_GetConversationKeysResponse: Sendable {
   /// next is published.
   public var rotate: Bool = false
 
-  /// Every device the current epoch's key is wrapped for.
+  /// Every device the current epoch's key is wrapped for. Empty, as is
+  /// rotate, for a former member, who learns nothing of the membership now.
   public var currentRecipients: [Wrinkle_V1_KeyRecipient] = []
 
   public var keys: [Wrinkle_V1_ReceivedKey] = []
@@ -1308,7 +1311,8 @@ public nonisolated struct Wrinkle_V1_ReceivedKey: Sendable {
 }
 
 /// Marks the conversation read up to seq for the requesting user. Lower than
-/// the current read position is a no-op.
+/// the current read position is a no-op. In a direct conversation with a block
+/// either way, the read event goes to the reader's own devices only.
 public nonisolated struct Wrinkle_V1_MarkReadRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for

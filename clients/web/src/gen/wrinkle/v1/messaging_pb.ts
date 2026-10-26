@@ -1372,8 +1372,10 @@ export const UserDevicesSchema: GenMessage<UserDevices> = /*@__PURE__*/
  * unless that device made the epoch: a device publishing a new epoch
  * includes itself, so the loser of two publishing the same epoch learns it
  * lost instead of joining the winner's epoch with its own key. Wraps a
- * recipient already has are kept. At most 500 keys; a new epoch with more
- * recipients continues as the current epoch.
+ * recipient already has are kept. At most 500 keys, each for a signed-in
+ * device with a key (ERROR_CODE_INVALID_ARGUMENT otherwise); a new epoch with
+ * more recipients continues as the current epoch. In a direct conversation
+ * with a block either way, keys for the other user fail as SendMessage does.
  *
  * @generated from message wrinkle.v1.PublishKeysRequest
  */
@@ -1489,7 +1491,8 @@ export type GetConversationKeysResponse = Message<"wrinkle.v1.GetConversationKey
   rotate: boolean;
 
   /**
-   * Every device the current epoch's key is wrapped for.
+   * Every device the current epoch's key is wrapped for. Empty, as is
+   * rotate, for a former member, who learns nothing of the membership now.
    *
    * @generated from field: repeated wrinkle.v1.KeyRecipient current_recipients = 3;
    */
@@ -1572,7 +1575,8 @@ export const ReceivedKeySchema: GenMessage<ReceivedKey> = /*@__PURE__*/
 
 /**
  * Marks the conversation read up to seq for the requesting user. Lower than
- * the current read position is a no-op.
+ * the current read position is a no-op. In a direct conversation with a block
+ * either way, the read event goes to the reader's own devices only.
  *
  * @generated from message wrinkle.v1.MarkReadRequest
  */

@@ -3187,8 +3187,10 @@ func (x *UserDevices) GetDevices() []*Device {
 // unless that device made the epoch: a device publishing a new epoch
 // includes itself, so the loser of two publishing the same epoch learns it
 // lost instead of joining the winner's epoch with its own key. Wraps a
-// recipient already has are kept. At most 500 keys; a new epoch with more
-// recipients continues as the current epoch.
+// recipient already has are kept. At most 500 keys, each for a signed-in
+// device with a key (ERROR_CODE_INVALID_ARGUMENT otherwise); a new epoch with
+// more recipients continues as the current epoch. In a direct conversation
+// with a block either way, keys for the other user fail as SendMessage does.
 type PublishKeysRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
@@ -3408,7 +3410,8 @@ type GetConversationKeysResponse struct {
 	// The membership changed since the current epoch; sends fail until the
 	// next is published.
 	Rotate bool `protobuf:"varint,2,opt,name=rotate,proto3" json:"rotate,omitempty"`
-	// Every device the current epoch's key is wrapped for.
+	// Every device the current epoch's key is wrapped for. Empty, as is
+	// rotate, for a former member, who learns nothing of the membership now.
 	CurrentRecipients []*KeyRecipient `protobuf:"bytes,3,rep,name=current_recipients,json=currentRecipients,proto3" json:"current_recipients,omitempty"`
 	Keys              []*ReceivedKey  `protobuf:"bytes,4,rep,name=keys,proto3" json:"keys,omitempty"`
 	unknownFields     protoimpl.UnknownFields
@@ -3604,7 +3607,8 @@ func (x *ReceivedKey) GetWrapped() []byte {
 }
 
 // Marks the conversation read up to seq for the requesting user. Lower than
-// the current read position is a no-op.
+// the current read position is a no-op. In a direct conversation with a block
+// either way, the read event goes to the reader's own devices only.
 type MarkReadRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`

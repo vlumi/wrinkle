@@ -281,6 +281,10 @@ func TestPublishKeys(t *testing.T) {
 	bad = wrapFor(t, a, b, conv, 1, k1)
 	bad.RecipientUserId = bad.RecipientUserId[:15]
 	wantCode(t, a.PublishKeys(ctx(t), conv, 1, []*pb.WrappedKey{bad}), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	// Only for a member's signed-in device with a key.
+	bad = wrapFor(t, a, b, conv, 1, k1)
+	bad.RecipientDeviceId += 1000
+	wantCode(t, a.PublishKeys(ctx(t), conv, 1, []*pb.WrappedKey{wrapFor(t, a, a, conv, 1, k1), bad}), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 	// Recipients are members; only members publish, from a device with a
 	// key.
 	wantCode(t, publish(t, a, conv, 1, k1, a, eve), pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
@@ -450,6 +454,10 @@ func TestSendNeedsCurrentEpoch(t *testing.T) {
 	state := conversationKeys(t, d, id, 0)
 	if len(state.GetKeys()) != 1 || state.GetKeys()[0].GetEpoch() != 2 {
 		t.Fatalf("removed member's keys: %v", state.GetKeys())
+	}
+	// Nor anything of the membership now.
+	if len(state.GetCurrentRecipients()) != 0 || state.GetRotate() {
+		t.Fatalf("removed member sees the current recipients: %v", state)
 	}
 
 	// Leaving.
