@@ -30,12 +30,17 @@ const MAX_FRAME_BYTES: usize = 64 * 1024;
 const OUTBOUND_QUEUE: usize = 32;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+/// Register and SignIn requests per connection, each of which may cost a
+/// password hash; those refused as invalid, before hashing, do not count.
+const MAX_SIGN_INS: usize = 5;
 const MAX_IN_FLIGHT: usize = 32;
 const BURST: f64 = 100.0;
 const REFILL_PER_SECOND: f64 = 50.0;
 const PING_INTERVAL: Duration = Duration::from_secs(30);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(90);
 const SWEEP_INTERVAL: Duration = Duration::from_secs(10);
+/// How long a frame may take to write before the connection is closed.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a close frame may take to write before the socket is dropped.
 const CLOSE_WRITE_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -233,10 +238,11 @@ pub struct Conn {
     app: Arc<App>,
     link: Arc<Link>,
     binding: Mutex<Binding>,
-    /// Signaled when a Connect is undone, or a Register or SignIn answered,
+    /// Signaled when a Connect is undone, or a Register or SignIn succeeds,
     /// so the Connect that follows gets a fresh deadline.
     restart_deadline: Notify,
     in_flight: AtomicUsize,
+    sign_ins: AtomicUsize,
     /// Created on the first ack after Connect.
     acks: Mutex<Option<Arc<Acks<DeviceAcks>>>>,
 }
@@ -263,13 +269,14 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
         binding: Mutex::new(Binding::Pending),
         restart_deadline: Notify::new(),
         in_flight: AtomicUsize::default(),
+        sign_ins: AtomicUsize::default(),
         acks: Mutex::default(),
     });
+    // Its own task, so it fires while the read loop waits for room in the
+    // queue.
+    let deadline = tokio::spawn(conn.clone().connect_deadline());
 
     let mut bucket = TokenBucket::new(Instant::now());
-    let connect_deadline = tokio::time::sleep(CONNECT_TIMEOUT);
-    tokio::pin!(connect_deadline);
-    let mut awaiting_connect = true;
     let mut writer_done = false;
     loop {
         tokio::select! {
@@ -301,25 +308,13 @@ async fn serve(socket: WebSocket, app: Arc<App>) {
                     }
                 }
             }
-            () = &mut connect_deadline, if awaiting_connect => {
-                awaiting_connect = false;
-                if conn.device().is_none() {
-                    link.close(POLICY_VIOLATION, "connect first");
-                    break;
-                }
-            }
-            () = conn.restart_deadline.notified() => {
-                connect_deadline
-                    .as_mut()
-                    .reset(tokio::time::Instant::now() + CONNECT_TIMEOUT);
-                awaiting_connect = true;
-            }
             _ = &mut writer => {
                 writer_done = true;
                 break;
             }
         }
     }
+    deadline.abort();
     link.finish();
     if let Some(acks) = conn.acks.lock().unwrap().take() {
         acks.close();
@@ -346,13 +341,15 @@ async fn write(
                     Out::Frame(data) => Message::Binary(data),
                     Out::Ping => Message::Ping(Bytes::new()),
                 };
-                if let Err(e) = sink.send(message).await {
-                    tracing::warn!(error = %e, "socket write failed");
-                    return Some(Close {
-                        code: INTERNAL_ERROR,
-                        reason: "write failed",
-                    });
+                match tokio::time::timeout(WRITE_TIMEOUT, sink.send(message)).await {
+                    Ok(Ok(())) => continue,
+                    Ok(Err(e)) => tracing::warn!(error = %e, "socket write failed"),
+                    Err(_) => tracing::warn!("socket write timed out"),
                 }
+                return Some(Close {
+                    code: INTERNAL_ERROR,
+                    reason: "write failed",
+                });
             }
             None
         };
@@ -385,6 +382,23 @@ fn too_big(e: &axum::Error) -> bool {
 }
 
 impl Conn {
+    /// Closes the connection if it is not bound within `CONNECT_TIMEOUT` of
+    /// opening or of the last restart; runs until aborted.
+    async fn connect_deadline(self: Arc<Self>) {
+        loop {
+            tokio::select! {
+                () = tokio::time::sleep(CONNECT_TIMEOUT) => {
+                    if self.device().is_none() {
+                        self.link.close(POLICY_VIOLATION, "connect first");
+                        return;
+                    }
+                    self.restart_deadline.notified().await;
+                }
+                () = self.restart_deadline.notified() => {}
+            }
+        }
+    }
+
     fn device(&self) -> Option<Device> {
         match *self.binding.lock().unwrap() {
             Binding::Bound(device) => Some(device),
@@ -440,8 +454,17 @@ impl Conn {
         );
         let response = self.dispatch(request).await;
         if signs_in {
-            // Hashing the password may have taken a while; Connect gets a fresh deadline.
-            self.restart_deadline.notify_one();
+            match &response.body {
+                Some(response::Body::Error(e)) if e.code() == ErrorCode::InvalidArgument => {
+                    self.sign_ins.fetch_sub(1, Ordering::SeqCst);
+                }
+                // A failed attempt keeps the deadline, so it cannot hold the
+                // connection open.
+                Some(response::Body::Error(_)) => {}
+                // Hashing the password may have taken a while; Connect gets a
+                // fresh deadline.
+                _ => self.restart_deadline.notify_one(),
+            }
         }
         self.reply(kind, started, response).await;
         self.in_flight.fetch_sub(1, Ordering::SeqCst);
@@ -470,6 +493,17 @@ impl Conn {
             (true, Some(_)) => return already_connected(request_id),
             (false, None) => return error(request_id, ErrorCode::Unauthenticated, "connect first"),
             _ => {}
+        }
+        let signs_in = matches!(
+            request.body,
+            Some(request::Body::Register(_) | request::Body::SignIn(_))
+        );
+        if signs_in && !self.count_sign_in() {
+            return error(
+                request_id,
+                ErrorCode::ResourceExhausted,
+                &format!("at most {MAX_SIGN_INS} sign-ins per connection"),
+            );
         }
         let call = CallRequest {
             user_id: device.map(|d| d.user_id.to_vec()).unwrap_or_default(),
@@ -514,6 +548,15 @@ impl Conn {
             }
         }
         response
+    }
+
+    /// Counts a Register or SignIn; false beyond the connection's limit.
+    fn count_sign_in(&self) -> bool {
+        self.sign_ins
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
+                (n < MAX_SIGN_INS).then_some(n + 1)
+            })
+            .is_ok()
     }
 
     /// Binds the connection to its device once its pushes are subscribed,
@@ -725,6 +768,52 @@ impl request::Body {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The 1009 close finds tungstenite's capacity error in what axum
+    /// returns, which needs axum's tungstenite to be the one this crate
+    /// names.
+    #[tokio::test]
+    async fn an_oversized_frame_reads_as_too_big() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let (tx, rx) = oneshot::channel();
+        let tx = Arc::new(Mutex::new(Some(tx)));
+        let handler = move |ws: WebSocketUpgrade| async move {
+            ws.max_message_size(MAX_FRAME_BYTES)
+                .max_frame_size(MAX_FRAME_BYTES)
+                .on_upgrade(move |mut socket| async move {
+                    let too_big = matches!(socket.recv().await, Some(Err(e)) if too_big(&e));
+                    if let Some(tx) = tx.lock().unwrap().take() {
+                        let _ = tx.send(too_big);
+                    }
+                })
+        };
+        let router = axum::Router::new().route("/", axum::routing::get(handler));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, router).await });
+
+        let mut client = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let upgrade = format!(
+            "GET / HTTP/1.1\r\nHost: {addr}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n"
+        );
+        client.write_all(upgrade.as_bytes()).await.unwrap();
+        let mut head = Vec::new();
+        while !head.ends_with(b"\r\n\r\n") {
+            head.push(client.read_u8().await.unwrap());
+        }
+        assert!(head.starts_with(b"HTTP/1.1 101"));
+        // A masked binary frame one byte over the limit.
+        let mut frame = vec![0x82, 0x80 | 127];
+        frame.extend_from_slice(&(MAX_FRAME_BYTES as u64 + 1).to_be_bytes());
+        frame.extend_from_slice(&[0; 4]);
+        frame.resize(frame.len() + MAX_FRAME_BYTES + 1, 0);
+        let _ = client.write_all(&frame).await;
+
+        let too_big = tokio::time::timeout(Duration::from_secs(5), rx).await;
+        assert!(matches!(too_big, Ok(Ok(true))));
+    }
 
     #[test]
     fn token_bucket_allows_a_burst_then_the_refill_rate() {
