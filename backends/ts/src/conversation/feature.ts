@@ -148,7 +148,7 @@ const handlersOf: FeatureFactory = (deps) => {
         return { case: "setReaction", value: create(SetReactionResponseSchema) };
       },
       markRead: async (c, req) => {
-        await markRead(db, c.userId, conversationIdOf(req.conversationId), req.seq);
+        await markRead(cs, c.userId, conversationIdOf(req.conversationId), req.seq);
         return { case: "markRead", value: create(MarkReadResponseSchema) };
       },
       getMessages: async (c, req) => ({
@@ -159,7 +159,7 @@ const handlersOf: FeatureFactory = (deps) => {
       }),
       publishKeys: async (c, req) => {
         const conversationId = conversationIdOf(req.conversationId);
-        await publishKeys(deps, c.userId, c.deviceId, conversationId, req.epoch, req.keys);
+        await publishKeys(cs, c.userId, c.deviceId, conversationId, req.epoch, req.keys);
         return { case: "publishKeys", value: create(PublishKeysResponseSchema) };
       },
       getConversationKeys: async (c, req) => ({

@@ -3,8 +3,10 @@
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { MessageSchema, type Message, type Reaction } from "../gen/wrinkle/v1/model_pb.js";
 import type { Pool, PoolConnection } from "mysql2/promise";
+import { unavailable } from "../internal/apierror.ts";
 import { microsOf, timestampOf, tx, type DbTime } from "../internal/db.ts";
-import type { UUID } from "../internal/ids.ts";
+import { hex, type UUID } from "../internal/ids.ts";
+import { log } from "../internal/log.ts";
 import { coldReadDuration } from "../internal/metrics.ts";
 import { decodeBlobIds, decodeBody } from "./state.ts";
 
@@ -121,15 +123,19 @@ export class Cold {
       key: b64(coldKey(conversationId, m.seq)),
       Cell: Object.entries(cellsOf(m)).map(([q, v]) => ({ column: b64(`${family}:${q}`), $: b64(v) })),
     }));
-    // The row in the path is ignored; the body names them.
-    const res = await fetch(`${this.url}/${table}/fakerow`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ Row }),
-      signal: AbortSignal.timeout(requestTimeout),
-    });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`cold put: ${res.status} ${text}`);
+    try {
+      // The row in the path is ignored; the body names them.
+      const res = await fetch(`${this.url}/${table}/fakerow`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ Row }),
+        signal: AbortSignal.timeout(requestTimeout),
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`${res.status} ${text}`);
+    } catch (err) {
+      throw coldUnavailable("put", err);
+    }
   }
 
   /** The message at seq, if the cold tier has it. */
@@ -155,14 +161,18 @@ export class Cold {
   // may end within a row, so cells of one key are gathered across them.
   private async range(start: Buffer, end: Buffer, kind: "range" | "message"): Promise<ColdMessage[]> {
     const observe = coldReadDuration.startTimer({ kind });
+    let rows;
     try {
-      return await this.scanRows(start, end);
+      rows = await this.scanRows(start, end);
+    } catch (err) {
+      throw coldUnavailable(kind === "message" ? "get" : "scan", err);
     } finally {
       observe();
     }
+    return rows.map((r) => coldMessageOf(r.key, r.cells));
   }
 
-  private async scanRows(start: Buffer, end: Buffer): Promise<ColdMessage[]> {
+  private async scanRows(start: Buffer, end: Buffer): Promise<{ key: Buffer; cells: Record<string, Buffer> }[]> {
     const opened = await fetch(`${this.url}/${table}/scanner`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -171,7 +181,7 @@ export class Cold {
     });
     const scanner = opened.headers.get("location");
     const text = await opened.text();
-    if (opened.status !== 201 || !scanner) throw new Error(`cold scan: ${opened.status} ${text}`);
+    if (opened.status !== 201 || !scanner) throw new Error(`${opened.status} ${text}`);
     const rows: { key: Buffer; cells: Record<string, Buffer> }[] = [];
     try {
       for (;;) {
@@ -180,7 +190,7 @@ export class Cold {
           signal: AbortSignal.timeout(requestTimeout),
         });
         if (res.status === 204) break;
-        if (res.status !== 200) throw new Error(`cold scan: ${res.status} ${await res.text()}`);
+        if (res.status !== 200) throw new Error(`${res.status} ${await res.text()}`);
         const { Row } = (await res.json()) as { Row?: RestRow[] };
         for (const r of Row ?? []) {
           const key = Buffer.from(r.key, "base64");
@@ -198,8 +208,14 @@ export class Cold {
         .then((res) => res.text())
         .catch(() => undefined);
     }
-    return rows.map((r) => coldMessageOf(r.key, r.cells));
+    return rows;
   }
+}
+
+/** Logs a failure of the cold tier and tells the device to try again later, without the details. */
+function coldUnavailable(op: string, err: unknown): Error {
+  log.warn("cold tier failed", { op, err });
+  return unavailable("history in the cold tier is unavailable; try again");
 }
 
 /** Writes a changed cold row of the conversation. */
@@ -220,11 +236,15 @@ export async function coldTx<T>(
   const putBack = async () => {
     const u = undo;
     undo = undefined;
-    await u?.().catch(() => undefined);
+    await u?.();
   };
   const change: ColdChange = async (conversationId, old, changed) => {
     await cold.put(conversationId, [changed]);
-    undo = () => cold.put(conversationId, [old]);
+    undo = () =>
+      cold.put(conversationId, [old]).catch((err: unknown) =>
+        // The row keeps a change no event told of, until the next one.
+        log.error("putting back a cold row failed", { conversation: hex(conversationId), seq: old.seq, err }),
+      );
   };
   try {
     return await tx(db, async (c) => {

@@ -18,6 +18,8 @@ import type { Server } from "./server.ts";
 
 export const requestTimeout = 10_000;
 export const connectTimeout = 5_000;
+// Bounds the Register and SignIn requests of a connection.
+export const maxSignIns = 5;
 export const subscribeTimeout = 5_000;
 export const outboundQueue = 32;
 // Frame's event field (3), length-delimited: a stored event becomes a frame
@@ -45,6 +47,9 @@ export class Conn {
   private closing = false;
   ended = false;
   private connectTimer: NodeJS.Timeout | undefined;
+  // Register and SignIn requests, which may cost a password hash each;
+  // those refused as invalid, before hashing, do not count.
+  private signIns = 0;
   userId: UUID | undefined;
   deviceId = 0n;
   private acks: AckCursor | undefined;
@@ -155,9 +160,18 @@ export class Conn {
     const signIn = kind === "register" || kind === "signIn" || kind === "connect";
     if (signIn && this.connected) return errorResponse(req.id, failedPrecondition("already connected"));
     if (!signIn && !this.connected) return errorResponse(req.id, unauthenticated("connect first"));
+    const hashing = kind === "register" || kind === "signIn";
+    if (hashing) {
+      if (this.signIns >= maxSignIns)
+        return errorResponse(req.id, resourceExhausted(`at most ${maxSignIns} sign-ins per connection`));
+      this.signIns++;
+    }
     let resp: Response;
     try {
-      resp = await withTimeout(this.server.backend.call(this.userId, this.deviceId, req), requestTimeout);
+      resp = await withTimeout(
+        this.server.backend.call(this.userId, this.deviceId, req, AbortSignal.timeout(requestTimeout)),
+        requestTimeout,
+      );
     } catch (err) {
       this.log.error("backend call failed", { request: req.id, err });
       return errorResponse(req.id, unavailable("services unavailable"));
@@ -169,8 +183,12 @@ export class Conn {
         return errorResponse(req.id, err);
       }
     }
-    if (kind === "register" || kind === "signIn") {
-      // Hashing the password may have taken a while; Connect gets a fresh deadline.
+    if (hashing && resp.body.case === "error") {
+      if (resp.body.value.code === ErrorCode.INVALID_ARGUMENT) this.signIns--;
+    } else if (hashing) {
+      // Hashing the password may have taken a while; Connect gets a fresh
+      // deadline. A failed attempt does not, so it cannot hold the
+      // connection open.
       this.stopConnectTimer();
       this.startConnectTimer();
     }

@@ -3,11 +3,17 @@
 import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { PushSchema, type Push } from "../gen/wrinkle/backend/v1/services_pb.js";
-import { EventSchema, type Event, type MessageDeletedEvent, type ReadEvent } from "../gen/wrinkle/v1/event_pb.js";
+import {
+  EventSchema,
+  MessageEventSchema,
+  type Event,
+  type MessageDeletedEvent,
+  type ReadEvent,
+} from "../gen/wrinkle/v1/event_pb.js";
 import { MessageSchema, UserSchema, type Message, type User } from "../gen/wrinkle/v1/model_pb.js";
 import { exec, isDuplicate, nullBytes, row, tx } from "../internal/db.ts";
 import { parseUUID, sameId, type UUID } from "../internal/ids.ts";
-import type { Logger } from "../internal/log.ts";
+import { log, type Logger } from "../internal/log.ts";
 import * as metrics from "../internal/metrics.ts";
 import { ListedCache } from "./listed.ts";
 import { isDirect, peerOf, type OutboxRow } from "./outbox.ts";
@@ -404,8 +410,15 @@ export class ListEntry {
       try {
         event = fromBinary(EventSchema, copy.payload);
       } catch (err) {
-        throw new Error(`event at ${copy.position} of user ${userId.toString("hex")}: ${(err as Error).message}`, {
-          cause: err,
+        // Retrying would not mend it; the copy becomes a bare tombstone.
+        log.warn("unreadable copy of a deleted message", { user: userId, position: copy.position, err });
+        event = create(EventSchema, {
+          body: {
+            case: "message",
+            value: create(MessageEventSchema, {
+              message: create(MessageSchema, { conversationId: o.conversationId, seq: deleted.seq }),
+            }),
+          },
         });
       }
       const msg = event.body.case === "message" ? event.body.value.message : undefined;

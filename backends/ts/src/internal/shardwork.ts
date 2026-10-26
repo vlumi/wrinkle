@@ -92,7 +92,8 @@ async function loop(job: Job, shard: Shard, signal: AbortSignal): Promise<void> 
 
 /**
  * Runs a round under the shard's lease, if this instance gets it. Losing
- * the lease midway stops the round; whoever took it goes on.
+ * the lease midway, or failing to renew it for as long as it lasts, stops
+ * the round; whoever took it goes on.
  */
 export async function leased(job: Job, shard: Shard, signal: AbortSignal): Promise<number> {
   const name = `${job.name}:${job.keyspace}/${shard.name}`;
@@ -113,14 +114,21 @@ export async function leased(job: Job, shard: Shard, signal: AbortSignal): Promi
   let done = false;
   let renewing: Promise<void> = Promise.resolve();
   let timer: NodeJS.Timeout | undefined;
+  let renewedAt = Date.now();
   const renew = () => {
     renewing = job.leases.renewLease(name, ttl).then(
       (held) => {
-        if (!held) lost.abort(new Error("lease lost"));
-        else if (!done) timer = setTimeout(renew, ttl / 3);
+        if (!held) {
+          lost.abort(new Error("lease lost"));
+          return;
+        }
+        renewedAt = Date.now();
+        if (!done) timer = setTimeout(renew, ttl / 3);
       },
       () => {
-        if (!done) timer = setTimeout(renew, ttl / 3);
+        // Unanswered for as long as the lease lasts, it may be another's.
+        if (Date.now() - renewedAt >= ttl) lost.abort(new Error("lease unrenewed"));
+        else if (!done) timer = setTimeout(renew, ttl / 3);
       },
     );
   };

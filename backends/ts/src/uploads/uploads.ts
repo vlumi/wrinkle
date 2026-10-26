@@ -14,11 +14,10 @@ import { newUUID, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
 
 const slotLifetime = 900; // seconds
-const maxMediaTypeBytes = 100;
 
 interface Limit {
   purpose: string;
-  mediaTypes?: string[]; // undefined allows any
+  mediaTypes: string[];
   maxSize: bigint;
 }
 
@@ -31,16 +30,19 @@ const limits = new Map<BlobPurpose, Limit>([
     BlobPurpose.STICKER,
     { purpose: "sticker", mediaTypes: ["image/png", "image/webp", "image/gif"], maxSize: 256n * 1024n },
   ],
-  [BlobPurpose.ATTACHMENT, { purpose: "attachment", maxSize: 25n * 1024n * 1024n }],
+  // Ciphertext, served as nothing a browser would render.
+  [
+    BlobPurpose.ATTACHMENT,
+    { purpose: "attachment", mediaTypes: ["application/octet-stream"], maxSize: 25n * 1024n * 1024n },
+  ],
 ]);
 
 export async function createUpload(deps: Deps, userId: UUID, req: CreateUploadRequest): Promise<CreateUploadResponse> {
   const l = limits.get(req.purpose);
   if (!l) throw invalidArgument(`unknown purpose BLOB_PURPOSE_${BlobPurpose[req.purpose]}`);
-  if (l.mediaTypes && !l.mediaTypes.includes(req.mediaType)) {
+  if (!l.mediaTypes.includes(req.mediaType)) {
     throw invalidArgument(`${l.purpose} must be one of ${l.mediaTypes.join(", ")}`);
   }
-  if (!validMediaType(req.mediaType)) throw invalidArgument("media_type must be type/subtype");
   if (req.size < 1n || req.size > l.maxSize) {
     throw invalidArgument(`size must be 1 to ${l.maxSize} bytes for ${l.purpose}`);
   }
@@ -59,16 +61,6 @@ export async function createUpload(deps: Deps, userId: UUID, req: CreateUploadRe
   });
 }
 
-/** A media type as type/subtype, printable ASCII without spaces. */
-export function validMediaType(s: string): boolean {
-  if (Buffer.byteLength(s) > maxMediaTypeBytes) return false;
-  for (const c of Buffer.from(s)) if (c <= 0x20 || c > 0x7e) return false;
-  const i = s.indexOf("/");
-  if (i <= 0) return false;
-  const sub = s.slice(i + 1);
-  return sub !== "" && !sub.includes("/");
-}
-
 const notAttachmentUpload = () => failedPrecondition("not an attachment upload of yours");
 
 /**
@@ -78,7 +70,13 @@ const notAttachmentUpload = () => failedPrecondition("not an attachment upload o
  * stay pending until the fan-out delivers the message, so a send that fails
  * without releasing them loses them only to the sweeper.
  */
-export async function useAttachments(deps: Deps, userId: UUID, blobIds: UUID[]): Promise<void> {
+export async function useAttachments(
+  deps: Deps,
+  userId: UUID,
+  conversationId: UUID,
+  clientMessageId: string,
+  blobIds: UUID[],
+): Promise<void> {
   if (blobIds.length === 0) return;
   const query = `SELECT used FROM upload WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN (${placeholders(blobIds.length)})`;
   const args = [userId, ...blobIds];
@@ -92,8 +90,9 @@ export async function useAttachments(deps: Deps, userId: UUID, blobIds: UUID[]):
     }
     await exec(
       c,
-      `UPDATE upload SET used = TRUE, pending_since = ? WHERE user_id = ? AND blob_id IN (${placeholders(blobIds.length)})`,
-      [now(), ...args],
+      `UPDATE upload SET used = TRUE, pending_since = ?, conversation_id = ?, client_message_id = ?
+       WHERE user_id = ? AND blob_id IN (${placeholders(blobIds.length)})`,
+      [now(), conversationId, clientMessageId, ...args],
     );
   });
 }

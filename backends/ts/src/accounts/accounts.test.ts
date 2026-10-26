@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { ErrorCode } from "../gen/wrinkle/v1/frame_pb.js";
+import { codeOf } from "../internal/apierror.ts";
 import { newUUID } from "../internal/ids.ts";
-import { argonMemory, argonThreads, argonTime, encodeHash, hashPassword, verifyPassword } from "./password.ts";
+import {
+  argonMemory,
+  argonThreads,
+  argonTime,
+  encodeHash,
+  hashPassword,
+  HashSlots,
+  verifyPassword,
+} from "./password.ts";
 import { parseToken, newToken, tokenHash, tokenString } from "./token.ts";
 import { validIcon, validName } from "./validate.ts";
 
@@ -83,4 +93,18 @@ test("names", () => {
 test("icons", () => {
   for (const icon of ["", "cat", "unicorn"]) assert.ok(validIcon(icon), icon);
   for (const icon of ["Cat", "dragon", " cat"]) assert.equal(validIcon(icon), false, icon);
+});
+
+test("hash slots bound the hashes at once, and a wait ends with the deadline", async () => {
+  const slots = new HashSlots(1);
+  let release!: () => void;
+  const first = slots.run(() => new Promise<void>((r) => (release = r)));
+  await assert.rejects(
+    slots.run(() => Promise.resolve(), AbortSignal.timeout(20)),
+    (err: unknown) => codeOf(err) === ErrorCode.UNAVAILABLE,
+  );
+  const second = slots.run(() => Promise.resolve(2), new AbortController().signal);
+  release();
+  await first;
+  assert.equal(await second, 2);
 });

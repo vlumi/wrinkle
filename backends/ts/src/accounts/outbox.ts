@@ -39,9 +39,18 @@ export class Outbox {
   }
 
   /** Writes a DeviceEvent with the device as it is now in the transaction. */
-  async addDevice(deviceId: bigint, signedOut: boolean): Promise<Device> {
+  addDevice(deviceId: bigint, signedOut: boolean): Promise<Device> {
+    return this.addDeviceKind("device", deviceId, signedOut);
+  }
+
+  /** Writes a DeviceEvent for a change only the user's own devices need to know of: a new name. */
+  addDeviceName(deviceId: bigint): Promise<Device> {
+    return this.addDeviceKind("device_name", deviceId, false);
+  }
+
+  private async addDeviceKind(kind: string, deviceId: bigint, signedOut: boolean): Promise<Device> {
     const device = await loadDevice(this.q, this.userId, deviceId);
-    await this.add("device", {
+    await this.add(kind, {
       case: "device",
       value: create(DeviceEventSchema, { device, signedOut, userId: this.userId }),
     });

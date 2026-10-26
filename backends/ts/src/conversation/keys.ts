@@ -9,11 +9,12 @@ import {
   type GetConversationKeysResponse,
   type WrappedKey,
 } from "../gen/wrinkle/v1/messaging_pb.js";
-import { deviceKey } from "../accounts/keys.ts";
+import { deviceKey, deviceKeys } from "../accounts/keys.ts";
 import { failedPrecondition, invalidArgument, permissionDenied } from "../internal/apierror.ts";
 import { exec, now, row, rows, rowsOf, tx } from "../internal/db.ts";
 import { hex, parseUUID, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
+import { checkBlocks, type Conversations } from "./service.ts";
 import { has, load, member, notInConversation, selectState, type State } from "./state.ts";
 
 const maxWrappedKeys = 500;
@@ -34,7 +35,7 @@ interface Wrap {
  * two devices publishing the same epoch, the later fails.
  */
 export async function publishKeys(
-  deps: Deps,
+  cs: Conversations,
   userId: UUID,
   deviceId: bigint,
   conversationId: UUID,
@@ -52,7 +53,12 @@ export async function publishKeys(
     self ||= id.equals(userId) && k.recipientDeviceId === deviceId;
     return { userId: id, deviceId: k.recipientDeviceId, wrapped: Buffer.from(k.wrapped) };
   });
+  // Across a block, either way, no keys go to the other side; the user's
+  // own devices may still share the history.
+  if (wraps.some((w) => !w.userId.equals(userId))) await checkBlocks(cs, userId, conversationId);
+  const deps = cs.deps;
   const senderKey = await deviceKey(deps.users, userId, deviceId);
+  await recipientsHaveKeys(deps, wraps);
 
   await tx(deps.conversations, async (c) => {
     const st = await member(c, conversationId, userId);
@@ -84,6 +90,19 @@ export async function publishKeys(
   });
 }
 
+/** Checks that every wrap is for a signed-in device with a key, so the epoch holds rows for real devices only. */
+async function recipientsHaveKeys(deps: Deps, wraps: Wrap[]): Promise<void> {
+  const users = new Map<string, UUID>();
+  for (const w of wraps) users.set(hex(w.userId), w.userId);
+  // More users than a conversation's members is refused there.
+  const found = await deviceKeys(deps.users, [...users.values()]);
+  const keyed = new Set<string>();
+  for (const u of found) for (const d of u.devices) keyed.add(`${hex(u.userId)}/${d.deviceId}`);
+  for (const w of wraps)
+    if (!keyed.has(`${hex(w.userId)}/${w.deviceId}`))
+      throw invalidArgument(`device ${w.deviceId} of ${hex(w.userId)} is not a signed-in device with a key`);
+}
+
 function recipientsAreMembers(st: State, wraps: Wrap[]): void {
   for (const w of wraps)
     if (!has(st.members, w.userId)) throw invalidArgument(`recipient ${hex(w.userId)} is not a member`);
@@ -109,7 +128,7 @@ async function madeBy(
 /**
  * The conversation's key state and the keys wrapped for the device in
  * epochs after afterEpoch, oldest first. Former members may ask: no wraps
- * reach them after they leave.
+ * reach them after they leave, and they get none of the current membership.
  */
 export async function conversationKeys(
   deps: Deps,
@@ -120,13 +139,15 @@ export async function conversationKeys(
 ): Promise<GetConversationKeysResponse> {
   const db = deps.conversations;
   const st = await load(db, selectState, conversationId);
-  const m = await row(db, `SELECT 1 FROM conversation_member WHERE conversation_id = ? AND user_id = ?`, [
-    conversationId,
-    userId,
-  ]);
+  const m = await row<{ left_seq: bigint | null }>(
+    db,
+    `SELECT left_seq FROM conversation_member WHERE conversation_id = ? AND user_id = ?`,
+    [conversationId, userId],
+  );
   if (!m) throw notInConversation(userId, conversationId);
-  const resp = create(GetConversationKeysResponseSchema, { currentEpoch: st.keyEpoch, rotate: st.rotate });
-  if (st.keyEpoch > 0) {
+  const current = m.left_seq === null;
+  const resp = create(GetConversationKeysResponseSchema, { currentEpoch: st.keyEpoch, rotate: current && st.rotate });
+  if (current && st.keyEpoch > 0) {
     const recipients = await rows<{ recipient_user_id: Buffer; recipient_device_id: bigint }>(
       db,
       `SELECT recipient_user_id, recipient_device_id FROM conversation_key

@@ -9,8 +9,9 @@ export interface Backend {
    * Handles a request for a device; the user id is undefined until the
    * connection has completed Connect. It throws only when the request could
    * not be handled at all; a request's own failure is the response's error.
+   * The signal is the request's deadline.
    */
-  call(userId: UUID | undefined, deviceId: bigint, req: Request): Promise<Response>;
+  call(userId: UUID | undefined, deviceId: bigint, req: Request, signal: AbortSignal): Promise<Response>;
   ack(userId: UUID, deviceId: bigint, cursor: bigint): Promise<void>;
 }
 

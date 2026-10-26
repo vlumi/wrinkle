@@ -412,7 +412,8 @@ export async function describe(db: Pool, cold: Cold, conversationId: UUID, userI
       c.lastMessage = msg;
     } else {
       // Moved to the cold tier, which has it before MySQL lets go.
-      const moved = await cold.get(conversationId, st.lastSeq);
+      // Without the cold tier, the summary goes without it.
+      const moved = await cold.get(conversationId, st.lastSeq).catch(() => undefined);
       if (moved) {
         c.lastMessage = coldMessage(conversationId, moved);
         c.lastMessage.reactions = [];

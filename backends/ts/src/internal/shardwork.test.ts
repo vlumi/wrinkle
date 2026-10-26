@@ -10,6 +10,8 @@ import type { Shard } from "./shards.ts";
 class FakeLeases implements Leases {
   readonly held = new Map<string, string>();
   readonly me: string;
+  // Makes renewals fail, as with Valkey unreachable.
+  failing = false;
   constructor(me: string) {
     this.me = me;
   }
@@ -19,6 +21,7 @@ class FakeLeases implements Leases {
     return Promise.resolve(true);
   }
   renewLease(name: string): Promise<boolean> {
+    if (this.failing) return Promise.reject(new Error("unreachable"));
     return Promise.resolve(this.held.get(name) === this.me);
   }
   dropLease(name: string): Promise<void> {
@@ -105,4 +108,21 @@ test("losing the lease stops the round", async () => {
   assert.equal(await leased(j, shard("-"), new AbortController().signal), 1);
   assert.equal(leases.held.get("work:ks/-"), "b");
   assert.equal(await counted("-", "lost"), lost + 1);
+});
+
+test("a lease unrenewed for as long as it lasts stops the round", async () => {
+  const lost = await counted("-40", "lost");
+  const leases = new FakeLeases("a");
+  const j = job(leases, (_, signal) => {
+    leases.failing = true;
+    return new Promise((resolve, reject) => {
+      const late = setTimeout(() => reject(new Error("round went on with its lease unrenewed past its life")), 3_000);
+      signal.addEventListener("abort", () => {
+        clearTimeout(late);
+        resolve(1);
+      });
+    });
+  });
+  assert.equal(await leased(j, shard("-40"), new AbortController().signal), 1);
+  assert.equal(await counted("-40", "lost"), lost + 1);
 });

@@ -1,7 +1,10 @@
 // Passwords as argon2id in the PHC string format. Hashing runs on the libuv
-// thread pool, which bounds how many run at once.
+// thread pool, as many at once as there are cores.
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { availableParallelism } from "node:os";
 import { hashRaw } from "@node-rs/argon2";
+import { unavailable } from "../internal/apierror.ts";
+import { deadline } from "../internal/deadline.ts";
 
 // Parameters for new hashes; verification reads them from the stored string.
 export const argonMemory = 19456;
@@ -26,8 +29,64 @@ function fromB64(s: string): Buffer | undefined {
   return b64(b) === s ? b : undefined;
 }
 
+/**
+ * Bounds concurrent hashing: each takes about 19 MiB and a core for tens of
+ * milliseconds, and a burst of sign-ins must not exhaust memory or hold the
+ * thread pool's other work. A wait ends with the request's deadline.
+ */
+export class HashSlots {
+  private free: number;
+  private readonly waiting: (() => void)[] = [];
+
+  constructor(size: number) {
+    this.free = size;
+  }
+
+  async run<T>(fn: () => Promise<T>, signal = deadline()): Promise<T> {
+    await this.acquire(signal);
+    try {
+      return await fn();
+    } finally {
+      this.release();
+    }
+  }
+
+  private acquire(signal: AbortSignal | undefined): Promise<void> {
+    if (signal?.aborted) return Promise.reject(busy());
+    if (this.free > 0) {
+      this.free--;
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        const i = this.waiting.indexOf(take);
+        if (i >= 0) this.waiting.splice(i, 1);
+        reject(busy());
+      };
+      const take = () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      };
+      this.waiting.push(take);
+      signal?.addEventListener("abort", onAbort, { once: true });
+    });
+  }
+
+  private release(): void {
+    const next = this.waiting.shift();
+    if (next) next();
+    else this.free++;
+  }
+}
+
+const busy = () => unavailable("password hashing is busy; try again");
+
+export const hashSlots = new HashSlots(availableParallelism());
+
 const key = (password: string, salt: Uint8Array, memory: number, time: number, threads: number, len: number) =>
-  hashRaw(password, { salt, memoryCost: memory, timeCost: time, parallelism: threads, outputLen: len });
+  hashSlots.run(() =>
+    hashRaw(password, { salt, memoryCost: memory, timeCost: time, parallelism: threads, outputLen: len }),
+  );
 
 export async function encodeHash(
   password: string,

@@ -9,6 +9,7 @@ import {
   invalidArgument,
   unauthenticated,
 } from "../internal/apierror.ts";
+import { withDeadline } from "../internal/deadline.ts";
 import { isZero, type UUID } from "../internal/ids.ts";
 import { log } from "../internal/log.ts";
 import type { Backend, Handler, Handlers, RequestCase, SignInHandler, SignInHandlers } from "./backend.ts";
@@ -28,9 +29,9 @@ export class Local implements Backend {
     this.onAck = ack;
   }
 
-  async call(userId: UUID | undefined, deviceId: bigint, req: Request): Promise<Response> {
+  async call(userId: UUID | undefined, deviceId: bigint, req: Request, signal: AbortSignal): Promise<Response> {
     try {
-      const body = await this.dispatch(userId, deviceId, req);
+      const body = await withDeadline(signal, () => this.dispatch(userId, deviceId, req));
       return create(ResponseSchema, { requestId: req.id, body });
     } catch (err) {
       if (codeOf(err) === ErrorCode.INTERNAL) log.error("request failed", { request: req.id, err });

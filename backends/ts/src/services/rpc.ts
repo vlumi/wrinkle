@@ -20,9 +20,9 @@ export async function serve(backend: Backend, addr: string): Promise<http2.Http2
     grpcWeb: false,
     routes: (router) =>
       router.service(BackendService, {
-        async call(req) {
+        async call(req, ctx) {
           const userId = isZero(req.userId) ? undefined : parseUUID(req.userId);
-          const response = await backend.call(userId, req.deviceId, req.request!);
+          const response = await backend.call(userId, req.deviceId, req.request!, ctx.signal);
           return create(CallResponseSchema, { response });
         },
         async ack(req) {
@@ -49,10 +49,10 @@ export class Remote implements Backend {
     this.client = createClient(BackendService, createGrpcTransport({ baseUrl: `http://${addr}` }));
   }
 
-  async call(userId: UUID | undefined, deviceId: bigint, request: Request): Promise<Response> {
+  async call(userId: UUID | undefined, deviceId: bigint, request: Request, signal: AbortSignal): Promise<Response> {
     const res = await this.client.call(
       { userId: userId ?? new Uint8Array(), deviceId, request },
-      { timeoutMs: callTimeout },
+      { timeoutMs: callTimeout, signal },
     );
     return res.response!;
   }

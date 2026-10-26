@@ -21,5 +21,6 @@ WORKDIR /app
 COPY --from=build /app/node_modules node_modules
 COPY backends/ts/package.json ./
 COPY backends/ts/src src
+COPY backends/ts/wrinkle ./
 USER node
-ENTRYPOINT ["node", "--expose-gc", "src/main.ts"]
+ENTRYPOINT ["/app/wrinkle"]

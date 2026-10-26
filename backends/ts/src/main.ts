@@ -24,7 +24,7 @@ import type { Deps } from "./services/deps.ts";
 import { newLocal, type Feature } from "./services/features.ts";
 import { Remote, serve } from "./services/rpc.ts";
 import { stickers } from "./stickers/feature.ts";
-import { uploads } from "./uploads/feature.ts";
+import { uploadsFeature } from "./uploads/feature.ts";
 
 // Local settings from .env, in the working directory or at the repository
 // root; variables already set win.
@@ -51,6 +51,8 @@ const { values: flags } = parseArgs({
     "log-trim-interval-s": { type: "string", default: env("WRINKLE_LOG_TRIM_INTERVAL_S", "60") },
     "history-hot-s": { type: "string", default: env("WRINKLE_HISTORY_HOT_S", String(30 * 24 * 3600)) },
     "cold-move-interval-s": { type: "string", default: env("WRINKLE_COLD_MOVE_INTERVAL_S", "60") },
+    "upload-unused-s": { type: "string", default: env("WRINKLE_UPLOAD_UNUSED_S", String(24 * 3600)) },
+    "upload-sweep-interval-s": { type: "string", default: env("WRINKLE_UPLOAD_SWEEP_INTERVAL_S", "600") },
     "blob-url": { type: "string", default: env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200") },
     // No default: make infra-up writes the local key to .env.
     "blob-key-id": { type: "string", default: env("WRINKLE_BLOB_KEY_ID", "") },
@@ -122,7 +124,11 @@ async function main(): Promise<void> {
         intervalMs: Number(flags["cold-move-interval-s"]) * 1000,
       }),
       contacts,
-      uploads,
+      uploadsFeature({
+        unusedMs: Number(flags["upload-unused-s"]) * 1000,
+        intervalMs: Number(flags["upload-sweep-interval-s"]) * 1000,
+        hotMs: Number(flags["history-hot-s"]) * 1000,
+      }),
       stickers,
     ]);
     features = built.features;
@@ -195,6 +201,16 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => void shutdown());
   process.on("SIGINT", () => void shutdown());
 }
+
+// Anything left unhandled leaves the process in an unknown state.
+process.on("unhandledRejection", (err: unknown) => {
+  log.error("unhandled rejection", { err });
+  process.exit(1);
+});
+process.on("uncaughtException", (err: unknown) => {
+  log.error("uncaught exception", { err });
+  process.exit(1);
+});
 
 main().catch((err: unknown) => {
   log.error("startup failed", { err });

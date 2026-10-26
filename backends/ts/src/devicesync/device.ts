@@ -42,6 +42,8 @@ export async function registerPushToken(
     throw invalidArgument(`unknown push service ${serviceName(service)}`);
   if (Buffer.byteLength(token, "utf8") > maxPushToken)
     throw invalidArgument(`push token is longer than ${maxPushToken} bytes`);
+  // APNs tokens are hex, and go into the request path as they are.
+  if (!/^[0-9a-fA-F]*$/.test(token)) throw invalidArgument("push token must be hex");
   await exec(db, `UPDATE device SET push_service = ?, push_token = ? WHERE user_id = ? AND device_id = ?`, [
     serviceName(service),
     token,

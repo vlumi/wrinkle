@@ -8,10 +8,10 @@ import {
   type RegisterRequest,
   type SignInRequest,
 } from "../gen/wrinkle/v1/messaging_pb.js";
-import { unauthenticated } from "../internal/apierror.ts";
+import { alreadyExists, unauthenticated } from "../internal/apierror.ts";
 import { exec, now, row, tx } from "../internal/db.ts";
 import { newUUID, randomId, type UUID } from "../internal/ids.ts";
-import { claim, claimOwner } from "./names.ts";
+import { claim, claimOwner, resolve } from "./names.ts";
 import { lockOutbox } from "./outbox.ts";
 import { argonMemory, argonThreads, argonTime, encodeHash, hashPassword, verifyPassword } from "./password.ts";
 import type { AccountsDeps } from "./service.ts";
@@ -24,7 +24,17 @@ let dummy: Promise<string> | undefined;
 
 /** A hash verified against when there is no account to check, so an unknown name takes as long as a wrong password. */
 export const dummyHash = (): Promise<string> =>
-  (dummy ??= encodeHash(randomBytes(16).toString("base64"), randomBytes(16), argonMemory, argonTime, argonThreads));
+  (dummy ??= encodeHash(
+    randomBytes(16).toString("base64"),
+    randomBytes(16),
+    argonMemory,
+    argonTime,
+    argonThreads,
+  ).catch((err: unknown) => {
+    // A wait for a hash slot that ran out is tried again by the next request.
+    dummy = undefined;
+    throw err;
+  }));
 
 /**
  * Creates an account and a device for it. The user row comes before the
@@ -35,6 +45,8 @@ export async function register(d: AccountsDeps, req: RegisterRequest): Promise<D
   checkName(req.name);
   checkPassword(req.password);
   checkDeviceName(req.deviceName);
+  // A taken name fails before the hash's cost; the claim below decides.
+  if (await resolve(d.db, req.name)) throw alreadyExists("the name is taken");
   const hash = await hashPassword(req.password);
   const userId = newUUID();
   await exec(

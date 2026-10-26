@@ -19,7 +19,7 @@ const wrap = (userId: UUID, err: unknown) =>
  * has its connections closed, even when the log had the event already. A
  * device with a key also goes, with only its id and key, to everyone who
  * encrypts for it: the user's direct partners and the members of the
- * user's groups.
+ * user's groups; a rename, which changes nothing they use, does not.
  */
 export async function deliverDevice(d: Delivery, o: UserOutboxRow): Promise<void> {
   if (o.event.body.case !== "device") return;
@@ -43,7 +43,7 @@ export async function deliverDevice(d: Delivery, o: UserOutboxRow): Promise<void
       }),
     );
   }
-  if (!device || device.publicKey.length === 0) return;
+  if (!device || device.publicKey.length === 0 || o.kind === "device_name") return;
   const keyOnly = create(EventSchema, {
     occurredAt: event.occurredAt,
     body: {

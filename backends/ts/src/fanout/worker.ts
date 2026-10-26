@@ -164,7 +164,8 @@ class Worker {
         return;
       } catch (err) {
         last = err;
-        this.log.warn("delivery failed", { attempt: attempt + 1, err });
+        // The last failure is logged by the caller, once.
+        this.log.debug("delivery failed", { attempt: attempt + 1, err });
         if (this.stopping) break;
         await sleep((attempt + 1) * 200);
       }

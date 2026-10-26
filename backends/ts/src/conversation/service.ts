@@ -7,7 +7,7 @@ import type { Pool } from "mysql2/promise";
 import { ReadEventSchema } from "../gen/wrinkle/v1/event_pb.js";
 import { MessageSchema, SealedSchema, type Message, type Sealed } from "../gen/wrinkle/v1/model_pb.js";
 import { checkMessaging } from "../contacts/contacts.ts";
-import { failedPrecondition, invalidArgument } from "../internal/apierror.ts";
+import { ApiError, failedPrecondition, invalidArgument } from "../internal/apierror.ts";
 import {
   exec,
   isDuplicate,
@@ -260,18 +260,26 @@ async function takeAttachments(
     [conversationId, userId, clientMessageId],
   );
   if (r) return false;
-  await useAttachments(deps, userId, blobIds);
+  await useAttachments(deps, userId, conversationId, clientMessageId, blobIds);
   return true;
 }
 
 /**
  * Moves the user's read position forward. Moving it backwards or to where
  * it is does nothing. In a group, the read event goes to the reader and to
- * the senders of the messages it covers.
+ * the senders of the messages it covers; across a block, either way, only
+ * to the reader.
  */
-export async function markRead(db: Pool, userId: UUID, conversationId: UUID, seq: bigint): Promise<void> {
+export async function markRead(cs: Conversations, userId: UUID, conversationId: UUID, seq: bigint): Promise<void> {
   if (seq === 0n) throw invalidArgument("seq must be positive");
-  await tx(db, async (c) => {
+  let blocked = false;
+  try {
+    await checkBlocks(cs, userId, conversationId);
+  } catch (err) {
+    if (!(err instanceof ApiError)) throw err;
+    blocked = true;
+  }
+  await tx(cs.deps.conversations, async (c) => {
     const st = await member(c, conversationId, userId);
     if (seq > st.lastSeq) throw invalidArgument(`seq ${seq} is beyond the last message ${st.lastSeq}`);
     const mark = await row<{ seq: bigint }>(
@@ -289,7 +297,11 @@ export async function markRead(db: Pool, userId: UUID, conversationId: UUID, seq
       [conversationId, userId, seq, at, seq, at],
     );
     const recipients =
-      st.kind === kindGroup ? await readRecipients(c, st, conversationId, userId, current, seq) : st.members;
+      st.kind === kindGroup
+        ? await readRecipients(c, st, conversationId, userId, current, seq)
+        : blocked
+          ? [userId]
+          : st.members;
     await insertOutbox(c, {
       conversationId,
       outboxId: randomId(),
@@ -413,6 +425,8 @@ async function messagePage(
   const { hi, more, again } = coldRange(result, joinedSeq, upTo, beforeSeq, c?.cold_seq ?? 0n, limit);
   if (again) return undefined;
   if (!more) return result;
+  // Failing as unavailable, retryable: the hot part alone would read as the
+  // end of history.
   for (const m of await cold.scan(conversationId, joinedSeq, hi, limit - result.length))
     result.push(coldMessage(conversationId, m));
   return result;

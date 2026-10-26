@@ -78,7 +78,7 @@ export async function renameDevice(d: AccountsDeps, userId: UUID, req: RenameDev
   return tx(d.db, async (c) => {
     const o = await lockSignedIn(c, userId, req.deviceId);
     await exec(c, `UPDATE device SET name = ? WHERE user_id = ? AND device_id = ?`, [req.name, userId, req.deviceId]);
-    const device = await o.addDevice(req.deviceId, false);
+    const device = await o.addDeviceName(req.deviceId);
     await o.save();
     return device;
   });

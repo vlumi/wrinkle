@@ -101,7 +101,9 @@ export async function deliverDeletion(d: Delivery, o: UserOutboxRow): Promise<vo
     }
   }
   try {
-    await exec(d.db, "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose <> 'sticker'", [o.userId]);
+    // The avatar goes; stickers stay public, and attachments stay with the
+    // messages, which keep them until deleted.
+    await exec(d.db, "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'avatar'", [o.userId]);
   } catch (err) {
     throw new Error(`release uploads of user ${hex(o.userId)}: ${(err as Error).message}`, { cause: err });
   }
