@@ -15,6 +15,9 @@ defmodule Wrinkle.Socket do
   @connect_deadline 5_000
   @subscribe_timeout 5_000
   @max_in_flight 32
+  # Register and SignIn requests per connection, each of which may cost a
+  # password hash; those answered INVALID_ARGUMENT, before hashing, do not count.
+  @max_sign_ins 5
   @outbound_queue 32
 
   @shutting_down {1001, "shutting down"}
@@ -42,6 +45,7 @@ defmodule Wrinkle.Socket do
             pushes: nil,
             bucket: nil,
             in_flight: 0,
+            sign_ins: 0,
             ack: nil,
             seen_at: 0,
             draining: false
@@ -65,6 +69,7 @@ defmodule Wrinkle.Socket do
           pushes: :atomics.atomics_ref(),
           bucket: TokenBucket.t(),
           in_flight: non_neg_integer(),
+          sign_ins: non_neg_integer(),
           ack: AckWriter.t(),
           seen_at: integer(),
           draining: boolean()
@@ -250,19 +255,27 @@ defmodule Wrinkle.Socket do
     refuse(request, :ERROR_CODE_FAILED_PRECONDITION, "already connected", state)
   end
 
+  defp inbound({:request, %Request{body: {kind, _}} = request}, :ok, %{sign_ins: n} = state)
+       when kind in [:register, :sign_in] and n >= @max_sign_ins do
+    message = "at most #{@max_sign_ins} sign-ins per connection"
+    refuse(request, :ERROR_CODE_RESOURCE_EXHAUSTED, message, state)
+  end
+
   defp inbound({:request, %Request{id: id} = request}, :ok, %__MODULE__{} = state) do
     device = state.device
     task = Task.Supervisor.async_nolink(Wrinkle.Tasks, fn -> dispatch(device, request) end)
     type = request_type(request)
     entry = {:request, id, type, System.monotonic_time()}
     connect = if type == "connect", do: :pending, else: state.connect
+    sign_ins = if type in ["register", "sign_in"], do: state.sign_ins + 1, else: state.sign_ins
 
     {:ok,
      %__MODULE__{
        state
        | tasks: Map.put(state.tasks, task.ref, entry),
          in_flight: state.in_flight + 1,
-         connect: connect
+         connect: connect,
+         sign_ins: sign_ins
      }}
   end
 
@@ -305,7 +318,7 @@ defmodule Wrinkle.Socket do
   end
 
   defp finished({:request, id, type, started}, {response, nil}, state) do
-    respond({id, type, started}, response, after_request(type, state))
+    respond({id, type, started}, response, after_request(type, response, state))
   end
 
   defp finished({:ack, _}, result, state) do
@@ -316,19 +329,33 @@ defmodule Wrinkle.Socket do
   # A task that crashed: its request is answered, an ack write is done.
   defp crashed({:request, id, type, started}, state) do
     response = error(id, :ERROR_CODE_INTERNAL, "internal error")
-    respond({id, type, started}, response, after_request(type, state))
+    respond({id, type, started}, response, after_request(type, response, state))
   end
 
   defp crashed({:ack, _}, state), do: ack_done(state)
 
   # A Connect that failed may be retried. Hashing a password may have taken
-  # a while, so a Register or SignIn answered gives Connect a fresh deadline.
-  defp after_request("connect", %__MODULE__{} = state), do: %__MODULE__{state | connect: :none}
+  # a while, so a successful Register or SignIn gives Connect a fresh
+  # deadline; a failed one does not, so it cannot hold the connection open.
+  # One refused as invalid gives its sign-in back.
+  defp after_request("connect", _response, %__MODULE__{} = state),
+    do: %__MODULE__{state | connect: :none}
 
-  defp after_request(type, state) when type in ["register", "sign_in"],
-    do: restart_deadline(state)
+  defp after_request(type, response, %__MODULE__{} = state)
+       when type in ["register", "sign_in"] do
+    case response do
+      %Response{body: {:error, %WireError{code: :ERROR_CODE_INVALID_ARGUMENT}}} ->
+        %__MODULE__{state | sign_ins: state.sign_ins - 1}
 
-  defp after_request(_type, state), do: state
+      %Response{body: {:error, _}} ->
+        state
+
+      _ ->
+        restart_deadline(state)
+    end
+  end
+
+  defp after_request(_type, _response, state), do: state
 
   defp restart_deadline(%__MODULE__{} = state) do
     ref = make_ref()

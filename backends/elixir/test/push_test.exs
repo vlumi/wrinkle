@@ -88,5 +88,7 @@ defmodule Wrinkle.PushTest do
     assert Wrinkle.Push.decode(<<0x0A, 0x05, 1>>) == :error
     assert Wrinkle.Push.decode(<<0xFF>>) == :error
     assert Wrinkle.Push.decode(<<>>) == :error
+    # A sign-out holding a fixed32 field: the decoder raises a MatchError.
+    assert Wrinkle.Push.decode(<<0x12, 0x02, 0x0D, 0x00>>) == :error
   end
 end

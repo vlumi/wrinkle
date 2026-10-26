@@ -72,7 +72,9 @@ defmodule Wrinkle.Push do
       _ -> :error
     end
   rescue
-    Protobuf.DecodeError -> :error
+    # Any malformed push, not only one the decoder reports: an exception here
+    # would stop this process and close every connection on the node.
+    _ -> :error
   end
 
   defp read_varint(<<1::1, b::7, rest::binary>>, shift, acc) when shift < 63,
