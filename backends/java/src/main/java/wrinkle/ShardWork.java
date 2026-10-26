@@ -39,6 +39,7 @@ public final class ShardWork {
   }
 
   private final String name;
+  private final String metric;
   private final String keyspace;
   private final List<ShardPools.Shard> shards;
   private final Duration interval;
@@ -50,9 +51,13 @@ public final class ShardWork {
   private final CountDownLatch stopping = new CountDownLatch(1);
   private final List<Thread> threads = new ArrayList<>();
 
-  /** A job named name over the shards, each shard's rounds interval apart, counting in unit. */
+  /**
+   * A job named name over the shards, each shard's rounds interval apart, counting in unit; metric
+   * labels its metrics.
+   */
   public ShardWork(
       String name,
+      String metric,
       String keyspace,
       List<ShardPools.Shard> shards,
       Duration interval,
@@ -60,11 +65,13 @@ public final class ShardWork {
       Round round,
       Leases leases,
       Logger log) {
-    this(name, keyspace, shards, interval, unit, round, leases, log, LEASE_TTL.dividedBy(3));
+    this(
+        name, metric, keyspace, shards, interval, unit, round, leases, log, LEASE_TTL.dividedBy(3));
   }
 
   ShardWork(
       String name,
+      String metric,
       String keyspace,
       List<ShardPools.Shard> shards,
       Duration interval,
@@ -74,6 +81,7 @@ public final class ShardWork {
       Logger log,
       Duration renewEvery) {
     this.name = name;
+    this.metric = metric;
     this.keyspace = keyspace;
     this.shards = shards;
     this.interval = interval;
@@ -116,6 +124,8 @@ public final class ShardWork {
   }
 
   private void loop(ShardPools.Shard shard) {
+    // The shard shows before its first round ends.
+    Metrics.SHARD_ROUNDS.labelValues(metric, shard.name(), "ok").inc(0);
     Duration delay = FIRST_ROUND.compareTo(interval) < 0 ? FIRST_ROUND : interval;
     try {
       while (!stopping.await(delay.toMillis(), TimeUnit.MILLISECONDS)) {
@@ -142,9 +152,18 @@ public final class ShardWork {
    */
   int leased(ShardPools.Shard shard) throws SQLException {
     String lease = name + ":" + keyspace + "/" + shard.name();
-    if (!leases.takeLease(lease, LEASE_TTL)) {
+    boolean taken;
+    try {
+      taken = leases.takeLease(lease, LEASE_TTL);
+    } catch (RuntimeException e) {
+      Metrics.SHARD_ROUNDS.labelValues(metric, shard.name(), "error").inc();
+      throw e;
+    }
+    if (!taken) {
+      Metrics.SHARD_ROUNDS.labelValues(metric, shard.name(), "skipped").inc();
       return 0;
     }
+    long start = System.nanoTime();
     AtomicBoolean lost = new AtomicBoolean();
     CountDownLatch done = new CountDownLatch(1);
     Thread renewer =
@@ -166,8 +185,12 @@ public final class ShardWork {
                     Thread.currentThread().interrupt();
                   }
                 });
+    int n = 0;
+    boolean failed = true;
     try {
-      return round.run(shard, () -> lost.get() || stopped());
+      n = round.run(shard, () -> lost.get() || stopped());
+      failed = false;
+      return n;
     } finally {
       done.countDown();
       try {
@@ -175,6 +198,10 @@ public final class ShardWork {
       } catch (InterruptedException e) {
         Thread.currentThread().interrupt();
       }
+      Metrics.SHARD_ROUND_DURATION.labelValues(metric).observe((System.nanoTime() - start) / 1e9);
+      Metrics.SHARD_WORK.labelValues(metric).inc(n);
+      String result = lost.get() ? "lost" : failed ? "error" : "ok";
+      Metrics.SHARD_ROUNDS.labelValues(metric, shard.name(), result).inc();
       try {
         leases.dropLease(lease, DROP_DEADLINE);
       } catch (RuntimeException e) {

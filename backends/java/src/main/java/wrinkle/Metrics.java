@@ -64,6 +64,40 @@ public final class Metrics {
           .labelNames("result")
           .register();
 
+  public static final Counter SHARD_ROUNDS =
+      Counter.builder()
+          .name("wrinkle_shard_rounds")
+          .help(
+              "Rounds of per-shard work, by job, shard and result: ok, error, skipped (leased"
+                  + " elsewhere), lost (lease lost midway).")
+          .labelNames("job", "shard", "result")
+          .register();
+
+  public static final Histogram SHARD_ROUND_DURATION =
+      Histogram.builder()
+          .name("wrinkle_shard_round_duration_seconds")
+          .help("Time of the rounds this instance held the lease for, by job.")
+          .labelNames("job")
+          .classicExponentialUpperBounds(0.001, 2, 18)
+          .register();
+
+  public static final Counter SHARD_WORK =
+      Counter.builder()
+          .name("wrinkle_shard_work")
+          .help("What the per-shard rounds did, by job: events trimmed, messages moved.")
+          .labelNames("job")
+          .register();
+
+  public static final Histogram COLD_READ_DURATION =
+      Histogram.builder()
+          .name("wrinkle_cold_read_duration_seconds")
+          .help(
+              "Reads from the cold tier, by kind: range (a page of history) or message (one"
+                  + " message).")
+          .labelNames("kind")
+          .classicExponentialUpperBounds(0.0005, 2, 16)
+          .register();
+
   public static void init() {
     JvmMetrics.builder().register();
   }

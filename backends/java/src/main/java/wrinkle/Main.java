@@ -129,6 +129,7 @@ public final class Main {
       shardWork.add(
           new ShardWork(
               "trimming the user logs",
+              "log_trim",
               USER_KEYSPACE,
               trimmer.shards(),
               cfg.logTrimInterval(),
@@ -146,6 +147,7 @@ public final class Main {
       shardWork.add(
           new ShardWork(
               "moving history to the cold tier",
+              "history_move",
               "conversation",
               mover.shards(),
               cfg.coldMoveInterval(),

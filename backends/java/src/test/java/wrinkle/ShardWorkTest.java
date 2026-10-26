@@ -49,6 +49,7 @@ class ShardWorkTest {
   private static ShardWork job(FakeLeases leases, ShardWork.Round round) {
     return new ShardWork(
         "work",
+        "work",
         "ks",
         List.of(),
         Duration.ofHours(1),
@@ -59,12 +60,23 @@ class ShardWorkTest {
         Duration.ofMillis(20));
   }
 
+  /** The test job's rounds counted with the result. */
+  private static double counted(String shard, String result) {
+    return Metrics.SHARD_ROUNDS.labelValues("work", shard, result).get();
+  }
+
+  private static double work() {
+    return Metrics.SHARD_WORK.labelValues("work").get();
+  }
+
   private static ShardPools.Shard shard(String name) {
     return new ShardPools.Shard(name, null);
   }
 
   @Test
   void leasedRoundRunsOnceAndDropsTheLease() throws Exception {
+    double ok = counted("-80", "ok");
+    double work = work();
     FakeLeases leases = new FakeLeases("a");
     AtomicInteger rounds = new AtomicInteger();
     ShardWork j =
@@ -77,10 +89,13 @@ class ShardWorkTest {
     assertEquals(3, j.leased(shard("-80")));
     assertEquals(1, rounds.get());
     assertEquals(Map.of(), leases.snapshot());
+    assertEquals(ok + 1, counted("-80", "ok"), "round not counted");
+    assertEquals(work + 3, work(), "work not counted");
   }
 
   @Test
   void shardLeasedElsewhereIsSkipped() throws Exception {
+    double skipped = counted("-80", "skipped");
     FakeLeases leases = new FakeLeases("a");
     leases.give("work:ks/-80", "b");
     ShardWork j =
@@ -93,12 +108,14 @@ class ShardWorkTest {
               return 0;
             });
     assertEquals(0, j.leased(shard("-80")));
+    assertEquals(skipped + 1, counted("-80", "skipped"), "skipped round not counted");
     assertEquals(0, j.leased(shard("80-")));
     assertEquals(Map.of("work:ks/-80", "b"), leases.snapshot());
   }
 
   @Test
   void losingTheLeaseStopsTheRound() throws Exception {
+    double lost = counted("-", "lost");
     FakeLeases leases = new FakeLeases("a");
     ShardWork j =
         job(
@@ -120,5 +137,6 @@ class ShardWorkTest {
             });
     assertEquals(1, j.leased(shard("-")));
     assertEquals("b", leases.snapshot().get("work:ks/-"), "dropped another instance's lease");
+    assertEquals(lost + 1, counted("-", "lost"), "lost round not counted");
   }
 }

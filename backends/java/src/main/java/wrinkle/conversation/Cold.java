@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
 import wrinkle.MessageBody;
+import wrinkle.Metrics;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
@@ -232,11 +233,14 @@ public final class Cold {
 
   /** The message at seq, or null if the cold tier does not have it. */
   Row get(Uuid conversationId, long seq) {
+    long start = System.nanoTime();
     try (Table t = table()) {
       Result r = t.get(new Get(key(conversationId, seq)).addFamily(FAMILY));
       return r.isEmpty() ? null : Row.of(r);
     } catch (IOException e) {
       throw new UncheckedIOException("cold get", e);
+    } finally {
+      observeRead("message", start);
     }
   }
 
@@ -254,6 +258,7 @@ public final class Cold {
             .setLimit(limit)
             .setCaching(limit)
             .addFamily(FAMILY);
+    long start = System.nanoTime();
     try (Table t = table();
         ResultScanner scanner = t.getScanner(scan)) {
       for (Result r : scanner) {
@@ -264,8 +269,14 @@ public final class Cold {
       }
     } catch (IOException e) {
       throw new UncheckedIOException("cold scan", e);
+    } finally {
+      observeRead("range", start);
     }
     return rows;
+  }
+
+  private static void observeRead(String kind, long start) {
+    Metrics.COLD_READ_DURATION.labelValues(kind).observe((System.nanoTime() - start) / 1e9);
   }
 
   /** Changes to cold rows inside one transaction, and the rows as they were before. */
