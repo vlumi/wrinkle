@@ -6,7 +6,7 @@ import type { MessageInitShape } from "@bufbuild/protobuf";
 import type { Event } from "../gen/wrinkle/v1/event_pb";
 import { FrameSchema, RequestSchema } from "../gen/wrinkle/v1/frame_pb";
 import type { Frame, Response } from "../gen/wrinkle/v1/frame_pb";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb";
 
 export type ConnectionState = "offline" | "connecting" | "connected";
 
@@ -15,14 +15,19 @@ export class BackendError extends Error {
   constructor(
     readonly code: ErrorCode,
     message: string,
+    readonly reason: ErrorReason = ErrorReason.UNSPECIFIED,
   ) {
     super(message || ErrorCode[code]);
   }
 }
 
-/** A message for the user: the one given for the error's code, or else the error's own. */
-export function errorText(err: unknown, byCode: Partial<Record<ErrorCode, string>> = {}): string {
-  const given = err instanceof BackendError ? byCode[err.code] : undefined;
+/** A message for the user: the one given for the error's reason or code, or else the error's own. */
+export function errorText(
+  err: unknown,
+  byCode: Partial<Record<ErrorCode, string>> = {},
+  byReason: Partial<Record<ErrorReason, string>> = {},
+): string {
+  const given = err instanceof BackendError ? (byReason[err.reason] ?? byCode[err.code]) : undefined;
   if (given) return given;
   return err instanceof Error ? err.message : String(err);
 }
@@ -131,7 +136,8 @@ export class Connection {
       }
     });
     if (response.body.case === "error") {
-      throw new BackendError(response.body.value.code, response.body.value.message);
+      const { code, message, reason } = response.body.value;
+      throw new BackendError(code, message, reason);
     }
     if (response.body.case !== expected) throw new Error(`unexpected response ${response.body.case}`);
     return response.body.value as BodyOf<C>;

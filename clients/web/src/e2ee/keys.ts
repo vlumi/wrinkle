@@ -9,7 +9,7 @@ import { BackendError } from "../connection/connection";
 import type { Connection } from "../connection/connection";
 import { ContentSchema, ReactionsSchema } from "../gen/wrinkle/v1/content_pb";
 import type { Content } from "../gen/wrinkle/v1/content_pb";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb";
 import type { ReceivedKey } from "../gen/wrinkle/v1/messaging_pb";
 import type { Device, Message, Sealed, SealedSchema } from "../gen/wrinkle/v1/model_pb";
 import { fromHex, hex, sameId } from "../ids";
@@ -52,6 +52,11 @@ const sameSet = (a: Set<string>, b: Set<string>): boolean => a.size === b.size &
 export function needsEpoch(state: KeyState, devices: Set<string>, haveKey: boolean): boolean {
   return state.currentEpoch === 0 || state.rotate || !haveKey || !sameSet(state.recipients, devices);
 }
+
+/** Whether a refused send or reaction asks for the conversation's keys again: the epoch moved on, or must. */
+export const staleKeys = (err: unknown): boolean =>
+  err instanceof BackendError &&
+  (err.reason === ErrorReason.STALE_KEY_EPOCH || err.reason === ErrorReason.KEYS_MUST_ROTATE);
 
 type Devices = Map<bigint, Uint8Array>;
 
@@ -224,14 +229,19 @@ export class Keys {
   /** Asks for the conversation's key state and the keys for this device after the epoch. */
   private async fetchKeys(conversationId: Uint8Array, after: number): Promise<KeyState> {
     const id = hex(conversationId);
-    const resp = await this.call("getConversationKeys", {
-      case: "getConversationKeys",
-      value: { conversationId, afterEpoch: after },
-    });
-    for (const k of resp.keys) {
-      if (this.keyOf(id, k.epoch)) continue;
-      const key = await this.unwrap(conversationId, k).catch(() => null);
-      if (key) await this.remember(id, k.epoch, key);
+    let resp;
+    for (let afterEpoch = after; ;) {
+      resp = await this.call("getConversationKeys", {
+        case: "getConversationKeys",
+        value: { conversationId, afterEpoch },
+      });
+      for (const k of resp.keys) {
+        if (this.keyOf(id, k.epoch)) continue;
+        const key = await this.unwrap(conversationId, k).catch(() => null);
+        if (key) await this.remember(id, k.epoch, key);
+      }
+      if (!resp.hasMore || resp.keys.length === 0) break;
+      afterEpoch = resp.keys[resp.keys.length - 1].epoch;
     }
     const state = {
       currentEpoch: resp.currentEpoch,

@@ -2,7 +2,9 @@
 // history, read positions, and deleting one's own messages.
 
 import { timestampNow } from "@bufbuild/protobuf/wkt";
+import type { Connection } from "../connection/connection";
 import type { opening } from "../e2ee/opening";
+import type { Conversation } from "../gen/wrinkle/v1/model_pb";
 import type { groupActions } from "../groups/actions";
 import { isFormer, noticeUsers } from "../groups/model";
 import { fromHex } from "../ids";
@@ -12,6 +14,18 @@ import { addHistory, key, unread, upsertConversation, withDeleted, withUsers } f
 import type { Data } from "./model";
 
 const HISTORY_PAGE = 50;
+
+/** All the user's conversations, the most recently active first, a page at a time. */
+export async function listConversations(call: Connection["call"]): Promise<Conversation[]> {
+  const all: Conversation[] = [];
+  let pageToken: Uint8Array = new Uint8Array();
+  do {
+    const resp = await call("listConversations", { case: "listConversations", value: { pageToken } });
+    all.push(...resp.conversations);
+    pageToken = resp.nextPageToken;
+  } while (pageToken.length > 0);
+  return all;
+}
 
 export const isVisible = (): boolean => typeof document === "undefined" || document.visibilityState === "visible";
 
@@ -26,11 +40,11 @@ export function conversationActions(
 
   async function refreshConversations() {
     if (!link.conn) return;
-    const resp = await link.conn.call("listConversations", { case: "listConversations", value: {} });
+    const conversations = await listConversations(link.conn.call.bind(link.conn));
     let data: Data = get();
-    for (const c of resp.conversations) data = upsertConversation(data, c);
+    for (const c of conversations) data = upsertConversation(data, c);
     set({ conversations: data.conversations, users: data.users });
-    for (const c of resp.conversations) groups.learnSender(key(c.conversationId));
+    for (const c of conversations) groups.learnSender(key(c.conversationId));
     open.openLatest();
   }
 
@@ -45,9 +59,8 @@ export function conversationActions(
     const data = addHistory(get(), id, resp.messages);
     const notices = resp.messages.flatMap((m) => (m.content.case === "notice" ? [m.content.value] : []));
     const users = withUsers(data, notices.flatMap(noticeUsers)).users;
-    // A short page reaches the start: of the conversation, or of what a group member may see.
-    const complete =
-      resp.messages.length < HISTORY_PAGE ? { ...get().complete, [conversationId]: true as const } : get().complete;
+    // The start: of the conversation, or of what a group member may see.
+    const complete = resp.hasMore ? get().complete : { ...get().complete, [conversationId]: true as const };
     set({ messages: data.messages, reactions: data.reactions, users, complete });
     open.openMessages(resp.messages);
     open.openReactions(conversationId);

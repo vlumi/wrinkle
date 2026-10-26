@@ -5,12 +5,12 @@
 
 import { create } from "@bufbuild/protobuf";
 import { BackendError } from "../connection/connection";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
 import { DeviceSchema, MessageSchema } from "../gen/wrinkle/v1/model_pb";
 import { hex, sameId } from "../ids";
 import type { DeviceRef } from "./crypto";
-import { deviceId, Keys, needsEpoch } from "./keys";
+import { deviceId, Keys, needsEpoch, staleKeys } from "./keys";
 import type { BodyInit, Call } from "./keys";
 import { memoryStore } from "./store";
 
@@ -29,6 +29,8 @@ class Backend {
   epochs = new Map<string, { epoch: number; rotate: boolean; wraps: Wrap[] }>();
   /** Replaces sender keys in GetConversationKeys, as a dishonest server might. */
   forge: Uint8Array | null = null;
+  /** Keys a GetConversationKeys page holds. */
+  keyPage = 100;
 
   conversation(id: Uint8Array, members: Uint8Array[]) {
     this.members.set(hex(id), members);
@@ -99,6 +101,7 @@ class Backend {
         case "getConversationKeys": {
           const c = this.epochs.get(hex(v.conversationId as Uint8Array))!;
           const me = deviceId(self.userId, self.deviceId);
+          const keys = c.wraps.filter((w) => w.recipient === me && w.epoch > (v.afterEpoch as number));
           return {
             currentEpoch: c.epoch,
             rotate: c.rotate,
@@ -108,9 +111,8 @@ class Backend {
                 userId: Uint8Array.from(Buffer.from(w.recipient.split(":")[0], "hex")),
                 deviceId: BigInt(w.recipient.split(":")[1]),
               })),
-            keys: c.wraps
-              .filter((w) => w.recipient === me && w.epoch > (v.afterEpoch as number))
-              .map((w) => ({ ...w, senderPublicKey: this.forge ?? w.senderPublicKey })),
+            keys: keys.slice(0, this.keyPage).map((w) => ({ ...w, senderPublicKey: this.forge ?? w.senderPublicKey })),
+            hasMore: keys.length > this.keyPage,
           };
         }
       }
@@ -249,6 +251,32 @@ test("two devices racing for the next epoch both end up sealing with the winner'
   expect(epochs).toEqual([1, 1]);
   expect(await opened(a1, y)).toBe("y");
   expect(await opened(b1, x)).toBe("x");
+});
+
+test("keys come a page at a time", async () => {
+  const b = new Backend();
+  b.conversation(conversation, [alice, bob]);
+  const a1 = await b.device(alice, 11n);
+  const b1 = await b.device(bob, 21n);
+  b.keyPage = 1;
+  let last: Message | undefined;
+  for (const text of ["one", "two", "three"]) {
+    last = await send(a1, text);
+    b.setMembers(conversation, [alice, bob]);
+    a1.invalidate(hex(conversation));
+  }
+  expect(last?.content.case === "sealed" && last.content.value.epoch).toBe(3);
+  // Bob asks for every epoch after 0 and gets one a page.
+  expect(await opened(b1, last!)).toBe("three");
+});
+
+test("only a stale or rotating epoch is worth sealing again", () => {
+  const refusal = (reason: ErrorReason) => new BackendError(ErrorCode.FAILED_PRECONDITION, "", reason);
+  expect(staleKeys(refusal(ErrorReason.STALE_KEY_EPOCH))).toBe(true);
+  expect(staleKeys(refusal(ErrorReason.KEYS_MUST_ROTATE))).toBe(true);
+  expect(staleKeys(refusal(ErrorReason.BLOCKED_BY_YOU))).toBe(false);
+  expect(staleKeys(refusal(ErrorReason.UNSPECIFIED))).toBe(false);
+  expect(staleKeys(new Error("connection closed"))).toBe(false);
 });
 
 test("a key wrapped under a sender key the directory does not know is refused", async () => {

@@ -2,12 +2,11 @@
 // sealed together and set, shown before the event confirms them.
 
 import { create as createMessage } from "@bufbuild/protobuf";
-import { BackendError } from "../connection/connection";
 import { key, textKey } from "../conversations/model";
 import { NO_CRYPTO } from "../e2ee/actions";
 import { available } from "../e2ee/crypto";
+import { staleKeys } from "../e2ee/keys";
 import { timestampNow } from "@bufbuild/protobuf/wkt";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import { SealedSchema } from "../gen/wrinkle/v1/model_pb";
 import type { Api } from "../session/api";
 import type { Session } from "../session/session";
@@ -37,8 +36,7 @@ export function reactionActions({ set, get, link, current }: Api) {
           return;
         } catch (err) {
           // Another device made a newer epoch, or the members changed: look again, once.
-          const stale = err instanceof BackendError && err.code === ErrorCode.FAILED_PRECONDITION && sealed;
-          if (attempt > 1 || !stale) throw err;
+          if (attempt > 1 || !sealed || !staleKeys(err)) throw err;
           keys.invalidate(id);
         }
       }

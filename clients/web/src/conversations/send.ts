@@ -5,6 +5,7 @@
 import { BackendError } from "../connection/connection";
 import { available } from "../e2ee/crypto";
 import { NO_CRYPTO } from "../e2ee/actions";
+import { staleKeys } from "../e2ee/keys";
 import type { BodyInit } from "../e2ee/keys";
 import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
 import type { Message } from "../gen/wrinkle/v1/model_pb";
@@ -43,7 +44,7 @@ export function sendActions({ set, get, link, onSignOut }: Api) {
         return resp.message;
       } catch (err) {
         // Another device made a newer epoch, or the members changed: look again, once.
-        if (attempt > 1 || !(err instanceof BackendError) || err.code !== ErrorCode.FAILED_PRECONDITION) throw err;
+        if (attempt > 1 || !staleKeys(err)) throw err;
         keys.invalidate(key(conversationId));
       }
     }

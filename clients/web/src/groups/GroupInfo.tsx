@@ -5,7 +5,7 @@ import { errorText } from "../connection/connection";
 import { ContactActions, contactError } from "../contacts/ContactActions";
 import { ContactPicker } from "../contacts/ContactPicker";
 import { notContact } from "../contacts/model";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb";
 import { Verify } from "../e2ee/Verify";
 import type { Member, User } from "../gen/wrinkle/v1/model_pb";
 import { hex, sameId } from "../ids";
@@ -28,11 +28,18 @@ export function GroupInfo({ id, onClose }: { id: string; onClose: () => void }) 
       return;
     }
     setError(
-      errorText(err, {
-        [ErrorCode.PERMISSION_DENIED]: "Only admins can do that.",
-        [ErrorCode.NOT_FOUND]: "No one by that name is in the group or exists.",
-        [ErrorCode.FAILED_PRECONDITION]: "That would leave the group without an admin, or with too many members.",
-      }),
+      errorText(
+        err,
+        {
+          [ErrorCode.PERMISSION_DENIED]: "Only admins can do that.",
+          [ErrorCode.NOT_FOUND]: "No one by that name is in the group or exists.",
+          [ErrorCode.FAILED_PRECONDITION]: "That would leave the group without an admin, or with too many members.",
+        },
+        {
+          [ErrorReason.LAST_ADMIN]: "That would leave the group without an admin.",
+          [ErrorReason.GROUP_FULL]: "That would make the group too large.",
+        },
+      ),
     );
   };
 

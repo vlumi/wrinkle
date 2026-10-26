@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NAME_RULES, PASSWORD_RULES, nameProblem, passwordProblem } from "../account/rules";
 import { errorText } from "../connection/connection";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb";
 import { useSession } from "../session/session";
 import type { AuthMode } from "../session/session";
 import { defaultGatewayURL, forgetGateway, gatewayLabel, loadGateways } from "./gateways";
@@ -59,11 +59,18 @@ export function SignIn() {
           authenticate(mode, name, password, url.trim())
             .catch((err: unknown) =>
               setError(
-                errorText(err, {
-                  [ErrorCode.ALREADY_EXISTS]: "That name is taken.",
-                  [ErrorCode.UNAUTHENTICATED]: "Wrong name or password.",
-                  [ErrorCode.INVALID_ARGUMENT]: `${NAME_RULES} ${PASSWORD_RULES}`,
-                }),
+                errorText(
+                  err,
+                  {
+                    [ErrorCode.ALREADY_EXISTS]: "That name is taken.",
+                    [ErrorCode.UNAUTHENTICATED]: "Wrong name or password.",
+                    [ErrorCode.INVALID_ARGUMENT]: `${NAME_RULES} ${PASSWORD_RULES}`,
+                  },
+                  {
+                    [ErrorReason.TOO_MANY_DEVICES]:
+                      "This account is signed in on too many devices. Sign out one of them first, in Settings on another device.",
+                  },
+                ),
               ),
             )
             .finally(() => setBusy(false));
