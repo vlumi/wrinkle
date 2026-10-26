@@ -522,11 +522,9 @@ func (s *Service) Describe(ctx context.Context, conversationID, userID ids.UUID)
 			c.LastMessage = msg
 		case errors.Is(err, sql.ErrNoRows):
 			// Moved to the cold tier, which has it before MySQL lets go.
+			// Without the cold tier, the summary goes without it.
 			cold, found, err := s.cold.Get(ctx, conversationID, st.lastSeq)
-			if err != nil {
-				return nil, err
-			}
-			if found {
+			if err == nil && found {
 				if c.LastMessage, err = cold.message(conversationID); err != nil {
 					return nil, err
 				}

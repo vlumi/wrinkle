@@ -491,6 +491,8 @@ func (s *Service) messages(ctx context.Context, conversationID ids.UUID, joinedS
 	if again || !more {
 		return messages, again, nil
 	}
+	// Failing as unavailable, retryable: the hot part alone would read as
+	// the end of history.
 	cold, err := s.cold.Scan(ctx, conversationID, joinedSeq, hi, int(limit)-len(messages))
 	if err != nil {
 		return nil, false, err

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
 	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
@@ -163,10 +165,10 @@ func (c *Cold) Put(ctx context.Context, conversationID ids.UUID, messages []cold
 	}
 	for _, r := range res {
 		if r.Error != nil {
-			return fmt.Errorf("cold put: %w", r.Error)
+			return unavailable("put", r.Error)
 		}
 	}
-	return errors.New("cold put failed")
+	return unavailable("put", errors.New("failed"))
 }
 
 // Get reads the message at seq, if the cold tier has it.
@@ -178,7 +180,7 @@ func (c *Cold) Get(ctx context.Context, conversationID ids.UUID, seq uint64) (co
 	}
 	res, err := c.client.Get(get)
 	if err != nil {
-		return coldMessage{}, false, fmt.Errorf("cold get: %w", err)
+		return coldMessage{}, false, unavailable("get", err)
 	}
 	if len(res.Cells) == 0 {
 		return coldMessage{}, false, nil
@@ -213,7 +215,7 @@ func (c *Cold) Scan(ctx context.Context, conversationID ids.UUID, lo, hi uint64,
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("cold scan: %w", err)
+			return nil, unavailable("scan", err)
 		}
 		m, err := coldMessageOf(res.Cells)
 		if err != nil {
@@ -222,6 +224,13 @@ func (c *Cold) Scan(ctx context.Context, conversationID ids.UUID, lo, hi uint64,
 		messages = append(messages, m)
 	}
 	return messages, nil
+}
+
+// unavailable logs a failure of the cold tier and tells the device to try
+// again later, without the details.
+func unavailable(op string, err error) error {
+	slog.Warn("cold tier failed", "op", op, "err", err)
+	return apierror.Unavailable("history in the cold tier is unavailable; try again")
 }
 
 func observeRead(kind string, start time.Time) {
@@ -241,6 +250,9 @@ func (c *Cold) change(ctx context.Context, conversationID ids.UUID, old, changed
 		}
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
 		defer cancel()
-		_ = c.Put(ctx, conversationID, []coldMessage{old})
+		if err := c.Put(ctx, conversationID, []coldMessage{old}); err != nil {
+			// The row keeps a change no event told of, until the next one.
+			slog.Error("putting back a cold row failed", "conversation", conversationID, "seq", old.seq, "err", err)
+		}
 	}, nil
 }
