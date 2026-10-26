@@ -6,6 +6,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import type { PoolConnection } from "mysql2/promise";
 import { EventSchema } from "../gen/wrinkle/v1/event_pb.js";
 import type { Sticker } from "../gen/wrinkle/v1/model_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, notFound, unauthenticated } from "../internal/apierror.ts";
 import { exec, now, row, rows, tx } from "../internal/db.ts";
 import { sameId, type UUID } from "../internal/ids.ts";
@@ -38,7 +39,8 @@ export async function save(deps: Deps, userId: UUID, sticker: Uint8Array): Promi
   if ((await load(deps, [stickerId])).length === 0) throw notFound("no such sticker");
   await change(deps, userId, async (p) => {
     if (p.order.some((id) => sameId(id, stickerId))) return false;
-    if (p.order.length >= maxPalette) throw failedPrecondition(`the palette is full, at ${maxPalette} stickers`);
+    if (p.order.length >= maxPalette)
+      throw failedPrecondition(ErrorReason.PALETTE_FULL, `the palette is full, at ${maxPalette} stickers`);
     const position = p.order.length > 0 ? p.positions[p.positions.length - 1]! + 1 : 0;
     await exec(p.c, `INSERT INTO palette_sticker (user_id, sticker_id, position, saved_at) VALUES (?, ?, ?, ?)`, [
       userId,

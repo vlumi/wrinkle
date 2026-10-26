@@ -6,6 +6,7 @@ import { SyncResponseSchema, type SyncResponse } from "../gen/wrinkle/v1/messagi
 import { cursorExpired } from "../internal/apierror.ts";
 import { row, rows } from "../internal/db.ts";
 import type { UUID } from "../internal/ids.ts";
+import { maxPageBytes } from "../internal/page.ts";
 
 const defaultSyncLimit = 100;
 const maxSyncLimit = 1000;
@@ -19,7 +20,13 @@ export async function sync(db: Pool, userId: UUID, cursor: bigint, limit: number
     [userId, cursor, n + 1],
   );
   const resp = create(SyncResponseSchema, { cursor, hasMore: list.length > n });
+  let size = 0;
   for (const r of list.slice(0, n)) {
+    if (resp.events.length > 0 && size + r.payload.length > maxPageBytes) {
+      resp.hasMore = true;
+      break;
+    }
+    size += r.payload.length;
     const event = fromBinary(EventSchema, r.payload);
     resp.events.push(event);
     resp.cursor = event.cursor;

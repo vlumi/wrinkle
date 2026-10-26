@@ -4,7 +4,7 @@ import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { StickerSchema, type Sticker } from "../gen/wrinkle/v1/model_pb.js";
 import { codeOf, failedPrecondition, invalidArgument } from "../internal/apierror.ts";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb.js";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { exec, isDuplicate, now, placeholders, row, rows, tx } from "../internal/db.ts";
 import { hex, parseUUID, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
@@ -18,7 +18,7 @@ export function parseId(b: Uint8Array, field: string): UUID {
   return id;
 }
 
-const notStickerUpload = () => failedPrecondition("not a sticker upload of yours");
+const notStickerUpload = () => failedPrecondition(ErrorReason.NOT_YOUR_UPLOAD, "not a sticker upload of yours");
 
 /**
  * Makes a sticker of the user's uploaded sticker blob and saves it to their
@@ -33,7 +33,7 @@ export async function createSticker(deps: Deps, userId: UUID, blob: Uint8Array):
     [userId, blobId],
   );
   if (!upload) throw notStickerUpload();
-  if (!(await deps.blobs.exists(blobId))) throw failedPrecondition("not uploaded");
+  if (!(await deps.blobs.exists(blobId))) throw failedPrecondition(ErrorReason.NOT_UPLOADED, "not uploaded");
   const existing = await load(deps, [blobId]);
   if (existing[0]) return existing[0];
   // Used before the sticker row exists, so the sweeper keeps the blob even if what follows fails.

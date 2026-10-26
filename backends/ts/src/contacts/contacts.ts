@@ -9,6 +9,7 @@ import type { Contact, User } from "../gen/wrinkle/v1/model_pb.js";
 import { profile, profiles } from "../accounts/service.ts";
 import { resolve } from "../accounts/names.ts";
 import { validName } from "../accounts/validate.ts";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, invalidArgument, notFound, permissionDenied } from "../internal/apierror.ts";
 import { placeholders, rows, timedRows, type DbTime } from "../internal/db.ts";
 import { hex, parseUUID, sameId, type UUID } from "../internal/ids.ts";
@@ -78,7 +79,7 @@ export async function listContacts(db: Pool, userId: UUID): Promise<Contact[]> {
   });
 }
 
-const unblockFirst = () => failedPrecondition("unblock this user first");
+const unblockFirst = () => failedPrecondition(ErrorReason.BLOCKED_BY_YOU, "unblock this user first");
 
 /** The profile of a user who exists and is not deleted. */
 async function existing(db: Pool, userId: UUID): Promise<User> {
@@ -151,7 +152,7 @@ export async function unblockUser(db: Pool, userId: UUID, other: Uint8Array): Pr
  * other's without saying more.
  */
 export async function checkMessaging(db: Pool, userId: UUID, peerId: UUID): Promise<void> {
-  if (await blocks(db, userId, peerId)) throw failedPrecondition("you blocked this user");
+  if (await blocks(db, userId, peerId)) throw failedPrecondition(ErrorReason.BLOCKED_BY_YOU, "you blocked this user");
   if (await blocks(db, peerId, userId)) throw permissionDenied("can't message this user");
 }
 

@@ -1,6 +1,6 @@
 // The services in-process: each feature registers handlers for its requests.
 import { create } from "@bufbuild/protobuf";
-import { ErrorCode, ResponseSchema, type Request, type Response } from "../gen/wrinkle/v1/frame_pb.js";
+import { ErrorCode, ErrorReason, ResponseSchema, type Request, type Response } from "../gen/wrinkle/v1/frame_pb.js";
 import {
   ApiError,
   codeOf,
@@ -47,7 +47,7 @@ export class Local implements Backend {
     const body = req.body;
     if (body.case === undefined) throw invalidArgument("request has no body");
     if (body.case === "register" || body.case === "signIn" || body.case === "connect") {
-      if (!isZero(userId)) throw failedPrecondition("already connected");
+      if (!isZero(userId)) throw failedPrecondition(ErrorReason.ALREADY_CONNECTED, "already connected");
       const h = this.signIn[body.case] as SignInHandler<typeof body.case> | undefined;
       if (!h) throw unimplemented(body.case);
       return h(body.value);

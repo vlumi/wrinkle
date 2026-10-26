@@ -2,9 +2,10 @@
 // sending, read marks and history, with its cold tier. Every change writes
 // an outbox row in the same transaction, which change data capture carries
 // to the fan-out.
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import type { Pool } from "mysql2/promise";
 import { ReadEventSchema } from "../gen/wrinkle/v1/event_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { MessageSchema, SealedSchema, type Message, type Sealed } from "../gen/wrinkle/v1/model_pb.js";
 import { checkMessaging } from "../contacts/contacts.ts";
 import { ApiError, failedPrecondition, invalidArgument } from "../internal/apierror.ts";
@@ -22,6 +23,7 @@ import {
   type Querier,
 } from "../internal/db.ts";
 import { newUUID, parseUUID, randomId, type UUID } from "../internal/ids.ts";
+import { maxPageBytes } from "../internal/page.ts";
 import type { Deps } from "../services/deps.ts";
 import { releaseAttachments, useAttachments } from "../uploads/uploads.ts";
 import { coldMessage, type Cold } from "./cold.ts";
@@ -132,8 +134,12 @@ export const copySealed = (s: Sealed): Sealed =>
 /** Fails unless the sealed content uses the current key epoch, and none is current while keys must rotate. */
 export function checkEpoch(st: State, epoch: number): void {
   if (st.keyEpoch === 0 || epoch !== st.keyEpoch)
-    throw failedPrecondition(`stale key epoch: the current one is ${st.keyEpoch}`);
-  if (st.rotate) throw failedPrecondition(`keys must rotate: the membership changed since epoch ${st.keyEpoch}`);
+    throw failedPrecondition(ErrorReason.STALE_KEY_EPOCH, `stale key epoch: the current one is ${st.keyEpoch}`);
+  if (st.rotate)
+    throw failedPrecondition(
+      ErrorReason.KEYS_MUST_ROTATE,
+      `keys must rotate: the membership changed since epoch ${st.keyEpoch}`,
+    );
 }
 
 interface MessageRow {
@@ -351,7 +357,7 @@ export async function messages(
   conversationId: UUID,
   beforeSeq: bigint,
   limit: number,
-): Promise<Message[]> {
+): Promise<{ messages: Message[]; hasMore: boolean }> {
   const m = await row<{ joined_seq: bigint; left_seq: bigint | null }>(
     db,
     `SELECT joined_seq, left_seq FROM conversation_member WHERE conversation_id = ? AND user_id = ?`,
@@ -366,8 +372,25 @@ export async function messages(
   const n = Math.min(limit === 0 ? defaultPageSize : limit, maxPageSize);
   for (;;) {
     const page = await messagePage(db, cold, conversationId, m.joined_seq, upTo, before, n);
-    if (page) return page;
+    if (page) {
+      const kept = bounded(page);
+      // Seqs are dense from the first the user may read, so whether
+      // anything is older shows from the lowest returned.
+      const lowest = kept[kept.length - 1]?.seq;
+      const floor = m.joined_seq > 1n ? m.joined_seq : 1n;
+      return { messages: kept, hasMore: lowest !== undefined && lowest > floor };
+    }
   }
+}
+
+/** The newest messages of the page within the page's bytes, at least one. */
+function bounded(messages: Message[]): Message[] {
+  let size = 0;
+  for (let i = 0; i < messages.length; i++) {
+    size += toBinary(MessageSchema, messages[i]!).length;
+    if (i > 0 && size > maxPageBytes) return messages.slice(0, i);
+  }
+  return messages;
 }
 
 const min = (...xs: bigint[]): bigint => xs.reduce((a, b) => (b < a ? b : a));

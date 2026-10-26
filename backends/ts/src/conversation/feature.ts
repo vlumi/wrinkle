@@ -153,9 +153,10 @@ const handlersOf: FeatureFactory = (deps) => {
       },
       getMessages: async (c, req) => ({
         case: "getMessages",
-        value: create(GetMessagesResponseSchema, {
-          messages: await messages(db, cold, c.userId, conversationIdOf(req.conversationId), req.beforeSeq, req.limit),
-        }),
+        value: create(
+          GetMessagesResponseSchema,
+          await messages(db, cold, c.userId, conversationIdOf(req.conversationId), req.beforeSeq, req.limit),
+        ),
       }),
       publishKeys: async (c, req) => {
         const conversationId = conversationIdOf(req.conversationId);
@@ -164,7 +165,14 @@ const handlersOf: FeatureFactory = (deps) => {
       },
       getConversationKeys: async (c, req) => ({
         case: "getConversationKeys",
-        value: await conversationKeys(deps, c.userId, c.deviceId, conversationIdOf(req.conversationId), req.afterEpoch),
+        value: await conversationKeys(
+          deps,
+          c.userId,
+          c.deviceId,
+          conversationIdOf(req.conversationId),
+          req.afterEpoch,
+          req.limit,
+        ),
       }),
     },
   };

@@ -10,6 +10,7 @@ import {
   type Reaction,
   type Sealed,
 } from "../gen/wrinkle/v1/model_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, invalidArgument, notFound } from "../internal/apierror.ts";
 import { exec, now, row, timedRows, timestampOf, type DbTime, type Querier } from "../internal/db.ts";
 import { hex, randomId, type UUID } from "../internal/ids.ts";
@@ -57,7 +58,7 @@ export async function setReaction(
     const msg = create(MessageSchema);
     decodeBody(stored.body, msg);
     if (msg.content.case === "notice") throw invalidArgument(`message ${seq} is a notice`);
-    if (msg.deletedAt) throw failedPrecondition(`message ${seq} is deleted`);
+    if (msg.deletedAt) throw failedPrecondition(ErrorReason.MESSAGE_DELETED, `message ${seq} is deleted`);
     let newBody: Buffer | undefined;
     if (sealed) {
       checkEpoch(st, sealed.epoch);

@@ -8,7 +8,8 @@ import {
   type RegisterRequest,
   type SignInRequest,
 } from "../gen/wrinkle/v1/messaging_pb.js";
-import { alreadyExists, unauthenticated } from "../internal/apierror.ts";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
+import { alreadyExists, resourceExhausted, unauthenticated } from "../internal/apierror.ts";
 import { exec, now, row, tx } from "../internal/db.ts";
 import { newUUID, randomId, type UUID } from "../internal/ids.ts";
 import { claim, claimOwner, resolve } from "./names.ts";
@@ -19,6 +20,10 @@ import { newToken, tokenHash, tokenString } from "./token.ts";
 import { checkDeviceName, checkName, checkPassword, validName, validPassword } from "./validate.ts";
 
 const wrongCredentials = "wrong name or password";
+
+// Bounds an account's signed-in devices, and with them what one user adds to
+// every key epoch and device key list.
+const maxDevices = 20;
 
 let dummy: Promise<string> | undefined;
 
@@ -99,6 +104,16 @@ async function newDevice(db: Pool, userId: UUID, name: string): Promise<DeviceCr
   const token = newToken(userId, randomId());
   await tx(db, async (c) => {
     const o = await lockOutbox(c, userId, now());
+    // Counted under the user's row lock, so concurrent sign-ins cannot pass it.
+    const signedIn = await row<{ n: bigint }>(
+      c,
+      `SELECT COUNT(*) AS n FROM device WHERE user_id = ? AND token_hash IS NOT NULL`,
+      [userId],
+    );
+    if ((signedIn?.n ?? 0n) >= BigInt(maxDevices))
+      throw resourceExhausted(`at most ${maxDevices} signed-in devices; sign one out first`).because(
+        ErrorReason.TOO_MANY_DEVICES,
+      );
     await exec(
       c,
       `INSERT INTO device (user_id, device_id, name, token_hash, acked_position, created_at, last_seen_at)

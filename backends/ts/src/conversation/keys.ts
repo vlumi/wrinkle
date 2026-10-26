@@ -10,6 +10,7 @@ import {
   type WrappedKey,
 } from "../gen/wrinkle/v1/messaging_pb.js";
 import { deviceKey, deviceKeys } from "../accounts/keys.ts";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, invalidArgument, permissionDenied } from "../internal/apierror.ts";
 import { exec, now, row, rows, rowsOf, tx } from "../internal/db.ts";
 import { hex, parseUUID, type UUID } from "../internal/ids.ts";
@@ -19,6 +20,8 @@ import { has, load, member, notInConversation, selectState, type State } from ".
 
 const maxWrappedKeys = 500;
 const wrappedBytes = 60;
+// How many keys GetConversationKeys returns at most.
+const maxKeyPage = 100;
 
 interface Wrap {
   userId: UUID;
@@ -62,8 +65,11 @@ export async function publishKeys(
 
   await tx(deps.conversations, async (c) => {
     const st = await member(c, conversationId, userId);
-    if (!senderKey) throw failedPrecondition("this device has no key; set one first");
-    const notNext = failedPrecondition(`epoch ${epoch} is not next: the current one is ${st.keyEpoch}`);
+    if (!senderKey) throw failedPrecondition(ErrorReason.DEVICE_HAS_NO_KEY, "this device has no key; set one first");
+    const notNext = failedPrecondition(
+      ErrorReason.KEY_EPOCH_TAKEN,
+      `epoch ${epoch} is not next: the current one is ${st.keyEpoch}`,
+    );
     if (epoch === st.keyEpoch + 1) {
       recipientsAreMembers(st, wraps);
     } else if (epoch >= 1 && epoch <= st.keyEpoch) {
@@ -136,7 +142,9 @@ export async function conversationKeys(
   deviceId: bigint,
   conversationId: UUID,
   afterEpoch: number,
+  limit: number,
 ): Promise<GetConversationKeysResponse> {
+  const n = limit === 0 || limit > maxKeyPage ? maxKeyPage : limit;
   const db = deps.conversations;
   const st = await load(db, selectState, conversationId);
   const m = await row<{ left_seq: bigint | null }>(
@@ -168,10 +176,11 @@ export async function conversationKeys(
     db,
     `SELECT epoch, sender_user_id, sender_device_id, sender_public_key, wrapped FROM conversation_key
      WHERE conversation_id = ? AND recipient_user_id = ? AND recipient_device_id = ? AND epoch > ?
-     ORDER BY epoch`,
-    [conversationId, userId, deviceId, afterEpoch],
+     ORDER BY epoch LIMIT ?`,
+    [conversationId, userId, deviceId, afterEpoch, n + 1],
   );
-  resp.keys = received.map((r) =>
+  resp.hasMore = received.length > n;
+  resp.keys = received.slice(0, n).map((r) =>
     create(ReceivedKeySchema, {
       epoch: r.epoch,
       senderUserId: r.sender_user_id,

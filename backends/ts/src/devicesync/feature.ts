@@ -14,10 +14,16 @@ export function devicesyncFeature(trimming?: TrimOptions): FeatureFactory {
     ack: (userId, deviceId, cursor) => ack(db, userId, deviceId, cursor),
     handlers: {
       sync: async (c, req) => ({ case: "sync", value: await sync(db, c.userId, req.cursor, req.limit) }),
-      listConversations: async (c) => ({
-        case: "listConversations",
-        value: create(ListConversationsResponseSchema, { conversations: await listConversations(db, c.userId) }),
-      }),
+      listConversations: async (c, req) => {
+        const page = await listConversations(db, c.userId, req.pageToken, req.limit);
+        return {
+          case: "listConversations",
+          value: create(ListConversationsResponseSchema, {
+            conversations: page.conversations,
+            nextPageToken: page.next,
+          }),
+        };
+      },
       registerPushToken: async (c, req) => {
         await registerPushToken(db, c.userId, c.deviceId, req.service, req.token);
         return { case: "registerPushToken", value: create(RegisterPushTokenResponseSchema) };

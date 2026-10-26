@@ -3,6 +3,7 @@ import { create } from "@bufbuild/protobuf";
 import type { Pool } from "mysql2/promise";
 import { UserDevicesSchema, type UserDevices } from "../gen/wrinkle/v1/messaging_pb.js";
 import { DeviceSchema } from "../gen/wrinkle/v1/model_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, invalidArgument } from "../internal/apierror.ts";
 import { exec, placeholders, row, rows, tx } from "../internal/db.ts";
 import { hex, parseUUID, sameId, type UUID } from "../internal/ids.ts";
@@ -27,7 +28,11 @@ export async function setDeviceKey(d: AccountsDeps, userId: UUID, deviceId: bigi
     );
     const current = r?.public_key ?? null;
     if (current !== null && sameId(current, key)) return;
-    if (current !== null) throw failedPrecondition("the device has a different key; sign in again as a new device");
+    if (current !== null)
+      throw failedPrecondition(
+        ErrorReason.DEVICE_KEY_SET,
+        "the device has a different key; sign in again as a new device",
+      );
     await exec(c, `UPDATE device SET public_key = ? WHERE user_id = ? AND device_id = ?`, [
       Buffer.from(key),
       userId,

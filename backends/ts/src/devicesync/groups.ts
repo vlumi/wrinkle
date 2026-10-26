@@ -2,7 +2,7 @@
 // invites, the contact check on them, and leaving every group of a deleted
 // account.
 import type { Pool } from "mysql2/promise";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb.js";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { resolve } from "../accounts/names.ts";
 import { validName } from "../accounts/validate.ts";
 import { contactsAmong } from "../contacts/contacts.ts";
@@ -47,7 +47,8 @@ export function checkContacts(db: Pool, userId: UUID, names: Map<string, string>
   return async (users) => {
     const contacts = await contactsAmong(db, userId, users);
     for (const id of users)
-      if (!contacts.has(hex(id))) throw failedPrecondition(`not a contact: ${names.get(hex(id)) ?? ""}`);
+      if (!contacts.has(hex(id)))
+        throw failedPrecondition(ErrorReason.NOT_A_CONTACT, `not a contact: ${names.get(hex(id)) ?? ""}`);
   };
 }
 

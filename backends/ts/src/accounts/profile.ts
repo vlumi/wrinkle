@@ -3,6 +3,7 @@ import { create } from "@bufbuild/protobuf";
 import type { UpdateProfileRequest } from "../gen/wrinkle/v1/messaging_pb.js";
 import { ProfileEventSchema } from "../gen/wrinkle/v1/event_pb.js";
 import { UserSchema, type User } from "../gen/wrinkle/v1/model_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, invalidArgument, unauthenticated } from "../internal/apierror.ts";
 import { exec, now, nullBytes, row, tx, type Querier } from "../internal/db.ts";
 import { parseUUID, sameId, type UUID } from "../internal/ids.ts";
@@ -50,7 +51,7 @@ async function checkAvatar(d: AccountsDeps, userId: UUID, avatar: Uint8Array): P
   const blobId = parseUUID(avatar);
   if (!blobId) throw invalidArgument("avatar must be empty or 16 bytes");
   await avatarUpload(d.db, userId, blobId, false);
-  if (!(await d.blobs.exists(blobId))) throw failedPrecondition("not uploaded");
+  if (!(await d.blobs.exists(blobId))) throw failedPrecondition(ErrorReason.NOT_UPLOADED, "not uploaded");
 }
 
 /** Checks that the user made an avatar upload slot for the blob, optionally locking it against the sweeper. */
@@ -60,7 +61,7 @@ async function avatarUpload(q: Querier, userId: UUID, blobId: UUID, lock: boolea
     `SELECT 1 FROM upload WHERE user_id = ? AND blob_id = ? AND purpose = 'avatar'` + (lock ? ` FOR UPDATE` : ""),
     [userId, blobId],
   );
-  if (!r) throw failedPrecondition("not an avatar upload of yours");
+  if (!r) throw failedPrecondition(ErrorReason.NOT_YOUR_UPLOAD, "not an avatar upload of yours");
 }
 
 /** Applies the change and writes its outbox row in one transaction. */

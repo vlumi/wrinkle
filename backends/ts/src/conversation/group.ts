@@ -17,7 +17,7 @@ import {
   type Notice,
   type User,
 } from "../gen/wrinkle/v1/model_pb.js";
-import { ErrorCode } from "../gen/wrinkle/v1/frame_pb.js";
+import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { profiles } from "../accounts/service.ts";
 import { kindOf } from "../devicesync/conversations.ts";
 import { codeOf, failedPrecondition, invalidArgument, notFound, permissionDenied } from "../internal/apierror.ts";
@@ -91,7 +91,8 @@ export async function createGroup(
 ): Promise<Conversation> {
   checkTopic(topic);
   checkClientGroupId(clientGroupId);
-  if (invitees.length + 1 > maxMembers) throw failedPrecondition(`a group has at most ${maxMembers} members`);
+  if (invitees.length + 1 > maxMembers)
+    throw failedPrecondition(ErrorReason.GROUP_FULL, `a group has at most ${maxMembers} members`);
   const db = deps.conversations;
   const conversationId = await claimGroup(db, creatorId, clientGroupId);
   const snapshots = await snapshotsOf(deps, invitees);
@@ -204,7 +205,7 @@ export async function addMembers(
     const unchecked = added.filter((id) => !checked.some((x) => x.equals(id)));
     if (unchecked.length > 0) await check(unchecked);
     if (st.members.length + added.length > maxMembers)
-      throw failedPrecondition(`a group has at most ${maxMembers} members`);
+      throw failedPrecondition(ErrorReason.GROUP_FULL, `a group has at most ${maxMembers} members`);
     st.lastSeq++;
     const at = now();
     for (const id of added) {
@@ -324,7 +325,7 @@ export async function setAdmin(
     if (!has(st.members, targetId)) throw notFound(`user ${hex(targetId)} is not in group ${hex(conversationId)}`);
     if ((await isAdmin(c, conversationId, targetId)) === admin) return;
     if (!admin && (await countAdmins(c, conversationId)) <= 1)
-      throw failedPrecondition("a group keeps at least one admin");
+      throw failedPrecondition(ErrorReason.LAST_ADMIN, "a group keeps at least one admin");
     await exec(c, `UPDATE conversation_member SET admin = ? WHERE conversation_id = ? AND user_id = ?`, [
       admin,
       conversationId,

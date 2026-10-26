@@ -2,7 +2,14 @@
 // rules, requests to the backend, and the frames written back.
 import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { WebSocket } from "ws";
-import { ErrorCode, FrameSchema, type Frame, type Request, type Response } from "../gen/wrinkle/v1/frame_pb.js";
+import {
+  ErrorCode,
+  ErrorReason,
+  FrameSchema,
+  type Frame,
+  type Request,
+  type Response,
+} from "../gen/wrinkle/v1/frame_pb.js";
 import {
   errorResponse,
   failedPrecondition,
@@ -158,7 +165,8 @@ export class Conn {
   private async dispatch(req: Request): Promise<Response> {
     const kind = req.body.case;
     const signIn = kind === "register" || kind === "signIn" || kind === "connect";
-    if (signIn && this.connected) return errorResponse(req.id, failedPrecondition("already connected"));
+    if (signIn && this.connected)
+      return errorResponse(req.id, failedPrecondition(ErrorReason.ALREADY_CONNECTED, "already connected"));
     if (!signIn && !this.connected) return errorResponse(req.id, unauthenticated("connect first"));
     const hashing = kind === "register" || kind === "signIn";
     if (hashing) {
@@ -197,7 +205,7 @@ export class Conn {
 
   /** Records the identity Connect established and attaches the connection to its user. */
   private async identify(rawUserId: Uint8Array | undefined, deviceId: bigint): Promise<void> {
-    if (this.connected) throw failedPrecondition("already connected");
+    if (this.connected) throw failedPrecondition(ErrorReason.ALREADY_CONNECTED, "already connected");
     const userId = parseUUID(rawUserId);
     if (!userId) throw new Error("connect returned no user id");
     this.userId = userId;

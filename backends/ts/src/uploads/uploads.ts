@@ -8,6 +8,7 @@ import {
   type CreateUploadRequest,
   type CreateUploadResponse,
 } from "../gen/wrinkle/v1/messaging_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { failedPrecondition, invalidArgument } from "../internal/apierror.ts";
 import { exec, now, placeholders, rows, tx, type Querier } from "../internal/db.ts";
 import { newUUID, type UUID } from "../internal/ids.ts";
@@ -61,7 +62,7 @@ export async function createUpload(deps: Deps, userId: UUID, req: CreateUploadRe
   });
 }
 
-const notAttachmentUpload = () => failedPrecondition("not an attachment upload of yours");
+const notAttachmentUpload = () => failedPrecondition(ErrorReason.NOT_YOUR_UPLOAD, "not an attachment upload of yours");
 
 /**
  * Takes a message's attachments into use: each must be an attachment upload
@@ -82,11 +83,11 @@ export async function useAttachments(
   const args = [userId, ...blobIds];
   await attachmentUploads(deps.users, query, args, blobIds.length);
   for (const id of blobIds) {
-    if (!(await deps.blobs.exists(id))) throw failedPrecondition("not uploaded");
+    if (!(await deps.blobs.exists(id))) throw failedPrecondition(ErrorReason.NOT_UPLOADED, "not uploaded");
   }
   await tx(deps.users, async (c) => {
     if (await attachmentUploads(c, query + " FOR UPDATE", args, blobIds.length)) {
-      throw failedPrecondition("already attached");
+      throw failedPrecondition(ErrorReason.ALREADY_ATTACHED, "already attached");
     }
     await exec(
       c,

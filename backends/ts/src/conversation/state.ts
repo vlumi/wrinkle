@@ -5,6 +5,7 @@ import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { EventSchema, MessageEventSchema, type Event } from "../gen/wrinkle/v1/event_pb.js";
 import { MessageSchema, type Message, type Notice } from "../gen/wrinkle/v1/model_pb.js";
+import { ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
 import { notFound, permissionDenied, failedPrecondition } from "../internal/apierror.ts";
 import { exec, now, row, timestampOf, type Querier } from "../internal/db.ts";
 import { hex, randomId, type UUID } from "../internal/ids.ts";
@@ -105,7 +106,8 @@ export async function member(q: Querier, conversationId: UUID, userId: UUID): Pr
 /** Loads a group with the given query and checks that the user is a current member. */
 export async function group(q: Querier, query: string, conversationId: UUID, userId: UUID): Promise<State> {
   const st = await load(q, query, conversationId);
-  if (st.kind !== kindGroup) throw failedPrecondition(`conversation ${hex(conversationId)} is not a group`);
+  if (st.kind !== kindGroup)
+    throw failedPrecondition(ErrorReason.NOT_A_GROUP, `conversation ${hex(conversationId)} is not a group`);
   if (!has(st.members, userId)) throw permissionDenied(`user ${hex(userId)} is not in group ${hex(conversationId)}`);
   return st;
 }

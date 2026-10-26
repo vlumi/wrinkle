@@ -1,7 +1,8 @@
 // The user's conversation list: reading it, and the entries added when the
 // user opens a conversation or creates a group. The fan-out keeps the
 // entries current.
-import { create, fromBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import type { Pool } from "mysql2/promise";
 import {
   ConversationKind,
@@ -15,11 +16,17 @@ import { profile } from "../accounts/service.ts";
 import { resolve } from "../accounts/names.ts";
 import { validName } from "../accounts/validate.ts";
 import { checkMessaging } from "../contacts/contacts.ts";
+import { sqlTime } from "../fanout/sqltime.ts";
 import { invalidArgument, notFound } from "../internal/apierror.ts";
-import { exec, now, nullBytes, timedRows, timestampOf, type DbTime } from "../internal/db.ts";
+import { exec, microsOf, now, nullBytes, timedRows, timestampOf, type DbTime } from "../internal/db.ts";
 import { hex, participants, sameId, type UUID } from "../internal/ids.ts";
+import { maxPageBytes } from "../internal/page.ts";
 
-const maxConversationList = 200;
+const defaultConversationPage = 100;
+const maxConversationPage = 200;
+// A page token: the last entry's updated_at in Unix microseconds, then its
+// conversation id.
+const pageTokenBytes = 8 + 16;
 
 /** The contract's kind of a stored one. */
 export function kindOf(kind: string): ConversationKind {
@@ -100,14 +107,51 @@ function toConversation(r: ConversationRow): Conversation {
   return c;
 }
 
-/** The user's conversations, most recently active first. */
-export async function listConversations(db: Pool, userId: UUID): Promise<Conversation[]> {
-  const list = await timedRows<ConversationRow>(
+/**
+ * A page of the user's conversations, most recently active first, and the
+ * token of the next page, empty after the last.
+ */
+export async function listConversations(
+  db: Pool,
+  userId: UUID,
+  token: Uint8Array,
+  limit: number,
+): Promise<{ conversations: Conversation[]; next: Uint8Array }> {
+  const n = Math.min(limit === 0 ? defaultConversationPage : limit, maxConversationPage);
+  let query = conversationColumns + `, updated_at FROM user_conversation WHERE user_id = ?`;
+  const args: unknown[] = [userId];
+  if (token.length === pageTokenBytes) {
+    const b = Buffer.from(token);
+    const micros = b.readBigUInt64BE(0);
+    const after = create(TimestampSchema, { seconds: micros / 1_000_000n, nanos: Number(micros % 1_000_000n) * 1000 });
+    query += ` AND (updated_at, conversation_id) < (?, ?)`;
+    args.push(sqlTime(after), b.subarray(8));
+  } else if (token.length > 0) {
+    throw invalidArgument("page_token is not one this server gave");
+  }
+  const list = await timedRows<ConversationRow & { updated_at: DbTime }>(
     db,
-    conversationColumns + ` FROM user_conversation WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
-    [userId, maxConversationList],
+    query + ` ORDER BY updated_at DESC, conversation_id DESC LIMIT ?`,
+    [...args, n + 1],
   );
-  return list.map(toConversation);
+  let more = list.length > n;
+  const conversations: Conversation[] = [];
+  let size = 0;
+  for (const r of list.slice(0, n)) {
+    const c = toConversation(r);
+    size += toBinary(ConversationSchema, c).length;
+    if (conversations.length > 0 && size > maxPageBytes) {
+      more = true;
+      break;
+    }
+    conversations.push(c);
+  }
+  if (!more) return { conversations, next: new Uint8Array() };
+  const last = list[conversations.length - 1]!;
+  const next = Buffer.alloc(pageTokenBytes);
+  next.writeBigUInt64BE(microsOf(last.updated_at), 0);
+  Buffer.from(last.conversation_id).copy(next, 8);
+  return { conversations, next };
 }
 
 /** The user's list entry of the conversation. */
