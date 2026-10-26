@@ -49,3 +49,29 @@ export const fanoutLag = new client.Histogram({
   buckets: client.exponentialBuckets(0.001, 2, 16),
   registers: [registry],
 });
+export const shardRounds = new client.Counter({
+  name: "wrinkle_shard_rounds_total",
+  help: "Rounds of per-shard work, by job, shard and result: ok, error, skipped (leased elsewhere), lost (lease lost midway).",
+  labelNames: ["job", "shard", "result"],
+  registers: [registry],
+});
+export const shardRoundDuration = new client.Histogram({
+  name: "wrinkle_shard_round_duration_seconds",
+  help: "Time of the rounds this instance held the lease for, by job.",
+  labelNames: ["job"],
+  buckets: client.exponentialBuckets(0.001, 2, 18),
+  registers: [registry],
+});
+export const shardWork = new client.Counter({
+  name: "wrinkle_shard_work_total",
+  help: "What the per-shard rounds did, by job: events trimmed, messages moved.",
+  labelNames: ["job"],
+  registers: [registry],
+});
+export const coldReadDuration = new client.Histogram({
+  name: "wrinkle_cold_read_duration_seconds",
+  help: "Reads from the cold tier, by kind: range (a page of history) or message (one message).",
+  labelNames: ["kind"],
+  buckets: client.exponentialBuckets(0.0005, 2, 16),
+  registers: [registry],
+});

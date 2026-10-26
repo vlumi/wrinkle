@@ -21,6 +21,7 @@ export interface TrimOptions {
 export const startTrimmer = (db: Pool, leases: Leases, log: Logger, opts: TrimOptions): (() => Promise<void>) =>
   startShardWork(db, opts.mysql, {
     name: "trimming the user logs",
+    metric: "log_trim",
     keyspace: "user",
     intervalMs: opts.intervalMs,
     unit: "events",

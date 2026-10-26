@@ -33,6 +33,7 @@ export const startMover = (
 ): (() => Promise<void>) =>
   startShardWork(db, opts.mysql, {
     name: "moving history to the cold tier",
+    metric: "history_move",
     keyspace: "conversation",
     intervalMs: opts.intervalMs,
     unit: "messages",

@@ -5,6 +5,7 @@ import { MessageSchema, type Message, type Reaction } from "../gen/wrinkle/v1/mo
 import type { Pool, PoolConnection } from "mysql2/promise";
 import { microsOf, timestampOf, tx, type DbTime } from "../internal/db.ts";
 import type { UUID } from "../internal/ids.ts";
+import { coldReadDuration } from "../internal/metrics.ts";
 import { decodeBlobIds, decodeBody } from "./state.ts";
 
 const table = "message";
@@ -133,7 +134,7 @@ export class Cold {
 
   /** The message at seq, if the cold tier has it. */
   async get(conversationId: UUID, seq: bigint): Promise<ColdMessage | undefined> {
-    return (await this.range(coldKey(conversationId, seq), coldKey(conversationId, seq + 1n)))[0];
+    return (await this.range(coldKey(conversationId, seq), coldKey(conversationId, seq + 1n), "message"))[0];
   }
 
   /**
@@ -146,13 +147,22 @@ export class Cold {
   async scan(conversationId: UUID, lo: bigint, hi: bigint, limit: number): Promise<ColdMessage[]> {
     if (lo > hi || limit <= 0) return [];
     const from = hi - lo + 1n > BigInt(limit) ? hi - BigInt(limit) + 1n : lo;
-    const found = await this.range(coldKey(conversationId, from), coldKey(conversationId, hi + 1n));
+    const found = await this.range(coldKey(conversationId, from), coldKey(conversationId, hi + 1n), "range");
     return found.reverse();
   }
 
   // The rows from start up to end, exclusive, through a scanner. A response
   // may end within a row, so cells of one key are gathered across them.
-  private async range(start: Buffer, end: Buffer): Promise<ColdMessage[]> {
+  private async range(start: Buffer, end: Buffer, kind: "range" | "message"): Promise<ColdMessage[]> {
+    const observe = coldReadDuration.startTimer({ kind });
+    try {
+      return await this.scanRows(start, end);
+    } finally {
+      observe();
+    }
+  }
+
+  private async scanRows(start: Buffer, end: Buffer): Promise<ColdMessage[]> {
     const opened = await fetch(`${this.url}/${table}/scanner`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

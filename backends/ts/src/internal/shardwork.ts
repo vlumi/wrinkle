@@ -4,6 +4,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import type { Pool } from "mysql2/promise";
 import type { Logger } from "./log.ts";
+import { shardRoundDuration, shardRounds, shardWork } from "./metrics.ts";
 import { closeShardPools, openShardPools, type Shard } from "./shards.ts";
 
 const firstRound = 60_000;
@@ -20,9 +21,13 @@ export interface Leases {
   dropLease(name: string, signal: AbortSignal): Promise<void>;
 }
 
-/** One kind of work: round does what is due on a shard and returns how much it did, in unit. */
+/**
+ * One kind of work: round does what is due on a shard and returns how much
+ * it did, in unit. metric labels its metrics.
+ */
 export interface Job {
   name: string;
+  metric: string;
   keyspace: string;
   intervalMs: number;
   unit: string;
@@ -68,6 +73,8 @@ export function startShardWork(db: Pool, mysql: string, job: Job): () => Promise
 
 async function loop(job: Job, shard: Shard, signal: AbortSignal): Promise<void> {
   const log = job.log.with({ shard: shard.name });
+  // The shard shows before its first round ends.
+  shardRounds.inc({ job: job.metric, shard: shard.name, result: "ok" }, 0);
   for (;;) {
     try {
       const n = await leased(job, shard, signal);
@@ -90,7 +97,18 @@ async function loop(job: Job, shard: Shard, signal: AbortSignal): Promise<void> 
 export async function leased(job: Job, shard: Shard, signal: AbortSignal): Promise<number> {
   const name = `${job.name}:${job.keyspace}/${shard.name}`;
   const ttl = job.leaseMs ?? leaseTTL;
-  if (!(await job.leases.takeLease(name, ttl))) return 0;
+  let taken: boolean;
+  try {
+    taken = await job.leases.takeLease(name, ttl);
+  } catch (err) {
+    shardRounds.inc({ job: job.metric, shard: shard.name, result: "error" });
+    throw err;
+  }
+  if (!taken) {
+    shardRounds.inc({ job: job.metric, shard: shard.name, result: "skipped" });
+    return 0;
+  }
+  const end = shardRoundDuration.startTimer({ job: job.metric });
   const lost = new AbortController();
   let done = false;
   let renewing: Promise<void> = Promise.resolve();
@@ -107,12 +125,22 @@ export async function leased(job: Job, shard: Shard, signal: AbortSignal): Promi
     );
   };
   timer = setTimeout(renew, ttl / 3);
+  let n = 0;
+  let failed = false;
   try {
-    return await job.round(shard, AbortSignal.any([signal, lost.signal]));
+    n = await job.round(shard, AbortSignal.any([signal, lost.signal]));
+    return n;
+  } catch (err) {
+    failed = true;
+    throw err;
   } finally {
     done = true;
     clearTimeout(timer);
     await renewing;
+    end();
+    shardWork.inc({ job: job.metric }, n);
+    const result = lost.signal.aborted ? "lost" : failed ? "error" : "ok";
+    shardRounds.inc({ job: job.metric, shard: shard.name, result });
     await job.leases.dropLease(name, AbortSignal.timeout(dropDeadline)).catch(() => undefined);
   }
 }
