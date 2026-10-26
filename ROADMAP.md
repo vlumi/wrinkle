@@ -24,6 +24,7 @@ What is done, what is open and why, and the gaps that are known and accepted for
 - **TypeScript backend.** All three roles on Node 26, as a monolith or split, with batched fan-out and APNs push; in the cluster and the side-by-side setup with the others. [backends/ts](backends/ts/README.md).
 - **History in a cold tier.** Messages older than 30 days move to HBase per conversation behind a watermark; history, reactions and deletes work across it in Go, Java and TypeScript. [History and the cold tier](docs/architecture.md#history-and-the-cold-tier).
 - **Background work per shard.** The log trimmer and the history mover run each shard on its own loop, every minute by default, each shard's round leased in Valkey to one instance at a time, so services instances share the shards. [Processes](docs/architecture.md#processes).
+- **Bounded pages and error reasons** (2026-10-26): every list a device reads is paged and ends before 512 KiB, so no server frame passes 1 MiB; ListConversations is paged by token instead of keeping the newest 200; refusals carry a reason clients act on; at most 20 signed-in devices per account.
 - **A hardening round** (2026-10-26), from four reviews of the code and design: the blob storage key made per machine and the edge passing only blob reads and presigned uploads; attachments typed as bytes and blobs served with `nosniff`; account deletion keeping the attachments of the messages that stay, and pending uploads checked against their message before the sweeper deletes them; keys only for signed-in devices with keys, none of the current membership for former members, and blocks covering reads and keys one-to-one; renames kept to the user's own devices; hex push tokens; at most five sign-ins per connection, with failures keeping the Connect deadline and password hashing bounded by each request's deadline in every backend; the cold tier failing as `UNAVAILABLE`; the mover putting to HBase before it locks a conversation; leases that stop a round when they cannot be renewed; write timeouts in the Rust gateway and a crash-proof push process in the Elixir one; and `make check-invariants`, which runs after every conformance suite.
 - **`make ci-images`**: builds every image, the cluster's and the stack's, before a push that touches a Dockerfile or a backend's build; `make ci` still builds none, to stay quick.
 - **Monitoring every process.** Prometheus scrapes the process on port 8080, the side-by-side gateways and services instances, and every replica in the cluster, found by name, each labeled by process; the dashboard shows them by process, with the per-shard jobs and the cold tier's reads. Metrics for the jobs and the cold tier's reads in Go, Java and TypeScript ([docs/metrics.md](docs/metrics.md)).
@@ -73,7 +74,18 @@ In the order they would be done. Each item says why it comes where it does and h
 
 **Design:** park instead of retry. A record whose appends fail for one user shard after the retries has those recipients' appends produced to a parked topic, keyed by recipient, and the rest of the fetch commits. Later records for a parked recipient go to the parked topic too, so each recipient's log keeps its order; a consumer of the parked topic retries until the shard answers, and a recipient leaves the parked set once its parked records are drained. The parked set must survive a worker restart (a compacted topic or a Valkey set), or a later record could reach a log before an earlier parked one. The log's source key already makes every replay idempotent. Go first, then Java and TypeScript; a failure drill (stop one user shard under load, with the load generator counting per-device gaps and order) shows it.
 
-### 4. Parity
+### 4. From the 2026-10-26 review
+
+Found by the reviews behind the hardening round and left for later, each with its fix:
+
+- **Connect during a Valkey outage** fails with `UNAVAILABLE`, so a gateway restart then is a reconnect storm into refusals. Let Connect succeed without a push subscription and tell the device to poll Sync until a later notice.
+- **An idle connected device misses pushes** published while its gateway's pub/sub connection was replaced, until something else makes it sync. Close those connections with 1013 on resubscription, or push a nudge to sync.
+- **Limits in the contract.** About 40 limits are typed in five gateways, three services and two clients; an enum in `proto/` would give each language generated constants and the conformance tests one source to check.
+- **ListContacts** returns up to 1000 per state in one response; page it as ListConversations is.
+- **Failure drills**: kill the fan-out, stop Valkey, restart Kafka under load, with the load generator counting duplicates, gaps and misordering per receiving device; and a test harness shared by the four scripts that start a backend for tests.
+- **Capacity**: docs/capacity.md sizes the logs for direct conversations only; a group send costs an append per member. Debezium runs one task per keyspace, and resharding under it is untested.
+
+### 5. Parity
 
 - **The Elixir gateway at 1000 messages per second.** The other three gateways delivered everything at 1000/s in front of the same Go services; the Elixir gateway timed out about 5 % of its sends ([2026-10-21](docs/results/2026-10-21-shapes.md)). Profiled on 2026-10-22: no process in the gateway queues, and the gRPC client's own queue stays empty; the sends wait in the services for a connection to the conversation keyspace, as they do for every shape past the limit, and the database work per message is the Go gateway's. On a busy machine, from fresh stacks, even the Go gateway failed at 1000/s, and the Elixir gateway failed worse; turning off the BEAM schedulers' busy waiting, now the default in its launchers, closed part of that. Measured again in one session on an idle machine ([2026-10-24](docs/results/2026-10-24-shapes.md)), it delivered 98.3 % at 1000/s, and the Go gateway delivered everything but with a median p99 of 1.6 s; their send round trips, 1.5 s and 0.3 s at the median against the Rust gateway's 59 ms in front of the same services, put the wait on the gateways' side of the RPC. Open: where on that side.
 - **The TypeScript gateway at 1000 messages per second.** It delivered everything, but its send round trip rose to 1.2 s at the median, while the TypeScript monolith answered in 50 ms ([2026-10-24](docs/results/2026-10-24-shapes.md)). Open: whether the internal RPC on Node's gRPC or the services process's one thread, which serves every gateway's calls and is not measured, holds the sends.
@@ -96,8 +108,14 @@ Not ordered; each is an issue or becomes one when started.
 
 ### Experiments
 
-- **Services in Elixir and Rust.** Left out because the services are SQL and a Kafka consumer, where the languages differ least; a gateway is where they differ most. A full implementation in each would complete the matrix, and would grow with item 2.
-- **A second Go gateway without a goroutine per connection**, on a poller-driven WebSocket library, to see how far the idle memory per connection falls when the model changes; see [docs/results/2026-10-10-idle-memory.md](docs/results/2026-10-10-idle-memory.md).
+Ranked by what each would tell about the implementations under load, for its cost (the 2026-10-26 review):
+
+1. **Several gRPC connections per gateway.** Each gateway holds one HTTP/2 connection to the services balancer; at 1000 messages a second the Go, TypeScript and Elixir gateways queue on their side of it while Rust's does not (item 5). Two to four connections per gateway, then the rates series again. Hours.
+2. **Failure drills** (item 4): recovery differs by client library (franz-go, the Java client, KafkaJS; go-redis, Lettuce, ioredis), which no series measures yet.
+3. **A transactional-outbox poller in place of Debezium**, in Go first: the docs argue for the change stream but have no number for it, and `wrinkle_fanout_lag_seconds` isolates that path.
+4. **Services in Rust**: the one language likely to move CPU per message, the only metric left below the database's ceiling; HBase through REST, as in TypeScript. Weeks. Services in Elixir are dropped: SQL-bound services are where the BEAM has least to show.
+5. **A gateway in C#**, a second managed runtime beside the JVM; cheap, like the Rust gateway.
+6. **A second Go gateway without a goroutine per connection**, on a poller-driven WebSocket library; the idle-memory profile already predicts most of the answer ([docs/results/2026-10-10-idle-memory.md](docs/results/2026-10-10-idle-memory.md)), so the question left is its cost per message.
 
 ## Known gaps
 
