@@ -5,6 +5,19 @@ import SwiftProtobuf
 public struct BackendError: Error, Equatable, Sendable {
     public let code: Wrinkle_V1_ErrorCode
     public let message: String
+    /// Which precondition failed, or which limit was reached; unspecified otherwise.
+    public let reason: Wrinkle_V1_ErrorReason
+
+    public init(
+        code: Wrinkle_V1_ErrorCode, message: String, reason: Wrinkle_V1_ErrorReason = .unspecified
+    ) {
+        self.code = code
+        self.message = message
+        self.reason = reason
+    }
+
+    /// The conversation's keys are to be fetched again: the epoch moved on, or must.
+    public var staleKeys: Bool { reason == .staleKeyEpoch || reason == .keysMustRotate }
 }
 
 public enum ConnectionState: Sendable {
@@ -21,6 +34,9 @@ public enum CloseCode {
 /// One device's WebSocket connection: binary Frames in and out, requests matched to
 /// responses by id, events delivered as a stream.
 public actor Connection {
+    /// The largest frame accepted from the server, above the contract's 1 MiB.
+    static let maxFrame = 2 << 20
+
     private let url: URL
     private let session: URLSession
     private var task: URLSessionWebSocketTask?
@@ -47,6 +63,7 @@ public actor Connection {
     public func open() async throws {
         stateContinuation.yield(.connecting)
         let task = session.webSocketTask(with: url)
+        task.maximumMessageSize = Self.maxFrame
         self.task = task
         task.resume()
         // URLSession reports a failure to open on the first receive, so probe with a
@@ -96,7 +113,8 @@ public actor Connection {
         case .response(let response):
             if let c = pending.removeValue(forKey: response.requestID) {
                 if case .error(let e) = response.body {
-                    c.resume(throwing: BackendError(code: e.code, message: e.message))
+                    c.resume(
+                        throwing: BackendError(code: e.code, message: e.message, reason: e.reason))
                 } else {
                     c.resume(returning: response)
                 }
@@ -275,13 +293,50 @@ public actor Connection {
         ).sync
     }
 
-    public func listConversations() async throws -> [Wrinkle_V1_Conversation] {
-        try await call(.listConversations(Wrinkle_V1_ListConversationsRequest()))
-            .listConversations.conversations
+    public func registerPushToken(service: Wrinkle_V1_PushService, token: String) async throws {
+        _ = try await call(
+            .registerPushToken(
+                .with {
+                    $0.service = service
+                    $0.token = token
+                }))
+    }
+}
+
+// MARK: Paged requests
+
+extension Connection {
+    /// All the user's conversations, the most recently active first, a page at a time; 0
+    /// pages by the server's default.
+    public func listConversations(pageSize: UInt32 = 0) async throws -> [Wrinkle_V1_Conversation] {
+        var all: [Wrinkle_V1_Conversation] = []
+        var token = Data()
+        repeat {
+            let page = try await call(
+                .listConversations(
+                    .with {
+                        $0.pageToken = token
+                        $0.limit = pageSize
+                    })
+            ).listConversations
+            all += page.conversations
+            token = page.nextPageToken
+        } while !token.isEmpty
+        return all
     }
 
     public func getMessages(conversationID: Data, beforeSeq: UInt64, limit: UInt32)
         async throws -> [Wrinkle_V1_Message]
+    {
+        try await getMessagesPage(
+            conversationID: conversationID, beforeSeq: beforeSeq, limit: limit
+        ).messages
+    }
+
+    /// A page of history, newest first, with whether older messages follow; a short page does
+    /// not mean the end.
+    public func getMessagesPage(conversationID: Data, beforeSeq: UInt64, limit: UInt32)
+        async throws -> Wrinkle_V1_GetMessagesResponse
     {
         try await call(
             .getMessages(
@@ -290,15 +345,6 @@ public actor Connection {
                     $0.beforeSeq = beforeSeq
                     $0.limit = limit
                 })
-        ).getMessages.messages
-    }
-
-    public func registerPushToken(service: Wrinkle_V1_PushService, token: String) async throws {
-        _ = try await call(
-            .registerPushToken(
-                .with {
-                    $0.service = service
-                    $0.token = token
-                }))
+        ).getMessages
     }
 }

@@ -111,6 +111,7 @@ final class BackendTests: XCTestCase {
         let history = try await alice.getMessages(
             conversationID: conv.conversationID, beforeSeq: 0, limit: 10)
         XCTAssertEqual(history.map(\.seq), [2, 1])
+        try await historyPaged(alice, conv.conversationID)
 
         // A rename and an icon reach the peer, and the peer's list shows them.
         let renamed = unique("ios-robert")

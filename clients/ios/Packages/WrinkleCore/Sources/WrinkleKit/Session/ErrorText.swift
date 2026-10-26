@@ -8,6 +8,10 @@ func errorText(_ error: Error, _ meanings: [Wrinkle_V1_ErrorCode: String] = [:])
     guard let e = error as? BackendError else {
         return "Connection lost; try again."
     }
+    if e.reason == .tooManyDevices {
+        return "This account has 20 devices signed in, the most allowed; "
+            + "sign out another device first."
+    }
     if let meaning = meanings[e.code] { return meaning }
     switch e.code {
     case .invalidArgument: return "The server did not accept that."

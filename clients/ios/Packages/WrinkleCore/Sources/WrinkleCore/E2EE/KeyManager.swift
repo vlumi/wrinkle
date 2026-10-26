@@ -171,7 +171,7 @@ public actor KeyManager {
                 return try await connection.sendMessage(
                     conversationID: conversationID, clientMessageID: clientMessageID,
                     sealed: sealed, blobIDs: blobIDs)
-            } catch let e as BackendError where e.code == .failedPrecondition && !retried {
+            } catch let e as BackendError where e.staleKeys && !retried {
                 retried = true
                 rosters[conversationID] = nil
                 (epoch, key) = try await currentEpoch(

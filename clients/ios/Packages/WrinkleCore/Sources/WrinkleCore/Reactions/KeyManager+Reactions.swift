@@ -26,7 +26,7 @@ extension KeyManager {
                 try await connection.setReaction(
                     conversationID: conversationID, seq: seq, sealed: sealed)
                 return
-            } catch let e as BackendError where e.code == .failedPrecondition && !retried {
+            } catch let e as BackendError where e.staleKeys && !retried {
                 retried = true
                 invalidate(conversationID)
                 (epoch, key) = try await currentEpoch(

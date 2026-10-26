@@ -24,16 +24,29 @@ extension Connection {
                 }))
     }
 
-    public func getConversationKeys(conversationID: Data, afterEpoch: UInt32) async throws
-        -> Wrinkle_V1_GetConversationKeysResponse
+    /// The conversation's key state and every key for the device after the epoch, a page at
+    /// a time; 0 pages by the server's default.
+    public func getConversationKeys(conversationID: Data, afterEpoch: UInt32, pageSize: UInt32 = 0)
+        async throws -> Wrinkle_V1_GetConversationKeysResponse
     {
-        try await call(
-            .getConversationKeys(
-                .with {
-                    $0.conversationID = conversationID
-                    $0.afterEpoch = afterEpoch
-                })
-        ).getConversationKeys
+        var after = afterEpoch
+        var all: Wrinkle_V1_GetConversationKeysResponse?
+        while true {
+            let page = try await call(
+                .getConversationKeys(
+                    .with {
+                        $0.conversationID = conversationID
+                        $0.afterEpoch = after
+                        $0.limit = pageSize
+                    })
+            ).getConversationKeys
+            if all == nil { all = page } else { all?.keys += page.keys }
+            guard page.hasMore_p, let last = page.keys.last else {
+                all?.hasMore_p = false
+                return all ?? page
+            }
+            after = last.epoch
+        }
     }
 
     /// Sends content already sealed, with the attachment blobs it refers to; see

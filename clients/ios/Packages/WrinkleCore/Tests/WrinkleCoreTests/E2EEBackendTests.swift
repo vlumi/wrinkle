@@ -71,7 +71,7 @@ extension BackendTests {
         XCTAssertNil(movedText)
 
         // An epoch other than the current one is refused.
-        let stale = await code {
+        let stale = await failure {
             try await alice.sendMessage(
                 conversationID: id, clientMessageID: "e3",
                 sealed: .with {
@@ -80,7 +80,9 @@ extension BackendTests {
                     $0.ciphertext = Data(count: 32)
                 })
         }
-        XCTAssertEqual(stale, .failedPrecondition)
+        XCTAssertEqual(stale?.code, .failedPrecondition)
+        XCTAssertEqual(stale?.reason, .staleKeyEpoch)
+        XCTAssertEqual(stale?.staleKeys, true)
         try await sameSafetyNumber(alice, a.user.userID, bob, b.user.userID)
         await alice.close()
         await bob.close()
@@ -197,5 +199,11 @@ extension BackendTests {
         XCTAssertEqual(fourth.sealed.epoch, 2)
         let onlyFirst = try await read(alice, fourth)
         XCTAssertEqual(onlyFirst, "to the first device")
+        // The keys come a page at a time, oldest first.
+        let paged = try await alice.getConversationKeys(
+            conversationID: id, afterEpoch: 0, pageSize: 1)
+        XCTAssertEqual(paged.keys.map(\.epoch), [1, 2])
+        XCTAssertFalse(paged.hasMore_p)
+        XCTAssertEqual(paged.currentEpoch, 2)
     }
 }

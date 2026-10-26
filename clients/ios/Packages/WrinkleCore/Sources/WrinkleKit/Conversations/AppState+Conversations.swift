@@ -19,14 +19,14 @@ extension AppState {
 
     public func loadHistory(conversationID: IDHex, before: Int64?) async throws {
         let (connection, store) = try connected()
-        let messages = try await connection.getMessages(
+        let page = try await connection.getMessagesPage(
             conversationID: try wireID(conversationID), beforeSeq: UInt64(before ?? 0),
             limit: Self.historyPage)
-        for m in messages {
+        for m in page.messages {
             store.insert(m)
             store.replaceReactions(m)
         }
-        if messages.count < Self.historyPage, let c = store.conversation(conversationID) {
+        if !page.hasMore_p, let c = store.conversation(conversationID) {
             c.historyComplete = true
         }
         store.save()
