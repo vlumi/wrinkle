@@ -80,7 +80,7 @@ func notAttachmentUpload() error {
 // another message already. They stay pending until the fan-out delivers
 // the message, so a send that fails without releasing them loses them only
 // to the sweeper.
-func (s *Service) UseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error {
+func (s *Service) UseAttachments(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, blobIDs []ids.UUID) error {
 	if len(blobIDs) == 0 {
 		return nil
 	}
@@ -112,8 +112,10 @@ func (s *Service) UseAttachments(ctx context.Context, userID ids.UUID, blobIDs [
 	if used {
 		return apierror.FailedPrecondition("already attached")
 	}
-	query, args = blobQuery(`UPDATE upload SET used = TRUE, pending_since = ? WHERE user_id = ? AND blob_id IN `, userID, blobIDs)
-	args = append([]any{vtdb.Now()}, args...)
+	query, args = blobQuery(`
+		UPDATE upload SET used = TRUE, pending_since = ?, conversation_id = ?, client_message_id = ? WHERE user_id = ? AND blob_id IN `,
+		userID, blobIDs)
+	args = append([]any{vtdb.Now(), conversationID, clientMessageID}, args...)
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return err
 	}

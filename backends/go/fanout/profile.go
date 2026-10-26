@@ -113,7 +113,9 @@ func (w *Worker) deliverDeletion(ctx context.Context, o *userOutboxRow) error {
 			}
 		}
 	}
-	if _, err := w.db.ExecContext(ctx, `UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose <> 'sticker'`, o.userID); err != nil {
+	// The avatar goes; stickers stay public, and attachments stay with the
+	// messages, which keep them until deleted.
+	if _, err := w.db.ExecContext(ctx, `UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'avatar'`, o.userID); err != nil {
 		return fmt.Errorf("release uploads of user %s: %w", o.userID, err)
 	}
 	return nil

@@ -64,6 +64,8 @@ func run() error {
 		trimS   = flag.Int("log-trim-interval-s", envInt("WRINKLE_LOG_TRIM_INTERVAL_S", 60), "fanout: time between two trims of each shard of the user logs, in seconds")
 		hotS    = flag.Int("history-hot-s", envInt("WRINKLE_HISTORY_HOT_S", 30*24*3600), "fanout: how long messages stay in MySQL before moving to the cold tier, in seconds")
 		moveS   = flag.Int("cold-move-interval-s", envInt("WRINKLE_COLD_MOVE_INTERVAL_S", 60), "fanout: time between two moves of each shard to the cold tier, in seconds")
+		unusedS = flag.Int("upload-unused-s", envInt("WRINKLE_UPLOAD_UNUSED_S", 24*3600), "fanout: how long an upload may go unused, or an attachment wait for its message, before its blob is deleted, in seconds")
+		sweepS  = flag.Int("upload-sweep-interval-s", envInt("WRINKLE_UPLOAD_SWEEP_INTERVAL_S", 600), "fanout: time between two sweeps of unused uploads, in seconds")
 		apnsKey = flag.String("apns-key", env("WRINKLE_APNS_KEY", ""), "fanout: APNs .p8 key file; push notifications are off without it")
 		apnsKID = flag.String("apns-key-id", env("WRINKLE_APNS_KEY_ID", ""), "fanout: APNs key id; defaults to the id in the key's file name")
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
@@ -183,7 +185,10 @@ func run() error {
 		defer worker.Close()
 		log.Info("fanout consuming", "topics", fanout.Topics)
 		add("fanout", func() error { return worker.Run(ctx) })
-		sweeper := uploads.NewSweeper(userDB, store, log.With("role", "sweeper"))
+		sweeper := uploads.NewSweeper(userDB, conversationDB, store, uploads.SweeperConfig{
+			UnusedFor: time.Duration(*unusedS) * time.Second, Interval: time.Duration(*sweepS) * time.Second,
+			HotWindow: time.Duration(*hotS) * time.Second,
+		}, log.With("role", "sweeper"))
 		add("upload sweeper", func() error { return sweeper.Run(ctx) })
 		// Each shard's trim and move is taken by one instance at a time.
 		trimmer, err := devicesync.NewTrimmer(ctx, *mysql, "user", userDB, time.Duration(*logKeep)*time.Second)

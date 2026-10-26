@@ -159,8 +159,11 @@ CREATE TABLE upload (
   size BIGINT UNSIGNED NOT NULL,
   used BOOLEAN NOT NULL DEFAULT FALSE,
   -- An attachment a send took into use, until the fan-out delivers the
-  -- message; one still pending a day later belongs to a failed send.
+  -- message; one still pending a day later is checked against the message
+  -- it was taken for, and deleted if the send failed.
   pending_since DATETIME(6) NULL,
+  conversation_id BINARY(16) NULL,
+  client_message_id VARCHAR(64) NULL,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, blob_id),
   KEY upload_unused (used, created_at),

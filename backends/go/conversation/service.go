@@ -43,7 +43,7 @@ type Profiles interface {
 // Attachments takes the uploads of a message's attachments into use, and
 // releases them once it is deleted, in the user keyspace.
 type Attachments interface {
-	UseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error
+	UseAttachments(ctx context.Context, userID, conversationID ids.UUID, clientMessageID string, blobIDs []ids.UUID) error
 	ReleaseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error
 }
 
@@ -287,7 +287,7 @@ func (s *Service) useAttachments(ctx context.Context, userID, conversationID ids
 	if !errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	}
-	if err := s.attachments.UseAttachments(ctx, userID, blobIDs); err != nil {
+	if err := s.attachments.UseAttachments(ctx, userID, conversationID, clientMessageID, blobIDs); err != nil {
 		return false, err
 	}
 	return true, nil
