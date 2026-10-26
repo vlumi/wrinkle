@@ -1776,7 +1776,8 @@ export type RegisterPushTokenRequest = Message<"wrinkle.v1.RegisterPushTokenRequ
 
   /**
    * The token the push service issued to the device, as text; for APNs the
-   * device token in hex.
+   * device token in hex, up to 200 characters (ERROR_CODE_INVALID_ARGUMENT
+   * otherwise).
    *
    * @generated from field: string token = 2;
    */

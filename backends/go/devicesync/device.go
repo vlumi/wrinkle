@@ -2,6 +2,7 @@ package devicesync
 
 import (
 	"context"
+	"strings"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
@@ -36,6 +37,10 @@ func (s *Service) RegisterPushToken(ctx context.Context, userID ids.UUID, device
 	}
 	if len(token) > maxPushToken {
 		return apierror.InvalidArgument("push token is longer than %d bytes", maxPushToken)
+	}
+	// APNs tokens are hex, and go into the request path as they are.
+	if strings.Trim(token, "0123456789abcdefABCDEF") != "" {
+		return apierror.InvalidArgument("push token must be hex")
 	}
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE device SET push_service = ?, push_token = ?

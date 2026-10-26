@@ -543,7 +543,8 @@ message GetMessagesResponse {
 message RegisterPushTokenRequest {
   PushService service = 1;
   // The token the push service issued to the device, as text; for APNs the
-  // device token in hex.
+  // device token in hex, up to 200 characters (ERROR_CODE_INVALID_ARGUMENT
+  // otherwise).
   string token = 2;
 }
 

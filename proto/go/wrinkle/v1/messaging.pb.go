@@ -4018,7 +4018,8 @@ type RegisterPushTokenRequest struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Service PushService            `protobuf:"varint,1,opt,name=service,proto3,enum=wrinkle.v1.PushService" json:"service,omitempty"`
 	// The token the push service issued to the device, as text; for APNs the
-	// device token in hex.
+	// device token in hex, up to 200 characters (ERROR_CODE_INVALID_ARGUMENT
+	// otherwise).
 	Token         string `protobuf:"bytes,2,opt,name=token,proto3" json:"token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

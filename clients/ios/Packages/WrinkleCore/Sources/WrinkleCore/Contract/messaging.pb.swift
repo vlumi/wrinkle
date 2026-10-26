@@ -1446,7 +1446,8 @@ public nonisolated struct Wrinkle_V1_RegisterPushTokenRequest: Sendable {
   public var service: Wrinkle_V1_PushService = .unspecified
 
   /// The token the push service issued to the device, as text; for APNs the
-  /// device token in hex.
+  /// device token in hex, up to 200 characters (ERROR_CODE_INVALID_ARGUMENT
+  /// otherwise).
   public var token: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()

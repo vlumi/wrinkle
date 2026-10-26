@@ -22,7 +22,10 @@ func TestRegisterPushToken(t *testing.T) {
 	}
 	err := d.RegisterPushToken(ctx(t), pb.PushService_PUSH_SERVICE_UNSPECIFIED, token)
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
-	err = d.RegisterPushToken(ctx(t), pb.PushService_PUSH_SERVICE_APNS, strings.Repeat("x", 201))
+	err = d.RegisterPushToken(ctx(t), pb.PushService_PUSH_SERVICE_APNS, strings.Repeat("a", 201))
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
+	// Hex only: the token goes into the push service's request path.
+	err = d.RegisterPushToken(ctx(t), pb.PushService_PUSH_SERVICE_APNS, "ab/../cd")
 	wantCode(t, err, pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT)
 
 	c := dial(t)
