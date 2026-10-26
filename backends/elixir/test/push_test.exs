@@ -3,7 +3,7 @@ defmodule Wrinkle.PushTest do
   import Bitwise
 
   alias Wrinkle.Backend.V1.{Push, SignedOut}
-  alias Wrinkle.V1.{Event, Frame, MessageFailedEvent, ReadEvent}
+  alias Wrinkle.V1.{Event, Frame, Message, MessageEvent, ReadEvent}
 
   defp wrapped(event), do: Frame.decode(Wrinkle.Push.event_frame(Event.encode(event)))
 
@@ -18,10 +18,12 @@ defmodule Wrinkle.PushTest do
       event = %Event{
         cursor: len,
         body:
-          {:message_failed,
-           %MessageFailedEvent{
-             conversation_id: :binary.copy(<<7>>, 16),
-             client_message_id: String.duplicate("x", len)
+          {:message,
+           %MessageEvent{
+             message: %Message{
+               conversation_id: :binary.copy(<<7>>, 16),
+               client_message_id: String.duplicate("x", len)
+             }
            }}
       }
 
@@ -49,10 +51,12 @@ defmodule Wrinkle.PushTest do
       event = %Event{
         cursor: len,
         body:
-          {:message_failed,
-           %MessageFailedEvent{
-             conversation_id: :binary.copy(<<7>>, 16),
-             client_message_id: String.duplicate("x", len)
+          {:message,
+           %MessageEvent{
+             message: %Message{
+               conversation_id: :binary.copy(<<7>>, 16),
+               client_message_id: String.duplicate("x", len)
+             }
            }}
       }
 

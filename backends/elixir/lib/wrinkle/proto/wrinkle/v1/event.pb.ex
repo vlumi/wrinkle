@@ -12,12 +12,6 @@ defmodule Wrinkle.V1.Event do
   field :occurred_at, 2, type: Google.Protobuf.Timestamp, json_name: "occurredAt"
   field :message, 10, type: Wrinkle.V1.MessageEvent, oneof: 0
   field :read, 11, type: Wrinkle.V1.ReadEvent, oneof: 0
-
-  field :message_failed, 12,
-    type: Wrinkle.V1.MessageFailedEvent,
-    json_name: "messageFailed",
-    oneof: 0
-
   field :profile, 13, type: Wrinkle.V1.ProfileEvent, oneof: 0
   field :device, 14, type: Wrinkle.V1.DeviceEvent, oneof: 0
 
@@ -53,19 +47,6 @@ defmodule Wrinkle.V1.ReadEvent do
   field :conversation_id, 1, type: :bytes, json_name: "conversationId"
   field :user_id, 2, type: :bytes, json_name: "userId"
   field :seq, 3, type: :uint64
-end
-
-defmodule Wrinkle.V1.MessageFailedEvent do
-  @moduledoc false
-
-  use Protobuf,
-    full_name: "wrinkle.v1.MessageFailedEvent",
-    protoc_gen_elixir_version: "0.17.1",
-    syntax: :proto3
-
-  field :conversation_id, 1, type: :bytes, json_name: "conversationId"
-  field :client_message_id, 2, type: :string, json_name: "clientMessageId"
-  field :reason, 3, type: :string
 end
 
 defmodule Wrinkle.V1.ProfileEvent do

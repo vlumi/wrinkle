@@ -24,6 +24,7 @@ What is done, what is open and why, and the gaps that are known and accepted for
 - **TypeScript backend.** All three roles on Node 26, as a monolith or split, with batched fan-out and APNs push; in the cluster and the side-by-side setup with the others. [backends/ts](backends/ts/README.md).
 - **History in a cold tier.** Messages older than 30 days move to HBase per conversation behind a watermark; history, reactions and deletes work across it in Go, Java and TypeScript. [History and the cold tier](docs/architecture.md#history-and-the-cold-tier).
 - **Background work per shard.** The log trimmer and the history mover run each shard on its own loop, every minute by default, each shard's round leased in Valkey to one instance at a time, so services instances share the shards. [Processes](docs/architecture.md#processes).
+- **Contract clean-up.** `MessageFailedEvent`, which nothing produced, dropped; its field number and name reserved.
 - **Bounded user logs.** The user logs keep events for 30 days, and a device whose cursor is older starts again from the conversations; the history stays with them. [Connect and sync](docs/architecture.md#connect-and-sync).
 
 ## Open
@@ -69,11 +70,7 @@ In the order they would be done. Each item says why it comes where it does and h
 - **The change-data path does not survive a restart of the Vitess container.** The test server starts an empty database whenever its container restarts, and Debezium's stored offsets then point into history that no longer exists: both connectors retry forever ("failed to find a PRIMARY tablet for VStream"), and every conformance run fails at the readiness probe with "no event delivered". Fix: have `make infra-up` check the connectors' task state and, on that failure against an empty database, reset their offsets and restart them. The plain MySQL profile (item 1) has no such problem: its data and binlog survive a restart.
 - **Load-generator attachments are never deleted**, so blob storage grows with each run. Fix: have the load generator delete the messages it sent with attachments after the grace, outside the window, which releases the blobs through the normal path.
 
-### 4. Contract clean-up
-
-- **`MessageFailedEvent`**: drop it. Sends are answered synchronously and the fan-out retries until an append succeeds, so there is no asynchronous failure to report and no backend produces it ([Connect and sync](docs/architecture.md#connect-and-sync)). Reserve its field number and name so they are not reused.
-
-### 5. Parity
+### 4. Parity
 
 - **The Elixir gateway at 1000 messages per second.** The other three gateways delivered everything at 1000/s in front of the same Go services; the Elixir gateway timed out about 5 % of its sends ([2026-10-21](docs/results/2026-10-21-shapes.md)). Profiled on 2026-10-22: no process in the gateway queues, and the gRPC client's own queue stays empty; the sends wait in the services for a connection to the conversation keyspace, as they do for every shape past the limit, and the database work per message is the Go gateway's. On a busy machine, from fresh stacks, even the Go gateway failed at 1000/s, and the Elixir gateway failed worse; turning off the BEAM schedulers' busy waiting, now the default in its launchers, closed part of that. Measured again in one session on an idle machine ([2026-10-24](docs/results/2026-10-24-shapes.md)), it delivered 98.3 % at 1000/s, and the Go gateway delivered everything but with a median p99 of 1.6 s; their send round trips, 1.5 s and 0.3 s at the median against the Rust gateway's 59 ms in front of the same services, put the wait on the gateways' side of the RPC. Open: where on that side.
 - **The TypeScript gateway at 1000 messages per second.** It delivered everything, but its send round trip rose to 1.2 s at the median, while the TypeScript monolith answered in 50 ms ([2026-10-24](docs/results/2026-10-24-shapes.md)). Open: whether the internal RPC on Node's gRPC or the services process's one thread, which serves every gateway's calls and is not measured, holds the sends.

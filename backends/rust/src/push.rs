@@ -334,7 +334,7 @@ fn event_frame(payload: &[u8]) -> Bytes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pb::v1::{Event, Frame, MessageFailedEvent, ReadEvent, event, frame};
+    use crate::pb::v1::{self as v1, Event, Frame, MessageEvent, ReadEvent, event, frame};
 
     fn wrapped(event: &Event) -> Option<frame::Kind> {
         Frame::decode(event_frame(&event.encode_to_vec()))
@@ -349,10 +349,12 @@ mod tests {
             let event = Event {
                 cursor: len as u64,
                 occurred_at: None,
-                body: Some(event::Body::MessageFailed(MessageFailedEvent {
-                    conversation_id: vec![7; 16],
-                    client_message_id: "x".repeat(len),
-                    reason: String::new(),
+                body: Some(event::Body::Message(MessageEvent {
+                    message: Some(v1::Message {
+                        conversation_id: vec![7; 16],
+                        client_message_id: "x".repeat(len),
+                        ..Default::default()
+                    }),
                 })),
             };
             assert_eq!(wrapped(&event), Some(frame::Kind::Event(event)));
@@ -394,10 +396,12 @@ mod tests {
             let event = Event {
                 cursor: len as u64,
                 occurred_at: None,
-                body: Some(event::Body::MessageFailed(MessageFailedEvent {
-                    conversation_id: vec![7; 16],
-                    client_message_id: "x".repeat(len),
-                    reason: String::new(),
+                body: Some(event::Body::Message(MessageEvent {
+                    message: Some(v1::Message {
+                        conversation_id: vec![7; 16],
+                        client_message_id: "x".repeat(len),
+                        ..Default::default()
+                    }),
                 })),
             };
             let push = backend::Push {

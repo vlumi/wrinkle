@@ -197,8 +197,6 @@ Until Connect completes, the gateway answers anything but Register, SignIn and C
 
 The log is for delivery, not the archive: it keeps events for 30 days (`WRINKLE_LOG_RETENTION_S`), and the conversations keep the history. A trimmer, one of the per-shard jobs ([Processes](#processes)), drops older events a page at a time on each shard of the user keyspace, oldest first through an index on the events' time. For each user in a page, one transaction raises `user.log_tail` to the newest position dropped and deletes the events up to it, so a log stays contiguous. Sync reads the tail after the events, and a cursor before it fails with `CURSOR_EXPIRED`: either the events read were all there, or the drop came first and the tail shows it, so a device never gets a log with a hole. A device whose cursor expired starts again as one without history: from the head given by Connect, then the conversation list, contacts and history fetched again, which leaves nothing in between unseen.
 
-The contract has one event kind nothing produces: `MessageFailedEvent`, reserved for a message that SendMessage accepted but could not be delivered. The design has no such case: a send fails synchronously or not at all, and the fan-out retries until every participant's log has the event. Dropping it from the contract, or giving it a producer, is open ([ROADMAP.md](../ROADMAP.md), "Contract clean-up").
-
 ### Sending a message
 
 ```mermaid

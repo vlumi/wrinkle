@@ -17,10 +17,13 @@ message Event {
   // processed this event continues from this cursor.
   uint64 cursor = 1;
   google.protobuf.Timestamp occurred_at = 2;
+  // 12 was a delivery failure that nothing produced: a send fails
+  // synchronously or not at all.
+  reserved 12;
+  reserved "message_failed";
   oneof body {
     MessageEvent message = 10;
     ReadEvent read = 11;
-    MessageFailedEvent message_failed = 12;
     ProfileEvent profile = 13;
     DeviceEvent device = 14;
     MessageDeletedEvent message_deleted = 15;
@@ -44,14 +47,6 @@ message ReadEvent {
   bytes conversation_id = 1;
   bytes user_id = 2;
   uint64 seq = 3;
-}
-
-// A message accepted by SendMessage could not be delivered to the peer.
-// Received by the sender only.
-message MessageFailedEvent {
-  bytes conversation_id = 1;
-  string client_message_id = 2;
-  string reason = 3;
 }
 
 // A user's profile changed. Received by the user, so their other devices

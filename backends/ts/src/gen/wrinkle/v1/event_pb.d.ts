@@ -49,12 +49,6 @@ export declare type Event = Message<"wrinkle.v1.Event"> & {
     case: "read";
   } | {
     /**
-     * @generated from field: wrinkle.v1.MessageFailedEvent message_failed = 12;
-     */
-    value: MessageFailedEvent;
-    case: "messageFailed";
-  } | {
-    /**
      * @generated from field: wrinkle.v1.ProfileEvent profile = 13;
      */
     value: ProfileEvent;
@@ -147,35 +141,6 @@ export declare type ReadEvent = Message<"wrinkle.v1.ReadEvent"> & {
  * Use `create(ReadEventSchema)` to create a new message.
  */
 export declare const ReadEventSchema: GenMessage<ReadEvent>;
-
-/**
- * A message accepted by SendMessage could not be delivered to the peer.
- * Received by the sender only.
- *
- * @generated from message wrinkle.v1.MessageFailedEvent
- */
-export declare type MessageFailedEvent = Message<"wrinkle.v1.MessageFailedEvent"> & {
-  /**
-   * @generated from field: bytes conversation_id = 1;
-   */
-  conversationId: Uint8Array;
-
-  /**
-   * @generated from field: string client_message_id = 2;
-   */
-  clientMessageId: string;
-
-  /**
-   * @generated from field: string reason = 3;
-   */
-  reason: string;
-};
-
-/**
- * Describes the message wrinkle.v1.MessageFailedEvent.
- * Use `create(MessageFailedEventSchema)` to create a new message.
- */
-export declare const MessageFailedEventSchema: GenMessage<MessageFailedEvent>;
 
 /**
  * A user's profile changed. Received by the user, so their other devices

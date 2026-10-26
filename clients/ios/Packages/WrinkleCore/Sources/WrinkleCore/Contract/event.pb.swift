@@ -70,14 +70,6 @@ public nonisolated struct Wrinkle_V1_Event: @unchecked Sendable {
     set {_uniqueStorage()._body = .read(newValue)}
   }
 
-  public var messageFailed: Wrinkle_V1_MessageFailedEvent {
-    get {
-      if case .messageFailed(let v)? = _storage._body {return v}
-      return Wrinkle_V1_MessageFailedEvent()
-    }
-    set {_uniqueStorage()._body = .messageFailed(newValue)}
-  }
-
   public var profile: Wrinkle_V1_ProfileEvent {
     get {
       if case .profile(let v)? = _storage._body {return v}
@@ -131,7 +123,6 @@ public nonisolated struct Wrinkle_V1_Event: @unchecked Sendable {
   public nonisolated enum OneOf_Body: Equatable, Sendable {
     case message(Wrinkle_V1_MessageEvent)
     case read(Wrinkle_V1_ReadEvent)
-    case messageFailed(Wrinkle_V1_MessageFailedEvent)
     case profile(Wrinkle_V1_ProfileEvent)
     case device(Wrinkle_V1_DeviceEvent)
     case messageDeleted(Wrinkle_V1_MessageDeletedEvent)
@@ -183,24 +174,6 @@ public nonisolated struct Wrinkle_V1_ReadEvent: Sendable {
   public var userID: Data = Data()
 
   public var seq: UInt64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-/// A message accepted by SendMessage could not be delivered to the peer.
-/// Received by the sender only.
-public nonisolated struct Wrinkle_V1_MessageFailedEvent: Sendable {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var conversationID: Data = Data()
-
-  public var clientMessageID: String = String()
-
-  public var reason: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -371,7 +344,7 @@ fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
 
 nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Event"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{3}message_failed\0\u{1}profile\0\u{1}device\0\u{3}message_deleted\0\u{1}reaction\0\u{1}palette\0\u{1}contact\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}cursor\0\u{3}occurred_at\0\u{2}\u{8}message\0\u{1}read\0\u{2}\u{2}profile\0\u{1}device\0\u{3}message_deleted\0\u{1}reaction\0\u{1}palette\0\u{1}contact\0\u{b}message_failed\0\u{c}\u{c}\u{1}")
 
   fileprivate class _StorageClass {
     var _cursor: UInt64 = 0
@@ -434,19 +407,6 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
           if let v = v {
             if hadOneofValue {try decoder.handleConflictingOneOf()}
             _storage._body = .read(v)
-          }
-        }()
-        case 12: try {
-          var v: Wrinkle_V1_MessageFailedEvent?
-          var hadOneofValue = false
-          if let current = _storage._body {
-            hadOneofValue = true
-            if case .messageFailed(let m) = current {v = m}
-          }
-          try decoder.decodeSingularMessageField(value: &v)
-          if let v = v {
-            if hadOneofValue {try decoder.handleConflictingOneOf()}
-            _storage._body = .messageFailed(v)
           }
         }()
         case 13: try {
@@ -553,10 +513,6 @@ nonisolated extension Wrinkle_V1_Event: SwiftProtobuf.Message, SwiftProtobuf._Me
       case .read?: try {
         guard case .read(let v)? = _storage._body else { preconditionFailure() }
         try visitor.visitSingularMessageField(value: v, fieldNumber: 11)
-      }()
-      case .messageFailed?: try {
-        guard case .messageFailed(let v)? = _storage._body else { preconditionFailure() }
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 12)
       }()
       case .profile?: try {
         guard case .profile(let v)? = _storage._body else { preconditionFailure() }
@@ -674,46 +630,6 @@ nonisolated extension Wrinkle_V1_ReadEvent: SwiftProtobuf.Message, SwiftProtobuf
     if lhs.conversationID != rhs.conversationID {return false}
     if lhs.userID != rhs.userID {return false}
     if lhs.seq != rhs.seq {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-nonisolated extension Wrinkle_V1_MessageFailedEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".MessageFailedEvent"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}client_message_id\0\u{1}reason\0")
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      // The use of inline closures is to circumvent an issue where the compiler
-      // allocates stack space for every case branch when no optimizations are
-      // enabled. https://github.com/apple/swift-protobuf/issues/1034
-      switch fieldNumber {
-      case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
-      case 2: try { try decoder.decodeSingularStringField(value: &self.clientMessageID) }()
-      case 3: try { try decoder.decodeSingularStringField(value: &self.reason) }()
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.conversationID.isEmpty {
-      try visitor.visitSingularBytesField(value: self.conversationID, fieldNumber: 1)
-    }
-    if !self.clientMessageID.isEmpty {
-      try visitor.visitSingularStringField(value: self.clientMessageID, fieldNumber: 2)
-    }
-    if !self.reason.isEmpty {
-      try visitor.visitSingularStringField(value: self.reason, fieldNumber: 3)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: Wrinkle_V1_MessageFailedEvent, rhs: Wrinkle_V1_MessageFailedEvent) -> Bool {
-    if lhs.conversationID != rhs.conversationID {return false}
-    if lhs.clientMessageID != rhs.clientMessageID {return false}
-    if lhs.reason != rhs.reason {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

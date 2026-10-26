@@ -13,7 +13,7 @@ import { file_wrinkle_v1_model } from "./model_pb.js";
  * Describes the file wrinkle/v1/event.proto.
  */
 export const file_wrinkle_v1_event = /*@__PURE__*/
-  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxIvsDCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEjgKDm1lc3NhZ2VfZmFpbGVkGAwgASgLMh4ud3JpbmtsZS52MS5NZXNzYWdlRmFpbGVkRXZlbnRIABIrCgdwcm9maWxlGA0gASgLMhgud3JpbmtsZS52MS5Qcm9maWxlRXZlbnRIABIpCgZkZXZpY2UYDiABKAsyFy53cmlua2xlLnYxLkRldmljZUV2ZW50SAASOgoPbWVzc2FnZV9kZWxldGVkGA8gASgLMh8ud3JpbmtsZS52MS5NZXNzYWdlRGVsZXRlZEV2ZW50SAASLQoIcmVhY3Rpb24YECABKAsyGS53cmlua2xlLnYxLlJlYWN0aW9uRXZlbnRIABIrCgdwYWxldHRlGBEgASgLMhgud3JpbmtsZS52MS5QYWxldHRlRXZlbnRIABIrCgdjb250YWN0GBIgASgLMhgud3JpbmtsZS52MS5Db250YWN0RXZlbnRIAEIGCgRib2R5IjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiWAoSTWVzc2FnZUZhaWxlZEV2ZW50EhcKD2NvbnZlcnNhdGlvbl9pZBgBIAEoDBIZChFjbGllbnRfbWVzc2FnZV9pZBgCIAEoCRIOCgZyZWFzb24YAyABKAkiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiIwoMUGFsZXR0ZUV2ZW50EhMKC3N0aWNrZXJfaWRzGAEgAygMIjQKDENvbnRhY3RFdmVudBIkCgdjb250YWN0GAEgASgLMhMud3JpbmtsZS52MS5Db250YWN0Qp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
+  fileDesc("ChZ3cmlua2xlL3YxL2V2ZW50LnByb3RvEgp3cmlua2xlLnYxItcDCgVFdmVudBIOCgZjdXJzb3IYASABKAQSLwoLb2NjdXJyZWRfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKB21lc3NhZ2UYCiABKAsyGC53cmlua2xlLnYxLk1lc3NhZ2VFdmVudEgAEiUKBHJlYWQYCyABKAsyFS53cmlua2xlLnYxLlJlYWRFdmVudEgAEisKB3Byb2ZpbGUYDSABKAsyGC53cmlua2xlLnYxLlByb2ZpbGVFdmVudEgAEikKBmRldmljZRgOIAEoCzIXLndyaW5rbGUudjEuRGV2aWNlRXZlbnRIABI6Cg9tZXNzYWdlX2RlbGV0ZWQYDyABKAsyHy53cmlua2xlLnYxLk1lc3NhZ2VEZWxldGVkRXZlbnRIABItCghyZWFjdGlvbhgQIAEoCzIZLndyaW5rbGUudjEuUmVhY3Rpb25FdmVudEgAEisKB3BhbGV0dGUYESABKAsyGC53cmlua2xlLnYxLlBhbGV0dGVFdmVudEgAEisKB2NvbnRhY3QYEiABKAsyGC53cmlua2xlLnYxLkNvbnRhY3RFdmVudEgAQgYKBGJvZHlKBAgMEA1SDm1lc3NhZ2VfZmFpbGVkIjQKDE1lc3NhZ2VFdmVudBIkCgdtZXNzYWdlGAEgASgLMhMud3JpbmtsZS52MS5NZXNzYWdlIkIKCVJlYWRFdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSDwoHdXNlcl9pZBgCIAEoDBILCgNzZXEYAyABKAQiLgoMUHJvZmlsZUV2ZW50Eh4KBHVzZXIYASABKAsyEC53cmlua2xlLnYxLlVzZXIiVgoLRGV2aWNlRXZlbnQSIgoGZGV2aWNlGAEgASgLMhIud3JpbmtsZS52MS5EZXZpY2USEgoKc2lnbmVkX291dBgCIAEoCBIPCgd1c2VyX2lkGAMgASgMImsKE01lc3NhZ2VEZWxldGVkRXZlbnQSFwoPY29udmVyc2F0aW9uX2lkGAEgASgMEgsKA3NlcRgCIAEoBBIuCgpkZWxldGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKaAQoNUmVhY3Rpb25FdmVudBIXCg9jb252ZXJzYXRpb25faWQYASABKAwSCwoDc2VxGAIgASgEEg8KB3VzZXJfaWQYAyABKAwSIgoGc2VhbGVkGAQgASgLMhIud3JpbmtsZS52MS5TZWFsZWQSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiIwoMUGFsZXR0ZUV2ZW50EhMKC3N0aWNrZXJfaWRzGAEgAygMIjQKDENvbnRhY3RFdmVudBIkCgdjb250YWN0GAEgASgLMhMud3JpbmtsZS52MS5Db250YWN0Qp0BCg5jb20ud3JpbmtsZS52MUIKRXZlbnRQcm90b1ABWjZnaXRodWIuY29tL3ZsdW1pL3dyaW5rbGUvcHJvdG8vZ28vd3JpbmtsZS92MTt3cmlua2xldjGiAgNXWFiqAgpXcmlua2xlLlYxygIKV3JpbmtsZVxWMeICFldyaW5rbGVcVjFcR1BCTWV0YWRhdGHqAgtXcmlua2xlOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_wrinkle_v1_model]);
 
 /**
  * Describes the message wrinkle.v1.Event.
@@ -37,51 +37,44 @@ export const ReadEventSchema = /*@__PURE__*/
   messageDesc(file_wrinkle_v1_event, 2);
 
 /**
- * Describes the message wrinkle.v1.MessageFailedEvent.
- * Use `create(MessageFailedEventSchema)` to create a new message.
- */
-export const MessageFailedEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 3);
-
-/**
  * Describes the message wrinkle.v1.ProfileEvent.
  * Use `create(ProfileEventSchema)` to create a new message.
  */
 export const ProfileEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 4);
+  messageDesc(file_wrinkle_v1_event, 3);
 
 /**
  * Describes the message wrinkle.v1.DeviceEvent.
  * Use `create(DeviceEventSchema)` to create a new message.
  */
 export const DeviceEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 5);
+  messageDesc(file_wrinkle_v1_event, 4);
 
 /**
  * Describes the message wrinkle.v1.MessageDeletedEvent.
  * Use `create(MessageDeletedEventSchema)` to create a new message.
  */
 export const MessageDeletedEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 6);
+  messageDesc(file_wrinkle_v1_event, 5);
 
 /**
  * Describes the message wrinkle.v1.ReactionEvent.
  * Use `create(ReactionEventSchema)` to create a new message.
  */
 export const ReactionEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 7);
+  messageDesc(file_wrinkle_v1_event, 6);
 
 /**
  * Describes the message wrinkle.v1.PaletteEvent.
  * Use `create(PaletteEventSchema)` to create a new message.
  */
 export const PaletteEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 8);
+  messageDesc(file_wrinkle_v1_event, 7);
 
 /**
  * Describes the message wrinkle.v1.ContactEvent.
  * Use `create(ContactEventSchema)` to create a new message.
  */
 export const ContactEventSchema = /*@__PURE__*/
-  messageDesc(file_wrinkle_v1_event, 9);
+  messageDesc(file_wrinkle_v1_event, 8);
 

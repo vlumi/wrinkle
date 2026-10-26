@@ -14,7 +14,7 @@ A dated log of how Wrinkle got to where it is: the phases, the questions settled
 - The roles are `gateway`, `services` and `fanout`. By default the gateway runs the conversation and sync services in-process; with `--services` it forwards to a `services` process over the internal RPC added with the Elixir and Rust gateways.
 - Push goes from fan-out workers to gateways through Valkey pub/sub, one channel per user; a gateway subscribes to a user's channel while it holds one of that user's connections. The presence hash (device to node) tells the push notifier which devices are not connected.
 - Ids were derived, not allocated: user id from the name, conversation id from the user pair, both within 63 bits, so sign-in and opening a conversation needed no lookup table. Replaced by random UUIDs with accounts on 2026-10-11.
-- `MessageFailedEvent` is in the contract but nothing produces it; the synchronous path has no asynchronous failure to report. Still open in the roadmap.
+- `MessageFailedEvent` is in the contract but nothing produces it; the synchronous path has no asynchronous failure to report. Dropped on 2026-10-26, its field number and name reserved.
 
 **Web client (phase 3).** Sign in by name, conversation list, conversation view, read marks, connection state, as one page of plain JavaScript. The browser test drives it in headless Chrome in `make ci`.
 
