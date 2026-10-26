@@ -158,9 +158,13 @@ CREATE TABLE upload (
   media_type VARCHAR(100) NOT NULL,
   size BIGINT UNSIGNED NOT NULL,
   used BOOLEAN NOT NULL DEFAULT FALSE,
+  -- An attachment a send took into use, until the fan-out delivers the
+  -- message; one still pending a day later belongs to a failed send.
+  pending_since DATETIME(6) NULL,
   created_at DATETIME(6) NOT NULL,
   PRIMARY KEY (user_id, blob_id),
-  KEY upload_unused (used, created_at)
+  KEY upload_unused (used, created_at),
+  KEY upload_pending (pending_since)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
 
 -- Each user's own side toward other users: a request, which is also how one

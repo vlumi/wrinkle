@@ -51,7 +51,10 @@ type outboxRow struct {
 	kind             string
 	// The outbox row of the message a deletion is about, 0 for others.
 	targetOutboxID uint64
-	event          *pb.Event
+	// A deletion's sender and the uploads of the message's attachments.
+	releasedBy      ids.UUID
+	releasedUploads []ids.UUID
+	event           *pb.Event
 }
 
 func parseOutboxRow(value []byte) (*outboxRow, error) {
@@ -64,6 +67,7 @@ func parseOutboxRow(value []byte) (*outboxRow, error) {
 		MemberCount      rawUint  `json:"member_count"`
 		Kind             string   `json:"kind"`
 		TargetOutboxID   *rawUint `json:"target_outbox_id"`
+		ReleasedUploads  []byte   `json:"released_uploads"`
 		Payload          []byte   `json:"payload"`
 	}
 	if err := json.Unmarshal(value, &r); err != nil {
@@ -89,6 +93,16 @@ func parseOutboxRow(value []byte) (*outboxRow, error) {
 	for i := 0; i < len(r.Recipients); i += 16 {
 		id, _ := ids.Parse(r.Recipients[i : i+16])
 		o.recipients = append(o.recipients, id)
+	}
+	if n := len(r.ReleasedUploads); n > 0 {
+		if n%16 != 0 || n < 32 {
+			return nil, fmt.Errorf("released_uploads of %d bytes", n)
+		}
+		o.releasedBy, _ = ids.Parse(r.ReleasedUploads[:16])
+		for i := 16; i < n; i += 16 {
+			id, _ := ids.Parse(r.ReleasedUploads[i : i+16])
+			o.releasedUploads = append(o.releasedUploads, id)
+		}
 	}
 	if o.event, err = parseEvent(r.Payload); err != nil {
 		return nil, err

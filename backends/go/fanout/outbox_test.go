@@ -50,19 +50,28 @@ func TestParseOutboxRowTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	row := func(target string) []byte {
+	row := func(target, released string) []byte {
 		return []byte(`{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"2","recipients":"","conversation_kind":"direct",` +
-			`"member_count":2,"kind":"message_deleted","target_outbox_id":` + target + `,"payload":"` + base64.StdEncoding.EncodeToString(payload) + `"}`)
+			`"member_count":2,"kind":"message_deleted","target_outbox_id":` + target + `,"released_uploads":` + released +
+			`,"payload":"` + base64.StdEncoding.EncodeToString(payload) + `"}`)
 	}
-	o, err := parseOutboxRow(row(`"18446744073709551615"`))
+	sender, blob := ids.New(), ids.New()
+	released := `"` + base64.StdEncoding.EncodeToString(append(sender.Bytes(), blob.Bytes()...)) + `"`
+	o, err := parseOutboxRow(row(`"18446744073709551615"`, released))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if o.targetOutboxID != 18446744073709551615 || o.event.GetMessageDeleted().GetSeq() != 3 {
 		t.Fatalf("target %d event %v", o.targetOutboxID, o.event)
 	}
-	if o, err = parseOutboxRow(row("null")); err != nil || o.targetOutboxID != 0 {
-		t.Fatalf("target of a null column: %v %v", o, err)
+	if o.releasedBy != sender || len(o.releasedUploads) != 1 || o.releasedUploads[0] != blob {
+		t.Fatalf("released %v %v", o.releasedBy, o.releasedUploads)
+	}
+	if o, err = parseOutboxRow(row("null", "null")); err != nil || o.targetOutboxID != 0 || len(o.releasedUploads) != 0 {
+		t.Fatalf("null columns: %v %v", o, err)
+	}
+	if _, err := parseOutboxRow(row("null", `"`+base64.StdEncoding.EncodeToString(sender.Bytes())+`"`)); err == nil {
+		t.Fatal("parsed released uploads without a blob")
 	}
 }
 

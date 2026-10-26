@@ -254,6 +254,9 @@ func (w *Worker) handle(ctx context.Context, rec *kgo.Record) error {
 		w.log.Error("skipping outbox record without a body", "kind", o.kind, "offset", rec.Offset)
 		return nil
 	}
+	if err := w.settleUploads(ctx, o); err != nil {
+		return err
+	}
 	if batchable(o) {
 		return w.deliverBatched(ctx, o)
 	}

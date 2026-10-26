@@ -18,8 +18,8 @@ import (
 // keeps only the deletion time, and the event tells the current members,
 // and the user when no longer one, so that their logs and lists drop the
 // content. A former member may delete what they sent before leaving.
-// Deleting a deleted message again does nothing. The attachments' uploads
-// are released after the commit, for the sweeper to delete. A message in the
+// Deleting a deleted message again does nothing. The outbox row names the
+// attachments' uploads, which the fan-out releases for the sweeper. A message in the
 // cold tier is changed there, under the conversation's row lock as in MySQL.
 func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, seq uint64) error {
 	if seq == 0 {
@@ -128,6 +128,9 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 		conversationID: conversationID, outboxID: ids.Random(), recipients: recipients, st: st, kind: "message_deleted",
 		target: sql.Null[uint64]{V: outboxID, Valid: true}, event: event, at: now,
 	}
+	if len(blobs) > 0 {
+		row.releasedUploads = append(userID.Bytes(), blobs...)
+	}
 	if err := row.insert(ctx, tx); err != nil {
 		return err
 	}
@@ -135,12 +138,5 @@ func (s *Service) Delete(ctx context.Context, userID, conversationID ids.UUID, s
 		return err
 	}
 	committed = true
-	if len(blobs) == 0 {
-		return nil
-	}
-	released := make([]ids.UUID, len(blobs)/16)
-	for i := range released {
-		copy(released[i][:], blobs[16*i:])
-	}
-	return s.attachments.ReleaseAttachments(ctx, userID, released)
+	return nil
 }

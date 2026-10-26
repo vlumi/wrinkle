@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"net/http"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -186,5 +187,18 @@ func TestAttachments(t *testing.T) {
 				t.Fatalf("synced deleted message keeps blob ids %x", m.GetBlobIds())
 			}
 		}
+	}
+	// The fan-out releases the uploads, which a new message may then take.
+	deadline := time.Now().Add(eventTimeout)
+	for {
+		_, err := a.SendMessage(ctx(t), conv, "files again", junkSealed(epoch), sent.GetBlobIds()...)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("uploads of the deleted message not released: %v", err)
+		}
+		wantCode(t, err, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
+		time.Sleep(100 * time.Millisecond)
 	}
 }

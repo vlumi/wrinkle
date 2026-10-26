@@ -140,6 +140,9 @@ CREATE TABLE outbox (
   -- message_deleted: the outbox row of the deleted message, which names its
   -- copies in the recipients' logs.
   target_outbox_id BIGINT UNSIGNED NULL,
+  -- message_deleted: the sender's id and the message's attachments' blob
+  -- ids, 16 bytes each, whose uploads the fan-out releases.
+  released_uploads VARBINARY(176) NULL,
   -- Serialized wrinkle.v1.Event without a cursor; each recipient's log
   -- assigns its own.
   payload BLOB NOT NULL,

@@ -14,13 +14,15 @@ import (
 const (
 	sweepFirst    = time.Minute
 	sweepInterval = 10 * time.Minute
-	// unusedFor is how long a slot may go unused before its blob is deleted.
+	// unusedFor is how long a slot may go unused, or an attachment wait for
+	// its message's delivery, before its blob is deleted.
 	unusedFor = 24 * time.Hour
 	sweepPage = 500
 )
 
-// Sweeper deletes blobs nothing refers to. Any number may run: a row is
-// deleted by one of them, and only that one deletes the blob.
+// Sweeper deletes blobs nothing refers to: uploads never used, released,
+// or taken by a send whose message was never delivered. Any number may
+// run: a row is deleted by one of them, and only that one deletes the blob.
 type Sweeper struct {
 	db    *sql.DB
 	blobs *blobs.Store
@@ -53,13 +55,26 @@ func (s *Sweeper) Run(ctx context.Context) error {
 
 type unused struct{ userID, blobID ids.UUID }
 
-// Sweep deletes one page of unused uploads and returns how many blobs it
-// deleted.
+// Sweep deletes a page of unused uploads and one of pending ones, and
+// returns how many blobs it deleted.
 func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
-	now := vtdb.Now()
-	rows, err := s.db.QueryContext(ctx, `
-		SELECT user_id, blob_id FROM upload WHERE used = FALSE AND created_at < ? LIMIT ?`,
-		now.Add(-unusedFor), sweepPage)
+	cutoff := vtdb.Now().Add(-unusedFor)
+	deleted := 0
+	for _, query := range []string{
+		`SELECT user_id, blob_id FROM upload WHERE used = FALSE AND created_at < ? LIMIT ?`,
+		`SELECT user_id, blob_id FROM upload WHERE pending_since < ? LIMIT ?`,
+	} {
+		n, err := s.sweep(ctx, query, cutoff)
+		deleted += n
+		if err != nil {
+			return deleted, err
+		}
+	}
+	return deleted, nil
+}
+
+func (s *Sweeper) sweep(ctx context.Context, query string, cutoff time.Time) (int, error) {
+	rows, err := s.db.QueryContext(ctx, query, cutoff, sweepPage)
 	if err != nil {
 		return 0, err
 	}
@@ -70,12 +85,13 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	deleted := 0
 	for _, u := range page {
 		res, err := s.db.ExecContext(ctx, `
-			DELETE FROM upload WHERE user_id = ? AND blob_id = ? AND used = FALSE`, u.userID, u.blobID)
+			DELETE FROM upload WHERE user_id = ? AND blob_id = ? AND (used = FALSE OR pending_since < ?)`,
+			u.userID, u.blobID, cutoff)
 		if err != nil {
 			return deleted, err
 		}
 		if n, err := res.RowsAffected(); err != nil || n != 1 {
-			// Taken into use meanwhile, or another sweeper got it.
+			// Taken into use or delivered meanwhile, or another sweeper got it.
 			continue
 		}
 		if err := s.blobs.Delete(ctx, u.blobID, vtdb.Now()); err != nil {

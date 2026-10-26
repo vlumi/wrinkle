@@ -96,7 +96,9 @@ func notAttachmentUpload() error {
 
 // UseAttachments takes the user's uploaded attachment blobs into use, so
 // the sweeper keeps them; the ids are distinct, and none may be in use by
-// another message already.
+// another message already. They stay pending until the fan-out delivers
+// the message, so a send that fails without releasing them loses them only
+// to the sweeper.
 func (s *Service) UseAttachments(ctx context.Context, userID ids.UUID, blobIDs []ids.UUID) error {
 	if len(blobIDs) == 0 {
 		return nil
@@ -129,7 +131,8 @@ func (s *Service) UseAttachments(ctx context.Context, userID ids.UUID, blobIDs [
 	if used {
 		return apierror.FailedPrecondition("already attached")
 	}
-	query, args = blobQuery(`UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id IN `, userID, blobIDs)
+	query, args = blobQuery(`UPDATE upload SET used = TRUE, pending_since = ? WHERE user_id = ? AND blob_id IN `, userID, blobIDs)
+	args = append([]any{vtdb.Now()}, args...)
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 		return err
 	}
@@ -169,7 +172,7 @@ func (s *Service) ReleaseAttachments(ctx context.Context, userID ids.UUID, blobI
 		return nil
 	}
 	query, args := blobQuery(`
-		UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN `, userID, blobIDs)
+		UPDATE upload SET used = FALSE, pending_since = NULL WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN `, userID, blobIDs)
 	_, err := s.db.ExecContext(ctx, query, args...)
 	return err
 }

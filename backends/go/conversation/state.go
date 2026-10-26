@@ -235,8 +235,10 @@ type outboxRow struct {
 	kind           string
 	// target is the outbox row of the message a deletion is about.
 	target sql.Null[uint64]
-	event  *pb.Event
-	at     time.Time
+	// releasedUploads is a deleted message's sender and blob ids.
+	releasedUploads []byte
+	event           *pb.Event
+	at              time.Time
 }
 
 // insert writes the row. The insert reaches the binlog, which is all the
@@ -252,9 +254,9 @@ func (r outboxRow) insert(ctx context.Context, tx *sql.Tx) error {
 		to = append(to, id[:]...)
 	}
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, target_outbox_id, payload, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.conversationID, r.outboxID, to, r.st.kind, r.st.topic, len(r.st.members), r.kind, r.target, payload, r.at); err != nil {
+		INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, target_outbox_id, released_uploads, payload, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.conversationID, r.outboxID, to, r.st.kind, r.st.topic, len(r.st.members), r.kind, r.target, r.releasedUploads, payload, r.at); err != nil {
 		return err
 	}
 	_, err = tx.ExecContext(ctx, `
