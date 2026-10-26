@@ -2,13 +2,13 @@
 // by conversation, oldest first on each shard. Any number may run: each
 // move happens under the conversation's row lock.
 import { create, fromBinary } from "@bufbuild/protobuf";
-import type { Pool, PoolConnection } from "mysql2/promise";
+import type { Pool } from "mysql2/promise";
 import { ReactionSchema, SealedSchema, type Reaction, type Sealed } from "../gen/wrinkle/v1/model_pb.js";
-import { exec, now, row, timedRows, timestampOf, tx, type DbTime } from "../internal/db.ts";
+import { exec, now, row, timedRows, timestampOf, tx, type DbTime, type Querier } from "../internal/db.ts";
 import { hex, type UUID } from "../internal/ids.ts";
 import type { Logger } from "../internal/log.ts";
 import { startShardWork, type Leases } from "../internal/shardwork.ts";
-import { encodeReactions, type Cold, type ColdMessage } from "./cold.ts";
+import { encodeReactions, sameColdMessage, type Cold, type ColdMessage } from "./cold.ts";
 
 const movePage = 1000;
 // Bounds the messages one transaction moves, and so how long it holds the
@@ -78,9 +78,9 @@ const agedPage = (shard: Pool, cutoff: Date, after: Date) =>
 async function moveConversation(db: Pool, cold: Cold, conversationId: UUID, cutoff: Date): Promise<number> {
   let total = 0;
   for (;;) {
-    const n = await tx(db, (c) => moveBatchOf(c, cold, conversationId, cutoff));
+    const { n, more } = await moveBatchOf(db, cold, conversationId, cutoff);
     total += n;
-    if (n < moveBatch) return total;
+    if (!more) return total;
   }
 }
 
@@ -95,28 +95,81 @@ interface MessageRow {
 }
 
 /**
- * Writes the next batch to the cold tier with the conversation's row
- * locked, then raises the watermark over it and deletes it from MySQL in
- * the same transaction. A failure after the puts leaves copies of rows
- * still in MySQL, which the next move puts again.
+ * Writes the next batch to the cold tier, then, with the conversation's
+ * row locked, raises the watermark over it and deletes it from MySQL in one
+ * transaction. The puts come before the lock, so sends to the conversation
+ * never wait on the cold tier; under the lock the batch is read again, and
+ * a message deleted or reacted to meanwhile is put again. A failure after
+ * the puts leaves copies of rows still in MySQL, which the next move puts
+ * again.
  */
-async function moveBatchOf(c: PoolConnection, cold: Cold, conversationId: UUID, cutoff: Date): Promise<number> {
-  const conv = await row<{ cold_seq: bigint }>(
-    c,
-    `SELECT cold_seq FROM conversation WHERE conversation_id = ? FOR UPDATE`,
-    [conversationId],
-  );
+async function moveBatchOf(
+  db: Pool,
+  cold: Cold,
+  conversationId: UUID,
+  cutoff: Date,
+): Promise<{ n: number; more: boolean }> {
+  const conv = await row<{ cold_seq: bigint }>(db, `SELECT cold_seq FROM conversation WHERE conversation_id = ?`, [
+    conversationId,
+  ]);
   if (!conv) throw new Error(`conversation ${hex(conversationId)} missing`);
+  const coldSeq = conv.cold_seq;
+  const staged = await readBatch(db, conversationId, coldSeq, cutoff, moveBatch);
+  if (staged.length === 0) return { n: 0, more: false };
+  await cold.put(conversationId, staged);
+
+  return tx(db, async (c) => {
+    const locked = await row<{ cold_seq: bigint }>(
+      c,
+      `SELECT cold_seq FROM conversation WHERE conversation_id = ? FOR UPDATE`,
+      [conversationId],
+    );
+    if (!locked) throw new Error(`conversation ${hex(conversationId)} missing`);
+    // Another mover went first; read from its watermark.
+    if (locked.cold_seq !== coldSeq) return { n: 0, more: true };
+    const n = staged.length;
+    const upTo = staged[n - 1]!.seq;
+    const current = await readBatch(c, conversationId, coldSeq, undefined, n);
+    if (current.length !== n || current[n - 1]!.seq !== upTo) {
+      throw new Error(`batch of conversation ${hex(conversationId)} changed from ${n} to ${current.length} messages`);
+    }
+    const changed = current.filter((m, i) => !sameColdMessage(m, staged[i]!));
+    if (changed.length > 0) await cold.put(conversationId, changed);
+    await exec(c, `UPDATE conversation SET cold_seq = ? WHERE conversation_id = ?`, [upTo, conversationId]);
+    await exec(c, `DELETE FROM reaction WHERE conversation_id = ? AND seq > ? AND seq <= ?`, [
+      conversationId,
+      coldSeq,
+      upTo,
+    ]);
+    await exec(c, `DELETE FROM message WHERE conversation_id = ? AND seq > ? AND seq <= ?`, [
+      conversationId,
+      coldSeq,
+      upTo,
+    ]);
+    return { n, more: n === moveBatch };
+  });
+}
+
+// Reads up to limit messages after the watermark, in seq order, with their
+// reactions, stopping at the first sent at or after the cutoff; without a
+// cutoff it reads them all.
+async function readBatch(
+  q: Querier,
+  conversationId: UUID,
+  coldSeq: bigint,
+  cutoff: Date | undefined,
+  limit: number,
+): Promise<ColdMessage[]> {
   const batch = await timedRows<MessageRow>(
-    c,
+    q,
     `SELECT seq, sender_user_id, client_message_id, body, sent_at, outbox_id, blob_ids FROM message
      WHERE conversation_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
-    [conversationId, conv.cold_seq, moveBatch],
+    [conversationId, coldSeq, limit],
   );
-  const moved: ColdMessage[] = [];
+  const read: ColdMessage[] = [];
   for (const r of batch) {
-    if (r.sent_at.getTime() >= cutoff.getTime()) break;
-    moved.push({
+    if (cutoff && r.sent_at.getTime() >= cutoff.getTime()) break;
+    read.push({
       seq: r.seq,
       sender: r.sender_user_id,
       clientId: r.client_message_id,
@@ -127,35 +180,22 @@ async function moveBatchOf(c: PoolConnection, cold: Cold, conversationId: UUID, 
       reactions: Buffer.alloc(0),
     });
   }
-  if (moved.length === 0) return 0;
-  const upTo = moved[moved.length - 1]!.seq;
-  await addColdReactions(c, conversationId, conv.cold_seq, upTo, moved);
-  await cold.put(conversationId, moved);
-  await exec(c, `UPDATE conversation SET cold_seq = ? WHERE conversation_id = ?`, [upTo, conversationId]);
-  await exec(c, `DELETE FROM reaction WHERE conversation_id = ? AND seq > ? AND seq <= ?`, [
-    conversationId,
-    conv.cold_seq,
-    upTo,
-  ]);
-  await exec(c, `DELETE FROM message WHERE conversation_id = ? AND seq > ? AND seq <= ?`, [
-    conversationId,
-    conv.cold_seq,
-    upTo,
-  ]);
-  return moved.length;
+  if (read.length === 0) return read;
+  await addColdReactions(q, conversationId, coldSeq, read[read.length - 1]!.seq, read);
+  return read;
 }
 
 // Reads the reactions to the messages, which span (from, to], into their
 // cold rows.
 async function addColdReactions(
-  c: PoolConnection,
+  q: Querier,
   conversationId: UUID,
   from: bigint,
   to: bigint,
   messages: ColdMessage[],
 ): Promise<void> {
   const list = await timedRows<{ seq: bigint; user_id: Buffer; body: Buffer; updated_at: DbTime }>(
-    c,
+    q,
     `SELECT seq, user_id, body, updated_at FROM reaction
      WHERE conversation_id = ? AND seq > ? AND seq <= ? ORDER BY seq, updated_at, user_id`,
     [conversationId, from, to],

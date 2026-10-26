@@ -27,6 +27,16 @@ export interface ColdMessage {
   reactions: Buffer;
 }
 
+export const sameColdMessage = (a: ColdMessage, b: ColdMessage): boolean =>
+  a.seq === b.seq &&
+  a.sender.equals(b.sender) &&
+  a.clientId === b.clientId &&
+  a.body.equals(b.body) &&
+  microsOf(a.sentAt) === microsOf(b.sentAt) &&
+  a.outboxId === b.outboxId &&
+  a.blobIds.equals(b.blobIds) &&
+  a.reactions.equals(b.reactions);
+
 /** The row key: the conversation id, then the seq big-endian, so a conversation's history is one range in seq order. */
 export function coldKey(conversationId: UUID, seq: bigint): Buffer {
   const key = Buffer.alloc(24);
