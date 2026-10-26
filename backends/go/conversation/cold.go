@@ -15,6 +15,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -170,6 +171,7 @@ func (c *Cold) Put(ctx context.Context, conversationID ids.UUID, messages []cold
 
 // Get reads the message at seq, if the cold tier has it.
 func (c *Cold) Get(ctx context.Context, conversationID ids.UUID, seq uint64) (coldMessage, bool, error) {
+	defer observeRead("message", time.Now())
 	get, err := hrpc.NewGet(ctx, coldTable, coldKey(conversationID, seq), hrpc.Families(map[string][]string{coldFamily: nil}))
 	if err != nil {
 		return coldMessage{}, false, err
@@ -190,6 +192,7 @@ func (c *Cold) Scan(ctx context.Context, conversationID ids.UUID, lo, hi uint64,
 	if lo > hi || limit <= 0 {
 		return nil, nil
 	}
+	defer observeRead("range", time.Now())
 	// Reversed, the range starts at its higher key, inclusive, and stops
 	// before its lower one.
 	stop := coldKey(conversationID, lo-1)
@@ -219,6 +222,10 @@ func (c *Cold) Scan(ctx context.Context, conversationID ids.UUID, lo, hi uint64,
 		messages = append(messages, m)
 	}
 	return messages, nil
+}
+
+func observeRead(kind string, start time.Time) {
+	metrics.ColdReadDuration.WithLabelValues(kind).Observe(time.Since(start).Seconds())
 }
 
 // change writes a changed cold row inside the transaction that tells of

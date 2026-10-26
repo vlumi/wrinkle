@@ -46,6 +46,24 @@ var (
 		Help:    "Time from an event being stored to its append to a user's log.",
 		Buckets: prometheus.ExponentialBuckets(0.001, 2, 16),
 	})
+	ShardRounds = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "wrinkle_shard_rounds_total",
+		Help: "Rounds of per-shard work, by job, shard and result: ok, error, skipped (leased elsewhere), lost (lease lost midway).",
+	}, []string{"job", "shard", "result"})
+	ShardRoundDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "wrinkle_shard_round_duration_seconds",
+		Help:    "Time of the rounds this instance held the lease for, by job.",
+		Buckets: prometheus.ExponentialBuckets(0.001, 2, 18),
+	}, []string{"job"})
+	ShardWork = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "wrinkle_shard_work_total",
+		Help: "What the per-shard rounds did, by job: events trimmed, messages moved.",
+	}, []string{"job"})
+	ColdReadDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "wrinkle_cold_read_duration_seconds",
+		Help:    "Reads from the cold tier, by kind: range (a page of history) or message (one message).",
+		Buckets: prometheus.ExponentialBuckets(0.0005, 2, 16),
+	}, []string{"kind"})
 )
 
 // Handler serves the metrics uncompressed: the scrapers are local, and the

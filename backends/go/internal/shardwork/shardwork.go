@@ -8,8 +8,10 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/vlumi/wrinkle/backends/go/internal/metrics"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 )
 
@@ -28,9 +30,10 @@ type Leases interface {
 }
 
 // Job is one kind of work: Round does what is due on a shard and returns
-// how much it did, in Unit.
+// how much it did, in Unit. Metric labels its metrics.
 type Job struct {
 	Name     string
+	Metric   string
 	Keyspace string
 	Shards   []vtdb.Shard
 	Interval time.Duration
@@ -53,6 +56,8 @@ func (j Job) Run(ctx context.Context) error {
 
 func (j Job) loop(ctx context.Context, shard vtdb.Shard) {
 	log := j.Log.With("shard", shard.Name)
+	// The shard shows before its first round ends.
+	metrics.ShardRounds.WithLabelValues(j.Metric, shard.Name, "ok").Add(0)
 	timer := time.NewTimer(min(time.Minute, j.Interval))
 	defer timer.Stop()
 	for {
@@ -76,8 +81,15 @@ func (j Job) leased(ctx context.Context, shard vtdb.Shard) (int, error) {
 	name := j.Name + ":" + j.Keyspace + "/" + shard.Name
 	ok, err := j.Leases.TakeLease(ctx, name, leaseTTL)
 	if err != nil || !ok {
+		result := "skipped"
+		if err != nil {
+			result = "error"
+		}
+		metrics.ShardRounds.WithLabelValues(j.Metric, shard.Name, result).Inc()
 		return 0, err
 	}
+	start := time.Now()
+	var lost atomic.Bool
 	roundCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	renewed := make(chan struct{})
@@ -92,6 +104,7 @@ func (j Job) leased(ctx context.Context, shard vtdb.Shard) (int, error) {
 			case <-ticker.C:
 			}
 			if held, err := j.Leases.RenewLease(roundCtx, name, leaseTTL); err == nil && !held {
+				lost.Store(true)
 				cancel()
 				return
 			}
@@ -100,6 +113,16 @@ func (j Job) leased(ctx context.Context, shard vtdb.Shard) (int, error) {
 	n, err := j.Round(roundCtx, shard)
 	cancel()
 	<-renewed
+	metrics.ShardRoundDuration.WithLabelValues(j.Metric).Observe(time.Since(start).Seconds())
+	metrics.ShardWork.WithLabelValues(j.Metric).Add(float64(n))
+	result := "ok"
+	switch {
+	case lost.Load():
+		result = "lost"
+	case err != nil:
+		result = "error"
+	}
+	metrics.ShardRounds.WithLabelValues(j.Metric, shard.Name, result).Inc()
 	dropCtx, done := context.WithTimeout(context.WithoutCancel(ctx), dropDeadline)
 	defer done()
 	_ = j.Leases.DropLease(dropCtx, name)

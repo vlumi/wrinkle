@@ -188,7 +188,7 @@ func run() error {
 		}
 		defer trimmer.Close()
 		trims := shardwork.Job{
-			Name: "trimming the user logs", Keyspace: "user", Shards: trimmer.Shards(), Interval: time.Duration(*trimS) * time.Second,
+			Name: "trimming the user logs", Metric: "log_trim", Keyspace: "user", Shards: trimmer.Shards(), Interval: time.Duration(*trimS) * time.Second,
 			Unit: "events", Round: trimmer.TrimShard, Leases: pres, Log: log.With("role", "trimmer"),
 		}
 		add("log trimmer", func() error { return trims.Run(ctx) })
@@ -198,7 +198,7 @@ func run() error {
 		}
 		defer mover.Close()
 		moves := shardwork.Job{
-			Name: "moving history to the cold tier", Keyspace: "conversation", Shards: mover.Shards(), Interval: time.Duration(*moveS) * time.Second,
+			Name: "moving history to the cold tier", Metric: "history_move", Keyspace: "conversation", Shards: mover.Shards(), Interval: time.Duration(*moveS) * time.Second,
 			Unit: "messages", Round: mover.MoveShard, Leases: pres, Log: log.With("role", "mover"),
 		}
 		add("cold mover", func() error { return moves.Run(ctx) })

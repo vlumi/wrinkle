@@ -12,8 +12,10 @@ Every backend exposes Prometheus metrics at `/metrics` on its HTTP port, with th
 | `wrinkle_fanout_deliveries_total` | counter | | Events appended to a user's log. |
 | `wrinkle_push_sent_total` | counter | `result` | Push notifications to devices that are not connected: `ok`, `unregistered` (token cleared), `error`, `dropped` (too many in flight). Only from the Go, Java and TypeScript fan-out, and only with an APNs key set. |
 | `wrinkle_fanout_lag_seconds` | histogram | | From an event being stored to its append to a user's log: the change-data path plus the worker. |
-
-The log trimmer, the history mover and their leases have no metrics yet, only log lines.
+| `wrinkle_shard_rounds_total` | counter | `job`, `shard`, `result` | Rounds of the per-shard jobs, `job` being `log_trim` or `history_move`, on `shard` (`-` unsharded), each shown at zero from its loop's start: `ok`, `error`, `skipped` (another instance held the shard's lease) or `lost` (the lease was lost midway, and the round stopped). |
+| `wrinkle_shard_round_duration_seconds` | histogram | `job` | The time of each round this instance held the lease for. |
+| `wrinkle_shard_work_total` | counter | `job` | What the rounds did: events trimmed from the logs, messages moved to the cold tier. Its rate is the job's throughput. |
+| `wrinkle_cold_read_duration_seconds` | histogram | `kind` | Reads from HBase: `range`, the part of a page of history below the watermark, or `message`, one message (a delete or reaction of a cold one, or a conversation's last message). |
 
 Process metrics:
 
