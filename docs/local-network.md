@@ -120,7 +120,7 @@ make cluster-down                                # remove the cluster; the infra
 
 The counts are `GO_SERVICES`, `JAVA_SERVICES`, `TS_SERVICES`, `GO_GW`, `ELIXIR_GW`, `RUST_GW`, `JAVA_GW` and `TS_GW`, 0 to 8 each. A count not given keeps what is running, so after a code change a plain `make cluster-up` rebuilds the images and replaces the containers whose image changed, at the same counts. The defaults apply on a fresh start, after `cluster-down`. Devices connect through the TLS edge as before, and `http://localhost:8404/` shows every replica the balancer has found. The balancer finds them by name through Docker's DNS: a kind scaled up joins within a few seconds, one scaled down drops out. Push settings come from `.env` as for the other targets.
 
-The cluster is for trying the scaled shape, not for measuring: the containers run in Docker Desktop's virtual machine, behind its networking, so their numbers are not comparable with the native processes the measurements use. Its processes don't show in Grafana.
+The cluster is for trying the scaled shape, not for measuring: the containers run in Docker Desktop's virtual machine, behind its networking, so their numbers are not comparable with the native processes the measurements use. Prometheus finds its replicas by name, so they show in Grafana, each by process.
 
 ### Monoliths
 
@@ -166,7 +166,7 @@ make lb-down                       # when done
 - **Devices to gateways:** the balancer on port 8080, behind the TLS edge for devices on the network, sends each connection to the healthy gateway with the fewest. Stop a gateway and the balancer marks it down within about two seconds; its devices reconnect and land on the others. The gateways listen on loopback; to reach one in particular from the Mac itself, put `ws://localhost:<port>/v1/ws` in the client's gateway field.
 - **Gateways to services:** each gateway keeps one HTTP/2 connection to the services balancer on 127.0.0.1:9100, which hands out each request separately, in turn, to the running instances. Instance *n* serves the RPC on 9100+*n*, on loopback only. Stop an instance and the rest take its requests and its share of the fan-out.
 
-`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before a monolith. Prometheus scrapes only port 8080, so these processes don't show in Grafana; the monitoring page links each one's metrics.
+`http://localhost:8404/` on the host shows both balancers: each gateway and instance, its state, and what it has handled. A gateway refuses to start until the balancers and at least one services instance are up. `PORT=...` moves a gateway elsewhere, outside the balancer. The balancer holds port 8080, so stop it before a monolith. Prometheus scrapes each of these processes too, labeled by process, and the monitoring page links each one's metrics.
 
 ## What faces the network
 
