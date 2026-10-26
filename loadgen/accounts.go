@@ -20,6 +20,9 @@ const (
 	// connectionReuse is how long a worker sends sign-ins on one
 	// connection, well within the backend's deadline for Connect.
 	connectionReuse = 3 * time.Second
+	// signInsPerConnection is how many sign-ins the backend takes on one
+	// connection; a registration and the sign-in after it count two.
+	signInsPerConnection = 5
 )
 
 // signInAll gets every device its credentials before anything connects:
@@ -54,11 +57,12 @@ func signInAll(ctx context.Context, devices []*device, url string, devicesPerUse
 }
 
 // signInWorker holds a connection that has not connected, replacing it
-// before the backend would close it.
+// before the backend would close it or refuse its sign-ins.
 type signInWorker struct {
-	url    string
-	client *wrinkleclient.Client
-	opened time.Time
+	url     string
+	client  *wrinkleclient.Client
+	opened  time.Time
+	signIns int
 }
 
 func (w *signInWorker) close() {
@@ -68,8 +72,11 @@ func (w *signInWorker) close() {
 	}
 }
 
-func (w *signInWorker) conn(ctx context.Context) (*wrinkleclient.Client, error) {
-	if w.client != nil && (time.Since(w.opened) > connectionReuse || w.client.Err() != nil) {
+// conn returns a connection with room for the given number of sign-ins,
+// and counts them.
+func (w *signInWorker) conn(ctx context.Context, signIns int) (*wrinkleclient.Client, error) {
+	if w.client != nil && (time.Since(w.opened) > connectionReuse || w.client.Err() != nil ||
+		w.signIns+signIns > signInsPerConnection) {
 		w.close()
 	}
 	if w.client == nil {
@@ -77,15 +84,21 @@ func (w *signInWorker) conn(ctx context.Context) (*wrinkleclient.Client, error) 
 		if err != nil {
 			return nil, err
 		}
-		w.client, w.opened = c, time.Now()
+		w.client, w.opened, w.signIns = c, time.Now(), 0
 	}
+	w.signIns += signIns
 	return w.client, nil
 }
 
 func (w *signInWorker) signIn(ctx context.Context, d *device, first bool) error {
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	c, err := w.conn(cctx)
+	// A registration may be followed by a sign-in.
+	signIns := 1
+	if first {
+		signIns = 2
+	}
+	c, err := w.conn(cctx, signIns)
 	if err != nil {
 		return err
 	}
