@@ -30,7 +30,17 @@ class AppendBatcherTest {
 
   private static OutboxRecord row(Event event, Uuid... recipients) {
     return new OutboxRecord(
-        Uuid.random(), 1, List.of(recipients), Kinds.GROUP, "t", 2, "message", null, event);
+        Uuid.random(),
+        1,
+        List.of(recipients),
+        Kinds.GROUP,
+        "t",
+        2,
+        "message",
+        null,
+        null,
+        List.of(),
+        event);
   }
 
   private Event message(Message.Builder m) {

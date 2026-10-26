@@ -21,6 +21,9 @@ record OutboxRecord(
     int memberCount,
     String kind,
     Long targetOutboxId,
+    // A deletion's sender and the uploads of the message's attachments; null and empty for others.
+    Uuid releasedBy,
+    List<Uuid> releasedUploads,
     Event event) {
   private static final ObjectMapper JSON = new ObjectMapper();
 
@@ -34,6 +37,18 @@ record OutboxRecord(
     }
     JsonNode topic = n.get("topic");
     JsonNode target = n.get("target_outbox_id");
+    JsonNode released = n.get("released_uploads");
+    Uuid releasedBy = null;
+    List<Uuid> releasedUploads = List.of();
+    if (released != null && !released.isNull()) {
+      byte[] b = released.binaryValue();
+      if (b.length % 16 != 0 || b.length < 32) {
+        throw new IOException("released_uploads of " + b.length + " bytes");
+      }
+      List<Uuid> list = Uuid.split(b);
+      releasedBy = list.getFirst();
+      releasedUploads = list.subList(1, list.size());
+    }
     return new OutboxRecord(
         id(n, "conversation_id"),
         unsigned(n, "outbox_id"),
@@ -43,6 +58,8 @@ record OutboxRecord(
         (int) unsigned(n, "member_count"),
         field(n, "kind").asText(),
         target == null || target.isNull() ? null : unsigned(n, "target_outbox_id"),
+        releasedBy,
+        releasedUploads,
         Event.parseFrom(field(n, "payload").binaryValue()));
   }
 

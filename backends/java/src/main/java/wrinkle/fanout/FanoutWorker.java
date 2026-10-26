@@ -62,6 +62,7 @@ public final class FanoutWorker {
   private final ProfileFanout profiles;
   private final DeviceFanout devices;
   private final ContactFanout contacts;
+  private final UploadSettler uploads;
   private final AtomicBoolean stopped = new AtomicBoolean();
   private volatile Thread thread;
 
@@ -89,6 +90,7 @@ public final class FanoutWorker {
     this.profiles = new ProfileFanout(userLog, tasks);
     this.devices = new DeviceFanout(userLog, conversationDb, tasks);
     this.contacts = new ContactFanout(userLog);
+    this.uploads = new UploadSettler(userDb);
   }
 
   /** Consumes on a platform thread of its own until stopped. */
@@ -216,6 +218,7 @@ public final class FanoutWorker {
       log.error("skipping outbox record without a body, kind {}", o.kind());
       return;
     }
+    uploads.settle(o);
     if (AppendBatcher.batchable(o)) {
       userLog.deliverBatched(o);
       return;

@@ -35,18 +35,33 @@ class UploadsTest {
     UploadSweeper.Upload taken = new UploadSweeper.Upload(user, Uuid.random());
     UploadSweeper.Upload missing = new UploadSweeper.Upload(user, Uuid.random());
     UploadSweeper.Upload failing = new UploadSweeper.Upload(user, Uuid.random());
+    UploadSweeper.Upload stale = new UploadSweeper.Upload(user, Uuid.random());
     Map<Uuid, Integer> statuses =
-        new HashMap<>(Map.of(gone.blobId(), 200, missing.blobId(), 404, failing.blobId(), 403));
+        new HashMap<>(
+            Map.of(
+                gone.blobId(),
+                200,
+                missing.blobId(),
+                404,
+                failing.blobId(),
+                403,
+                stale.blobId(),
+                204));
     List<Uuid> deleted = new ArrayList<>();
     UploadSweeper.Store store =
         new UploadSweeper.Store() {
           @Override
-          public List<UploadSweeper.Upload> unused(LocalDateTime createdBefore, int limit) {
+          public List<UploadSweeper.Upload> unused(LocalDateTime cutoff, int limit) {
             return List.of(gone, taken, missing, failing);
           }
 
           @Override
-          public boolean remove(UploadSweeper.Upload u) {
+          public List<UploadSweeper.Upload> pending(LocalDateTime cutoff, int limit) {
+            return List.of(stale);
+          }
+
+          @Override
+          public boolean remove(UploadSweeper.Upload u, LocalDateTime cutoff) {
             // Used again since it was selected.
             return !u.equals(taken);
           }
@@ -58,7 +73,8 @@ class UploadsTest {
               deleted.add(blobId);
               return statuses.get(blobId);
             });
-    assertEquals(2, sweeper.sweep(LocalDateTime.now()));
-    assertEquals(List.of(gone.blobId(), missing.blobId(), failing.blobId()), deleted);
+    assertEquals(3, sweeper.sweep(LocalDateTime.now()));
+    assertEquals(
+        List.of(gone.blobId(), missing.blobId(), failing.blobId(), stale.blobId()), deleted);
   }
 }

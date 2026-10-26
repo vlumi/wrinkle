@@ -190,7 +190,9 @@ public final class UploadService {
 
   /**
    * Marks the user's attachment uploads used, once each is found to be theirs, uploaded and not
-   * attached to another message; fails with FAILED_PRECONDITION otherwise.
+   * attached to another message; fails with FAILED_PRECONDITION otherwise. They stay pending until
+   * the fan-out delivers the message, so a send that fails without releasing them loses them only
+   * to the sweeper.
    */
   public void useAttachments(Uuid userId, List<Uuid> blobIds) throws SQLException {
     if (blobIds.isEmpty()) {
@@ -216,11 +218,14 @@ public final class UploadService {
           if (requireAll(c, query + " FOR UPDATE", args, blobIds.size())) {
             throw ApiError.failedPrecondition("already attached");
           }
+          Object[] update = new Object[args.length + 1];
+          update[0] = Timestamps.now();
+          System.arraycopy(args, 0, update, 1, args.length);
           Sql.update(
               c,
-              "UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id IN "
+              "UPDATE upload SET used = TRUE, pending_since = ? WHERE user_id = ? AND blob_id IN "
                   + inList(blobIds.size()),
-              args);
+              update);
           return null;
         });
   }
@@ -254,7 +259,8 @@ public final class UploadService {
     try (Connection c = db.getConnection()) {
       Sql.update(
           c,
-          "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'attachment' AND"
+          "UPDATE upload SET used = FALSE, pending_since = NULL WHERE user_id = ? AND purpose ="
+              + " 'attachment' AND"
               + " blob_id IN "
               + inList(blobIds.size()),
           idArgs(userId, blobIds));

@@ -188,10 +188,14 @@ final class Rows {
         kind,
         event,
         at,
+        null,
         null);
   }
 
-  /** As above, naming the outbox row of the message a message_deleted row is about. */
+  /**
+   * As above, naming the outbox row of the message a message_deleted row is about, and the deleting
+   * sender's id followed by the message's blob ids, for the fan-out to release, or null.
+   */
   static void insertOutbox(
       Connection c,
       Uuid conversationId,
@@ -203,13 +207,14 @@ final class Rows {
       String kind,
       Event event,
       LocalDateTime at,
-      Long targetOutboxId)
+      Long targetOutboxId,
+      byte[] releasedUploads)
       throws SQLException {
     Sql.update(
         c,
         "INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic,"
-            + " member_count, kind, target_outbox_id, payload, created_at) VALUES (?, ?, ?, ?, ?,"
-            + " ?, ?, ?, ?, ?)",
+            + " member_count, kind, target_outbox_id, released_uploads, payload, created_at) VALUES"
+            + " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         conversationId,
         outboxId,
         Uuid.join(recipients),
@@ -218,6 +223,7 @@ final class Rows {
         memberCount,
         kind,
         targetOutboxId,
+        releasedUploads,
         event.toByteArray(),
         at);
     Sql.update(

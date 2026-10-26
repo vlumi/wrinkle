@@ -80,6 +80,28 @@ class OutboxRecordTest {
   }
 
   @Test
+  void parsesTheReleasedUploadsOfADeletion() throws IOException {
+    String row =
+        """
+        {"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"8",\
+        "recipients":"C4X3FkaURgebCmaEBLUfTA==","conversation_kind":"direct",\
+        "member_count":2,"kind":"message_deleted","target_outbox_id":"9",\
+        "released_uploads":%s,"payload":""}""";
+    Uuid sender = Uuid.random();
+    Uuid blob = Uuid.random();
+    String released =
+        '"' + Base64.getEncoder().encodeToString(Uuid.join(List.of(sender, blob))) + '"';
+    OutboxRecord o = OutboxRecord.parse(json(row.formatted(released)));
+    assertEquals(sender, o.releasedBy());
+    assertEquals(List.of(blob), o.releasedUploads());
+    o = OutboxRecord.parse(json(row.formatted("null")));
+    assertNull(o.releasedBy());
+    assertTrue(o.releasedUploads().isEmpty());
+    String senderOnly = '"' + Base64.getEncoder().encodeToString(sender.bytes()) + '"';
+    assertThrows(IOException.class, () -> OutboxRecord.parse(json(row.formatted(senderOnly))));
+  }
+
+  @Test
   void rejectsRecipientsNotInWholeIds() {
     assertThrows(
         IOException.class,

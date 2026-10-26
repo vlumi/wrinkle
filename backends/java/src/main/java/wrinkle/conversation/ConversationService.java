@@ -290,21 +290,14 @@ public final class ConversationService {
   /**
    * Deletes one of the user's own messages for everyone: its content gives way to deleted_at, and
    * the members, with the user even after leaving, learn of it. Deleting again does nothing. The
-   * attachments' uploads become unused, for the sweeper. A message in the cold tier is changed
-   * there, under the conversation's row lock as in MySQL.
+   * outbox row names the attachments' uploads, which the fan-out releases for the sweeper. A
+   * message in the cold tier is changed there, under the conversation's row lock as in MySQL.
    */
   public void deleteMessage(Uuid userId, Uuid conversationId, long seq) throws SQLException {
     if (seq <= 0) {
       throw ApiError.invalidArgument("seq must be positive");
     }
-    List<Uuid> released = deleteMessageRow(userId, conversationId, seq);
-    uploads.releaseAttachments(userId, released);
-  }
-
-  /** Deletes the message, returning the attachment ids it had. */
-  private List<Uuid> deleteMessageRow(Uuid userId, Uuid conversationId, long seq)
-      throws SQLException {
-    return cold.inTransaction(
+    cold.inTransaction(
         db,
         (c, changes) -> {
           Header h = Rows.header(c, conversationId, true);
@@ -347,7 +340,7 @@ public final class ConversationService {
             throw ApiError.permissionDenied("message " + seq + " was sent by someone else");
           }
           if (msg.hasDeletedAt()) {
-            return List.of();
+            return null;
           }
           LocalDateTime at = Timestamps.now();
           Message deleted = Message.newBuilder().setDeletedAt(Timestamps.toProto(at)).build();
@@ -382,6 +375,13 @@ public final class ConversationService {
           if (!h.includes(userId)) {
             recipients.add(userId);
           }
+          byte[] releasedUploads =
+              msg.getBlobIdsCount() == 0
+                  ? null
+                  : userId
+                      .toByteString()
+                      .concat(ByteString.copyFrom(msg.getBlobIdsList()))
+                      .toByteArray();
           Rows.insertOutbox(
               c,
               conversationId,
@@ -393,8 +393,9 @@ public final class ConversationService {
               "message_deleted",
               event,
               at,
-              targetOutboxId);
-          return msg.getBlobIdsList().stream().map(Uuid::parse).toList();
+              targetOutboxId,
+              releasedUploads);
+          return null;
         });
   }
 

@@ -19,13 +19,15 @@ import wrinkle.Timestamps;
 import wrinkle.Uuid;
 
 /**
- * Deletes blobs nothing refers to a day after their upload slot was made: the upload row first, so
- * a blob is only deleted once nobody can start using it, then the bytes.
+ * Deletes blobs nothing refers to a day after their upload slot was made, or after a send took them
+ * for a message that was never delivered: the upload row first, so a blob is only deleted once
+ * nobody can start using it, then the bytes.
  */
 public final class UploadSweeper {
   private static final Logger log = LoggerFactory.getLogger(UploadSweeper.class);
   private static final Duration FIRST_RUN = Duration.ofMinutes(1);
   private static final Duration INTERVAL = Duration.ofMinutes(10);
+  // How long a slot may go unused, or an attachment wait for its message's delivery.
   private static final Duration UNUSED_FOR = Duration.ofHours(24);
   private static final int SWEEP_PAGE = 500;
 
@@ -33,10 +35,14 @@ public final class UploadSweeper {
 
   /** Where the upload rows are. */
   interface Store {
-    List<Upload> unused(LocalDateTime createdBefore, int limit) throws SQLException;
+    /** Unused uploads made before the cutoff. */
+    List<Upload> unused(LocalDateTime cutoff, int limit) throws SQLException;
 
-    /** Deletes the row if it is still unused; true if it did. */
-    boolean remove(Upload u) throws SQLException;
+    /** Uploads still waiting since before the cutoff for their message's delivery. */
+    List<Upload> pending(LocalDateTime cutoff, int limit) throws SQLException;
+
+    /** Deletes the row if it is still unused or pending since before the cutoff; true if it did. */
+    boolean remove(Upload u, LocalDateTime cutoff) throws SQLException;
   }
 
   /** Where the bytes are. */
@@ -77,12 +83,21 @@ public final class UploadSweeper {
     }
   }
 
-  /** One batch of the unused uploads made before the cutoff; returns how many blobs went. */
+  /**
+   * One batch of the unused uploads made before the cutoff and one of those pending since before
+   * it; returns how many blobs went.
+   */
   int sweep(LocalDateTime cutoff) throws SQLException {
+    return sweep(store.unused(cutoff, SWEEP_PAGE), cutoff)
+        + sweep(store.pending(cutoff, SWEEP_PAGE), cutoff);
+  }
+
+  private int sweep(List<Upload> page, LocalDateTime cutoff) throws SQLException {
     int deleted = 0;
-    for (Upload u : store.unused(cutoff, SWEEP_PAGE)) {
-      // Another sweeper, or a profile that started using it meanwhile, may have got there first.
-      if (!store.remove(u)) {
+    for (Upload u : page) {
+      // Another sweeper, a profile that started using it or a delivery meanwhile may have got
+      // there first.
+      if (!store.remove(u, cutoff)) {
         continue;
       }
       int status = remover.delete(u.blobId());
@@ -97,15 +112,22 @@ public final class UploadSweeper {
 
   private record DbStore(DataSource db) implements Store {
     @Override
-    public List<Upload> unused(LocalDateTime createdBefore, int limit) throws SQLException {
+    public List<Upload> unused(LocalDateTime cutoff, int limit) throws SQLException {
+      return page(
+          "SELECT user_id, blob_id FROM upload WHERE used = FALSE AND created_at < ? LIMIT ?",
+          cutoff,
+          limit);
+    }
+
+    @Override
+    public List<Upload> pending(LocalDateTime cutoff, int limit) throws SQLException {
+      return page(
+          "SELECT user_id, blob_id FROM upload WHERE pending_since < ? LIMIT ?", cutoff, limit);
+    }
+
+    private List<Upload> page(String query, LocalDateTime cutoff, int limit) throws SQLException {
       try (Connection c = db.getConnection();
-          PreparedStatement ps =
-              Sql.prepare(
-                  c,
-                  "SELECT user_id, blob_id FROM upload WHERE used = FALSE AND created_at < ?"
-                      + " LIMIT ?",
-                  createdBefore,
-                  limit);
+          PreparedStatement ps = Sql.prepare(c, query, cutoff, limit);
           ResultSet rs = ps.executeQuery()) {
         List<Upload> list = new ArrayList<>();
         while (rs.next()) {
@@ -116,13 +138,15 @@ public final class UploadSweeper {
     }
 
     @Override
-    public boolean remove(Upload u) throws SQLException {
+    public boolean remove(Upload u, LocalDateTime cutoff) throws SQLException {
       try (Connection c = db.getConnection()) {
         return Sql.update(
                 c,
-                "DELETE FROM upload WHERE user_id = ? AND blob_id = ? AND used = FALSE",
+                "DELETE FROM upload WHERE user_id = ? AND blob_id = ? AND (used = FALSE OR"
+                    + " pending_since < ?)",
                 u.userId(),
-                u.blobId())
+                u.blobId(),
+                cutoff)
             == 1;
       }
     }
