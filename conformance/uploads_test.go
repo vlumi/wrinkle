@@ -63,7 +63,8 @@ func TestCreateUploadLimits(t *testing.T) {
 		{pb.BlobPurpose_BLOB_PURPOSE_STICKER, "image/png", 256*1024 + 1},
 		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "", 100},
 		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "no type", 100},
-		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "application/pdf", 25*1024*1024 + 1},
+		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "application/pdf", 100},
+		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "application/octet-stream", 25*1024*1024 + 1},
 	} {
 		_, err := d.CreateUpload(ctx(t), c.purpose, c.mediaType, c.size)
 		if wrinkleclient.Code(err) != pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
@@ -77,7 +78,7 @@ func TestCreateUploadLimits(t *testing.T) {
 	}{
 		{pb.BlobPurpose_BLOB_PURPOSE_AVATAR, "image/jpeg", 512 * 1024},
 		{pb.BlobPurpose_BLOB_PURPOSE_STICKER, "image/gif", 1},
-		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "application/pdf", 25 * 1024 * 1024},
+		{pb.BlobPurpose_BLOB_PURPOSE_ATTACHMENT, "application/octet-stream", 25 * 1024 * 1024},
 	} {
 		if _, err := d.CreateUpload(ctx(t), c.purpose, c.mediaType, c.size); err != nil {
 			t.Errorf("%v %q %d: %v", c.purpose, c.mediaType, c.size, err)

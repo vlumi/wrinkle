@@ -459,8 +459,8 @@ export declare const DeleteAccountResponseSchema: GenMessage<DeleteAccountRespon
  *
  * Limits by purpose: avatars image/jpeg, image/png or image/webp up to
  * 512 KiB; stickers image/png, image/webp or image/gif up to 256 KiB;
- * attachments any media type up to 25 MiB. Beyond them the request fails
- * with ERROR_CODE_INVALID_ARGUMENT.
+ * attachments application/octet-stream, since they are ciphertext, up to
+ * 25 MiB. Beyond them the request fails with ERROR_CODE_INVALID_ARGUMENT.
  *
  * @generated from message wrinkle.v1.CreateUploadRequest
  */

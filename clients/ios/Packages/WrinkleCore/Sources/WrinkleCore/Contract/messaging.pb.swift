@@ -497,8 +497,8 @@ public nonisolated struct Wrinkle_V1_DeleteAccountResponse: Sendable {
 ///
 /// Limits by purpose: avatars image/jpeg, image/png or image/webp up to
 /// 512 KiB; stickers image/png, image/webp or image/gif up to 256 KiB;
-/// attachments any media type up to 25 MiB. Beyond them the request fails
-/// with ERROR_CODE_INVALID_ARGUMENT.
+/// attachments application/octet-stream, since they are ciphertext, up to
+/// 25 MiB. Beyond them the request fails with ERROR_CODE_INVALID_ARGUMENT.
 public nonisolated struct Wrinkle_V1_CreateUploadRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
