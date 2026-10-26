@@ -5,7 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
+	"log/slog"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -349,7 +349,11 @@ func (e listEntry) recordDeletion(ctx context.Context, tx *sql.Tx, deleted *pb.M
 	case err == nil:
 		event := &pb.Event{}
 		if err := proto.Unmarshal(payload, event); err != nil {
-			return fmt.Errorf("event at %d of user %s: %w", position, userID, err)
+			// Retrying would not mend it; the copy becomes a bare tombstone.
+			slog.Warn("unreadable copy of a deleted message", "user", userID, "position", position, "err", err)
+			event = &pb.Event{Body: &pb.Event_Message{Message: &pb.MessageEvent{Message: &pb.Message{
+				ConversationId: o.conversationID.Bytes(), Seq: deleted.GetSeq(),
+			}}}}
 		}
 		if msg := event.GetMessage().GetMessage(); msg != nil {
 			if e.deletedSender != nil {

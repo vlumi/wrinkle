@@ -226,7 +226,8 @@ func (w *Worker) handleWithRetry(ctx context.Context, rec *kgo.Record) error {
 		if err = w.handle(ctx, rec); err == nil {
 			return nil
 		}
-		w.log.Warn("delivery failed", "attempt", attempt+1, "err", err)
+		// The last failure is logged by the caller, once.
+		w.log.Debug("delivery failed", "attempt", attempt+1, "err", err)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
