@@ -18,6 +18,11 @@ type sample struct {
 	rss         float64 // resident memory bytes
 	live        float64 // heap and stacks in use, bytes
 	connections float64
+	// The history mover's messages moved, its rounds' seconds and its
+	// rounds by shard, when the process runs it.
+	moved, moveSeconds float64
+	moveRounds         map[string]float64
+	mover              bool
 }
 
 // scrape asks the backend to collect garbage, then reads its Prometheus
@@ -29,16 +34,24 @@ func scrape(metricsURL string) sample {
 	}
 	client := &http.Client{Timeout: 30 * time.Second}
 	collectGarbage(client, metricsURL)
+	s := read(client, metricsURL)
+	if s.ok && s.rss == 0 {
+		s.rss = rssOfListener(metricsURL)
+	}
+	return s
+}
+
+// read reads the metrics as they are.
+func read(client *http.Client, metricsURL string) sample {
+	if metricsURL == "" {
+		return sample{}
+	}
 	resp, err := client.Get(metricsURL)
 	if err != nil {
 		return sample{}
 	}
 	defer resp.Body.Close()
-	s := parseMetrics(resp.Body)
-	if s.rss == 0 {
-		s.rss = rssOfListener(metricsURL)
-	}
-	return s
+	return parseMetrics(resp.Body)
 }
 
 // collectGarbage asks the backend to collect, through the debug endpoint
@@ -80,6 +93,21 @@ func parseMetrics(r io.Reader) sample {
 			s.live += v
 		case "wrinkle_connections":
 			s.connections += v
+		case "wrinkle_shard_work_total":
+			if strings.Contains(line, `job="history_move"`) {
+				s.moved, s.mover = v, true
+			}
+		case "wrinkle_shard_round_duration_seconds_sum":
+			if strings.Contains(line, `job="history_move"`) {
+				s.moveSeconds = v
+			}
+		case "wrinkle_shard_rounds_total":
+			if strings.Contains(line, `job="history_move"`) {
+				if s.moveRounds == nil {
+					s.moveRounds = map[string]float64{}
+				}
+				s.moveRounds[label(line, "shard")] += v
+			}
 		}
 	}
 	return s
@@ -110,6 +138,17 @@ func parseSample(line string) (name string, value float64, ok bool) {
 		return "", 0, false
 	}
 	return name, v, true
+}
+
+// label returns the value of the sample line's label, unescaped only as
+// far as shard names need: not at all.
+func label(line, name string) string {
+	_, rest, ok := strings.Cut(line, name+`="`)
+	if !ok {
+		return ""
+	}
+	value, _, _ := strings.Cut(rest, `"`)
+	return value
 }
 
 // labelsEnd returns the index of the brace closing the label set that s

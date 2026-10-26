@@ -46,6 +46,41 @@ type result struct {
 	BackendRSSB    float64 `json:"backend_rss_bytes"`
 	BackendLiveB   float64 `json:"backend_live_bytes"`
 	BackendConns   float64 `json:"backend_connections"`
+	// History reads, with --history: pages of 50, newest (all hot), among
+	// the cold messages, and across the watermark; the mover's messages
+	// moved for them, and per second of its rounds.
+	History        int     `json:"history,omitempty"`
+	HistoryReads   int     `json:"history_reads,omitempty"`
+	HistoryErrors  int64   `json:"history_errors,omitempty"`
+	HotP50Ms       float64 `json:"hot_p50_ms,omitempty"`
+	HotP99Ms       float64 `json:"hot_p99_ms,omitempty"`
+	ColdP50Ms      float64 `json:"cold_p50_ms,omitempty"`
+	ColdP99Ms      float64 `json:"cold_p99_ms,omitempty"`
+	AcrossP50Ms    float64 `json:"across_p50_ms,omitempty"`
+	AcrossP99Ms    float64 `json:"across_p99_ms,omitempty"`
+	Moved          float64 `json:"moved,omitempty"`
+	MovedPerRoundS float64 `json:"moved_per_round_s,omitempty"`
+}
+
+func (r *result) addHistory(cfg config, h *historyStats) {
+	hot, cold, across := h.summary()
+	r.History, r.HistoryReads, r.HistoryErrors = cfg.history, len(hot)+len(cold)+len(across), h.errors
+	r.HotP50Ms, r.HotP99Ms = ms(percentile(hot, 0.50)), ms(percentile(hot, 0.99))
+	r.ColdP50Ms, r.ColdP99Ms = ms(percentile(cold, 0.50)), ms(percentile(cold, 0.99))
+	r.AcrossP50Ms, r.AcrossP99Ms = ms(percentile(across, 0.50)), ms(percentile(across, 0.99))
+	r.Moved = h.moved
+	if h.moveSeconds > 0 {
+		r.MovedPerRoundS = h.moved / h.moveSeconds
+	}
+}
+
+func (r result) historyString() string {
+	return fmt.Sprintf(
+		"connections=%d history=%d per conversation, target=%.0f reads/s, reads=%d (%.1f/s) errors=%d\n"+
+			"hot p50=%.1fms p99=%.1fms; cold p50=%.1fms p99=%.1fms; across p50=%.1fms p99=%.1fms\n"+
+			"moved %.0f messages, %.0f per second of the mover's rounds",
+		r.Connections, r.History, r.TargetRate, r.HistoryReads, float64(r.HistoryReads)/r.DurationS, r.HistoryErrors,
+		r.HotP50Ms, r.HotP99Ms, r.ColdP50Ms, r.ColdP99Ms, r.AcrossP50Ms, r.AcrossP99Ms, r.Moved, r.MovedPerRoundS)
 }
 
 // result summarizes the window, with the backend's samples from its start

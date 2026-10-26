@@ -34,6 +34,9 @@ type config struct {
 	groupShare     float64
 	attachShare    float64
 	attachSize     int
+	history        int
+	hotWindow      time.Duration
+	moverMetrics   string
 	label          string
 	commit         string
 	out            string
@@ -54,6 +57,9 @@ func main() {
 	flag.Float64Var(&cfg.groupShare, "group-share", 0, "share of sends that go to the sender's group, 0 to 1; 0 forms no groups")
 	flag.Float64Var(&cfg.attachShare, "attachment-share", 0, "share of sends that carry an attachment, 0 to 1")
 	flag.IntVar(&cfg.attachSize, "attachment-size", 50<<10, "attachment size in bytes, with --attachment-share")
+	flag.IntVar(&cfg.history, "history", 0, "measure history reads instead of sends: messages per conversation to move to the cold tier, at least 100; --rate is then reads per second")
+	flag.DurationVar(&cfg.hotWindow, "hot-window", time.Minute, "the backend's hot window, with --history, waited for when its metrics do not show the mover")
+	flag.StringVar(&cfg.moverMetrics, "mover-metrics", "", "metrics URL of the process running the history mover, with --history; --metrics when empty")
 	flag.StringVar(&cfg.label, "label", "", "free text recorded with the result, such as the backend")
 	flag.StringVar(&cfg.commit, "commit", "", "commit recorded with the result")
 	flag.StringVar(&cfg.out, "out", "", "append the result as a JSON line to this file")
@@ -79,6 +85,12 @@ func run(cfg config) error {
 	}
 	if cfg.attachShare > 0 && (cfg.attachSize < 1 || cfg.attachSize > maxAttachmentSize) {
 		return fmt.Errorf("attachment-size must be 1 to %d bytes", maxAttachmentSize)
+	}
+	if cfg.moverMetrics == "" {
+		cfg.moverMetrics = cfg.metricsURL
+	}
+	if cfg.history != 0 && (cfg.history < 2*historyPage || cfg.rate <= 0) {
+		return fmt.Errorf("history must be at least %d, with a positive rate", 2*historyPage)
 	}
 	blobAddress, err := wrinkleclient.BlobAddress(cfg.url)
 	if err != nil {
@@ -112,6 +124,22 @@ func run(cfg config) error {
 	fmt.Fprintf(os.Stderr, "published conversation keys in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
 	for _, d := range ready {
 		go d.receive(ctx)
+	}
+	if cfg.history > 0 {
+		h, err := runHistory(ctx, cfg, ready, stats)
+		if err != nil {
+			return err
+		}
+		for _, d := range ready {
+			d.client.Close()
+		}
+		r := stats.result(cfg, sample{}, sample{})
+		r.addHistory(cfg, h)
+		fmt.Println(r.historyString())
+		if cfg.out != "" {
+			return appendResult(cfg.out, r)
+		}
+		return nil
 	}
 
 	fmt.Fprintf(os.Stderr, "warm-up %s, then measuring %s at %.0f msg/s\n", cfg.warmup, cfg.duration, cfg.rate)
