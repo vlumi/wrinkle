@@ -107,7 +107,7 @@ The limits and their values are the contract's ([frame.proto](../../proto/wrinkl
 | Rate | a token bucket per connection, used only by the read loop, so unlocked; every protobuf frame takes a token, WebSocket pings and pongs none, since the library answers them before the read loop sees them |
 | Requests in flight | an atomic counter; requests over either limit get `RESOURCE_EXHAUSTED`, other frames are dropped |
 | Acks once per interval | `ackCursor` keeps the highest pending cursor and when the last write started; a goroutine writes it at once if `--ack-interval-ms` has passed since, otherwise a timer starts one when it has, and acks meanwhile only raise the cursor. When the connection ends, the read loop stops the timer and writes what is pending at once, after a write in flight |
-| Connect deadline | a timer per connection, stopped by a Connect that succeeds and restarted when a Register or SignIn is answered (hashing the password may have taken a while) or a Connect is undone; on expiry, close with 1008 |
+| Connect deadline | a timer per connection, stopped by a Connect that succeeds and restarted when a Register or SignIn succeeds (hashing the password may have taken a while; a failure does not restart it, so it cannot hold the connection open), with at most 5 of them per connection beyond those refused as invalid or a Connect is undone; on expiry, close with 1008 |
 | Pings and the idle timeout | one ticker per gateway ([keepalive.go](gateway/keepalive.go)), the presence heartbeat's, sweeps all connections: idle ones close with 1001, the rest get a ping; pongs update the last-seen time |
 | Keeping up with events | a full outbound queue on push closes with 1013 (Writing, above) |
 

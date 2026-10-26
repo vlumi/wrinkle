@@ -22,6 +22,8 @@ const (
 	requestTimeout = 10 * time.Second
 	writeTimeout   = 10 * time.Second
 	connectTimeout = 5 * time.Second
+	// maxSignIns bounds the Register and SignIn requests of a connection.
+	maxSignIns = 5
 	// How long Connect waits for the user's push channel to be subscribed.
 	subscribeTimeout = 5 * time.Second
 	maxFrameBytes    = 64 * 1024
@@ -60,6 +62,10 @@ type conn struct {
 	userID       ids.UUID
 	deviceID     uint64
 	connectTimer *time.Timer
+	// signIns counts Register and SignIn requests, which may cost a
+	// password hash each; those refused as invalid, before hashing, do not
+	// count.
+	signIns int
 }
 
 func newConn(s *Server, remoteAddr string) *conn {
@@ -357,6 +363,9 @@ func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 		if connected {
 			return apierror.Response(req.GetId(), apierror.FailedPrecondition("already connected"))
 		}
+		if req.GetConnect() == nil && !c.countSignIn() {
+			return apierror.Response(req.GetId(), apierror.ResourceExhausted("at most %d sign-ins per connection", maxSignIns))
+		}
 	default:
 		if !connected {
 			return apierror.Response(req.GetId(), apierror.Unauthenticated("connect first"))
@@ -376,12 +385,35 @@ func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 			return apierror.Response(req.GetId(), err)
 		}
 	}
-	if req.GetRegister() != nil || req.GetSignIn() != nil {
-		// Hashing the password may have taken a while; Connect gets a fresh deadline.
+	if (req.GetRegister() != nil || req.GetSignIn() != nil) && resp.GetError().GetCode() == pb.ErrorCode_ERROR_CODE_INVALID_ARGUMENT {
+		c.uncountSignIn()
+	}
+	if (req.GetRegister() != nil || req.GetSignIn() != nil) && resp.GetError() == nil {
+		// Hashing the password may have taken a while; Connect gets a fresh
+		// deadline. A failed attempt does not, so it cannot hold the
+		// connection open.
 		c.stopConnectTimer()
 		c.startConnectTimer()
 	}
 	return resp
+}
+
+// countSignIn counts a Register or SignIn and reports whether it is within
+// the connection's limit.
+func (c *conn) countSignIn() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.signIns >= maxSignIns {
+		return false
+	}
+	c.signIns++
+	return true
+}
+
+func (c *conn) uncountSignIn() {
+	c.mu.Lock()
+	c.signIns--
+	c.mu.Unlock()
 }
 
 // identify records the identity Connect established and attaches the

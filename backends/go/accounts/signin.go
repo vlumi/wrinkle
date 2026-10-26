@@ -36,6 +36,12 @@ func (s *Service) Register(ctx context.Context, req *pb.RegisterRequest) (*pb.De
 	if err := checkDeviceName(req.GetDeviceName()); err != nil {
 		return nil, err
 	}
+	// A taken name fails before the hash's cost; the claim below decides.
+	if _, taken, err := s.Resolve(ctx, req.GetName()); err != nil {
+		return nil, err
+	} else if taken {
+		return nil, apierror.AlreadyExists("the name is taken")
+	}
 	hash, err := hashPassword(ctx, req.GetPassword())
 	if err != nil {
 		return nil, err

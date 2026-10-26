@@ -27,9 +27,11 @@
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
 // Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
-// of the connection opening or of the response to its last Register or
-// SignIn; a connection may have 32 requests in flight and send 50 frames a
-// second on average, in bursts of 100. Requests beyond the limits fail with
+// of the connection opening or of the response to its last successful
+// Register or SignIn; a connection may make 5 Register or SignIn requests,
+// not counting those refused with ERROR_CODE_INVALID_ARGUMENT, since each
+// may cost a password hash; it may have 32 requests in flight and send 50
+// frames a second on average, in bursts of 100. Requests beyond the limits fail with
 // ERROR_CODE_RESOURCE_EXHAUSTED; other frames beyond them are dropped. The
 // server sends WebSocket pings every 30 seconds and closes a connection it
 // has received nothing on for 90.

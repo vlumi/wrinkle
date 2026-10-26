@@ -2,6 +2,7 @@ package conformance
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -109,5 +110,34 @@ func TestRequestFlood(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("still limited after the flood: %v", err)
 		}
+	}
+}
+
+func TestSignInsPerConnection(t *testing.T) {
+	c := dial(t)
+	for range 5 {
+		_, err := c.SignIn(ctx(t), fmt.Sprintf("nobody-%x", randomID(t)), "wrong password", "conformance")
+		wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+	}
+	_, err := c.SignIn(ctx(t), fmt.Sprintf("nobody-%x", randomID(t)), "wrong password", "conformance")
+	wantCode(t, err, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED)
+}
+
+func TestFailedSignInsKeepTheDeadline(t *testing.T) {
+	// Parallel: it waits out the deadline.
+	t.Parallel()
+	c := dial(t)
+	start := time.Now()
+	for range 4 {
+		_, err := c.SignIn(ctx(t), fmt.Sprintf("nobody-%x", randomID(t)), "wrong password", "conformance")
+		wantCode(t, err, pb.ErrorCode_ERROR_CODE_UNAUTHENTICATED)
+		time.Sleep(time.Second)
+	}
+	// Five seconds after opening, not after the last attempt, the
+	// connection is closed.
+	time.Sleep(time.Until(start.Add(6 * time.Second)))
+	_, err := c.SignIn(ctx(t), fmt.Sprintf("nobody-%x", randomID(t)), "wrong password", "conformance")
+	if err == nil || wrinkleclient.Code(err) != pb.ErrorCode_ERROR_CODE_UNSPECIFIED {
+		t.Fatalf("a sign-in 6 s after opening: %v, want the connection closed", err)
 	}
 }

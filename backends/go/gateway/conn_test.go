@@ -182,6 +182,8 @@ func request(id uint64, body any) *pb.Frame {
 		req.Body = &pb.Request_Connect{Connect: b}
 	case *pb.SignInRequest:
 		req.Body = &pb.Request_SignIn{SignIn: b}
+	case *pb.RegisterRequest:
+		req.Body = &pb.Request_Register{Register: b}
 	case *pb.ListConversationsRequest:
 		req.Body = &pb.Request_ListConversations{ListConversations: b}
 	}
@@ -232,15 +234,31 @@ func TestConnRefusesRequestsBeforeConnect(t *testing.T) {
 	}
 }
 
+func TestConnLimitsSignIns(t *testing.T) {
+	_, url := newTestServer(t, newFakeBackend())
+	ws := dialTest(t, url)
+	for id := uint64(1); id <= maxSignIns; id++ {
+		writeFrame(t, ws, request(id, &pb.SignInRequest{Name: "n", Password: "p"}))
+		if resp := readFrame(t, ws).GetResponse(); resp.GetError() != nil {
+			t.Fatalf("sign-in %d: %v", id, resp)
+		}
+	}
+	writeFrame(t, ws, request(maxSignIns+1, &pb.RegisterRequest{Name: "n", Password: "p"}))
+	wantError(t, readFrame(t, ws), pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED)
+	// Connect is not one of them.
+	connect(t, ws)
+}
+
 func TestConnLimitsRequestsInFlight(t *testing.T) {
 	backend := newFakeBackend()
 	backend.hold = make(chan struct{})
 	_, url := newTestServer(t, backend)
 	ws := dialTest(t, url)
+	connect(t, ws)
 	// The read loop counts a request before its goroutine starts, so the
 	// one over the limit is refused whatever the scheduling.
 	for id := uint64(1); id <= maxInFlight+1; id++ {
-		writeFrame(t, ws, request(id, &pb.SignInRequest{Name: "n", Password: "p"}))
+		writeFrame(t, ws, request(id, &pb.ListConversationsRequest{}))
 	}
 	refused := readFrame(t, ws)
 	wantError(t, refused, pb.ErrorCode_ERROR_CODE_RESOURCE_EXHAUSTED)
