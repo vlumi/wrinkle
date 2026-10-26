@@ -201,8 +201,11 @@ build-loadgen:  ## Load generator (bin/loadgen)
 
 ##@ Check (make ci runs all of it)
 
-.PHONY: ci lint format test conformance smoke web-test ios-test
+.PHONY: ci ci-images lint format test conformance smoke web-test ios-test
 ci: lint proto-check test build-ios smoke conformance web-test ios-test  ## The local CI: lint, unit tests, builds, conformance, client tests
+
+ci-images:  ## Build every image, the cluster's and the stack's, as before a push that touches a Dockerfile or a backend's build (not in make ci)
+	docker compose -f infra/docker-compose.yml -f infra/cluster.yml --profile vitess --profile mysql build
 
 lint:  proto-lint go-lint java-lint elixir-lint rust-lint ts-lint web-lint ios-lint shell-lint docker-lint infra-lint  ## Formatting checks and linters for everything
 
