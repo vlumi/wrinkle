@@ -15,12 +15,11 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 )
 
-const (
-	// leaseTTL bounds how long a stopped instance keeps its shards; a
-	// round renews its lease at a third of it.
-	leaseTTL     = 30 * time.Second
-	dropDeadline = 5 * time.Second
-)
+const dropDeadline = 5 * time.Second
+
+// leaseTTL bounds how long a stopped instance keeps its shards; a round
+// renews its lease at a third of it. A variable for the tests.
+var leaseTTL = 30 * time.Second
 
 // Leases are held by name, for this instance.
 type Leases interface {
@@ -76,7 +75,8 @@ func (j Job) loop(ctx context.Context, shard vtdb.Shard) {
 }
 
 // leased runs a round under the shard's lease, if this instance gets it.
-// Losing the lease midway stops the round; whoever took it goes on.
+// Losing the lease midway, or failing to renew it for as long as it lasts,
+// stops the round; whoever took it goes on.
 func (j Job) leased(ctx context.Context, shard vtdb.Shard) (int, error) {
 	name := j.Name + ":" + j.Keyspace + "/" + shard.Name
 	ok, err := j.Leases.TakeLease(ctx, name, leaseTTL)
@@ -89,6 +89,7 @@ func (j Job) leased(ctx context.Context, shard vtdb.Shard) (int, error) {
 		return 0, err
 	}
 	start := time.Now()
+	renewedAt := start
 	var lost atomic.Bool
 	roundCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -103,7 +104,12 @@ func (j Job) leased(ctx context.Context, shard vtdb.Shard) (int, error) {
 				return
 			case <-ticker.C:
 			}
-			if held, err := j.Leases.RenewLease(roundCtx, name, leaseTTL); err == nil && !held {
+			held, err := j.Leases.RenewLease(roundCtx, name, leaseTTL)
+			switch {
+			case err == nil && held:
+				renewedAt = time.Now()
+			// Unanswered for as long as the lease lasts, it may be another's.
+			case err == nil, time.Since(renewedAt) >= leaseTTL:
 				lost.Store(true)
 				cancel()
 				return

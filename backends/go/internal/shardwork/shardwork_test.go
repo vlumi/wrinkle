@@ -2,6 +2,7 @@ package shardwork
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"testing"
@@ -20,6 +21,8 @@ type fakeLeases struct {
 	held    map[string]string
 	me      string
 	renewed int
+	// failing makes renewals fail, as with Valkey unreachable.
+	failing bool
 }
 
 func (f *fakeLeases) TakeLease(_ context.Context, name string, _ time.Duration) (bool, error) {
@@ -36,6 +39,9 @@ func (f *fakeLeases) RenewLease(_ context.Context, name string, _ time.Duration)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.renewed++
+	if f.failing {
+		return false, errors.New("unreachable")
+	}
 	return f.held[name] == f.me, nil
 }
 
@@ -94,10 +100,15 @@ func TestShardLeasedElsewhereIsSkipped(t *testing.T) {
 	}
 }
 
+// shortLeases makes leases last a moment for the test.
+func shortLeases(t *testing.T) {
+	ttl := leaseTTL
+	leaseTTL = 300 * time.Millisecond
+	t.Cleanup(func() { leaseTTL = ttl })
+}
+
 func TestLosingTheLeaseStopsTheRound(t *testing.T) {
-	if testing.Short() {
-		t.Skip("waits for a renewal")
-	}
+	shortLeases(t)
 	lost := counted("-", "lost")
 	leases := &fakeLeases{held: map[string]string{}, me: "a"}
 	j := job(leases, func(ctx context.Context, shard vtdb.Shard) (int, error) {
@@ -119,6 +130,30 @@ func TestLosingTheLeaseStopsTheRound(t *testing.T) {
 		t.Fatalf("dropped another instance's lease: %v", leases.held)
 	}
 	if counted("-", "lost") != lost+1 {
+		t.Fatal("lost round not counted")
+	}
+}
+
+func TestUnrenewableLeaseStopsTheRound(t *testing.T) {
+	shortLeases(t)
+	leases := &fakeLeases{held: map[string]string{}, me: "a"}
+	j := job(leases, func(ctx context.Context, shard vtdb.Shard) (int, error) {
+		leases.mu.Lock()
+		leases.failing = true
+		leases.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return 1, nil
+		case <-time.After(10 * leaseTTL):
+			t.Error("round went on with its lease unrenewed past its life")
+			return 0, nil
+		}
+	})
+	before := counted("-40", "lost")
+	if n, err := j.leased(t.Context(), vtdb.Shard{Name: "-40"}); n != 1 || err != nil {
+		t.Fatalf("round: %d %v", n, err)
+	}
+	if counted("-40", "lost") != before+1 {
 		t.Fatal("lost round not counted")
 	}
 }
