@@ -1,6 +1,7 @@
 package conversation
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -38,6 +39,12 @@ type coldMessage struct {
 	// A serialized Message with only its reactions, oldest first; empty
 	// for none.
 	reactions []byte
+}
+
+func (m coldMessage) equal(o coldMessage) bool {
+	return m.seq == o.seq && m.sender == o.sender && m.clientID == o.clientID && bytes.Equal(m.body, o.body) &&
+		m.sentAt.Equal(o.sentAt) && m.outboxID == o.outboxID && bytes.Equal(m.blobIDs, o.blobIDs) &&
+		bytes.Equal(m.reactions, o.reactions)
 }
 
 // coldKey is the row key: the conversation id, then the seq big-endian, so

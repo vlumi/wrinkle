@@ -111,50 +111,61 @@ func (m *Mover) moveConversation(ctx context.Context, conversationID ids.UUID, c
 	}
 }
 
-// moveBatch writes the next batch to the cold tier with the conversation's
-// row locked, then raises the watermark over it and deletes it from MySQL
-// in the same transaction. A failure after the puts leaves copies of rows
-// still in MySQL, which the next move puts again.
+// moveBatch writes the next batch to the cold tier, then, with the
+// conversation's row locked, raises the watermark over it and deletes it
+// from MySQL in one transaction. The puts come before the lock, so sends
+// to the conversation never wait on the cold tier; under the lock the
+// batch is read again, and a message deleted or reacted to meanwhile is put
+// again. A failure after the puts leaves copies of rows still in MySQL,
+// which the next move puts again.
 func (m *Mover) moveBatch(ctx context.Context, conversationID ids.UUID, cutoff time.Time) (int, bool, error) {
+	var coldSeq uint64
+	if err := m.db.QueryRowContext(ctx, `
+		SELECT cold_seq FROM conversation WHERE conversation_id = ?`, conversationID).Scan(&coldSeq); err != nil {
+		return 0, false, err
+	}
+	staged, err := readBatch(ctx, m.db, conversationID, coldSeq, cutoff, moveBatch)
+	if err != nil || len(staged) == 0 {
+		return 0, false, err
+	}
+	if err := m.cold.Put(ctx, conversationID, staged); err != nil {
+		return 0, false, err
+	}
+
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, false, err
 	}
 	defer tx.Rollback()
-
-	var coldSeq uint64
+	var locked uint64
 	if err := tx.QueryRowContext(ctx, `
 		SELECT cold_seq FROM conversation WHERE conversation_id = ? FOR UPDATE`,
-		conversationID).Scan(&coldSeq); err != nil {
+		conversationID).Scan(&locked); err != nil {
 		return 0, false, err
 	}
-	rows, err := tx.QueryContext(ctx, `
-		SELECT seq, sender_user_id, client_message_id, body, sent_at, outbox_id, blob_ids FROM message
-		WHERE conversation_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
-		conversationID, coldSeq, moveBatch)
+	if locked != coldSeq {
+		// Another mover went first; read from its watermark.
+		return 0, true, nil
+	}
+	n := len(staged)
+	upTo := staged[n-1].seq
+	current, err := readBatch(ctx, tx, conversationID, coldSeq, time.Time{}, n)
 	if err != nil {
 		return 0, false, err
 	}
-	batch, err := vtdb.Collect(rows, func(rows *sql.Rows) (c coldMessage, err error) {
-		return c, rows.Scan(&c.seq, &c.sender, &c.clientID, &c.body, &c.sentAt, &c.outboxID, &c.blobIDs)
-	})
-	if err != nil {
-		return 0, false, err
+	if len(current) != n || current[n-1].seq != upTo {
+		return 0, false, fmt.Errorf("batch of conversation %s changed from %d to %d messages", conversationID, n, len(current))
 	}
-	n := 0
-	for n < len(batch) && batch[n].sentAt.Before(cutoff) {
-		n++
+	var changed []coldMessage
+	for i := range current {
+		if !current[i].equal(staged[i]) {
+			changed = append(changed, current[i])
+		}
 	}
-	if n == 0 {
-		return 0, false, nil
-	}
-	moved := batch[:n]
-	upTo := moved[n-1].seq
-	if err := addColdReactions(ctx, tx, conversationID, coldSeq, upTo, moved); err != nil {
-		return 0, false, err
-	}
-	if err := m.cold.Put(ctx, conversationID, moved); err != nil {
-		return 0, false, err
+	if len(changed) > 0 {
+		if err := m.cold.Put(ctx, conversationID, changed); err != nil {
+			return 0, false, err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE conversation SET cold_seq = ? WHERE conversation_id = ?`, upTo, conversationID); err != nil {
@@ -174,10 +185,41 @@ func (m *Mover) moveBatch(ctx context.Context, conversationID ids.UUID, cutoff t
 	return n, n == moveBatch, nil
 }
 
+// readBatch reads up to limit messages after the watermark, in seq order,
+// with their reactions, stopping at the first sent at or after the cutoff;
+// a zero cutoff reads them all.
+func readBatch(ctx context.Context, q vtdb.Querier, conversationID ids.UUID, coldSeq uint64, cutoff time.Time, limit int) ([]coldMessage, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT seq, sender_user_id, client_message_id, body, sent_at, outbox_id, blob_ids FROM message
+		WHERE conversation_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
+		conversationID, coldSeq, limit)
+	if err != nil {
+		return nil, err
+	}
+	batch, err := vtdb.Collect(rows, func(rows *sql.Rows) (c coldMessage, err error) {
+		return c, rows.Scan(&c.seq, &c.sender, &c.clientID, &c.body, &c.sentAt, &c.outboxID, &c.blobIDs)
+	})
+	if err != nil {
+		return nil, err
+	}
+	n := 0
+	for n < len(batch) && (cutoff.IsZero() || batch[n].sentAt.Before(cutoff)) {
+		n++
+	}
+	if n == 0 {
+		return nil, nil
+	}
+	batch = batch[:n]
+	if err := addColdReactions(ctx, q, conversationID, coldSeq, batch[n-1].seq, batch); err != nil {
+		return nil, err
+	}
+	return batch, nil
+}
+
 // addColdReactions reads the reactions to the messages, which are sorted by
 // seq and span (from, to], into their cold rows.
-func addColdReactions(ctx context.Context, tx *sql.Tx, conversationID ids.UUID, from, to uint64, messages []coldMessage) error {
-	rows, err := tx.QueryContext(ctx, `
+func addColdReactions(ctx context.Context, q vtdb.Querier, conversationID ids.UUID, from, to uint64, messages []coldMessage) error {
+	rows, err := q.QueryContext(ctx, `
 		SELECT seq, user_id, body, updated_at FROM reaction
 		WHERE conversation_id = ? AND seq > ? AND seq <= ? ORDER BY seq, updated_at, user_id`,
 		conversationID, from, to)
