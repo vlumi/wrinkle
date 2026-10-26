@@ -201,7 +201,7 @@ build-loadgen:  ## Load generator (bin/loadgen)
 
 ##@ Check (make ci runs all of it)
 
-.PHONY: ci ci-images lint format test conformance smoke web-test ios-test
+.PHONY: ci ci-images lint format test conformance smoke check-invariants web-test ios-test
 ci: lint proto-check test build-ios smoke conformance web-test ios-test  ## The local CI: lint, unit tests, builds, conformance, client tests
 
 ci-images:  ## Build every image, the cluster's and the stack's, as before a push that touches a Dockerfile or a backend's build (not in make ci)
@@ -225,6 +225,9 @@ conformance: $(SHAPES:%=conformance-%)  ## The conformance tests against every b
 
 smoke: infra-up  ## The change-data path: an outbox insert reaches Kafka; a row round-trips through HBase
 	infra/smoke-test.sh
+
+check-invariants:  ## What must hold of the stored data once the fan-out has caught up, as after a load or conformance run
+	infra/check-invariants.sh
 
 web-test: infra-up web-deps build-go  ## The web client in headless Chrome against the Go backend
 	clients/web/test/run.sh $(GO_BACKEND)

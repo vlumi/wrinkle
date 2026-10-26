@@ -53,3 +53,9 @@ if ! go test -count=1 ${CONFORMANCE_RUN:+-run "$CONFORMANCE_RUN"} ./...; then
   tail -50 "$log" >&2
   exit 1
 fi
+
+# After the whole suite, with the backend still up for the fan-out to
+# catch up: the data it left must hold together.
+if [ -z "${CONFORMANCE_RUN:-}" ]; then
+  ../infra/check-invariants.sh
+fi
