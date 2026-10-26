@@ -330,12 +330,12 @@ Each gateway keeps one HTTP/2 connection to the services balancer, which spreads
 | A gateway | its devices disconnect | they reconnect through the balancer to another gateway and sync; presence entries expire within 90 s |
 | A services instance | requests in flight on it fail with `UNAVAILABLE` | the balancer drops it within 2 s; Kafka moves its fan-out partitions to the other instances, and its shard leases expire within 30 s for others to take |
 | Kafka or Debezium | sends still succeed; nothing is fanned out | the stream resumes from where it was; the logs catch up and devices get the events then |
-| Valkey | no pushes; presence unknown; log trimming and history moves pause | devices still sync; when it is back, gateways resubscribe and announce themselves again, but devices that stayed connected have no presence entry until they reconnect, so they may get notifications meanwhile |
+| Valkey | no pushes; presence unknown; log trimming and history moves pause; Connect fails with `UNAVAILABLE`, since a device's push channel cannot be set up | connected devices still sync, and connecting ones retry; when it is back, gateways resubscribe and announce themselves again, but devices that stayed connected have no presence entry until they reconnect, so they may get notifications meanwhile |
 | APNs | no notifications | none needed; devices sync when opened |
 | Object storage | uploads and downloads fail; sends with attachments fail | messages without attachments are unaffected; clients retry |
-| HBase | history older than the hot window cannot be read or changed; the mover stops | recent history and sends are unaffected; the mover catches up |
+| HBase | a page of history reaching below the watermark, or a change to a cold message, fails with `UNAVAILABLE`; the mover stops | sends and the conversation lists are unaffected; devices retry; the mover catches up |
 | A conversation shard | sends and reads in its conversations fail | the shard's replica takes over (a real Vitess topology; the prototype runs one process) |
-| A user shard | Connect, Sync and fan-out to its users fail | fan-out retries the batch until the shard is back |
+| A user shard | Connect, Sync and fan-out to its users fail; and, since a fan-out worker retries a whole fetch, it delivers to no one while its fetches hold records for that shard, which with many shards is almost every fetch | the worker retries until the shard is back; isolating a shard is open ([ROADMAP.md](../ROADMAP.md), "The fan-out's blast radius") |
 
 The prototype's single Vitess process has one known weakness: it starts empty when its container restarts, losing the data; `make infra-up` then resets the connectors' positions so the change stream resumes on the new database ([local-network.md](local-network.md#troubleshooting)).
 

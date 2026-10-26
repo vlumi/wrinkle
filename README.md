@@ -18,7 +18,8 @@ Prototype:
 - one Vitess process rather than a topology, which starts empty when its container restarts;
 - no limits per user or per address, and no password recovery;
 - no reporting or moderation;
-- no forward secrecy between key rotations;
+- no forward secrecy between key rotations, and the servers are the key directory: a compromised server could add a device to an account, which only a verified safety number would show;
+- the web client is as trustworthy as whoever serves its code;
 - no alerting on the metrics.
 
 [docs/production.md](docs/production.md) lists what a public deployment would take, with deployment options and their costs.

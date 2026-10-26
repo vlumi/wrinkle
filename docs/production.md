@@ -52,7 +52,7 @@ The services already refuse requests about conversations the user is not in. Mis
 
 ### 7. Clients
 
-- The web client served as static files from a CDN or object storage, or from the edge host.
+- The web client served as static files from a CDN or object storage, or from the edge host, with a strict Content-Security-Policy and Subresource Integrity: its end-to-end encryption is only as strong as whoever serves its code, which signed, reproducible builds would let users check.
 - The iOS app on TestFlight, then the App Store, using APNs's production environment, with privacy labels and the account deletion above.
 
 ## Simplifying the infrastructure
