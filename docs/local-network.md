@@ -104,7 +104,7 @@ make tls-up
 
 ## Backends
 
-Three ways to run them, all against the same database, so users and conversations carry over between them: the cluster, a monolith, or the side-by-side setup. Each holds port 8080, so one of them at a time. `make` lists every target.
+Four ways to run them, all against the same database, so users and conversations carry over between them: the cluster, the same on Kubernetes, a monolith, or the side-by-side setup. Each holds port 8080, so one of them at a time. `make` lists every target.
 
 ### Cluster
 
@@ -121,6 +121,22 @@ make cluster-down                                # remove the cluster; the infra
 The counts are `GO_SERVICES`, `JAVA_SERVICES`, `TS_SERVICES`, `GO_GW`, `ELIXIR_GW`, `RUST_GW`, `JAVA_GW` and `TS_GW`, 0 to 8 each. A count not given keeps what is running, so after a code change a plain `make cluster-up` rebuilds the images and replaces the containers whose image changed, at the same counts. The defaults apply on a fresh start, after `cluster-down`. Devices connect through the TLS edge as before, and `http://localhost:8404/` shows every replica the balancer has found. The balancer finds them by name through Docker's DNS: a kind scaled up joins within a few seconds, one scaled down drops out. Push settings come from `.env` as for the other targets.
 
 The cluster is for trying the scaled shape, not for measuring: the containers run in Docker Desktop's virtual machine, behind its networking, so their numbers are not comparable with the native processes the measurements use. Prometheus finds its replicas by name, so they show in Grafana, each by process.
+
+### Kubernetes
+
+The cluster's backends on Docker Desktop's Kubernetes instead of Compose, for trying them the way they would be deployed; the infrastructure stays in Compose either way. Enable it once in Docker Desktop, Settings, Kubernetes (the kubeadm cluster, whose pods use the images Docker builds), and give Docker Desktop 14 GB or more. The targets and counts are the cluster's:
+
+```sh
+make k8s-up                                  # the same defaults as cluster-up
+make k8s-up GO_GW=3 RUST_GW=0                # rescales; counts not given stay as they are
+make k8s-status                              # every Deployment and pod
+make k8s-logs SERVICE=go-gw                  # follow one kind, or all without SERVICE
+make k8s-down                                # remove it all; the infrastructure keeps running
+```
+
+Everything is in the `wrinkle` namespace, from [`infra/k8s`](../infra/k8s): a Deployment and a headless Service per kind, an HAProxy balancer doing the Compose cluster's two jobs, and a Prometheus agent sending the pods' metrics to the stack's Prometheus, where Grafana shows them by process. The services' settings from `.env` become Secrets. Pods reach the infrastructure through `host.docker.internal`. A plain `make k8s-up` after a code change rebuilds the images and rolls only the pods whose image or settings changed. `kubectl` always uses the `docker-desktop` context, whatever the current one is.
+
+Devices reach the balancer through a Compose container, `k8s-entry`, on loopback 8080 and 8404 like the cluster's balancer: Docker Desktop would publish a Kubernetes Service on every interface of the Mac, unencrypted. The Compose cluster and Kubernetes can both be up only if one of them holds no port, so `make k8s-up` refuses while anything holds 8080, and `make cluster-up` while `k8s-entry` does.
 
 ### Monoliths
 
@@ -170,7 +186,7 @@ make lb-down                       # when done
 
 ## What faces the network
 
-- Only the TLS edge (8443) and the web client's server (8081) face the network. The backends, the balancer and the cluster serve devices on loopback port 8080, and side-by-side gateways on loopback 8180 to 8184. The infrastructure's ports (MySQL through vtgate without a password, or on the mysql profile MySQL itself as `root` without one; Kafka, Kafka Connect, Valkey, the blob proxy, HBase's ZooKeeper 2181, master 16000, master UI 16010 and region server 16020, HBase's REST server 8086, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too. Through the edge, `/blobs/` takes only what devices do: unsigned reads of one blob, and the uploads a backend presigned; the storage key is made per machine by `make infra-up`, kept in `.env`, and never leaves it.
+- Only the TLS edge (8443) and the web client's server (8081) face the network. The backends, the balancer, the cluster and Kubernetes (through `k8s-entry`) serve devices on loopback port 8080, and side-by-side gateways on loopback 8180 to 8184. The infrastructure's ports (MySQL through vtgate without a password, or on the mysql profile MySQL itself as `root` without one; Kafka, Kafka Connect, Valkey, the blob proxy, HBase's ZooKeeper 2181, master 16000, master UI 16010 and region server 16020, HBase's REST server 8086, Prometheus, Grafana) are published on loopback, and the internal RPC between gateway and services listens on loopback too. Through the edge, `/blobs/` takes only what devices do: unsigned reads of one blob, and the uploads a backend presigned; the storage key is made per machine by `make infra-up`, kept in `.env`, and never leaves it.
 - Accounts have passwords, stored as argon2id hashes, and sign-in gives each device a token. There is no password recovery: a forgotten password means a new account, or `make infra-reset` for everyone.
 - `make monitor`, or `https://localhost:8081/monitor` on the host (`http://` before `make certs`), with `make web` running, links to every monitoring page (Grafana, Prometheus, the balancers' statistics, Kafka Connect, Vitess, each native backend's metrics and profiles) and shows which answer. It is served only to the host itself, since those pages listen on loopback; from another device it is a 404.
 - Grafana shows the backend's connections, requests and fan-out while you test. To open it from another device, start the stack with `GRAFANA_BIND=0.0.0.0 make infra-up` and browse to `http://<address>:3000`; it has no login.

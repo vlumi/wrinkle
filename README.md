@@ -24,7 +24,7 @@ Prototype:
 
 [docs/production.md](docs/production.md) lists what a public deployment would take, with deployment options and their costs.
 
-**Status:** Go, Java and TypeScript backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements comparing the shapes are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
+**Status:** Go, Java and TypeScript backends, each as one process or split into gateways and services, and Elixir and Rust gateways pass the same conformance tests. Split, they run side by side in any number and language behind load balancers, natively or as a cluster of containers, in Compose or on Kubernetes. The web and iOS clients work against any of them, with APNs push to iOS devices that are not connected. Measurements comparing the shapes are in [docs/results/](docs/results/). See [ROADMAP.md](ROADMAP.md) for what is done and what is open.
 
 Users register with a name and a password, sign in on any number of devices, each with its own token, and manage their profile (name, icon, picture), their devices and their account, which they can delete. Users become contacts by asking and accepting, and can block anyone. Conversations are direct, between any two users, or groups of up to 256 of the creator's and members' contacts, with a topic and admins. Messages carry text, a sticker or attachments (images and files, with thumbnails); their sender can delete them for everyone, anyone can react to them with up to three emoji, and every participant's read position is shared. Content is encrypted end to end: the servers see who talks to whom and when, group topics and membership, profiles and avatars, and sizes, but no text, sticker, attachment or reaction.
 
@@ -113,7 +113,7 @@ Absolute numbers depend on the machine and say little about production. Comparis
 
 ## Running
 
-Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client (26 or later for the TypeScript backend), and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
+Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster, 14 GB with Kubernetes), mkcert for TLS (`brew install mkcert && mkcert -install`, once), Node 22 or later for the web client (26 or later for the TypeScript backend), and, only for the native backends and clients, Go, JDK 25 (found through `java_home`), Elixir, Rust and Xcode 26, with `make tools` once for the code generators and linters. The main path, on one Mac:
 
 1. `make infra-up`: the shared stack in Docker (Vitess, Kafka, Debezium, Valkey, Garage, HBase and its REST server, Prometheus, Grafana). `make infra-up PROFILE=mysql` runs plain MySQL in place of Vitess, the same schema unsharded.
 2. `make cluster-up`: the whole backend in containers, two Go, one Java and one TypeScript services instances and a gateway in each language behind balancers, serving devices on `ws://localhost:8080/v1/ws`. The same from one native process is `make run-go-mono`, `make run-java-mono` or `make run-ts-mono`; `mono` in a target name is the monolith, `gw` a gateway.
@@ -127,7 +127,7 @@ Grafana is at http://localhost:3000 with a dashboard over the backend's metrics,
 ```text
 proto/        the contract: wrinkle/v1 for devices, wrinkle/backend/v1 between gateway and services
 schema/       SQL schemas, Vitess keyspace definitions and the HBase table
-infra/        Docker Compose for Vitess or MySQL, Kafka, Debezium, Valkey, Garage, HBase, Prometheus and Grafana, HAProxy for the TLS edge and the side-by-side setup, and the cluster; the arm64 Vitess image and the HBase image
+infra/        Docker Compose for Vitess or MySQL, Kafka, Debezium, Valkey, Garage, HBase, Prometheus and Grafana, HAProxy for the TLS edge and the side-by-side setup, and the cluster, whose backends also run on Kubernetes (k8s/); the arm64 Vitess image and the HBase image
 backends/     go/, java/, ts/, elixir/ and rust/ (gateways), each with its architecture in a README and a Dockerfile for the cluster
 clients/      web/ (React), ios/ (SwiftUI), go/ (the library the tests and load generator use)
 loadgen/      load generator and the measurement protocol script (Go)
