@@ -1,0 +1,37 @@
+# The stateless tier on Docker Desktop's Kubernetes (make k8s-up): services
+# instances and gateways in any number and language, the same images as the
+# Compose cluster. The infrastructure stays in Compose; pods reach it through
+# host.docker.internal on its loopback ports. infra/k8s.sh builds the images,
+# creates the secrets from .env, applies this and sets the counts.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: wrinkle
+resources:
+  - namespace.yaml
+  - services.yaml
+  - gateways.yaml
+  - balancer.yaml
+  - metrics.yaml
+configMapGenerator:
+  # A change here gets a new name, so the pods using it roll.
+  - name: infra
+    literals:
+      - WRINKLE_MYSQL=host.docker.internal:15003
+      - WRINKLE_KAFKA=host.docker.internal:29092
+      - WRINKLE_VALKEY=host.docker.internal:6379
+      # HBase's ZooKeeper hands out hbase.localhost for the master and the
+      # region server; the services pods map it to the host.
+      - WRINKLE_HBASE=hbase.localhost:2181
+      - WRINKLE_HBASE_REST=http://host.docker.internal:8086
+      - WRINKLE_BLOB_URL=http://host.docker.internal:9200
+  - name: gateway
+    literals:
+      - WRINKLE_SERVICES=balancer:9100
+      - WRINKLE_VALKEY=host.docker.internal:6379
+      - WRINKLE_LISTEN=:8080
+  - name: balancer
+    files:
+      - haproxy.cfg
+  - name: metrics
+    files:
+      - prometheus.yml

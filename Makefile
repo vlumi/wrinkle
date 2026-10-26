@@ -151,6 +151,22 @@ cluster-status:  ## Every container of the cluster
 cluster-logs:  ## Follow the cluster's logs (SERVICE=go-gw for one kind)
 	infra/cluster.sh logs $(SERVICE)
 
+##@ Kubernetes (the cluster's backends on Docker Desktop's Kubernetes, the infrastructure still in Compose)
+##~ The same counts as the cluster; one of the two at a time. Devices on :8080; statistics on localhost:8404.
+
+.PHONY: k8s-up k8s-down k8s-status k8s-logs
+k8s-up: infra-up  ## Rebuild the images and deploy, update or rescale the backends on Kubernetes
+	GO_SERVICES=$(GO_SERVICES) JAVA_SERVICES=$(JAVA_SERVICES) TS_SERVICES=$(TS_SERVICES) GO_GW=$(GO_GW) ELIXIR_GW=$(ELIXIR_GW) RUST_GW=$(RUST_GW) JAVA_GW=$(JAVA_GW) TS_GW=$(TS_GW) infra/k8s.sh up
+
+k8s-down:  ## Remove the backends from Kubernetes, leaving the infrastructure running
+	infra/k8s.sh down
+
+k8s-status:  ## Every Deployment and pod
+	infra/k8s.sh status
+
+k8s-logs:  ## Follow the pods' logs (SERVICE=go-gw for one kind)
+	infra/k8s.sh logs $(SERVICE)
+
 ##@ Clients
 
 .PHONY: web web-dev monitor ios-sim ios-device ios-project
@@ -392,4 +408,6 @@ docker-lint:
 infra-lint:
 	$(COMPOSE) config --quiet
 	$(COMPOSE) -f infra/cluster.yml config --quiet
+	$(COMPOSE) -f infra/k8s/entry.yml config --quiet
+	kubectl kustomize infra/k8s >/dev/null
 	infra/haproxy-check.sh

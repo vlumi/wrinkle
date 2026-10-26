@@ -8,7 +8,7 @@ docker run --rm -v "$PWD:/cfg:ro" --tmpfs /usr/local/etc/haproxy/certs haproxy:3
   cd /usr/local/etc/haproxy/certs
   openssl req -x509 -newkey rsa:2048 -nodes -days 1 -subj /CN=localhost -keyout key.pem -out cert.pem 2>/dev/null
   cat cert.pem key.pem >haproxy.pem
-  for cfg in haproxy/haproxy.cfg haproxy/cluster.cfg edge/haproxy.cfg blobs/haproxy.cfg; do
+  for cfg in haproxy/haproxy.cfg haproxy/cluster.cfg edge/haproxy.cfg blobs/haproxy.cfg k8s/haproxy.cfg k8s/entry.cfg; do
     echo "== $cfg"
     haproxy -q -c -dr -f "/cfg/$cfg"
   done'

@@ -10,6 +10,6 @@ for port in "$@"; do
   fi
 done
 if [ "$busy" = 1 ]; then
-  echo "Run one backend at a time: stop the other one (Ctrl-C) first." >&2
+  echo "Run one backend at a time: stop the other one first (Ctrl-C, make cluster-down or make k8s-down)." >&2
   exit 1
 fi

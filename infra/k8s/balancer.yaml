@@ -1,0 +1,44 @@
+# One HAProxy for devices and for the gateways' RPC (haproxy.cfg). Devices
+# reach it through host ports on the Kubernetes node, which Docker Desktop
+# does not publish on the Mac; the k8s-entry container in Compose
+# (entry.yml) forwards loopback 8080 and 8404 to them, so nothing faces the
+# network but the TLS edge, as with the other shapes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: balancer
+spec:
+  replicas: 1
+  # The host ports allow one pod on the node: the old one goes first.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {app: balancer}
+  template:
+    metadata:
+      labels: {app: balancer}
+    spec:
+      containers:
+        - name: haproxy
+          image: haproxy:3.4.6
+          ports:
+            - {name: devices, containerPort: 8080, hostPort: 31080}
+            - {name: rpc, containerPort: 9100}
+            - {name: stats, containerPort: 8404, hostPort: 31404}
+          readinessProbe:
+            tcpSocket: {port: devices}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: config, mountPath: /usr/local/etc/haproxy, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: balancer}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: balancer
+spec:
+  selector: {app: balancer}
+  ports:
+    - {name: rpc, port: 9100}

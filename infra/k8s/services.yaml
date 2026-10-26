@@ -1,0 +1,139 @@
+# The services instances, one Deployment per language, all in one pool:
+# the balancer spreads the gateways' requests over them, and they share the
+# fan-out's consumer group. Each also has a headless Service, so the
+# balancer finds its pods by name, as in the Compose cluster. Replicas are
+# set by infra/k8s.sh, not here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-services
+spec:
+  selector:
+    matchLabels: {app: go-services}
+  template:
+    metadata:
+      labels: {app: go-services, tier: services}
+    spec:
+      hostAliases:
+        # Docker Desktop's address for the host, where HBase's ports are.
+        - ip: 192.168.65.254
+          hostnames: [hbase.localhost]
+      containers:
+        - name: go
+          image: wrinkle/go:dev
+          imagePullPolicy: Never
+          args: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
+          envFrom:
+            - configMapRef: {name: infra}
+            - secretRef: {name: wrinkle-env}
+          ports:
+            - {name: http, containerPort: 8090}
+            - {name: rpc, containerPort: 9000}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: apns, mountPath: /run/apns, readOnly: true}
+      volumes:
+        - name: apns
+          secret: {secretName: wrinkle-apns, optional: true}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-services
+spec:
+  clusterIP: None
+  selector: {app: go-services}
+  ports:
+    - {name: rpc, port: 9000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-services
+spec:
+  selector:
+    matchLabels: {app: java-services}
+  template:
+    metadata:
+      labels: {app: java-services, tier: services}
+    spec:
+      hostAliases:
+        # Docker Desktop's address for the host, where HBase's ports are.
+        - ip: 192.168.65.254
+          hostnames: [hbase.localhost]
+      containers:
+        - name: java
+          image: wrinkle/java:dev
+          imagePullPolicy: Never
+          args: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
+          envFrom:
+            - configMapRef: {name: infra}
+            - secretRef: {name: wrinkle-env}
+          ports:
+            - {name: http, containerPort: 8090}
+            - {name: rpc, containerPort: 9000}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: apns, mountPath: /run/apns, readOnly: true}
+      volumes:
+        - name: apns
+          secret: {secretName: wrinkle-apns, optional: true}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-services
+spec:
+  clusterIP: None
+  selector: {app: java-services}
+  ports:
+    - {name: rpc, port: 9000}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ts-services
+spec:
+  selector:
+    matchLabels: {app: ts-services}
+  template:
+    metadata:
+      labels: {app: ts-services, tier: services}
+    spec:
+      hostAliases:
+        # Docker Desktop's address for the host, where HBase's ports are.
+        - ip: 192.168.65.254
+          hostnames: [hbase.localhost]
+      containers:
+        - name: ts
+          image: wrinkle/ts:dev
+          imagePullPolicy: Never
+          args: [--roles, "services,fanout", --listen, ":8090", --services-listen, ":9000"]
+          envFrom:
+            - configMapRef: {name: infra}
+            - secretRef: {name: wrinkle-env}
+          ports:
+            - {name: http, containerPort: 8090}
+            - {name: rpc, containerPort: 9000}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+          volumeMounts:
+            - {name: apns, mountPath: /run/apns, readOnly: true}
+      volumes:
+        - name: apns
+          secret: {secretName: wrinkle-apns, optional: true}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ts-services
+spec:
+  clusterIP: None
+  selector: {app: ts-services}
+  ports:
+    - {name: rpc, port: 9000}

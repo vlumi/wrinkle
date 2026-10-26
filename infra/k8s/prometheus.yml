@@ -1,0 +1,21 @@
+# The agent scrapes every services and gateway pod and sends the samples to
+# the Compose stack's Prometheus, which cannot reach pods itself. Each series
+# is labeled with its process, kind@address, as in the Compose cluster.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: kubernetes
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces: {own_namespace: true}
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_container_port_name]
+        regex: http
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_label_app, __meta_kubernetes_pod_ip]
+        separator: "@"
+        target_label: process
+
+remote_write:
+  - url: http://host.docker.internal:9090/api/v1/write

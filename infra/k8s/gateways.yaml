@@ -1,0 +1,170 @@
+# The gateways, one Deployment per language, each with a headless Service
+# the balancer finds its pods by. Elixir and Rust are gateways only and need
+# no role. Replicas are set by infra/k8s.sh, not here.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: go-gw
+spec:
+  selector:
+    matchLabels: {app: go-gw}
+  template:
+    metadata:
+      labels: {app: go-gw, tier: gateway}
+    spec:
+      containers:
+        - name: go
+          image: wrinkle/go:dev
+          imagePullPolicy: Never
+          args: [--roles, gateway]
+          envFrom:
+            - configMapRef: {name: gateway}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: go-gw
+spec:
+  clusterIP: None
+  selector: {app: go-gw}
+  ports:
+    - {name: http, port: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elixir-gw
+spec:
+  selector:
+    matchLabels: {app: elixir-gw}
+  template:
+    metadata:
+      labels: {app: elixir-gw, tier: gateway}
+    spec:
+      containers:
+        - name: elixir
+          image: wrinkle/elixir:dev
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef: {name: gateway}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: elixir-gw
+spec:
+  clusterIP: None
+  selector: {app: elixir-gw}
+  ports:
+    - {name: http, port: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rust-gw
+spec:
+  selector:
+    matchLabels: {app: rust-gw}
+  template:
+    metadata:
+      labels: {app: rust-gw, tier: gateway}
+    spec:
+      containers:
+        - name: rust
+          image: wrinkle/rust:dev
+          imagePullPolicy: Never
+          envFrom:
+            - configMapRef: {name: gateway}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rust-gw
+spec:
+  clusterIP: None
+  selector: {app: rust-gw}
+  ports:
+    - {name: http, port: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: java-gw
+spec:
+  selector:
+    matchLabels: {app: java-gw}
+  template:
+    metadata:
+      labels: {app: java-gw, tier: gateway}
+    spec:
+      containers:
+        - name: java
+          image: wrinkle/java:dev
+          imagePullPolicy: Never
+          args: [--roles, gateway]
+          envFrom:
+            - configMapRef: {name: gateway}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: java-gw
+spec:
+  clusterIP: None
+  selector: {app: java-gw}
+  ports:
+    - {name: http, port: 8080}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ts-gw
+spec:
+  selector:
+    matchLabels: {app: ts-gw}
+  template:
+    metadata:
+      labels: {app: ts-gw, tier: gateway}
+    spec:
+      containers:
+        - name: ts
+          image: wrinkle/ts:dev
+          imagePullPolicy: Never
+          args: [--roles, gateway]
+          envFrom:
+            - configMapRef: {name: gateway}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ts-gw
+spec:
+  clusterIP: None
+  selector: {app: ts-gw}
+  ports:
+    - {name: http, port: 8080}

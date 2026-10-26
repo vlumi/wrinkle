@@ -1,0 +1,22 @@
+# Devices' way into the Kubernetes tier (make k8s-up): loopback 8080 and
+# 8404 forwarded to the balancer's host ports on the Kubernetes node, which
+# containers reach and the network does not. Used together with
+# docker-compose.yml; infra/k8s.sh sets K8S_NODE.
+
+services:
+  k8s-entry:
+    image: haproxy:3.4.6
+    volumes:
+      - ./k8s/entry.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    environment:
+      K8S_NODE: ${K8S_NODE:-}
+    ports:
+      # On loopback: devices on the network come through the TLS edge.
+      - "${LB_BIND:-127.0.0.1}:8080:8080"
+      - "127.0.0.1:8404:8404" # the balancer's statistics
+    healthcheck:
+      test: ["CMD", "socat", "-u", "/dev/null", "TCP:127.0.0.1:8080"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    restart: unless-stopped
