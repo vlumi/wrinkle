@@ -32,8 +32,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "wrinkle_connections",
-          "legendFormat": "__auto"
+          "expr": "sum by (process) (wrinkle_connections)",
+          "legendFormat": "{{process}}"
         }
       ]
     },
@@ -144,17 +144,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "rate(wrinkle_fanout_records_total[30s])",
+          "expr": "sum(rate(wrinkle_fanout_records_total[30s]))",
           "legendFormat": "records"
         },
         {
           "refId": "B",
-          "expr": "rate(wrinkle_fanout_deliveries_total[30s])",
+          "expr": "sum(rate(wrinkle_fanout_deliveries_total[30s]))",
           "legendFormat": "deliveries"
         },
         {
           "refId": "C",
-          "expr": "rate(wrinkle_events_pushed_total[30s])",
+          "expr": "sum(rate(wrinkle_events_pushed_total[30s]))",
           "legendFormat": "pushed"
         }
       ]
@@ -216,7 +216,7 @@
         {
           "refId": "A",
           "expr": "process_resident_memory_bytes",
-          "legendFormat": "__auto"
+          "legendFormat": "{{process}}"
         }
       ]
     },
@@ -244,7 +244,73 @@
         {
           "refId": "A",
           "expr": "rate(process_cpu_seconds_total[30s])",
-          "legendFormat": "__auto"
+          "legendFormat": "{{process}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Per-shard jobs: work per second",
+      "gridPos": {
+        "x": 0,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job) (rate(wrinkle_shard_work_total[1m]))",
+          "legendFormat": "{{job}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (job, result) (rate(wrinkle_shard_rounds_total{result!=\"ok\"}[1m]))",
+          "legendFormat": "{{job}} {{result}} rounds"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Cold-tier reads p50 / p99",
+      "gridPos": {
+        "x": 12,
+        "y": 32,
+        "w": 12,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.5, sum by (le, kind) (rate(wrinkle_cold_read_duration_seconds_bucket[30s])))",
+          "legendFormat": "{{kind}} p50"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.99, sum by (le, kind) (rate(wrinkle_cold_read_duration_seconds_bucket[30s])))",
+          "legendFormat": "{{kind}} p99"
         }
       ]
     }

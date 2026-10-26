@@ -19,7 +19,7 @@ Prototype:
 - no limits per user or per address, and no password recovery;
 - no reporting or moderation;
 - no forward secrecy between key rotations;
-- monitoring of the native processes only.
+- no alerting on the metrics.
 
 [docs/production.md](docs/production.md) lists what a public deployment would take, with deployment options and their costs.
 

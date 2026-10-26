@@ -1,9 +1,47 @@
-# Scrapes the backend under test on the host. Every backend exposes the same
-# metric names (docs/metrics.md), so one job and one dashboard serve all.
+# Scrapes every backend process there may be: on the host, the one under
+# test on port 8080 and the side-by-side gateways and services instances;
+# in the cluster, every replica of its services, found by name. Each
+# series is labeled with its process. Every backend exposes the same metric
+# names (docs/metrics.md), so one dashboard serves all; targets not running
+# are down.
 global:
   scrape_interval: 5s
 
 scrape_configs:
-  - job_name: backend
+  - job_name: native
     static_configs:
       - targets: ["host.docker.internal:8080"]
+        labels: { process: main }
+      - targets: ["host.docker.internal:8090"]
+        labels: { process: services }
+      - targets: ["host.docker.internal:8180"]
+        labels: { process: go-gw }
+      - targets: ["host.docker.internal:8181"]
+        labels: { process: elixir-gw }
+      - targets: ["host.docker.internal:8182"]
+        labels: { process: rust-gw }
+      - targets: ["host.docker.internal:8183"]
+        labels: { process: java-gw }
+      - targets: ["host.docker.internal:8184"]
+        labels: { process: ts-gw }
+      - targets: ["host.docker.internal:8191", "host.docker.internal:8192", "host.docker.internal:8193", "host.docker.internal:8194"]
+        labels: { process: services }
+    relabel_configs:
+      - source_labels: [process, __address__]
+        regex: "services;.*:(\\d+)"
+        target_label: process
+        replacement: services-$1
+
+  - job_name: cluster
+    dns_sd_configs:
+      - names: [go-services, java-services, ts-services]
+        type: A
+        port: 8090
+      - names: [go-gw, java-gw, elixir-gw, rust-gw, ts-gw]
+        type: A
+        port: 8080
+    relabel_configs:
+      - source_labels: [__meta_dns_name, __address__]
+        regex: "(.+);(.+):\\d+"
+        target_label: process
+        replacement: $1@$2
