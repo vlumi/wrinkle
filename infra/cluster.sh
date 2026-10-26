@@ -25,7 +25,8 @@ count() {
 
 case ${1:-} in
   up)
-    # Push settings from .env, with the key file resolved for mounting.
+    # Push settings and the blob key from .env, with the key file resolved
+    # for mounting.
     if [ -f .env ]; then
       set -a
       # shellcheck source=/dev/null

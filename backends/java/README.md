@@ -70,7 +70,7 @@ Configuration ([Config.java](src/main/java/wrinkle/Config.java)): flags have the
 | `--node` | `WRINKLE_NODE` | the host name | Prefix of this process's instance id in presence |
 | `--db-conns` | `WRINKLE_DB_CONNS` | `64` | Maximum connections in each of the two pools |
 | `--blob-url` | `WRINKLE_BLOB_URL` | `http://127.0.0.1:9200` | The blob proxy, for checking and deleting blobs |
-| `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_KEY_ID`, `WRINKLE_BLOB_SECRET`, `WRINKLE_BLOB_REGION` | the local Garage's | Object storage credentials for presigning |
+| `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_KEY_ID`, `WRINKLE_BLOB_SECRET`, `WRINKLE_BLOB_REGION` | none for the key and secret, which `make infra-up` writes to `.env`; `garage` for the region | Object storage credentials for presigning |
 | `--ack-interval-ms` | `WRINKLE_ACK_INTERVAL_MS` | `60000` | Least time between two ack writes of a connection; `0` writes each ack as it comes |
 | `--log-retention-s` | `WRINKLE_LOG_RETENTION_S` | `2592000` (30 days) | How long the user logs keep events, in seconds |
 | `--log-trim-interval-s` | `WRINKLE_LOG_TRIM_INTERVAL_S` | `60` | Time between two trims of each shard of the user logs, in seconds |

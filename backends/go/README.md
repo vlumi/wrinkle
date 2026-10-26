@@ -63,8 +63,8 @@ Startup opens a pool per keyspace (`conversation`, `user`) when any role needs t
 | `--apns-team-id` | `WRINKLE_TEAM_ID` | empty | developer team |
 | `--apns-topic` | `WRINKLE_APNS_TOPIC` | the app's bundle id | APNs topic |
 | `--blob-url` | `WRINKLE_BLOB_URL` | `http://127.0.0.1:9200` | the blob proxy, for HEAD and DELETE |
-| `--blob-key-id` | `WRINKLE_BLOB_KEY_ID` | the local key | blob storage access key |
-| `--blob-secret` | `WRINKLE_BLOB_SECRET` | the local secret | blob storage secret |
+| `--blob-key-id` | `WRINKLE_BLOB_KEY_ID` | none: required, `make infra-up` writes the local one to `.env` | blob storage access key |
+| `--blob-secret` | `WRINKLE_BLOB_SECRET` | none, as the key | blob storage secret |
 | `--blob-region` | `WRINKLE_BLOB_REGION` | `garage` | blob storage region |
 | `--debug` | | false | debug logging |
 

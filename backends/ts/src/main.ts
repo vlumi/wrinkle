@@ -52,11 +52,9 @@ const { values: flags } = parseArgs({
     "history-hot-s": { type: "string", default: env("WRINKLE_HISTORY_HOT_S", String(30 * 24 * 3600)) },
     "cold-move-interval-s": { type: "string", default: env("WRINKLE_COLD_MOVE_INTERVAL_S", "60") },
     "blob-url": { type: "string", default: env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200") },
-    "blob-key-id": { type: "string", default: env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000") },
-    "blob-secret": {
-      type: "string",
-      default: env("WRINKLE_BLOB_SECRET", "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4"),
-    },
+    // No default: make infra-up writes the local key to .env.
+    "blob-key-id": { type: "string", default: env("WRINKLE_BLOB_KEY_ID", "") },
+    "blob-secret": { type: "string", default: env("WRINKLE_BLOB_SECRET", "") },
     "blob-region": { type: "string", default: env("WRINKLE_BLOB_REGION", "garage") },
     // The fan-out's push notifications; off without a key.
     "apns-key": { type: "string", default: env("WRINKLE_APNS_KEY", "") },
@@ -93,6 +91,11 @@ async function main(): Promise<void> {
       openKeyspace(flags.mysql, "conversation", conns),
     ]);
     closers.push(() => Promise.all(pools.map((p) => p.end())));
+    if (!flags["blob-key-id"] || !flags["blob-secret"]) {
+      throw new Error(
+        "no blob storage key: set WRINKLE_BLOB_KEY_ID and WRINKLE_BLOB_SECRET (make infra-up writes the local one to .env)",
+      );
+    }
     deps = {
       users: pools[0]!,
       conversations: pools[1]!,

@@ -9,6 +9,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -68,8 +69,8 @@ func run() error {
 		apnsTID = flag.String("apns-team-id", env("WRINKLE_TEAM_ID", ""), "fanout: Apple developer team id")
 		apnsTop = flag.String("apns-topic", env("WRINKLE_APNS_TOPIC", "fi.misaki.wrinkle"), "fanout: the iOS app's bundle id")
 		blobURL = flag.String("blob-url", env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200"), "the blob address, for checking and deleting blobs")
-		blobKey = flag.String("blob-key-id", env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000"), "blob storage access key id")
-		blobSec = flag.String("blob-secret", env("WRINKLE_BLOB_SECRET", "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4"), "blob storage secret key")
+		blobKey = flag.String("blob-key-id", env("WRINKLE_BLOB_KEY_ID", ""), "blob storage access key id; make infra-up writes the local one to .env")
+		blobSec = flag.String("blob-secret", env("WRINKLE_BLOB_SECRET", ""), "blob storage secret key")
 		blobReg = flag.String("blob-region", env("WRINKLE_BLOB_REGION", "garage"), "blob storage region")
 		debug   = flag.Bool("debug", false, "debug logging")
 	)
@@ -95,6 +96,9 @@ func run() error {
 	var cold *conversation.Cold
 	store := blobs.New(blobs.Config{URL: *blobURL, KeyID: *blobKey, Secret: *blobSec, Region: *blobReg})
 	if want.services || want.fanout || (want.gateway && *svcAddr == "") {
+		if *blobKey == "" || *blobSec == "" {
+			return errors.New("no blob storage key: set WRINKLE_BLOB_KEY_ID and WRINKLE_BLOB_SECRET (make infra-up writes the local one to .env)")
+		}
 		conversationDB, err = vtdb.Open(ctx, *mysql, "conversation", *dbConns)
 		if err != nil {
 			return err

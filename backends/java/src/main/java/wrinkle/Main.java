@@ -182,7 +182,7 @@ public final class Main {
    */
   private static final class Shared {
     private final Config cfg;
-    private final Blobs blobs;
+    private Blobs blobs;
     private DataSource userDb;
     private DataSource conversationDb;
     private Cold cold;
@@ -191,12 +191,19 @@ public final class Main {
 
     Shared(Config cfg) {
       this.cfg = cfg;
-      this.blobs =
-          new Blobs(
-              cfg.blobUrl(), new Presigner(cfg.blobKeyId(), cfg.blobSecret(), cfg.blobRegion()));
     }
 
     Blobs blobs() {
+      if (blobs == null) {
+        if (cfg.blobKeyId().isEmpty() || cfg.blobSecret().isEmpty()) {
+          throw new IllegalStateException(
+              "no blob storage key: set WRINKLE_BLOB_KEY_ID and WRINKLE_BLOB_SECRET (make infra-up"
+                  + " writes the local one to .env)");
+        }
+        blobs =
+            new Blobs(
+                cfg.blobUrl(), new Presigner(cfg.blobKeyId(), cfg.blobSecret(), cfg.blobRegion()));
+      }
       return blobs;
     }
 
@@ -223,7 +230,7 @@ public final class Main {
 
     LocalBackend local() {
       if (local == null) {
-        UploadService uploads = new UploadService(userDb(), blobs);
+        UploadService uploads = new UploadService(userDb(), blobs());
         Contacts contacts = new Contacts(userDb());
         ConversationService conversations =
             new ConversationService(conversationDb(), uploads, contacts, cold());

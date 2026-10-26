@@ -48,7 +48,7 @@ Dockerfile          the image for the cluster, built from the repository root
 | `--log-trim-interval-s` | `WRINKLE_LOG_TRIM_INTERVAL_S` | 60 | time between two trims of each shard of the user logs |
 | `--history-hot-s` | `WRINKLE_HISTORY_HOT_S` | 2592000 (30 days) | how long messages stay in MySQL before moving to the cold tier |
 | `--cold-move-interval-s` | `WRINKLE_COLD_MOVE_INTERVAL_S` | 60 | time between two moves of each shard to the cold tier |
-| `--blob-url`, `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_*` | the local Garage | blob storage, as for Go |
+| `--blob-url`, `--blob-key-id`, `--blob-secret`, `--blob-region` | `WRINKLE_BLOB_*` | the local Garage, with the key and secret from `.env` (`make infra-up` writes them) | blob storage, as for Go |
 | `--apns-key`, `--apns-key-id`, `--apns-team-id`, `--apns-topic` | `WRINKLE_APNS_KEY`, `WRINKLE_APNS_KEY_ID`, `WRINKLE_TEAM_ID`, `WRINKLE_APNS_TOPIC` | off | APNs from the fan-out, as for Go |
 
 `.env` in the working directory, or else at the repository root, is read first; variables already set win. `WRINKLE_LOG_LEVEL` (`debug`, `info`, `warn`, `error`) sets the logging, as `key=value` lines on stderr.

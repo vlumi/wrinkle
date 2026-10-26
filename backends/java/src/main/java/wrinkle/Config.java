@@ -75,13 +75,10 @@ public record Config(
     String servicesListen = env("WRINKLE_SERVICES_LISTEN", "127.0.0.1:9000");
     String node = env("WRINKLE_NODE", hostname());
     String dbConns = env("WRINKLE_DB_CONNS", "64");
-    // The local object storage's credentials; fine to commit.
+    // The object storage's key has no default: make infra-up writes the local one to .env.
     String blobUrl = env("WRINKLE_BLOB_URL", "http://127.0.0.1:9200");
-    String blobKeyId = env("WRINKLE_BLOB_KEY_ID", "GK7772696e6b6c6500000000");
-    String blobSecret =
-        env(
-            "WRINKLE_BLOB_SECRET",
-            "667c7e6aafc73808d30a89b14f18816b605d7d340823d9493b32b97aa7079fc4");
+    String blobKeyId = env("WRINKLE_BLOB_KEY_ID", "");
+    String blobSecret = env("WRINKLE_BLOB_SECRET", "");
     String blobRegion = env("WRINKLE_BLOB_REGION", "garage");
     String ackIntervalMs = env("WRINKLE_ACK_INTERVAL_MS", "60000");
     String logRetentionS = env("WRINKLE_LOG_RETENTION_S", String.valueOf(30 * 24 * 3600));

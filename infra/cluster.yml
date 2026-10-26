@@ -9,6 +9,9 @@ x-infra: &infra
   WRINKLE_VALKEY: valkey:6379
   WRINKLE_HBASE: hbase.localhost:2181
   WRINKLE_HBASE_REST: http://hbase-rest:8086
+  # From .env, where make infra-up writes them.
+  WRINKLE_BLOB_KEY_ID: ${WRINKLE_BLOB_KEY_ID:-}
+  WRINKLE_BLOB_SECRET: ${WRINKLE_BLOB_SECRET:-}
 
 x-push: &push
   WRINKLE_TEAM_ID: ${WRINKLE_TEAM_ID:-}
