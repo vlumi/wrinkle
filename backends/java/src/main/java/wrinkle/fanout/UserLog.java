@@ -30,6 +30,7 @@ import wrinkle.v1.Event;
 import wrinkle.v1.MemberLeft;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageDeletedEvent;
+import wrinkle.v1.MessageEvent;
 import wrinkle.v1.Notice;
 import wrinkle.v1.ReadEvent;
 import wrinkle.v1.User;
@@ -421,7 +422,17 @@ final class UserLog {
           try {
             copy = Event.parseFrom(rs.getBytes(2));
           } catch (InvalidProtocolBufferException e) {
-            log.warn("corrupt event {} of user {}, not rewriting it", position, userId);
+            // Retrying would not mend it; the copy becomes a bare tombstone.
+            log.warn("unreadable copy of a deleted message, event {} of user {}", position, userId);
+            copy =
+                Event.newBuilder()
+                    .setMessage(
+                        MessageEvent.newBuilder()
+                            .setMessage(
+                                Message.newBuilder()
+                                    .setConversationId(o.conversationId().toByteString())
+                                    .setSeq(deleted.getSeq())))
+                    .build();
           }
         }
       }

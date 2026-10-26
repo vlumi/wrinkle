@@ -13,10 +13,15 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.helpers.NOPLogger;
 
 class ShardWorkTest {
+  // Leases that last a moment, for the tests.
+  private static final Duration LEASE_TTL = Duration.ofMillis(300);
+
   /** Leases for one instance; others take them by holding the name. */
   static final class FakeLeases implements ShardWork.Leases {
     final Map<String, String> held = new HashMap<>();
     final String me;
+    // Makes renewals fail, as with Valkey unreachable.
+    boolean failing;
 
     FakeLeases(String me) {
       this.me = me;
@@ -29,6 +34,9 @@ class ShardWorkTest {
 
     @Override
     public synchronized boolean renewLease(String name, Duration ttl) {
+      if (failing) {
+        throw new IllegalStateException("unreachable");
+      }
       return me.equals(held.get(name));
     }
 
@@ -39,6 +47,10 @@ class ShardWorkTest {
 
     synchronized void give(String name, String to) {
       held.put(name, to);
+    }
+
+    synchronized void failRenewals() {
+      failing = true;
     }
 
     synchronized Map<String, String> snapshot() {
@@ -57,7 +69,7 @@ class ShardWorkTest {
         round,
         leases,
         NOPLogger.NOP_LOGGER,
-        Duration.ofMillis(20));
+        LEASE_TTL);
   }
 
   /** The test job's rounds counted with the result. */
@@ -138,5 +150,31 @@ class ShardWorkTest {
     assertEquals(1, j.leased(shard("-")));
     assertEquals("b", leases.snapshot().get("work:ks/-"), "dropped another instance's lease");
     assertEquals(lost + 1, counted("-", "lost"), "lost round not counted");
+  }
+
+  @Test
+  void unrenewableLeaseStopsTheRound() throws Exception {
+    double lost = counted("-40", "lost");
+    FakeLeases leases = new FakeLeases("a");
+    ShardWork j =
+        job(
+            leases,
+            (s, stopped) -> {
+              leases.failRenewals();
+              long deadline = System.nanoTime() + LEASE_TTL.multipliedBy(10).toNanos();
+              while (!stopped.getAsBoolean()) {
+                if (System.nanoTime() > deadline) {
+                  fail("round went on with its lease unrenewed past its life");
+                }
+                try {
+                  Thread.sleep(5);
+                } catch (InterruptedException e) {
+                  throw new IllegalStateException(e);
+                }
+              }
+              return 1;
+            });
+    assertEquals(1, j.leased(shard("-40")));
+    assertEquals(lost + 1, counted("-40", "lost"), "lost round not counted");
   }
 }

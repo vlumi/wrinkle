@@ -19,6 +19,7 @@ import wrinkle.ApiError;
 import wrinkle.Metrics;
 import wrinkle.Uuid;
 import wrinkle.services.Backend;
+import wrinkle.v1.ErrorCode;
 import wrinkle.v1.Frame;
 import wrinkle.v1.Pong;
 import wrinkle.v1.Request;
@@ -36,6 +37,8 @@ final class Conn {
   private static final int MAX_IN_FLIGHT = 32;
   private static final int MAX_QUEUED_FRAMES = 32;
   private static final long SUBSCRIBE_TIMEOUT_MILLIS = 5000;
+  // Bounds the Register and SignIn requests of a connection.
+  static final int MAX_SIGN_INS = 5;
 
   private static final WebSocketCloseStatus SIGNED_OUT =
       WebSocketCloseStatus.ofPrivateUse(4001, "signed out");
@@ -76,6 +79,9 @@ final class Conn {
   private State state = State.PENDING;
   private Identity identity;
   private long connectBy;
+  // Guarded by this: Register and SignIn requests, which may cost a password hash each; those
+  // refused as invalid, before hashing, do not count.
+  private int signIns;
   // Guarded by this; made on the first ack.
   private AckCoalescer acks;
 
@@ -292,7 +298,20 @@ final class Conn {
     return state == State.PENDING && now - connectBy >= 0;
   }
 
-  /** Connect gets this long again: after a Register or SignIn, or when one was undone. */
+  /** Counts a Register or SignIn; false beyond the connection's limit. */
+  private synchronized boolean countSignIn() {
+    if (signIns >= MAX_SIGN_INS) {
+      return false;
+    }
+    signIns++;
+    return true;
+  }
+
+  private synchronized void uncountSignIn() {
+    signIns--;
+  }
+
+  /** Connect gets this long again: after a Register or SignIn succeeds, or when one was undone. */
   private synchronized void restartConnectDeadline() {
     connectBy = System.nanoTime() + CONNECT_DEADLINE_NANOS;
   }
@@ -383,6 +402,11 @@ final class Conn {
     if (!beforeConnect && id == null) {
       return ApiError.response(req, ApiError.unauthenticated("connect first"));
     }
+    boolean signIn = req.hasRegister() || req.hasSignIn();
+    if (signIn && !countSignIn()) {
+      return ApiError.response(
+          req, ApiError.resourceExhausted("at most " + MAX_SIGN_INS + " sign-ins per connection"));
+    }
     Response resp;
     try {
       resp = backend.call(id == null ? null : id.userId(), id == null ? 0 : id.deviceId(), req);
@@ -413,8 +437,12 @@ final class Conn {
         return ApiError.response(req, ApiError.unavailable("push channel unavailable"));
       }
     }
-    if (req.hasRegister() || req.hasSignIn()) {
-      // Hashing the password may have taken a while.
+    if (signIn && resp.getError().getCode() == ErrorCode.ERROR_CODE_INVALID_ARGUMENT) {
+      uncountSignIn();
+    }
+    if (signIn && !resp.hasError()) {
+      // Hashing the password may have taken a while. A failed attempt does not restart the
+      // deadline, so it cannot hold the connection open.
       restartConnectDeadline();
     }
     return resp;

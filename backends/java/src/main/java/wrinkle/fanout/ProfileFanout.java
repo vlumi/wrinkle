@@ -119,9 +119,10 @@ final class ProfileFanout {
           // Until a batch comes up short.
         }
       }
-      // A sticker upload is used only once it is a sticker.
+      // The avatar goes; stickers stay public, and attachments stay with the messages, which keep
+      // them until deleted.
       Sql.update(
-          c, "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose <> 'sticker'", userId);
+          c, "UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'avatar'", userId);
     }
   }
 

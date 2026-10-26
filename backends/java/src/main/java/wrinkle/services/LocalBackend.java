@@ -5,6 +5,7 @@ import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import wrinkle.ApiError;
+import wrinkle.Deadline;
 import wrinkle.Uuid;
 import wrinkle.accounts.AccountService;
 import wrinkle.accounts.Devices;
@@ -94,8 +95,14 @@ public final class LocalBackend implements Backend {
 
   @Override
   public Response call(Uuid userId, long deviceId, Request req) {
+    return call(userId, deviceId, req, System.nanoTime() + Deadline.REQUEST_TIMEOUT_NANOS);
+  }
+
+  /** Handles the request, which must be answered by the deadline, as System.nanoTime. */
+  public Response call(Uuid userId, long deviceId, Request req, long deadline) {
     try {
-      return dispatch(userId, deviceId, req).setRequestId(req.getId()).build();
+      return Deadline.within(
+          deadline, () -> dispatch(userId, deviceId, req).setRequestId(req.getId()).build());
     } catch (Exception e) {
       if (!(e instanceof ApiError)) {
         log.error("request {} failed", req.getId(), e);

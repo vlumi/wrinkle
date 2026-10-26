@@ -47,7 +47,7 @@ public final class ShardWork {
   private final Round round;
   private final Leases leases;
   private final Logger log;
-  private final Duration renewEvery;
+  private final Duration leaseTtl;
   private final CountDownLatch stopping = new CountDownLatch(1);
   private final List<Thread> threads = new ArrayList<>();
 
@@ -65,8 +65,7 @@ public final class ShardWork {
       Round round,
       Leases leases,
       Logger log) {
-    this(
-        name, metric, keyspace, shards, interval, unit, round, leases, log, LEASE_TTL.dividedBy(3));
+    this(name, metric, keyspace, shards, interval, unit, round, leases, log, LEASE_TTL);
   }
 
   ShardWork(
@@ -79,7 +78,7 @@ public final class ShardWork {
       Round round,
       Leases leases,
       Logger log,
-      Duration renewEvery) {
+      Duration leaseTtl) {
     this.name = name;
     this.metric = metric;
     this.keyspace = keyspace;
@@ -89,7 +88,7 @@ public final class ShardWork {
     this.round = round;
     this.leases = leases;
     this.log = log;
-    this.renewEvery = renewEvery;
+    this.leaseTtl = leaseTtl;
   }
 
   /** Starts every shard's loop. A shard's first round is after a minute, or the interval. */
@@ -147,14 +146,14 @@ public final class ShardWork {
   }
 
   /**
-   * Runs a round under the shard's lease, if this instance gets it. Losing the lease midway stops
-   * the round; whoever took it goes on.
+   * Runs a round under the shard's lease, if this instance gets it. Losing the lease midway, or
+   * failing to renew it for as long as it lasts, stops the round; whoever took it goes on.
    */
   int leased(ShardPools.Shard shard) throws SQLException {
     String lease = name + ":" + keyspace + "/" + shard.name();
     boolean taken;
     try {
-      taken = leases.takeLease(lease, LEASE_TTL);
+      taken = leases.takeLease(lease, leaseTtl);
     } catch (RuntimeException e) {
       Metrics.SHARD_ROUNDS.labelValues(metric, shard.name(), "error").inc();
       throw e;
@@ -164,21 +163,29 @@ public final class ShardWork {
       return 0;
     }
     long start = System.nanoTime();
+    Duration renewEvery = leaseTtl.dividedBy(3);
     AtomicBoolean lost = new AtomicBoolean();
     CountDownLatch done = new CountDownLatch(1);
     Thread renewer =
         Thread.ofVirtual()
             .start(
                 () -> {
+                  long renewedAt = start;
                   try {
                     while (!done.await(renewEvery.toMillis(), TimeUnit.MILLISECONDS)) {
                       try {
-                        if (!leases.renewLease(lease, LEASE_TTL)) {
+                        if (!leases.renewLease(lease, leaseTtl)) {
                           lost.set(true);
                           return;
                         }
+                        renewedAt = System.nanoTime();
                       } catch (RuntimeException e) {
-                        // Tried again at the next renewal; the lease may still be held.
+                        // Tried again at the next renewal, unless unanswered for as long as the
+                        // lease lasts: then it may be another's.
+                        if (System.nanoTime() - renewedAt >= leaseTtl.toNanos()) {
+                          lost.set(true);
+                          return;
+                        }
                       }
                     }
                   } catch (InterruptedException e) {

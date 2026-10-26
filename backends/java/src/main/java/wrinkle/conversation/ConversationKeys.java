@@ -8,16 +8,22 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
+import wrinkle.accounts.Devices;
 import wrinkle.conversation.Rows.Header;
+import wrinkle.v1.Device;
 import wrinkle.v1.GetConversationKeysResponse;
 import wrinkle.v1.KeyRecipient;
 import wrinkle.v1.ReceivedKey;
+import wrinkle.v1.UserDevices;
 import wrinkle.v1.WrappedKey;
 
 /**
@@ -32,13 +38,23 @@ public final class ConversationKeys {
 
   private final DataSource db;
   private final DataSource userDb;
+  private final Devices devices;
+  private final ConversationService conversations;
 
-  public ConversationKeys(DataSource conversationDb, DataSource userDb) {
+  public ConversationKeys(
+      DataSource conversationDb,
+      DataSource userDb,
+      Devices devices,
+      ConversationService conversations) {
     this.db = conversationDb;
     this.userDb = userDb;
+    this.devices = devices;
+    this.conversations = conversations;
   }
 
   private record Wrap(Uuid userId, long deviceId, byte[] wrapped) {}
+
+  private record DeviceRef(Uuid userId, long deviceId) {}
 
   /**
    * Publishes wraps from the requesting device: the next epoch, more recipients of the current one,
@@ -54,6 +70,7 @@ public final class ConversationKeys {
     }
     List<Wrap> wraps = new ArrayList<>(keys.size());
     boolean forSelf = false;
+    boolean forOthers = false;
     for (WrappedKey k : keys) {
       Uuid recipient = Uuid.parse(k.getRecipientUserId());
       if (recipient == null) {
@@ -67,16 +84,23 @@ public final class ConversationKeys {
       }
       wraps.add(new Wrap(recipient, k.getRecipientDeviceId(), k.getWrapped().toByteArray()));
       forSelf |= recipient.equals(userId) && k.getRecipientDeviceId() == deviceId;
+      forOthers |= !recipient.equals(userId);
     }
     boolean self = forSelf;
     try (Connection c = db.getConnection()) {
       // Members are told apart before the device's key is looked up in the other keyspace.
       Rows.memberHeader(c, conversationId, userId, false);
     }
+    // Across a block, either way, no keys go to the other side; the user's own devices may still
+    // share the history.
+    if (forOthers) {
+      conversations.checkBlocks(userId, conversationId);
+    }
     byte[] publicKey = publicKey(userId, deviceId);
     if (publicKey == null) {
       throw ApiError.failedPrecondition("this device has no key");
     }
+    requireKeyedDevices(wraps);
     Sql.inTransaction(
         db,
         c -> {
@@ -111,6 +135,34 @@ public final class ConversationKeys {
           }
           return null;
         });
+  }
+
+  /**
+   * Refuses wraps for anything but signed-in devices with keys, so epochs hold real devices only.
+   */
+  private void requireKeyedDevices(List<Wrap> wraps) throws SQLException {
+    Set<Uuid> users = new LinkedHashSet<>();
+    for (Wrap w : wraps) {
+      users.add(w.userId());
+    }
+    // More users than a conversation's members is refused there.
+    Set<DeviceRef> keyed = new HashSet<>();
+    for (UserDevices u : devices.keys(users.stream().map(Uuid::toByteString).toList())) {
+      Uuid id = Uuid.parse(u.getUserId());
+      for (Device d : u.getDevicesList()) {
+        keyed.add(new DeviceRef(id, d.getDeviceId()));
+      }
+    }
+    for (Wrap w : wraps) {
+      if (!keyed.contains(new DeviceRef(w.userId(), w.deviceId()))) {
+        throw ApiError.invalidArgument(
+            "device "
+                + Long.toUnsignedString(w.deviceId())
+                + " of "
+                + w.userId()
+                + " is not a signed-in device with a key");
+      }
+    }
   }
 
   private static void requireMembers(Header h, List<Wrap> wraps) {
@@ -193,16 +245,19 @@ public final class ConversationKeys {
 
   /**
    * The conversation's key state and the wraps for the requesting device after the given epoch.
-   * Former members may ask too; no wraps of later epochs reach them.
+   * Former members may ask too; no wraps of later epochs reach them, and they get none of the
+   * current membership.
    */
   public GetConversationKeysResponse get(
       Uuid userId, long deviceId, Uuid conversationId, long afterEpoch) throws SQLException {
     try (Connection c = db.getConnection()) {
       Header h = Rows.header(c, conversationId, false);
+      boolean current;
       try (PreparedStatement ps =
               Sql.prepare(
                   c,
-                  "SELECT 1 FROM conversation_member WHERE conversation_id = ? AND user_id = ?",
+                  "SELECT left_seq FROM conversation_member WHERE conversation_id = ? AND user_id ="
+                      + " ?",
                   conversationId,
                   userId);
           ResultSet rs = ps.executeQuery()) {
@@ -210,12 +265,15 @@ public final class ConversationKeys {
           throw ApiError.permissionDenied(
               "user " + userId + " is not in conversation " + conversationId);
         }
+        rs.getLong(1);
+        current = rs.wasNull();
       }
+      // A former member gets none of the current membership.
       GetConversationKeysResponse.Builder resp =
           GetConversationKeysResponse.newBuilder()
               .setCurrentEpoch((int) h.keyEpoch())
-              .setRotate(h.rotate());
-      if (h.keyEpoch() > 0) {
+              .setRotate(current && h.rotate());
+      if (current && h.keyEpoch() > 0) {
         try (PreparedStatement ps =
                 Sql.prepare(
                     c,

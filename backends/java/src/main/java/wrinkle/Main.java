@@ -122,7 +122,13 @@ public final class Main {
               notifier);
       fanout.start();
       log.info("fanout consuming {}", FanoutWorker.TOPICS);
-      new UploadSweeper(shared.userDb(), shared.blobs()).start();
+      new UploadSweeper(
+              shared.userDb(),
+              shared.conversationDb(),
+              shared.blobs(),
+              new UploadSweeper.Settings(
+                  cfg.uploadUnused(), cfg.uploadSweepInterval(), cfg.historyHot()))
+          .start();
       // Each shard's trim and move is taken by one instance at a time.
       LogTrimmer trimmer =
           new LogTrimmer(cfg.mysql(), USER_KEYSPACE, shared.userDb(), cfg.logRetention());
@@ -235,14 +241,15 @@ public final class Main {
         ConversationService conversations =
             new ConversationService(conversationDb(), uploads, contacts, cold());
         AccountService accounts = new AccountService(userDb(), uploads);
+        Devices devices = new Devices(userDb());
         local =
             new LocalBackend(
                 accounts,
-                new Devices(userDb()),
+                devices,
                 uploads,
                 conversations,
                 new GroupService(conversationDb(), userDb(), accounts, contacts, cold()),
-                new ConversationKeys(conversationDb(), userDb()),
+                new ConversationKeys(conversationDb(), userDb(), devices, conversations),
                 new DeviceSyncService(userDb(), accounts, conversations, contacts),
                 new StickerService(userDb(), uploads),
                 new ContactService(userDb(), accounts, contacts));

@@ -48,6 +48,17 @@ public final class UserOutbox {
   /** Writes a DeviceEvent for the device as it is now in the transaction. */
   static void device(Connection c, Uuid userId, long deviceId, boolean signedOut)
       throws SQLException {
+    device(c, userId, deviceId, signedOut, "device");
+  }
+
+  /** Writes a DeviceEvent for a change only the user's own devices need to know of: a new name. */
+  static void deviceName(Connection c, Uuid userId, long deviceId) throws SQLException {
+    device(c, userId, deviceId, false, "device_name");
+  }
+
+  private static void device(
+      Connection c, Uuid userId, long deviceId, boolean signedOut, String kind)
+      throws SQLException {
     Device device = Devices.read(c, userId, deviceId);
     if (device == null) {
       throw new SQLException("device " + deviceId + " of user " + userId + " missing");
@@ -56,7 +67,7 @@ public final class UserOutbox {
     write(
         c,
         userId,
-        "device",
+        kind,
         Event.newBuilder()
             .setOccurredAt(Timestamps.toProto(now))
             .setDevice(

@@ -25,7 +25,7 @@ import wrinkle.v1.Event;
 /**
  * Delivers a device change to the user's own log. When the device has a key, its id and key also go
  * to the user's direct conversation partners and the members of the user's groups, each once, so
- * they can encrypt for it.
+ * they can encrypt for it; a rename, which changes nothing they use, does not.
  */
 final class DeviceFanout {
   // How many list entries are read at a time.
@@ -51,7 +51,7 @@ final class DeviceFanout {
       userLog.pushSignedOut(
           o.userId(), SignedOut.newBuilder().addDeviceIds(d.getDevice().getDeviceId()).build());
     }
-    if (d.getDevice().getPublicKey().isEmpty()) {
+    if (d.getDevice().getPublicKey().isEmpty() || "device_name".equals(o.kind())) {
       return;
     }
     Event keyOnly =

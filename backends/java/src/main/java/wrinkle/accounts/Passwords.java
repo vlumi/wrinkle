@@ -5,10 +5,13 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.bouncycastle.crypto.generators.Argon2BytesGenerator;
 import org.bouncycastle.crypto.params.Argon2Parameters;
+import wrinkle.ApiError;
+import wrinkle.Deadline;
 
 /**
  * argon2id password hashes in the PHC string format, bit for bit as the other backends write them.
@@ -43,12 +46,24 @@ final class Passwords {
   static String hash(String password) {
     byte[] salt = new byte[SALT_LENGTH];
     RANDOM.nextBytes(salt);
-    SLOTS.acquireUninterruptibly();
+    acquireSlot();
     try {
       return encode(password, salt, MEMORY_KIB, ITERATIONS, PARALLELISM);
     } finally {
       SLOTS.release();
     }
+  }
+
+  /** Waits for a slot until the request's deadline; UNAVAILABLE when it passes first. */
+  private static void acquireSlot() {
+    try {
+      if (SLOTS.tryAcquire(Math.max(0, Deadline.remainingNanos()), TimeUnit.NANOSECONDS)) {
+        return;
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    }
+    throw ApiError.unavailable("too many sign-ins at once; try again");
   }
 
   static String encode(String password, byte[] salt, int memory, int iterations, int parallelism) {
@@ -107,7 +122,7 @@ final class Passwords {
     if (want.length < 16 || want.length > 64) {
       throw new MalformedHashException();
     }
-    SLOTS.acquireUninterruptibly();
+    acquireSlot();
     byte[] got;
     try {
       got = derive(password, salt, (int) memory, (int) iterations, (int) parallelism, want.length);

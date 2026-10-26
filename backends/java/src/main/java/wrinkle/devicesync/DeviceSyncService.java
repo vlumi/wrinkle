@@ -10,6 +10,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Kinds;
@@ -33,6 +34,7 @@ import wrinkle.v1.User;
  */
 public final class DeviceSyncService {
   private static final int MAX_PUSH_TOKEN = 200;
+  private static final Pattern HEX = Pattern.compile("[0-9a-fA-F]*");
   private static final int DEFAULT_SYNC_LIMIT = 100;
   private static final int MAX_SYNC_LIMIT = 1000;
   private static final int MAX_CONVERSATION_LIST = 200;
@@ -86,6 +88,10 @@ public final class DeviceSyncService {
       }
       if (token.getBytes(StandardCharsets.UTF_8).length > MAX_PUSH_TOKEN) {
         throw ApiError.invalidArgument("push token is longer than " + MAX_PUSH_TOKEN + " bytes");
+      }
+      // APNs tokens are hex, and go into the request path as they are.
+      if (!HEX.matcher(token).matches()) {
+        throw ApiError.invalidArgument("push token must be hex");
       }
     }
     try (Connection c = db.getConnection()) {

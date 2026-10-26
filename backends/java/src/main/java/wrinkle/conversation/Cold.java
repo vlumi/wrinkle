@@ -2,7 +2,6 @@ package wrinkle.conversation;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -27,6 +26,9 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.security.User;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import wrinkle.ApiError;
 import wrinkle.MessageBody;
 import wrinkle.Metrics;
 import wrinkle.Sql;
@@ -39,6 +41,7 @@ import wrinkle.v1.Reaction;
  * The cold tier of the history, in HBase. Every write puts a whole row, so a write can be repeated.
  */
 public final class Cold {
+  private static final Logger log = LoggerFactory.getLogger(Cold.class);
   private static final TableName TABLE = TableName.valueOf("message");
   static final byte[] FAMILY = bytes("m");
   private static final byte[] SENDER = bytes("sender");
@@ -227,7 +230,7 @@ public final class Cold {
     try (Table t = table()) {
       t.put(puts);
     } catch (IOException e) {
-      throw new UncheckedIOException("cold put", e);
+      throw unavailable("put", e);
     }
   }
 
@@ -238,7 +241,7 @@ public final class Cold {
       Result r = t.get(new Get(key(conversationId, seq)).addFamily(FAMILY));
       return r.isEmpty() ? null : Row.of(r);
     } catch (IOException e) {
-      throw new UncheckedIOException("cold get", e);
+      throw unavailable("get", e);
     } finally {
       observeRead("message", start);
     }
@@ -268,11 +271,17 @@ public final class Cold {
         }
       }
     } catch (IOException e) {
-      throw new UncheckedIOException("cold scan", e);
+      throw unavailable("scan", e);
     } finally {
       observeRead("range", start);
     }
     return rows;
+  }
+
+  /** Logs a failure of the cold tier and tells the device to try again later, without details. */
+  private static ApiError unavailable(String op, IOException e) {
+    log.warn("cold tier failed: {}", op, e);
+    return ApiError.unavailable("history in the cold tier is unavailable; try again");
   }
 
   private static void observeRead(String kind, long start) {
@@ -294,12 +303,17 @@ public final class Cold {
       before.add(old);
     }
 
-    private void undo(Exception cause) {
+    private void undo() {
       for (int i = before.size() - 1; i >= 0; i--) {
         try {
           put(conversations.get(i), List.of(before.get(i)));
         } catch (RuntimeException e) {
-          cause.addSuppressed(e);
+          // The row keeps a change no event told of, until the next one.
+          log.error(
+              "putting back a cold row failed, conversation {} seq {}",
+              conversations.get(i),
+              before.get(i).seq(),
+              e);
         }
       }
     }
@@ -313,15 +327,22 @@ public final class Cold {
 
   /**
    * Runs the work in one transaction, as {@link Sql#inTransaction}; the cold rows it changed are
-   * put back unless the transaction commits.
+   * put back unless the transaction commits, before the rollback, while the transaction still holds
+   * the conversation's row.
    */
   <T> T inTransaction(DataSource db, Work<T> work) throws SQLException {
-    Changes changes = new Changes();
-    try {
-      return Sql.inTransaction(db, c -> work.run(c, changes));
-    } catch (SQLException | RuntimeException e) {
-      changes.undo(e);
-      throw e;
+    try (Connection c = db.getConnection()) {
+      c.setAutoCommit(false);
+      Changes changes = new Changes();
+      try {
+        T result = work.run(c, changes);
+        c.commit();
+        return result;
+      } catch (SQLException | RuntimeException e) {
+        changes.undo();
+        c.rollback();
+        throw e;
+      }
     }
   }
 }

@@ -1,7 +1,6 @@
 package wrinkle.uploads;
 
 import com.google.protobuf.ByteString;
-import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -12,7 +11,6 @@ import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.regex.Pattern;
 import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Sql;
@@ -24,9 +22,6 @@ import wrinkle.v1.CreateUploadResponse;
 /** Upload slots for blobs, and the checks that a blob was uploaded by the user who refers to it. */
 public final class UploadService {
   private static final long EXPIRES_SECONDS = 900;
-  private static final int MAX_MEDIA_TYPE_BYTES = 100;
-  // type/subtype, ASCII without spaces or controls.
-  private static final Pattern MEDIA_TYPE = Pattern.compile("[!-.0-~]+/[!-.0-~]+");
 
   private record Limits(String purpose, Set<String> mediaTypes, long maxSize) {}
 
@@ -34,8 +29,9 @@ public final class UploadService {
       new Limits("avatar", Set.of("image/jpeg", "image/png", "image/webp"), 512 * 1024);
   private static final Limits STICKER =
       new Limits("sticker", Set.of("image/png", "image/webp", "image/gif"), 256 * 1024);
-  // Any media type.
-  private static final Limits ATTACHMENT = new Limits("attachment", null, 25L * 1024 * 1024);
+  // Ciphertext, served as nothing a browser would render.
+  private static final Limits ATTACHMENT =
+      new Limits("attachment", Set.of("application/octet-stream"), 25L * 1024 * 1024);
 
   private final DataSource db;
   private final Blobs blobs;
@@ -55,9 +51,7 @@ public final class UploadService {
           default -> throw ApiError.invalidArgument("unknown purpose " + req.getPurpose());
         };
     String mediaType = req.getMediaType();
-    if (limits.mediaTypes() == null
-        ? !validMediaType(mediaType)
-        : !limits.mediaTypes().contains(mediaType)) {
+    if (!limits.mediaTypes().contains(mediaType)) {
       throw ApiError.invalidArgument(
           "media type \"" + mediaType + "\" not allowed for " + limits.purpose());
     }
@@ -86,12 +80,6 @@ public final class UploadService {
         .setUploadPath(blobs.presignPut(blobId, mediaType, req.getSize(), t, EXPIRES_SECONDS))
         .setExpiresAt(Timestamps.toProto(now.plusSeconds(EXPIRES_SECONDS)))
         .build();
-  }
-
-  static boolean validMediaType(String s) {
-    return !s.isEmpty()
-        && s.getBytes(StandardCharsets.UTF_8).length <= MAX_MEDIA_TYPE_BYTES
-        && MEDIA_TYPE.matcher(s).matches();
   }
 
   /**
@@ -192,9 +180,11 @@ public final class UploadService {
    * Marks the user's attachment uploads used, once each is found to be theirs, uploaded and not
    * attached to another message; fails with FAILED_PRECONDITION otherwise. They stay pending until
    * the fan-out delivers the message, so a send that fails without releasing them loses them only
-   * to the sweeper.
+   * to the sweeper, which checks whether the message recorded on them was stored.
    */
-  public void useAttachments(Uuid userId, List<Uuid> blobIds) throws SQLException {
+  public void useAttachments(
+      Uuid userId, Uuid conversationId, String clientMessageId, List<Uuid> blobIds)
+      throws SQLException {
     if (blobIds.isEmpty()) {
       return;
     }
@@ -218,12 +208,15 @@ public final class UploadService {
           if (requireAll(c, query + " FOR UPDATE", args, blobIds.size())) {
             throw ApiError.failedPrecondition("already attached");
           }
-          Object[] update = new Object[args.length + 1];
+          Object[] update = new Object[args.length + 3];
           update[0] = Timestamps.now();
-          System.arraycopy(args, 0, update, 1, args.length);
+          update[1] = conversationId;
+          update[2] = clientMessageId;
+          System.arraycopy(args, 0, update, 3, args.length);
           Sql.update(
               c,
-              "UPDATE upload SET used = TRUE, pending_since = ? WHERE user_id = ? AND blob_id IN "
+              "UPDATE upload SET used = TRUE, pending_since = ?, conversation_id = ?,"
+                  + " client_message_id = ? WHERE user_id = ? AND blob_id IN "
                   + inList(blobIds.size()),
               update);
           return null;

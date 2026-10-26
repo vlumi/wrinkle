@@ -104,7 +104,7 @@ public final class Devices {
               name,
               userId,
               deviceId);
-          UserOutbox.device(c, userId, deviceId, false);
+          UserOutbox.deviceName(c, userId, deviceId);
           return read(c, userId, deviceId);
         });
   }

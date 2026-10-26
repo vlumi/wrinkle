@@ -190,7 +190,8 @@ public final class FanoutWorker {
         throw e;
       } catch (Exception e) {
         last = e;
-        log.warn("delivery failed, attempt {}: {}", attempt, e.toString());
+        // The last failure is logged by the caller, once.
+        log.debug("delivery failed, attempt {}: {}", attempt, e.toString());
         Thread.sleep(200L * attempt);
       }
     }

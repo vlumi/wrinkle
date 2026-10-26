@@ -194,6 +194,10 @@ public final class AccountService {
     checkName(req.getName());
     checkPassword(req.getPassword());
     checkDeviceName(req.getDeviceName());
+    // A taken name fails before the hash's cost; the claim below decides.
+    if (names.resolve(req.getName()) != null) {
+      throw ApiError.alreadyExists("the name is taken");
+    }
     String hash = Passwords.hash(req.getPassword());
     Uuid userId = Uuid.random();
     try (Connection c = db.getConnection()) {

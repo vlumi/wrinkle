@@ -1,9 +1,12 @@
 package wrinkle.services;
 
+import io.grpc.Context;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import wrinkle.Deadline;
 import wrinkle.Uuid;
 import wrinkle.backend.v1.AckRequest;
 import wrinkle.backend.v1.AckResponse;
@@ -34,11 +37,18 @@ public final class RpcServer extends BackendServiceGrpc.BackendServiceImplBase {
               .asRuntimeException());
       return;
     }
+    // The caller's deadline, or the request timeout when it set none.
+    var callerDeadline = Context.current().getDeadline();
+    long deadline =
+        System.nanoTime()
+            + (callerDeadline == null
+                ? Deadline.REQUEST_TIMEOUT_NANOS
+                : callerDeadline.timeRemaining(TimeUnit.NANOSECONDS));
     Thread.startVirtualThread(
         () -> {
           out.onNext(
               CallResponse.newBuilder()
-                  .setResponse(local.call(userId, req.getDeviceId(), req.getRequest()))
+                  .setResponse(local.call(userId, req.getDeviceId(), req.getRequest(), deadline))
                   .build());
           out.onCompleted();
         });

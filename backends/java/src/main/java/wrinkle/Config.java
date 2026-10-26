@@ -37,6 +37,8 @@ public record Config(
     Duration logTrimInterval,
     Duration historyHot,
     Duration coldMoveInterval,
+    Duration uploadUnused,
+    Duration uploadSweepInterval,
     String apnsKey,
     String apnsKeyId,
     String apnsTeamId,
@@ -85,6 +87,8 @@ public record Config(
     String logTrimIntervalS = env("WRINKLE_LOG_TRIM_INTERVAL_S", "60");
     String historyHotS = env("WRINKLE_HISTORY_HOT_S", String.valueOf(30 * 24 * 3600));
     String coldMoveIntervalS = env("WRINKLE_COLD_MOVE_INTERVAL_S", "60");
+    String uploadUnusedS = env("WRINKLE_UPLOAD_UNUSED_S", String.valueOf(24 * 3600));
+    String uploadSweepIntervalS = env("WRINKLE_UPLOAD_SWEEP_INTERVAL_S", "600");
     // Push notifications are off without a key.
     String apnsKey = env("WRINKLE_APNS_KEY", "");
     // Defaults to the id in the key's file name.
@@ -124,6 +128,8 @@ public record Config(
         case "log-trim-interval-s" -> logTrimIntervalS = value;
         case "history-hot-s" -> historyHotS = value;
         case "cold-move-interval-s" -> coldMoveIntervalS = value;
+        case "upload-unused-s" -> uploadUnusedS = value;
+        case "upload-sweep-interval-s" -> uploadSweepIntervalS = value;
         case "apns-key" -> apnsKey = value;
         case "apns-key-id" -> apnsKeyId = value;
         case "apns-team-id" -> apnsTeamId = value;
@@ -153,6 +159,12 @@ public record Config(
       throw new IllegalArgumentException(
           "the hot window must not be negative and the cold move interval must be positive");
     }
+    Duration uploadUnused = Duration.ofSeconds(Long.parseLong(uploadUnusedS));
+    Duration uploadSweepInterval = Duration.ofSeconds(Long.parseLong(uploadSweepIntervalS));
+    if (uploadUnused.isNegative() || !uploadSweepInterval.isPositive()) {
+      throw new IllegalArgumentException(
+          "the upload lifetime must not be negative and the sweep interval must be positive");
+    }
     return new Config(
         roleSet,
         address(listen),
@@ -173,6 +185,8 @@ public record Config(
         logTrimInterval,
         historyHot,
         coldMoveInterval,
+        uploadUnused,
+        uploadSweepInterval,
         expandHome(apnsKey),
         apnsKeyId,
         apnsTeamId,

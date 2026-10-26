@@ -401,8 +401,14 @@ public final class GroupService {
           if (rs.next()) {
             conv.setLastMessage(Rows.message(conversationId, rs));
           } else {
-            // Moved to the cold tier, which has it before MySQL lets go.
-            Cold.Row last = cold.get(conversationId, h.lastSeq());
+            // Moved to the cold tier, which has it before MySQL lets go. Without the cold tier,
+            // the summary goes without it.
+            Cold.Row last = null;
+            try {
+              last = cold.get(conversationId, h.lastSeq());
+            } catch (ApiError e) {
+              // Logged by the cold tier.
+            }
             if (last != null) {
               conv.setLastMessage(last.message(conversationId).toBuilder().clearReactions());
             }

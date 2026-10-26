@@ -73,7 +73,7 @@ public final class ConversationService {
    * In a direct conversation the user is a member of, refuses the user when either participant
    * blocked the other. A group, or a user who is not a member, is left to the transaction's checks.
    */
-  private void checkBlocks(Uuid userId, Uuid conversationId) throws SQLException {
+  void checkBlocks(Uuid userId, Uuid conversationId) throws SQLException {
     List<Uuid> members = directMembers.get(conversationId);
     if (members == null) {
       try (Connection c = db.getConnection()) {
@@ -206,7 +206,7 @@ public final class ConversationService {
           return stored;
         }
       }
-      uploads.useAttachments(userId, blobIds);
+      uploads.useAttachments(userId, conversationId, clientMessageId, blobIds);
     }
     try {
       return store(userId, conversationId, clientMessageId, sealed, blobIdBytes);
@@ -578,6 +578,14 @@ public final class ConversationService {
     if (seq <= 0) {
       throw ApiError.invalidArgument("seq must be positive");
     }
+    // Across a block, either way, a read tells only the reader's devices.
+    boolean blocked = false;
+    try {
+      checkBlocks(userId, conversationId);
+    } catch (ApiError e) {
+      blocked = true;
+    }
+    boolean readerOnly = blocked;
     Sql.inTransaction(
         db,
         c -> {
@@ -610,8 +618,14 @@ public final class ConversationService {
                           .setUserId(userId.toByteString())
                           .setSeq(seq))
                   .build();
-          Collection<Uuid> recipients =
-              h.group() ? readRecipients(c, h, userId, conversationId, previous, seq) : h.members();
+          Collection<Uuid> recipients;
+          if (h.group()) {
+            recipients = readRecipients(c, h, userId, conversationId, previous, seq);
+          } else if (readerOnly) {
+            recipients = List.of(userId);
+          } else {
+            recipients = h.members();
+          }
           Rows.insertOutbox(
               c,
               conversationId,
