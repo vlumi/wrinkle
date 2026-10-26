@@ -5,7 +5,7 @@ import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { StickerSchema, type Sticker } from "../gen/wrinkle/v1/model_pb.js";
 import { codeOf, failedPrecondition, invalidArgument } from "../internal/apierror.ts";
 import { ErrorCode, ErrorReason } from "../gen/wrinkle/v1/frame_pb.js";
-import { exec, isDuplicate, now, placeholders, row, rows, tx } from "../internal/db.ts";
+import { exec, isDuplicate, now, placeholders, row, timedRows, timestampOf, tx, type DbTime } from "../internal/db.ts";
 import { hex, parseUUID, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
 import { save } from "./palette.ts";
@@ -94,7 +94,12 @@ export async function getStickers(deps: Deps, stickerIds: Uint8Array[]): Promise
 export async function load(deps: Deps, stickerIds: UUID[]): Promise<Sticker[]> {
   if (stickerIds.length === 0) return [];
   const found = new Map<string, Sticker>();
-  for (const r of await rows<{ sticker_id: Buffer; creator_user_id: Buffer; media_type: string; created_at: Date }>(
+  for (const r of await timedRows<{
+    sticker_id: Buffer;
+    creator_user_id: Buffer;
+    media_type: string;
+    created_at: DbTime;
+  }>(
     deps.users,
     `SELECT sticker_id, creator_user_id, media_type, created_at FROM sticker WHERE sticker_id IN (${placeholders(stickerIds.length)})`,
     stickerIds,
@@ -105,7 +110,7 @@ export async function load(deps: Deps, stickerIds: UUID[]): Promise<Sticker[]> {
         stickerId: r.sticker_id,
         creatorUserId: r.creator_user_id,
         mediaType: r.media_type,
-        createdAt: timestampFromDate(r.created_at),
+        createdAt: timestampOf(r.created_at),
       }),
     );
   }
