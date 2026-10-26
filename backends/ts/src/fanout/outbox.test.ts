@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { create, toBinary } from "@bufbuild/protobuf";
 import { EventSchema, MessageDeletedEventSchema } from "../gen/wrinkle/v1/event_pb.js";
+import { newUUID } from "../internal/ids.ts";
 import { isDirect, parseOutboxRow, parseUserOutboxRow, peerOf } from "./outbox.ts";
 
 // Records as Debezium wrote them, binary columns in base64.
@@ -39,20 +40,31 @@ test("parses a conversation outbox row", () => {
   );
 });
 
-test("parses a deletion's target", () => {
+test("parses a deletion's target and released uploads", () => {
   const payload = toBinary(
     EventSchema,
     create(EventSchema, { body: { case: "messageDeleted", value: create(MessageDeletedEventSchema, { seq: 3n }) } }),
   );
-  const row = (target: string) =>
+  const row = (target: string, released = "null") =>
     Buffer.from(
       `{"conversation_id":"C4X3FkaURgebCmaEBLUfTA==","outbox_id":"2","recipients":"","conversation_kind":"direct",` +
-        `"member_count":2,"kind":"message_deleted","target_outbox_id":${target},"payload":"${b64(payload)}"}`,
+        `"member_count":2,"kind":"message_deleted","target_outbox_id":${target},"released_uploads":${released},` +
+        `"payload":"${b64(payload)}"}`,
     );
-  const o = parseOutboxRow(row(`"18446744073709551615"`));
+  const sender = newUUID();
+  const blob = newUUID();
+  const o = parseOutboxRow(row(`"18446744073709551615"`, `"${b64(Buffer.concat([sender, blob]))}"`));
   assert.equal(o.targetOutboxId, 18446744073709551615n);
   assert.equal(o.event.body.case === "messageDeleted" ? o.event.body.value.seq : 0n, 3n);
-  assert.equal(parseOutboxRow(row("null")).targetOutboxId, 0n);
+  assert.ok(o.releasedBy?.equals(sender));
+  assert.deepEqual(o.releasedUploads.map(b64), [b64(blob)]);
+  const nulls = parseOutboxRow(row("null"));
+  assert.equal(nulls.targetOutboxId, 0n);
+  assert.equal(nulls.releasedBy, undefined);
+  assert.deepEqual(nulls.releasedUploads, []);
+  // The sender alone, or a partial id, is malformed.
+  assert.throws(() => parseOutboxRow(row("null", `"${b64(sender)}"`)));
+  assert.throws(() => parseOutboxRow(row("null", `"${b64(Buffer.concat([sender, blob.subarray(0, 8)]))}"`)));
   // Numbers beyond 2^53 keep every digit.
   assert.equal(parseOutboxRow(row("9007199254740993")).targetOutboxId, 9007199254740993n);
 });

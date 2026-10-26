@@ -231,6 +231,8 @@ export interface OutboxRow {
   kind: string;
   /** The outbox row of the message a deletion is about. */
   target?: bigint;
+  /** A deleted message's sender and blob ids. */
+  releasedUploads?: Buffer;
   event: Event;
   at: Date;
 }
@@ -242,8 +244,8 @@ export interface OutboxRow {
 export async function insertOutbox(q: Querier, r: OutboxRow): Promise<void> {
   await exec(
     q,
-    `INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, target_outbox_id, payload, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO outbox (conversation_id, outbox_id, recipients, conversation_kind, topic, member_count, kind, target_outbox_id, released_uploads, payload, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       r.conversationId,
       r.outboxId,
@@ -253,6 +255,7 @@ export async function insertOutbox(q: Querier, r: OutboxRow): Promise<void> {
       r.st.members.length,
       r.kind,
       r.target ?? null,
+      r.releasedUploads ?? null,
       Buffer.from(toBinary(EventSchema, r.event)),
       r.at,
     ],

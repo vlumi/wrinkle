@@ -6,7 +6,6 @@ import { invalidArgument, notFound, permissionDenied } from "../internal/apierro
 import { exec, now, row, timestampOf } from "../internal/db.ts";
 import { hex, randomId, type UUID } from "../internal/ids.ts";
 import type { Deps } from "../services/deps.ts";
-import { releaseAttachments } from "../uploads/uploads.ts";
 import { coldTx } from "./cold.ts";
 import {
   decodeBlobIds,
@@ -25,13 +24,14 @@ import {
  * the deletion time, and the event tells the current members, and the user
  * when no longer one, so that their logs and lists drop the content. A
  * former member may delete what they sent before leaving. Deleting a
- * deleted message again does nothing. The attachments' uploads are
- * released after the commit, for the sweeper to delete. A message in the
- * cold tier is changed there, under the conversation's row lock as in MySQL.
+ * deleted message again does nothing. The outbox row names the
+ * attachments' uploads, which the fan-out releases for the sweeper. A
+ * message in the cold tier is changed there, under the conversation's row
+ * lock as in MySQL.
  */
 export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UUID, seq: bigint): Promise<void> {
   if (seq === 0n) throw invalidArgument("seq must be positive");
-  const released = await coldTx(deps.conversations, deps.cold, async (c, change) => {
+  await coldTx(deps.conversations, deps.cold, async (c, change) => {
     const st = await load(c, selectStateForUpdate, conversationId);
     const m = await row<{ joined_seq: bigint; left_seq: bigint | null }>(
       c,
@@ -55,7 +55,7 @@ export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UU
     decodeBody(stored.body, msg);
     if (msg.content.case === "notice") throw invalidArgument(`message ${seq} is a notice`);
     if (!stored.sender_user_id.equals(userId)) throw permissionDenied(`message ${seq} is not the user's own`);
-    if (msg.deletedAt) return [];
+    if (msg.deletedAt) return;
     const at = now();
     const deletedAt = timestampOf(at);
     const body = Buffer.from(encodeBody({ content: { case: undefined }, deletedAt }));
@@ -70,6 +70,7 @@ export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UU
       ]);
       await exec(c, `DELETE FROM reaction WHERE conversation_id = ? AND seq = ?`, [conversationId, seq]);
     }
+    const blobs = decodeBlobIds(stored.blob_ids);
     const recipients = has(st.members, userId) ? st.members : [...st.members, userId];
     await insertOutbox(c, {
       conversationId,
@@ -78,13 +79,12 @@ export async function deleteMessage(deps: Deps, userId: UUID, conversationId: UU
       st,
       kind: "message_deleted",
       target: stored.outbox_id,
+      releasedUploads: blobs.length > 0 ? Buffer.concat([userId, ...blobs]) : undefined,
       event: event(deletedAt, {
         case: "messageDeleted",
         value: create(MessageDeletedEventSchema, { conversationId, seq, deletedAt }),
       }),
       at,
     });
-    return decodeBlobIds(stored.blob_ids).map((b) => Buffer.from(b));
   });
-  if (released.length > 0) await releaseAttachments(deps, userId, released);
 }

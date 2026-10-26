@@ -74,7 +74,9 @@ const notAttachmentUpload = () => failedPrecondition("not an attachment upload o
 /**
  * Takes a message's attachments into use: each must be an attachment upload
  * of the sender's, uploaded, and not attached to another message. Checked
- * again under row locks, so the sweeper cannot take them meanwhile.
+ * again under row locks, so the sweeper cannot take them meanwhile. They
+ * stay pending until the fan-out delivers the message, so a send that fails
+ * without releasing them loses them only to the sweeper.
  */
 export async function useAttachments(deps: Deps, userId: UUID, blobIds: UUID[]): Promise<void> {
   if (blobIds.length === 0) return;
@@ -90,8 +92,8 @@ export async function useAttachments(deps: Deps, userId: UUID, blobIds: UUID[]):
     }
     await exec(
       c,
-      `UPDATE upload SET used = TRUE WHERE user_id = ? AND blob_id IN (${placeholders(blobIds.length)})`,
-      args,
+      `UPDATE upload SET used = TRUE, pending_since = ? WHERE user_id = ? AND blob_id IN (${placeholders(blobIds.length)})`,
+      [now(), ...args],
     );
   });
 }
@@ -103,12 +105,12 @@ async function attachmentUploads(q: Querier, query: string, args: unknown[], wan
   return found.some((r) => r.used !== 0);
 }
 
-/** Gives a deleted message's attachments back to the sweeper. */
+/** Gives a failed send's attachments back to the sweeper. */
 export async function releaseAttachments(deps: Deps, userId: UUID, blobIds: UUID[]): Promise<void> {
   if (blobIds.length === 0) return;
   await exec(
     deps.users,
-    `UPDATE upload SET used = FALSE WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN (${placeholders(blobIds.length)})`,
+    `UPDATE upload SET used = FALSE, pending_since = NULL WHERE user_id = ? AND purpose = 'attachment' AND blob_id IN (${placeholders(blobIds.length)})`,
     [userId, ...blobIds],
   );
 }

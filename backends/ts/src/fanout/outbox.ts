@@ -18,6 +18,9 @@ export interface OutboxRow {
   kind: string;
   /** The outbox row of the message a deletion is about, 0 for others. */
   targetOutboxId: bigint;
+  /** A deletion's sender and the uploads of the message's attachments. */
+  releasedBy: UUID | undefined;
+  releasedUploads: UUID[];
   event: Event;
 }
 
@@ -86,6 +89,11 @@ export function parseOutboxRow(value: Buffer): OutboxRow {
   const recipients: UUID[] = [];
   for (let i = 0; i < raw.length; i += 16) recipients.push(Buffer.from(raw.subarray(i, i + 16)));
   const target = r["target_outbox_id"];
+  const released = bytes(r, "released_uploads");
+  if (released.length > 0 && (released.length % 16 !== 0 || released.length < 32))
+    throw new Error(`released_uploads of ${released.length} bytes`);
+  const releasedUploads: UUID[] = [];
+  for (let i = 16; i < released.length; i += 16) releasedUploads.push(Buffer.from(released.subarray(i, i + 16)));
   return {
     conversationId,
     outboxId: uint(r, "outbox_id"),
@@ -95,6 +103,8 @@ export function parseOutboxRow(value: Buffer): OutboxRow {
     memberCount: Number(uint(r, "member_count") & 0xffffffffn),
     kind: text(r, "kind"),
     targetOutboxId: target === undefined || target === null ? 0n : uint(r, "target_outbox_id"),
+    releasedBy: released.length > 0 ? Buffer.from(released.subarray(0, 16)) : undefined,
+    releasedUploads,
     event: parseEvent(bytes(r, "payload")),
   };
 }

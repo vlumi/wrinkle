@@ -14,7 +14,7 @@ src/accounts/       Register, SignIn, Connect, passwords and device tokens, devi
 src/devicesync/     acks, Sync and the trimmer of the logs, the conversation list, opening conversations and groups on the user's side, push tokens
 src/conversation/   direct conversations and notes, groups and notices, key epochs, send, read marks, history and its cold tier, reactions, deletion
 src/contacts/       each user's side toward another (a request or a block), the list, and the block and contact checks
-src/uploads/        upload slots for blobs, the attachments a message uses, and the sweeper of unused uploads
+src/uploads/        upload slots for blobs, the attachments a message uses, and the sweeper of unused and abandoned uploads
 src/stickers/       stickers made from uploads, palettes and their events
 src/fanout/         the Kafka consumer: both outboxes to the recipients' logs and lists, batched per shard, then published
 src/push/           APNs (token auth, HTTP/2) and the notifier for devices not connected
@@ -96,7 +96,6 @@ On 2026-10-24 at commit 7e6a395, from a fresh stack, medians of three ([2026-10-
 
 ## Gaps
 
-- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good, as in Go and Java ([ROADMAP.md](../../ROADMAP.md), "Stray blobs").
 - A batch transaction has no timeout of its own: mysql2 cannot cancel a query, so a hung one stalls its shard's queue until the connection fails.
 - Split, the gateway's sends queue at 1000 messages a second while the monolith's do not; whether in the internal RPC or the services process's one thread is not established ([ROADMAP.md](../../ROADMAP.md), Parity).
 - The gateway answers a request that takes over 10 s with an error, but the work behind it goes on, and the database pool queues for a connection without a limit: past the database's limit, sends the client gave up on still run.

@@ -18,6 +18,7 @@ import { deliverDevice } from "./device.ts";
 import { eachLimited, Limit } from "./limit.ts";
 import { parseOutboxRow, parseUserOutboxRow } from "./outbox.ts";
 import { deliverDeletion, deliverProfile } from "./profile.ts";
+import { settleUploads } from "./uploads.ts";
 
 // The outbox topics: conversations' rows keyed by conversation id, users'
 // by user id.
@@ -191,6 +192,7 @@ class Worker {
       this.log.error("skipping outbox record without a body", { kind: o.kind, offset: rec.offset });
       return;
     }
+    await settleUploads(this.d.db, o);
     if (batchable(o)) {
       await deliverBatched(this.d, this.batches, o);
       return;
