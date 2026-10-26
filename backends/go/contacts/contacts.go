@@ -172,7 +172,9 @@ func (s *Service) Add(ctx context.Context, userID ids.UUID, req *pb.AddContactRe
 	return Contact(other, own, peer), nil
 }
 
-func unblockFirst() error { return apierror.FailedPrecondition("unblock this user first") }
+func unblockFirst() error {
+	return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_BLOCKED_BY_YOU, "unblock this user first")
+}
 
 // existing returns the profile of a user who exists and is not deleted.
 func (s *Service) existing(ctx context.Context, userID ids.UUID) (*pb.User, error) {
@@ -243,7 +245,7 @@ func (s *Service) CheckMessaging(ctx context.Context, userID, peerID ids.UUID) e
 		return err
 	}
 	if blocked {
-		return apierror.FailedPrecondition("you blocked this user")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_BLOCKED_BY_YOU, "you blocked this user")
 	}
 	if blocked, err = Blocks(ctx, s.db, peerID, userID); err != nil {
 		return err

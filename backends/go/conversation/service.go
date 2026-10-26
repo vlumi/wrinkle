@@ -13,10 +13,12 @@ import (
 	"slices"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/page"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
@@ -200,9 +202,9 @@ func (s *Service) Send(ctx context.Context, userID, conversationID ids.UUID, cli
 	}
 	switch {
 	case st.keyEpoch == 0 || sealed.GetEpoch() != st.keyEpoch:
-		return nil, apierror.FailedPrecondition("stale key epoch: the current one is %d", st.keyEpoch)
+		return nil, apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_STALE_KEY_EPOCH, "stale key epoch: the current one is %d", st.keyEpoch)
 	case st.rotate:
-		return nil, apierror.FailedPrecondition("keys must rotate: the membership changed since epoch %d", st.keyEpoch)
+		return nil, apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_KEYS_MUST_ROTATE, "keys must rotate: the membership changed since epoch %d", st.keyEpoch)
 	}
 	msg.Content = &pb.Message_Sealed{Sealed: &pb.Sealed{
 		Epoch: sealed.GetEpoch(), Nonce: sealed.GetNonce(), Ciphertext: sealed.GetCiphertext(),
@@ -396,7 +398,7 @@ func readRecipients(ctx context.Context, tx *sql.Tx, st state, conversationID, r
 // group, those since the user joined and, for a former member, until they
 // left. The newer ones are in MySQL; the page goes on in the cold tier
 // below the watermark.
-func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
+func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID, beforeSeq uint64, limit uint32) ([]*pb.Message, bool, error) {
 	var joinedSeq uint64
 	var leftSeq sql.NullInt64
 	err := s.db.QueryRowContext(ctx, `
@@ -404,12 +406,12 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 		conversationID, userID).Scan(&joinedSeq, &leftSeq)
 	if errors.Is(err, sql.ErrNoRows) {
 		if _, err := load(ctx, s.db, selectState, conversationID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return nil, apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
+		return nil, false, apierror.PermissionDenied("user %s is not in conversation %s", userID, conversationID)
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	upTo := uint64(math.MaxUint64)
 	if leftSeq.Valid {
@@ -424,25 +426,45 @@ func (s *Service) Messages(ctx context.Context, userID, conversationID ids.UUID,
 	limit = min(limit, maxPageSize)
 	for {
 		messages, again, err := s.messages(ctx, conversationID, joinedSeq, upTo, beforeSeq, limit)
+		if err != nil {
+			return nil, false, err
+		}
 		if !again {
-			return messages, err
+			messages = bounded(messages)
+			// Seqs are dense from the first the user may read, so whether
+			// anything is older shows from the lowest returned.
+			more := len(messages) > 0 && messages[len(messages)-1].GetSeq() > max(joinedSeq, 1)
+			return messages, more, nil
 		}
 	}
+}
+
+// bounded keeps the newest messages of the page within the page's bytes,
+// at least one.
+func bounded(messages []*pb.Message) []*pb.Message {
+	size := 0
+	for i, m := range messages {
+		size += proto.Size(m)
+		if i > 0 && size > page.MaxBytes {
+			return messages[:i]
+		}
+	}
+	return messages
 }
 
 // coldRange is where a page that MySQL gave goes on in the cold tier: from
 // joinedSeq up to hi, when there is room and anything there. A page with a
 // message the watermark has since passed is read again.
-func coldRange(page []*pb.Message, joinedSeq, upTo, beforeSeq, coldSeq uint64, limit uint32) (hi uint64, more, again bool) {
+func coldRange(got []*pb.Message, joinedSeq, upTo, beforeSeq, coldSeq uint64, limit uint32) (hi uint64, more, again bool) {
 	hi = min(upTo, beforeSeq-1, coldSeq)
-	if len(page) > 0 {
-		lowest := page[len(page)-1].GetSeq()
+	if len(got) > 0 {
+		lowest := got[len(got)-1].GetSeq()
 		if lowest <= coldSeq {
 			return 0, false, true
 		}
 		hi = min(hi, lowest-1)
 	}
-	return hi, len(page) < int(limit) && hi >= joinedSeq, false
+	return hi, len(got) < int(limit) && hi >= joinedSeq, false
 }
 
 // messages reads a page of history: MySQL first, then the watermark, then

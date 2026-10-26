@@ -47,7 +47,7 @@ func (s *Service) Save(ctx context.Context, userID ids.UUID, sticker []byte) err
 			return false, nil
 		}
 		if len(p.order) >= maxPalette {
-			return false, apierror.FailedPrecondition("the palette is full, at %d stickers", maxPalette)
+			return false, apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_PALETTE_FULL, "the palette is full, at %d stickers", maxPalette)
 		}
 		position := 0
 		if n := len(p.order); n > 0 {

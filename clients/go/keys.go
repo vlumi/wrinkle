@@ -421,7 +421,7 @@ func (k *Keys) members(ctx context.Context, c *Client, conversationID []byte, cs
 	k.mu.Unlock()
 
 	list, err := c.GetMembers(ctx, conversationID)
-	if Code(err) == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION {
+	if Reason(err) == pb.ErrorReason_ERROR_REASON_NOT_A_GROUP {
 		// Not a group: find the peer, or the notes.
 		if _, err := c.ListConversations(ctx); err != nil {
 			return nil, err

@@ -3,7 +3,9 @@ package devicesync
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -12,11 +14,18 @@ import (
 	"github.com/vlumi/wrinkle/backends/go/conversation"
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/page"
 	"github.com/vlumi/wrinkle/backends/go/internal/vtdb"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
-const maxConversationList = 200
+const (
+	defaultConversationPage = 100
+	maxConversationPage     = 200
+	// A page token: the last entry's updated_at in Unix microseconds, then
+	// its conversation id.
+	pageTokenBytes = 8 + 16
+)
 
 // Open finds or creates the conversation with the named peer.
 func (s *Service) Open(ctx context.Context, userID ids.UUID, peerName string) (*pb.Conversation, error) {
@@ -94,16 +103,58 @@ func (s *Service) listed(ctx context.Context, userID, conversationID ids.UUID) (
 	return list[0], nil
 }
 
-// ListConversations returns the user's conversations, most recently active first.
-func (s *Service) ListConversations(ctx context.Context, userID ids.UUID) ([]*pb.Conversation, error) {
-	rows, err := s.db.QueryContext(ctx, conversationColumns+`
-		FROM user_conversation WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
-		userID, maxConversationList)
+// ListConversations returns a page of the user's conversations, most
+// recently active first, and the token of the next page, nil after the
+// last.
+func (s *Service) ListConversations(ctx context.Context, userID ids.UUID, token []byte, limit uint32) ([]*pb.Conversation, []byte, error) {
+	if limit == 0 {
+		limit = defaultConversationPage
+	}
+	limit = min(limit, maxConversationPage)
+	query, args := conversationColumns+`
+		FROM user_conversation WHERE user_id = ?`, []any{userID}
+	switch len(token) {
+	case 0:
+	case pageTokenBytes:
+		after := time.UnixMicro(int64(binary.BigEndian.Uint64(token))).UTC()
+		afterID, _ := ids.Parse(token[8:])
+		query += ` AND (updated_at, conversation_id) < (?, ?)`
+		args = append(args, after, afterID)
+	default:
+		return nil, nil, apierror.InvalidArgument("page_token is not one this server gave")
+	}
+	rows, err := s.db.QueryContext(ctx, query+` ORDER BY updated_at DESC, conversation_id DESC LIMIT ?`,
+		append(args, limit+1)...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
-	return scanConversations(rows)
+	list, err := scanConversations(rows)
+	if err != nil {
+		return nil, nil, err
+	}
+	more := len(list) > int(limit)
+	list = list[:min(len(list), int(limit))]
+	size := 0
+	for i, c := range list {
+		size += proto.Size(c)
+		if i > 0 && size > page.MaxBytes {
+			list, more = list[:i], true
+			break
+		}
+	}
+	if !more {
+		return list, nil, nil
+	}
+	last, _ := ids.Parse(list[len(list)-1].GetConversationId())
+	var updatedAt time.Time
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT updated_at FROM user_conversation WHERE user_id = ? AND conversation_id = ?`,
+		userID, last).Scan(&updatedAt); err != nil {
+		return nil, nil, err
+	}
+	next := binary.BigEndian.AppendUint64(nil, uint64(updatedAt.UnixMicro()))
+	return list, append(next, last[:]...), nil
 }
 
 const conversationColumns = `

@@ -53,7 +53,7 @@ func (s *Service) CreateGroup(ctx context.Context, creatorID ids.UUID, topic, cl
 		return nil, err
 	}
 	if len(invitees)+1 > MaxMembers {
-		return nil, apierror.FailedPrecondition("a group has at most %d members", MaxMembers)
+		return nil, apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_GROUP_FULL, "a group has at most %d members", MaxMembers)
 	}
 	conversationID, err := s.claimGroup(ctx, creatorID, clientGroupID)
 	if err != nil {
@@ -203,7 +203,7 @@ func (s *Service) AddMembers(ctx context.Context, userID, conversationID ids.UUI
 		}
 	}
 	if len(st.members)+len(added) > MaxMembers {
-		return apierror.FailedPrecondition("a group has at most %d members", MaxMembers)
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_GROUP_FULL, "a group has at most %d members", MaxMembers)
 	}
 	st.lastSeq++
 	now := vtdb.Now()
@@ -406,7 +406,7 @@ func (s *Service) SetAdmin(ctx context.Context, userID, conversationID, targetID
 			return err
 		}
 		if admins <= 1 {
-			return apierror.FailedPrecondition("a group keeps at least one admin")
+			return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_LAST_ADMIN, "a group keeps at least one admin")
 		}
 	}
 	if _, err := tx.ExecContext(ctx, `

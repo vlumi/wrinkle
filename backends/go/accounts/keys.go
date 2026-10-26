@@ -46,7 +46,7 @@ func (s *Service) SetDeviceKey(ctx context.Context, userID ids.UUID, deviceID ui
 	case bytes.Equal(current, key):
 		return nil
 	case current != nil:
-		return apierror.FailedPrecondition("the device has a different key; sign in again as a new device")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_DEVICE_KEY_SET, "the device has a different key; sign in again as a new device")
 	}
 	if _, err := tx.ExecContext(ctx, `
 		UPDATE device SET public_key = ? WHERE user_id = ? AND device_id = ?`,

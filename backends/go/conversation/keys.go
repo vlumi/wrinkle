@@ -25,6 +25,9 @@ type DeviceKeys interface {
 	DeviceKeys(ctx context.Context, userIDs [][]byte) ([]*pb.UserDevices, error)
 }
 
+// maxKeyPage is how many keys GetConversationKeys returns at most.
+const maxKeyPage = 100
+
 type wrap struct {
 	userID   ids.UUID
 	deviceID uint64
@@ -83,9 +86,9 @@ func (s *Service) PublishKeys(ctx context.Context, userID ids.UUID, deviceID uin
 		return err
 	}
 	if senderKey == nil {
-		return apierror.FailedPrecondition("this device has no key; set one first")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_DEVICE_HAS_NO_KEY, "this device has no key; set one first")
 	}
-	notNext := apierror.FailedPrecondition("epoch %d is not next: the current one is %d", epoch, st.keyEpoch)
+	notNext := apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_KEY_EPOCH_TAKEN, "epoch %d is not next: the current one is %d", epoch, st.keyEpoch)
 	switch {
 	case epoch == st.keyEpoch+1:
 		if err := recipientsAreMembers(st, wraps); err != nil {
@@ -222,7 +225,10 @@ func (p publication) insert(ctx context.Context, tx *sql.Tx) error {
 // device in epochs after afterEpoch, oldest first. Former members may ask:
 // no wraps reach them after they leave, and they get none of the current
 // membership.
-func (s *Service) Keys(ctx context.Context, userID ids.UUID, deviceID uint64, conversationID ids.UUID, afterEpoch uint32) (*pb.GetConversationKeysResponse, error) {
+func (s *Service) Keys(ctx context.Context, userID ids.UUID, deviceID uint64, conversationID ids.UUID, afterEpoch, limit uint32) (*pb.GetConversationKeysResponse, error) {
+	if limit == 0 || limit > maxKeyPage {
+		limit = maxKeyPage
+	}
 	st, err := load(ctx, s.db, selectState, conversationID)
 	if err != nil {
 		return nil, err
@@ -262,8 +268,8 @@ func (s *Service) Keys(ctx context.Context, userID ids.UUID, deviceID uint64, co
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT epoch, sender_user_id, sender_device_id, sender_public_key, wrapped FROM conversation_key
 		WHERE conversation_id = ? AND recipient_user_id = ? AND recipient_device_id = ? AND epoch > ?
-		ORDER BY epoch`,
-		conversationID, userID, deviceID, afterEpoch)
+		ORDER BY epoch LIMIT ?`,
+		conversationID, userID, deviceID, afterEpoch, limit+1)
 	if err != nil {
 		return nil, err
 	}
@@ -272,6 +278,10 @@ func (s *Service) Keys(ctx context.Context, userID ids.UUID, deviceID uint64, co
 		k := &pb.ReceivedKey{}
 		if err := rows.Scan(&k.Epoch, &k.SenderUserId, &k.SenderDeviceId, &k.SenderPublicKey, &k.Wrapped); err != nil {
 			return nil, err
+		}
+		if len(resp.Keys) == int(limit) {
+			resp.HasMore = true
+			break
 		}
 		resp.Keys = append(resp.Keys, k)
 	}

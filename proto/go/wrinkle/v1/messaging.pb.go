@@ -238,7 +238,9 @@ func (x *RegisterResponse) GetCredentials() *DeviceCredentials {
 
 // Signs a new device in to an existing account; the name is matched ignoring
 // case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
-// without saying which. Allowed only before Connect.
+// without saying which. An account has at most 20 signed-in devices; beyond
+// them SignIn fails with ERROR_CODE_RESOURCE_EXHAUSTED and
+// ERROR_REASON_TOO_MANY_DEVICES. Allowed only before Connect.
 type SignInRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -3355,8 +3357,10 @@ type GetConversationKeysRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	AfterEpoch     uint32                 `protobuf:"varint,2,opt,name=after_epoch,json=afterEpoch,proto3" json:"after_epoch,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Keys to return, oldest first: 0 means 100, at most 100.
+	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetConversationKeysRequest) Reset() {
@@ -3403,6 +3407,13 @@ func (x *GetConversationKeysRequest) GetAfterEpoch() uint32 {
 	return 0
 }
 
+func (x *GetConversationKeysRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type GetConversationKeysResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 0 while no epoch has been published.
@@ -3414,8 +3425,10 @@ type GetConversationKeysResponse struct {
 	// rotate, for a former member, who learns nothing of the membership now.
 	CurrentRecipients []*KeyRecipient `protobuf:"bytes,3,rep,name=current_recipients,json=currentRecipients,proto3" json:"current_recipients,omitempty"`
 	Keys              []*ReceivedKey  `protobuf:"bytes,4,rep,name=keys,proto3" json:"keys,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// More keys follow: ask again with after_epoch the last key's epoch.
+	HasMore       bool `protobuf:"varint,5,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetConversationKeysResponse) Reset() {
@@ -3474,6 +3487,13 @@ func (x *GetConversationKeysResponse) GetKeys() []*ReceivedKey {
 		return x.Keys
 	}
 	return nil
+}
+
+func (x *GetConversationKeysResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 type KeyRecipient struct {
@@ -3707,8 +3727,8 @@ func (*MarkReadResponse) Descriptor() ([]byte, []int) {
 type SyncRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Cursor uint64                 `protobuf:"varint,1,opt,name=cursor,proto3" json:"cursor,omitempty"`
-	// Maximum number of events to return; the server may return fewer.
-	// 0 means the server's default.
+	// Maximum number of events to return; the server may return fewer, and
+	// does past 512 KiB of them. 0 means the server's default.
 	Limit         uint32 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3821,8 +3841,13 @@ func (x *SyncResponse) GetHasMore() bool {
 	return false
 }
 
+// A page of the user's conversations, the most recently active first:
+// up to limit (0 means 100, at most 200), and fewer past 512 KiB of them.
+// The next page starts at the page token the last one returned.
 type ListConversationsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	PageToken     []byte                 `protobuf:"bytes,1,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	Limit         uint32                 `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3857,10 +3882,25 @@ func (*ListConversationsRequest) Descriptor() ([]byte, []int) {
 	return file_wrinkle_v1_messaging_proto_rawDescGZIP(), []int{75}
 }
 
-// Conversations with the most recently active first.
+func (x *ListConversationsRequest) GetPageToken() []byte {
+	if x != nil {
+		return x.PageToken
+	}
+	return nil
+}
+
+func (x *ListConversationsRequest) GetLimit() uint32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListConversationsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Conversations []*Conversation        `protobuf:"bytes,1,rep,name=conversations,proto3" json:"conversations,omitempty"`
+	// Empty on the last page; else pass it as the next request's page_token.
+	NextPageToken []byte `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3902,6 +3942,13 @@ func (x *ListConversationsResponse) GetConversations() []*Conversation {
 	return nil
 }
 
+func (x *ListConversationsResponse) GetNextPageToken() []byte {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return nil
+}
+
 // Returns messages of a conversation, newest first. Group members get the
 // messages from the notice that added them on; a former member those up to
 // the notice that removed them.
@@ -3910,7 +3957,7 @@ type GetMessagesRequest struct {
 	ConversationId []byte                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	// Return messages with seq below this; 0 starts from the newest.
 	BeforeSeq uint64 `protobuf:"varint,2,opt,name=before_seq,json=beforeSeq,proto3" json:"before_seq,omitempty"`
-	// 0 means the server's default.
+	// 0 means the server's default; the server returns fewer past 512 KiB.
 	Limit         uint32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3968,8 +4015,11 @@ func (x *GetMessagesRequest) GetLimit() uint32 {
 }
 
 type GetMessagesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Messages      []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Messages []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	// Older messages the user may read follow: ask again with before_seq the
+	// lowest seq returned. A short page does not mean the end.
+	HasMore       bool `protobuf:"varint,2,opt,name=has_more,json=hasMore,proto3" json:"has_more,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4009,6 +4059,13 @@ func (x *GetMessagesResponse) GetMessages() []*Message {
 		return x.Messages
 	}
 	return nil
+}
+
+func (x *GetMessagesResponse) GetHasMore() bool {
+	if x != nil {
+		return x.HasMore
+	}
+	return false
 }
 
 // Registers where to push notifications for the requesting device while it
@@ -4739,16 +4796,18 @@ const file_wrinkle_v1_messaging_proto_rawDesc = "" +
 	"WrappedKey\x12*\n" +
 	"\x11recipient_user_id\x18\x01 \x01(\fR\x0frecipientUserId\x12.\n" +
 	"\x13recipient_device_id\x18\x02 \x01(\x04R\x11recipientDeviceId\x12\x18\n" +
-	"\awrapped\x18\x03 \x01(\fR\awrapped\"f\n" +
+	"\awrapped\x18\x03 \x01(\fR\awrapped\"|\n" +
 	"\x1aGetConversationKeysRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x1f\n" +
 	"\vafter_epoch\x18\x02 \x01(\rR\n" +
-	"afterEpoch\"\xd0\x01\n" +
+	"afterEpoch\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"\xeb\x01\n" +
 	"\x1bGetConversationKeysResponse\x12#\n" +
 	"\rcurrent_epoch\x18\x01 \x01(\rR\fcurrentEpoch\x12\x16\n" +
 	"\x06rotate\x18\x02 \x01(\bR\x06rotate\x12G\n" +
 	"\x12current_recipients\x18\x03 \x03(\v2\x18.wrinkle.v1.KeyRecipientR\x11currentRecipients\x12+\n" +
-	"\x04keys\x18\x04 \x03(\v2\x17.wrinkle.v1.ReceivedKeyR\x04keys\"D\n" +
+	"\x04keys\x18\x04 \x03(\v2\x17.wrinkle.v1.ReceivedKeyR\x04keys\x12\x19\n" +
+	"\bhas_more\x18\x05 \x01(\bR\ahasMore\"D\n" +
 	"\fKeyRecipient\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\fR\x06userId\x12\x1b\n" +
 	"\tdevice_id\x18\x02 \x01(\x04R\bdeviceId\"\xb9\x01\n" +
@@ -4768,17 +4827,22 @@ const file_wrinkle_v1_messaging_proto_rawDesc = "" +
 	"\fSyncResponse\x12)\n" +
 	"\x06events\x18\x01 \x03(\v2\x11.wrinkle.v1.EventR\x06events\x12\x16\n" +
 	"\x06cursor\x18\x02 \x01(\x04R\x06cursor\x12\x19\n" +
-	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"\x1a\n" +
-	"\x18ListConversationsRequest\"[\n" +
+	"\bhas_more\x18\x03 \x01(\bR\ahasMore\"O\n" +
+	"\x18ListConversationsRequest\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x01 \x01(\fR\tpageToken\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\rR\x05limit\"\x83\x01\n" +
 	"\x19ListConversationsResponse\x12>\n" +
-	"\rconversations\x18\x01 \x03(\v2\x18.wrinkle.v1.ConversationR\rconversations\"r\n" +
+	"\rconversations\x18\x01 \x03(\v2\x18.wrinkle.v1.ConversationR\rconversations\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"r\n" +
 	"\x12GetMessagesRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\fR\x0econversationId\x12\x1d\n" +
 	"\n" +
 	"before_seq\x18\x02 \x01(\x04R\tbeforeSeq\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\rR\x05limit\"F\n" +
+	"\x05limit\x18\x03 \x01(\rR\x05limit\"a\n" +
 	"\x13GetMessagesResponse\x12/\n" +
-	"\bmessages\x18\x01 \x03(\v2\x13.wrinkle.v1.MessageR\bmessages\"c\n" +
+	"\bmessages\x18\x01 \x03(\v2\x13.wrinkle.v1.MessageR\bmessages\x12\x19\n" +
+	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"c\n" +
 	"\x18RegisterPushTokenRequest\x121\n" +
 	"\aservice\x18\x01 \x01(\x0e2\x17.wrinkle.v1.PushServiceR\aservice\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\"\x1b\n" +

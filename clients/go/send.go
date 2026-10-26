@@ -37,7 +37,7 @@ func (c *Client) SendContent(ctx context.Context, conversationID []byte, clientM
 			return nil, err
 		}
 		msg, err := c.SendMessage(ctx, conversationID, clientMessageID, sealed, blobIDs...)
-		if Code(err) == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION && attempt == 0 {
+		if staleKeys(err) && attempt == 0 {
 			k.Invalidate(conversationID)
 			continue
 		}

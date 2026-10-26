@@ -63,7 +63,7 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 	switch req.GetBody().(type) {
 	case *pb.Request_Register, *pb.Request_SignIn, *pb.Request_Connect:
 		if !userID.IsZero() {
-			return apierror.FailedPrecondition("already connected")
+			return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_ALREADY_CONNECTED, "already connected")
 		}
 		return l.signIn(ctx, req, resp)
 	case nil:
@@ -293,22 +293,22 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 		}
 		resp.Body = &pb.Response_Sync{Sync: sync}
 	case *pb.Request_ListConversations:
-		list, err := l.users.ListConversations(ctx, userID)
+		list, next, err := l.users.ListConversations(ctx, userID, r.ListConversations.GetPageToken(), r.ListConversations.GetLimit())
 		if err != nil {
 			return err
 		}
-		resp.Body = &pb.Response_ListConversations{ListConversations: &pb.ListConversationsResponse{Conversations: list}}
+		resp.Body = &pb.Response_ListConversations{ListConversations: &pb.ListConversationsResponse{Conversations: list, NextPageToken: next}}
 	case *pb.Request_GetMessages:
 		conversationID, err := parseConversationID(r.GetMessages.GetConversationId())
 		if err != nil {
 			return err
 		}
-		msgs, err := l.conversations.Messages(ctx, userID, conversationID,
+		msgs, more, err := l.conversations.Messages(ctx, userID, conversationID,
 			r.GetMessages.GetBeforeSeq(), r.GetMessages.GetLimit())
 		if err != nil {
 			return err
 		}
-		resp.Body = &pb.Response_GetMessages{GetMessages: &pb.GetMessagesResponse{Messages: msgs}}
+		resp.Body = &pb.Response_GetMessages{GetMessages: &pb.GetMessagesResponse{Messages: msgs, HasMore: more}}
 	case *pb.Request_SetDeviceKey:
 		if err := l.accounts.SetDeviceKey(ctx, userID, deviceID, r.SetDeviceKey.GetPublicKey()); err != nil {
 			return err
@@ -335,7 +335,7 @@ func (l *Local) dispatch(ctx context.Context, userID ids.UUID, deviceID uint64, 
 		if err != nil {
 			return err
 		}
-		keys, err := l.conversations.Keys(ctx, userID, deviceID, conversationID, r.GetConversationKeys.GetAfterEpoch())
+		keys, err := l.conversations.Keys(ctx, userID, deviceID, conversationID, r.GetConversationKeys.GetAfterEpoch(), r.GetConversationKeys.GetLimit())
 		if err != nil {
 			return err
 		}

@@ -11,6 +11,7 @@ import (
 type Error struct {
 	Code    pb.ErrorCode
 	Message string
+	Reason  pb.ErrorReason
 }
 
 func (e *Error) Error() string { return e.Message }
@@ -35,8 +36,9 @@ func NotFound(format string, args ...any) *Error {
 	return New(pb.ErrorCode_ERROR_CODE_NOT_FOUND, format, args...)
 }
 
-func FailedPrecondition(format string, args ...any) *Error {
-	return New(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, format, args...)
+// FailedPrecondition names the precondition, which clients act on.
+func FailedPrecondition(reason pb.ErrorReason, format string, args ...any) *Error {
+	return New(pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, format, args...).Because(reason)
 }
 
 func Unavailable(format string, args ...any) *Error {
@@ -53,6 +55,12 @@ func AlreadyExists(format string, args ...any) *Error {
 
 func CursorExpired(format string, args ...any) *Error {
 	return New(pb.ErrorCode_ERROR_CODE_CURSOR_EXPIRED, format, args...)
+}
+
+// Because sets the error's reason.
+func (e *Error) Because(reason pb.ErrorReason) *Error {
+	e.Reason = reason
+	return e
 }
 
 // Code returns the error's code; errors without one are internal.
@@ -72,7 +80,11 @@ func Proto(err error) *pb.Error {
 	if code == pb.ErrorCode_ERROR_CODE_INTERNAL {
 		msg = "internal error"
 	}
-	return &pb.Error{Code: code, Message: msg}
+	var reason pb.ErrorReason
+	if e := (*Error)(nil); errors.As(err, &e) {
+		reason = e.Reason
+	}
+	return &pb.Error{Code: code, Message: msg, Reason: reason}
 }
 
 // Response is the response to a request that failed with err.

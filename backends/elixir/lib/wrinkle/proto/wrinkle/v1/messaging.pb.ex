@@ -770,6 +770,7 @@ defmodule Wrinkle.V1.GetConversationKeysRequest do
 
   field :conversation_id, 1, type: :bytes, json_name: "conversationId"
   field :after_epoch, 2, type: :uint32, json_name: "afterEpoch"
+  field :limit, 3, type: :uint32
 end
 
 defmodule Wrinkle.V1.GetConversationKeysResponse do
@@ -789,6 +790,7 @@ defmodule Wrinkle.V1.GetConversationKeysResponse do
     json_name: "currentRecipients"
 
   field :keys, 4, repeated: true, type: Wrinkle.V1.ReceivedKey
+  field :has_more, 5, type: :bool, json_name: "hasMore"
 end
 
 defmodule Wrinkle.V1.KeyRecipient do
@@ -871,6 +873,9 @@ defmodule Wrinkle.V1.ListConversationsRequest do
     full_name: "wrinkle.v1.ListConversationsRequest",
     protoc_gen_elixir_version: "0.17.1",
     syntax: :proto3
+
+  field :page_token, 1, type: :bytes, json_name: "pageToken"
+  field :limit, 2, type: :uint32
 end
 
 defmodule Wrinkle.V1.ListConversationsResponse do
@@ -882,6 +887,7 @@ defmodule Wrinkle.V1.ListConversationsResponse do
     syntax: :proto3
 
   field :conversations, 1, repeated: true, type: Wrinkle.V1.Conversation
+  field :next_page_token, 2, type: :bytes, json_name: "nextPageToken"
 end
 
 defmodule Wrinkle.V1.GetMessagesRequest do
@@ -906,6 +912,7 @@ defmodule Wrinkle.V1.GetMessagesResponse do
     syntax: :proto3
 
   field :messages, 1, repeated: true, type: Wrinkle.V1.Message
+  field :has_more, 2, type: :bool, json_name: "hasMore"
 end
 
 defmodule Wrinkle.V1.RegisterPushTokenRequest do

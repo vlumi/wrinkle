@@ -10,6 +10,7 @@ import (
 
 	"github.com/vlumi/wrinkle/backends/go/internal/apierror"
 	"github.com/vlumi/wrinkle/backends/go/internal/ids"
+	"github.com/vlumi/wrinkle/backends/go/internal/page"
 	pb "github.com/vlumi/wrinkle/proto/go/wrinkle/v1"
 )
 
@@ -34,15 +35,17 @@ func (s *Service) Sync(ctx context.Context, userID ids.UUID, cursor uint64, limi
 	}
 	defer rows.Close()
 	resp := &pb.SyncResponse{Cursor: cursor}
+	size := 0
 	for rows.Next() {
-		if len(resp.Events) == int(limit) {
-			resp.HasMore = true
-			break
-		}
 		var payload []byte
 		if err := rows.Scan(&payload); err != nil {
 			return nil, err
 		}
+		if len(resp.Events) == int(limit) || (len(resp.Events) > 0 && size+len(payload) > page.MaxBytes) {
+			resp.HasMore = true
+			break
+		}
+		size += len(payload)
 		event := &pb.Event{}
 		if err := proto.Unmarshal(payload, event); err != nil {
 			return nil, fmt.Errorf("unmarshal event for user %s: %w", userID, err)

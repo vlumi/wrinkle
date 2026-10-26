@@ -66,7 +66,9 @@ export declare const RegisterResponseSchema: GenMessage<RegisterResponse>;
 /**
  * Signs a new device in to an existing account; the name is matched ignoring
  * case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
- * without saying which. Allowed only before Connect.
+ * without saying which. An account has at most 20 signed-in devices; beyond
+ * them SignIn fails with ERROR_CODE_RESOURCE_EXHAUSTED and
+ * ERROR_REASON_TOO_MANY_DEVICES. Allowed only before Connect.
  *
  * @generated from message wrinkle.v1.SignInRequest
  */
@@ -1390,6 +1392,13 @@ export declare type GetConversationKeysRequest = Message<"wrinkle.v1.GetConversa
    * @generated from field: uint32 after_epoch = 2;
    */
   afterEpoch: number;
+
+  /**
+   * Keys to return, oldest first: 0 means 100, at most 100.
+   *
+   * @generated from field: uint32 limit = 3;
+   */
+  limit: number;
 };
 
 /**
@@ -1429,6 +1438,13 @@ export declare type GetConversationKeysResponse = Message<"wrinkle.v1.GetConvers
    * @generated from field: repeated wrinkle.v1.ReceivedKey keys = 4;
    */
   keys: ReceivedKey[];
+
+  /**
+   * More keys follow: ask again with after_epoch the last key's epoch.
+   *
+   * @generated from field: bool has_more = 5;
+   */
+  hasMore: boolean;
 };
 
 /**
@@ -1552,8 +1568,8 @@ export declare type SyncRequest = Message<"wrinkle.v1.SyncRequest"> & {
   cursor: bigint;
 
   /**
-   * Maximum number of events to return; the server may return fewer.
-   * 0 means the server's default.
+   * Maximum number of events to return; the server may return fewer, and
+   * does past 512 KiB of them. 0 means the server's default.
    *
    * @generated from field: uint32 limit = 2;
    */
@@ -1598,9 +1614,22 @@ export declare type SyncResponse = Message<"wrinkle.v1.SyncResponse"> & {
 export declare const SyncResponseSchema: GenMessage<SyncResponse>;
 
 /**
+ * A page of the user's conversations, the most recently active first:
+ * up to limit (0 means 100, at most 200), and fewer past 512 KiB of them.
+ * The next page starts at the page token the last one returned.
+ *
  * @generated from message wrinkle.v1.ListConversationsRequest
  */
 export declare type ListConversationsRequest = Message<"wrinkle.v1.ListConversationsRequest"> & {
+  /**
+   * @generated from field: bytes page_token = 1;
+   */
+  pageToken: Uint8Array;
+
+  /**
+   * @generated from field: uint32 limit = 2;
+   */
+  limit: number;
 };
 
 /**
@@ -1610,8 +1639,6 @@ export declare type ListConversationsRequest = Message<"wrinkle.v1.ListConversat
 export declare const ListConversationsRequestSchema: GenMessage<ListConversationsRequest>;
 
 /**
- * Conversations with the most recently active first.
- *
  * @generated from message wrinkle.v1.ListConversationsResponse
  */
 export declare type ListConversationsResponse = Message<"wrinkle.v1.ListConversationsResponse"> & {
@@ -1619,6 +1646,13 @@ export declare type ListConversationsResponse = Message<"wrinkle.v1.ListConversa
    * @generated from field: repeated wrinkle.v1.Conversation conversations = 1;
    */
   conversations: Conversation[];
+
+  /**
+   * Empty on the last page; else pass it as the next request's page_token.
+   *
+   * @generated from field: bytes next_page_token = 2;
+   */
+  nextPageToken: Uint8Array;
 };
 
 /**
@@ -1648,7 +1682,7 @@ export declare type GetMessagesRequest = Message<"wrinkle.v1.GetMessagesRequest"
   beforeSeq: bigint;
 
   /**
-   * 0 means the server's default.
+   * 0 means the server's default; the server returns fewer past 512 KiB.
    *
    * @generated from field: uint32 limit = 3;
    */
@@ -1669,6 +1703,14 @@ export declare type GetMessagesResponse = Message<"wrinkle.v1.GetMessagesRespons
    * @generated from field: repeated wrinkle.v1.Message messages = 1;
    */
   messages: Message$1[];
+
+  /**
+   * Older messages the user may read follow: ask again with before_seq the
+   * lowest seq returned. A short page does not mean the end.
+   *
+   * @generated from field: bool has_more = 2;
+   */
+  hasMore: boolean;
 };
 
 /**

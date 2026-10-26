@@ -110,7 +110,7 @@ func group(ctx context.Context, q vtdb.RowQuerier, query string, conversationID,
 		return st, err
 	}
 	if st.kind != kindGroup {
-		return st, apierror.FailedPrecondition("conversation %s is not a group", conversationID)
+		return st, apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_A_GROUP, "conversation %s is not a group", conversationID)
 	}
 	if !st.has(userID) {
 		return st, apierror.PermissionDenied("user %s is not in group %s", userID, conversationID)

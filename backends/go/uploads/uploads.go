@@ -72,7 +72,7 @@ func (s *Service) CreateUpload(ctx context.Context, userID ids.UUID, req *pb.Cre
 }
 
 func notAttachmentUpload() error {
-	return apierror.FailedPrecondition("not an attachment upload of yours")
+	return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_YOUR_UPLOAD, "not an attachment upload of yours")
 }
 
 // UseAttachments takes the user's uploaded attachment blobs into use, so
@@ -95,7 +95,7 @@ func (s *Service) UseAttachments(ctx context.Context, userID, conversationID ids
 			return err
 		}
 		if !uploaded {
-			return apierror.FailedPrecondition("not uploaded")
+			return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_UPLOADED, "not uploaded")
 		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -110,7 +110,7 @@ func (s *Service) UseAttachments(ctx context.Context, userID, conversationID ids
 	}
 	// Another message refers to it; deleting either would release it.
 	if used {
-		return apierror.FailedPrecondition("already attached")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_ALREADY_ATTACHED, "already attached")
 	}
 	query, args = blobQuery(`
 		UPDATE upload SET used = TRUE, pending_since = ?, conversation_id = ?, client_message_id = ? WHERE user_id = ? AND blob_id IN `,

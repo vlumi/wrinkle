@@ -1,3 +1,32 @@
+defmodule Wrinkle.V1.ErrorReason do
+  @moduledoc false
+
+  use Protobuf,
+    enum: true,
+    full_name: "wrinkle.v1.ErrorReason",
+    protoc_gen_elixir_version: "0.17.1",
+    syntax: :proto3
+
+  field :ERROR_REASON_UNSPECIFIED, 0
+  field :ERROR_REASON_ALREADY_CONNECTED, 1
+  field :ERROR_REASON_STALE_KEY_EPOCH, 2
+  field :ERROR_REASON_KEYS_MUST_ROTATE, 3
+  field :ERROR_REASON_KEY_EPOCH_TAKEN, 4
+  field :ERROR_REASON_DEVICE_HAS_NO_KEY, 5
+  field :ERROR_REASON_DEVICE_KEY_SET, 6
+  field :ERROR_REASON_BLOCKED_BY_YOU, 7
+  field :ERROR_REASON_NOT_UPLOADED, 8
+  field :ERROR_REASON_NOT_YOUR_UPLOAD, 9
+  field :ERROR_REASON_ALREADY_ATTACHED, 10
+  field :ERROR_REASON_GROUP_FULL, 11
+  field :ERROR_REASON_LAST_ADMIN, 12
+  field :ERROR_REASON_NOT_A_GROUP, 13
+  field :ERROR_REASON_NOT_A_CONTACT, 14
+  field :ERROR_REASON_PALETTE_FULL, 15
+  field :ERROR_REASON_MESSAGE_DELETED, 16
+  field :ERROR_REASON_TOO_MANY_DEVICES, 17
+end
+
 defmodule Wrinkle.V1.ErrorCode do
   @moduledoc false
 
@@ -366,6 +395,7 @@ defmodule Wrinkle.V1.Error do
 
   field :code, 1, type: Wrinkle.V1.ErrorCode, enum: true
   field :message, 2, type: :string
+  field :reason, 3, type: Wrinkle.V1.ErrorReason, enum: true
 end
 
 defmodule Wrinkle.V1.Ack do

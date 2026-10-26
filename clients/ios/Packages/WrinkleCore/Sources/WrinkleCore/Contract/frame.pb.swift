@@ -26,7 +26,9 @@
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
-// Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
+// Limits: a frame from the client is at most 64 KiB; one from the server at
+// most 1 MiB, as pages of events, messages and conversations end early to
+// stay within it; Connect must complete within 5 seconds
 // of the connection opening or of the response to its last successful
 // Register or SignIn; a connection may make 5 Register or SignIn requests,
 // not counting those refused with ERROR_CODE_INVALID_ARGUMENT, since each
@@ -68,6 +70,140 @@ import SwiftProtobuf
 fileprivate nonisolated struct _GeneratedWithProtocGenSwiftVersion: SwiftProtobuf.ProtobufAPIVersionCheck {
   struct _2: SwiftProtobuf.ProtobufAPIVersion_2 {}
   typealias Version = _2
+}
+
+public nonisolated enum Wrinkle_V1_ErrorReason: SwiftProtobuf.Enum, Swift.CaseIterable {
+  public typealias RawValue = Int
+  case unspecified // = 0
+
+  /// Register, SignIn or Connect on a connected connection.
+  case alreadyConnected // = 1
+
+  /// The content is sealed with an epoch other than the current one: fetch
+  /// the conversation's keys and seal again.
+  case staleKeyEpoch // = 2
+
+  /// The membership changed since the current epoch: publish the next one.
+  case keysMustRotate // = 3
+
+  /// PublishKeys for an epoch another device made or published first.
+  case keyEpochTaken // = 4
+
+  /// The requesting device has no key yet: SetDeviceKey first.
+  case deviceHasNoKey // = 5
+
+  /// SetDeviceKey with a key other than the device's: sign in as a new device.
+  case deviceKeySet // = 6
+
+  /// The requesting user blocked the other user: unblock first.
+  case blockedByYou // = 7
+
+  /// The blob of an upload has not been uploaded.
+  case notUploaded // = 8
+
+  /// The blob is not an upload of the user's for this purpose.
+  case notYourUpload // = 9
+
+  /// The attachment goes with another message already.
+  case alreadyAttached // = 10
+
+  /// The group would have more members than allowed.
+  case groupFull // = 11
+
+  /// The change would leave the group without an admin.
+  case lastAdmin // = 12
+
+  /// A group request on a conversation that is not a group.
+  case notAGroup // = 13
+
+  /// A group takes only the adder's contacts.
+  case notAContact // = 14
+
+  /// The sticker palette is full.
+  case paletteFull // = 15
+
+  /// A reaction to a deleted message.
+  case messageDeleted // = 16
+
+  /// SignIn for an account with as many signed-in devices as allowed: sign one
+  /// out first.
+  case tooManyDevices // = 17
+  case UNRECOGNIZED(Int)
+
+  public init() {
+    self = .unspecified
+  }
+
+  public init?(rawValue: Int) {
+    switch rawValue {
+    case 0: self = .unspecified
+    case 1: self = .alreadyConnected
+    case 2: self = .staleKeyEpoch
+    case 3: self = .keysMustRotate
+    case 4: self = .keyEpochTaken
+    case 5: self = .deviceHasNoKey
+    case 6: self = .deviceKeySet
+    case 7: self = .blockedByYou
+    case 8: self = .notUploaded
+    case 9: self = .notYourUpload
+    case 10: self = .alreadyAttached
+    case 11: self = .groupFull
+    case 12: self = .lastAdmin
+    case 13: self = .notAGroup
+    case 14: self = .notAContact
+    case 15: self = .paletteFull
+    case 16: self = .messageDeleted
+    case 17: self = .tooManyDevices
+    default: self = .UNRECOGNIZED(rawValue)
+    }
+  }
+
+  public var rawValue: Int {
+    switch self {
+    case .unspecified: return 0
+    case .alreadyConnected: return 1
+    case .staleKeyEpoch: return 2
+    case .keysMustRotate: return 3
+    case .keyEpochTaken: return 4
+    case .deviceHasNoKey: return 5
+    case .deviceKeySet: return 6
+    case .blockedByYou: return 7
+    case .notUploaded: return 8
+    case .notYourUpload: return 9
+    case .alreadyAttached: return 10
+    case .groupFull: return 11
+    case .lastAdmin: return 12
+    case .notAGroup: return 13
+    case .notAContact: return 14
+    case .paletteFull: return 15
+    case .messageDeleted: return 16
+    case .tooManyDevices: return 17
+    case .UNRECOGNIZED(let i): return i
+    }
+  }
+
+  // The compiler won't synthesize support with the UNRECOGNIZED case.
+  public static let allCases: [Wrinkle_V1_ErrorReason] = [
+    .unspecified,
+    .alreadyConnected,
+    .staleKeyEpoch,
+    .keysMustRotate,
+    .keyEpochTaken,
+    .deviceHasNoKey,
+    .deviceKeySet,
+    .blockedByYou,
+    .notUploaded,
+    .notYourUpload,
+    .alreadyAttached,
+    .groupFull,
+    .lastAdmin,
+    .notAGroup,
+    .notAContact,
+    .paletteFull,
+    .messageDeleted,
+    .tooManyDevices,
+  ]
+
 }
 
 public nonisolated enum Wrinkle_V1_ErrorCode: SwiftProtobuf.Enum, Swift.CaseIterable {
@@ -1068,6 +1204,11 @@ public nonisolated struct Wrinkle_V1_Error: Sendable {
   /// Human-readable detail, for logs; not meant to be shown to users or parsed.
   public var message: String = String()
 
+  /// Which precondition failed, for ERROR_CODE_FAILED_PRECONDITION and
+  /// ERROR_CODE_RESOURCE_EXHAUSTED; unset otherwise. A client acts on it
+  /// rather than on the message.
+  public var reason: Wrinkle_V1_ErrorReason = .unspecified
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1112,6 +1253,10 @@ public nonisolated struct Wrinkle_V1_Pong: Sendable {
 // MARK: - Code below here is support for the SwiftProtobuf runtime.
 
 fileprivate nonisolated let _protobuf_package = "wrinkle.v1"
+
+nonisolated extension Wrinkle_V1_ErrorReason: SwiftProtobuf._ProtoNameProviding {
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_REASON_UNSPECIFIED\0\u{1}ERROR_REASON_ALREADY_CONNECTED\0\u{1}ERROR_REASON_STALE_KEY_EPOCH\0\u{1}ERROR_REASON_KEYS_MUST_ROTATE\0\u{1}ERROR_REASON_KEY_EPOCH_TAKEN\0\u{1}ERROR_REASON_DEVICE_HAS_NO_KEY\0\u{1}ERROR_REASON_DEVICE_KEY_SET\0\u{1}ERROR_REASON_BLOCKED_BY_YOU\0\u{1}ERROR_REASON_NOT_UPLOADED\0\u{1}ERROR_REASON_NOT_YOUR_UPLOAD\0\u{1}ERROR_REASON_ALREADY_ATTACHED\0\u{1}ERROR_REASON_GROUP_FULL\0\u{1}ERROR_REASON_LAST_ADMIN\0\u{1}ERROR_REASON_NOT_A_GROUP\0\u{1}ERROR_REASON_NOT_A_CONTACT\0\u{1}ERROR_REASON_PALETTE_FULL\0\u{1}ERROR_REASON_MESSAGE_DELETED\0\u{1}ERROR_REASON_TOO_MANY_DEVICES\0")
+}
 
 nonisolated extension Wrinkle_V1_ErrorCode: SwiftProtobuf._ProtoNameProviding {
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{2}\0ERROR_CODE_UNSPECIFIED\0\u{1}ERROR_CODE_INVALID_ARGUMENT\0\u{1}ERROR_CODE_UNAUTHENTICATED\0\u{1}ERROR_CODE_PERMISSION_DENIED\0\u{1}ERROR_CODE_NOT_FOUND\0\u{1}ERROR_CODE_FAILED_PRECONDITION\0\u{1}ERROR_CODE_UNAVAILABLE\0\u{1}ERROR_CODE_INTERNAL\0\u{1}ERROR_CODE_RESOURCE_EXHAUSTED\0\u{1}ERROR_CODE_ALREADY_EXISTS\0\u{1}ERROR_CODE_CURSOR_EXPIRED\0")
@@ -2847,7 +2992,7 @@ nonisolated extension Wrinkle_V1_Response: SwiftProtobuf.Message, SwiftProtobuf.
 
 nonisolated extension Wrinkle_V1_Error: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".Error"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}code\0\u{1}message\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}code\0\u{1}message\0\u{1}reason\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -2857,6 +3002,7 @@ nonisolated extension Wrinkle_V1_Error: SwiftProtobuf.Message, SwiftProtobuf._Me
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularEnumField(value: &self.code) }()
       case 2: try { try decoder.decodeSingularStringField(value: &self.message) }()
+      case 3: try { try decoder.decodeSingularEnumField(value: &self.reason) }()
       default: break
       }
     }
@@ -2869,12 +3015,16 @@ nonisolated extension Wrinkle_V1_Error: SwiftProtobuf.Message, SwiftProtobuf._Me
     if !self.message.isEmpty {
       try visitor.visitSingularStringField(value: self.message, fieldNumber: 2)
     }
+    if self.reason != .unspecified {
+      try visitor.visitSingularEnumField(value: self.reason, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_Error, rhs: Wrinkle_V1_Error) -> Bool {
     if lhs.code != rhs.code {return false}
     if lhs.message != rhs.message {return false}
+    if lhs.reason != rhs.reason {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

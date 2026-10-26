@@ -361,7 +361,7 @@ func (c *conn) dispatch(ctx context.Context, req *pb.Request) *pb.Response {
 	switch req.GetBody().(type) {
 	case *pb.Request_Register, *pb.Request_SignIn, *pb.Request_Connect:
 		if connected {
-			return apierror.Response(req.GetId(), apierror.FailedPrecondition("already connected"))
+			return apierror.Response(req.GetId(), apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_ALREADY_CONNECTED, "already connected"))
 		}
 		if req.GetConnect() == nil && !c.countSignIn() {
 			return apierror.Response(req.GetId(), apierror.ResourceExhausted("at most %d sign-ins per connection", maxSignIns))
@@ -422,7 +422,7 @@ func (c *conn) identify(ctx context.Context, resp *pb.ConnectResponse) error {
 	c.mu.Lock()
 	if c.connected {
 		c.mu.Unlock()
-		return apierror.FailedPrecondition("already connected")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_ALREADY_CONNECTED, "already connected")
 	}
 	userID, ok := ids.Parse(resp.GetUser().GetUserId())
 	if !ok {

@@ -109,7 +109,7 @@ func (s *Service) checkContacts(userID ids.UUID, names map[ids.UUID]string) func
 		}
 		for _, id := range users {
 			if !contacts[id] {
-				return apierror.FailedPrecondition("not a contact: %s", names[id])
+				return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_A_CONTACT, "not a contact: %s", names[id])
 			}
 		}
 		return nil

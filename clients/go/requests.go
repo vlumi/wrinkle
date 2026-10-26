@@ -122,26 +122,42 @@ func (c *Client) Sync(ctx context.Context, cursor uint64, limit uint32) (*pb.Syn
 	return resp.GetSync(), nil
 }
 
+// ListConversations returns all the user's conversations, the most
+// recently active first, a page at a time.
 func (c *Client) ListConversations(ctx context.Context) ([]*pb.Conversation, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_ListConversations{
-		ListConversations: &pb.ListConversationsRequest{}}})
-	if err != nil {
-		return nil, err
+	var convs []*pb.Conversation
+	var token []byte
+	for {
+		resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_ListConversations{
+			ListConversations: &pb.ListConversationsRequest{PageToken: token}}})
+		if err != nil {
+			return nil, err
+		}
+		page := resp.GetListConversations()
+		for _, conv := range page.GetConversations() {
+			c.Keys().learnConversation(conv)
+		}
+		convs = append(convs, page.GetConversations()...)
+		if token = page.GetNextPageToken(); len(token) == 0 {
+			return convs, nil
+		}
 	}
-	convs := resp.GetListConversations().GetConversations()
-	for _, conv := range convs {
-		c.Keys().learnConversation(conv)
-	}
-	return convs, nil
 }
 
 func (c *Client) GetMessages(ctx context.Context, conversationID []byte, beforeSeq uint64, limit uint32) ([]*pb.Message, error) {
+	page, err := c.GetMessagesPage(ctx, conversationID, beforeSeq, limit)
+	return page.GetMessages(), err
+}
+
+// GetMessagesPage returns a page of history with whether older messages
+// follow.
+func (c *Client) GetMessagesPage(ctx context.Context, conversationID []byte, beforeSeq uint64, limit uint32) (*pb.GetMessagesResponse, error) {
 	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetMessages{
 		GetMessages: &pb.GetMessagesRequest{ConversationId: conversationID, BeforeSeq: beforeSeq, Limit: limit}}})
 	if err != nil {
 		return nil, err
 	}
-	return resp.GetGetMessages().GetMessages(), nil
+	return resp.GetGetMessages(), nil
 }
 
 func (c *Client) Ack(ctx context.Context, cursor uint64) error {
@@ -232,13 +248,29 @@ func (c *Client) PublishKeys(ctx context.Context, conversationID []byte, epoch u
 	return err
 }
 
+// GetConversationKeys returns the conversation's key state and every key
+// for the device after the epoch, a page at a time.
 func (c *Client) GetConversationKeys(ctx context.Context, conversationID []byte, afterEpoch uint32) (*pb.GetConversationKeysResponse, error) {
-	resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetConversationKeys{
-		GetConversationKeys: &pb.GetConversationKeysRequest{ConversationId: conversationID, AfterEpoch: afterEpoch}}})
-	if err != nil {
-		return nil, err
+	var all *pb.GetConversationKeysResponse
+	for {
+		resp, err := c.Call(ctx, &pb.Request{Body: &pb.Request_GetConversationKeys{
+			GetConversationKeys: &pb.GetConversationKeysRequest{ConversationId: conversationID, AfterEpoch: afterEpoch}}})
+		if err != nil {
+			return nil, err
+		}
+		page := resp.GetGetConversationKeys()
+		if all == nil {
+			all = page
+		} else {
+			all.Keys = append(all.Keys, page.GetKeys()...)
+		}
+		keys := page.GetKeys()
+		if !page.GetHasMore() || len(keys) == 0 {
+			all.HasMore = false
+			return all, nil
+		}
+		afterEpoch = keys[len(keys)-1].GetEpoch()
 	}
-	return resp.GetGetConversationKeys(), nil
 }
 
 func (c *Client) ListContacts(ctx context.Context) ([]*pb.Contact, error) {

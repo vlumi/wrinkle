@@ -85,7 +85,7 @@ func (s *Service) checkAvatar(ctx context.Context, userID ids.UUID, avatar []byt
 		return err
 	}
 	if !uploaded {
-		return apierror.FailedPrecondition("not uploaded")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_UPLOADED, "not uploaded")
 	}
 	return nil
 }
@@ -100,7 +100,7 @@ func avatarUpload(ctx context.Context, q vtdb.RowQuerier, userID, blobID ids.UUI
 	var one int
 	err := q.QueryRowContext(ctx, query, userID, blobID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
-		return apierror.FailedPrecondition("not an avatar upload of yours")
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_YOUR_UPLOAD, "not an avatar upload of yours")
 	}
 	return err
 }

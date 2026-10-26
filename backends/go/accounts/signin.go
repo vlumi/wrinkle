@@ -15,6 +15,10 @@ import (
 
 const wrongCredentials = "wrong name or password"
 
+// maxDevices bounds an account's signed-in devices, and with them what one
+// user adds to every key epoch and device key list.
+const maxDevices = 20
+
 // dummyHash is verified against when there is no account to check, so an
 // unknown name takes as long as a wrong password.
 var dummyHash = sync.OnceValue(func() string {
@@ -122,6 +126,16 @@ func (s *Service) newDevice(ctx context.Context, userID ids.UUID, name string) (
 	o, err := lockOutbox(ctx, tx, userID, vtdb.Now())
 	if err != nil {
 		return nil, err
+	}
+	// Counted under the user's row lock, so concurrent sign-ins cannot pass it.
+	var signedIn int
+	if err := tx.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM device WHERE user_id = ? AND token_hash IS NOT NULL`, userID).Scan(&signedIn); err != nil {
+		return nil, err
+	}
+	if signedIn >= maxDevices {
+		return nil, apierror.ResourceExhausted("at most %d signed-in devices; sign one out first", maxDevices).
+			Because(pb.ErrorReason_ERROR_REASON_TOO_MANY_DEVICES)
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO device (user_id, device_id, name, token_hash, acked_position, created_at, last_seen_at)

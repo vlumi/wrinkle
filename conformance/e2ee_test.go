@@ -432,14 +432,14 @@ func TestSendNeedsCurrentEpoch(t *testing.T) {
 		t.Fatal(err)
 	}
 	rotate(true)
-	wantCode(t, send("m2", 1), pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
+	wantReason(t, send("m2", 1), pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, pb.ErrorReason_ERROR_REASON_KEYS_MUST_ROTATE)
 	// A resend still returns the message stored.
 	if again, err := a.SendMessage(ctx(t), id, "m1", junkSealed(1)); err != nil || again.GetSeq() != first.GetSeq() {
 		t.Fatalf("resend while rotating: %v %v", again, err)
 	}
 	mustPublish(t, a, id, 2, e2ee.NewEpochKey(), a, b, c, d)
 	rotate(false)
-	wantCode(t, send("m2", 1), pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
+	wantReason(t, send("m2", 1), pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, pb.ErrorReason_ERROR_REASON_STALE_KEY_EPOCH)
 	if err := send("m2", 2); err != nil {
 		t.Fatal(err)
 	}

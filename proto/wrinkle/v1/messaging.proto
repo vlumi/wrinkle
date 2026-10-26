@@ -29,7 +29,9 @@ message RegisterResponse {
 
 // Signs a new device in to an existing account; the name is matched ignoring
 // case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
-// without saying which. Allowed only before Connect.
+// without saying which. An account has at most 20 signed-in devices; beyond
+// them SignIn fails with ERROR_CODE_RESOURCE_EXHAUSTED and
+// ERROR_REASON_TOO_MANY_DEVICES. Allowed only before Connect.
 message SignInRequest {
   string name = 1;
   string password = 2;
@@ -453,6 +455,8 @@ message WrappedKey {
 message GetConversationKeysRequest {
   bytes conversation_id = 1;
   uint32 after_epoch = 2;
+  // Keys to return, oldest first: 0 means 100, at most 100.
+  uint32 limit = 3;
 }
 
 message GetConversationKeysResponse {
@@ -465,6 +469,8 @@ message GetConversationKeysResponse {
   // rotate, for a former member, who learns nothing of the membership now.
   repeated KeyRecipient current_recipients = 3;
   repeated ReceivedKey keys = 4;
+  // More keys follow: ask again with after_epoch the last key's epoch.
+  bool has_more = 5;
 }
 
 message KeyRecipient {
@@ -501,8 +507,8 @@ message MarkReadResponse {}
 // kept may have changed meanwhile.
 message SyncRequest {
   uint64 cursor = 1;
-  // Maximum number of events to return; the server may return fewer.
-  // 0 means the server's default.
+  // Maximum number of events to return; the server may return fewer, and
+  // does past 512 KiB of them. 0 means the server's default.
   uint32 limit = 2;
 }
 
@@ -515,11 +521,18 @@ message SyncResponse {
   bool has_more = 3;
 }
 
-message ListConversationsRequest {}
+// A page of the user's conversations, the most recently active first:
+// up to limit (0 means 100, at most 200), and fewer past 512 KiB of them.
+// The next page starts at the page token the last one returned.
+message ListConversationsRequest {
+  bytes page_token = 1;
+  uint32 limit = 2;
+}
 
-// Conversations with the most recently active first.
 message ListConversationsResponse {
   repeated Conversation conversations = 1;
+  // Empty on the last page; else pass it as the next request's page_token.
+  bytes next_page_token = 2;
 }
 
 // Returns messages of a conversation, newest first. Group members get the
@@ -529,12 +542,15 @@ message GetMessagesRequest {
   bytes conversation_id = 1;
   // Return messages with seq below this; 0 starts from the newest.
   uint64 before_seq = 2;
-  // 0 means the server's default.
+  // 0 means the server's default; the server returns fewer past 512 KiB.
   uint32 limit = 3;
 }
 
 message GetMessagesResponse {
   repeated Message messages = 1;
+  // Older messages the user may read follow: ask again with before_seq the
+  // lowest seq returned. A short page does not mean the end.
+  bool has_more = 2;
 }
 
 // Registers where to push notifications for the requesting device while it

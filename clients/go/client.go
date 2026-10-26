@@ -129,7 +129,7 @@ func (c *Client) Call(ctx context.Context, req *pb.Request) (*pb.Response, error
 		return nil, err
 	}
 	if e := resp.GetError(); e != nil {
-		return resp, &Error{Code: e.GetCode(), Message: e.GetMessage()}
+		return resp, &Error{Code: e.GetCode(), Message: e.GetMessage(), Reason: e.GetReason()}
 	}
 	return resp, nil
 }

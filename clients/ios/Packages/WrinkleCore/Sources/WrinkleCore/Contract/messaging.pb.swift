@@ -155,7 +155,9 @@ public nonisolated struct Wrinkle_V1_RegisterResponse: Sendable {
 
 /// Signs a new device in to an existing account; the name is matched ignoring
 /// case. A wrong name or password fails with ERROR_CODE_UNAUTHENTICATED,
-/// without saying which. Allowed only before Connect.
+/// without saying which. An account has at most 20 signed-in devices; beyond
+/// them SignIn fails with ERROR_CODE_RESOURCE_EXHAUSTED and
+/// ERROR_REASON_TOO_MANY_DEVICES. Allowed only before Connect.
 public nonisolated struct Wrinkle_V1_SignInRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -1246,6 +1248,9 @@ public nonisolated struct Wrinkle_V1_GetConversationKeysRequest: Sendable {
 
   public var afterEpoch: UInt32 = 0
 
+  /// Keys to return, oldest first: 0 means 100, at most 100.
+  public var limit: UInt32 = 0
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -1268,6 +1273,9 @@ public nonisolated struct Wrinkle_V1_GetConversationKeysResponse: Sendable {
   public var currentRecipients: [Wrinkle_V1_KeyRecipient] = []
 
   public var keys: [Wrinkle_V1_ReceivedKey] = []
+
+  /// More keys follow: ask again with after_epoch the last key's epoch.
+  public var hasMore_p: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1351,8 +1359,8 @@ public nonisolated struct Wrinkle_V1_SyncRequest: Sendable {
 
   public var cursor: UInt64 = 0
 
-  /// Maximum number of events to return; the server may return fewer.
-  /// 0 means the server's default.
+  /// Maximum number of events to return; the server may return fewer, and
+  /// does past 512 KiB of them. 0 means the server's default.
   public var limit: UInt32 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -1379,23 +1387,32 @@ public nonisolated struct Wrinkle_V1_SyncResponse: Sendable {
   public init() {}
 }
 
+/// A page of the user's conversations, the most recently active first:
+/// up to limit (0 means 100, at most 200), and fewer past 512 KiB of them.
+/// The next page starts at the page token the last one returned.
 public nonisolated struct Wrinkle_V1_ListConversationsRequest: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  public var pageToken: Data = Data()
+
+  public var limit: UInt32 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
 
-/// Conversations with the most recently active first.
 public nonisolated struct Wrinkle_V1_ListConversationsResponse: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var conversations: [Wrinkle_V1_Conversation] = []
+
+  /// Empty on the last page; else pass it as the next request's page_token.
+  public var nextPageToken: Data = Data()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1415,7 +1432,7 @@ public nonisolated struct Wrinkle_V1_GetMessagesRequest: Sendable {
   /// Return messages with seq below this; 0 starts from the newest.
   public var beforeSeq: UInt64 = 0
 
-  /// 0 means the server's default.
+  /// 0 means the server's default; the server returns fewer past 512 KiB.
   public var limit: UInt32 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -1429,6 +1446,10 @@ public nonisolated struct Wrinkle_V1_GetMessagesResponse: Sendable {
   // methods supported on all messages.
 
   public var messages: [Wrinkle_V1_Message] = []
+
+  /// Older messages the user may read follow: ask again with before_seq the
+  /// lowest seq returned. A short page does not mean the end.
+  public var hasMore_p: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3667,7 +3688,7 @@ nonisolated extension Wrinkle_V1_WrappedKey: SwiftProtobuf.Message, SwiftProtobu
 
 nonisolated extension Wrinkle_V1_GetConversationKeysRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetConversationKeysRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}after_epoch\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}conversation_id\0\u{3}after_epoch\0\u{1}limit\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3677,6 +3698,7 @@ nonisolated extension Wrinkle_V1_GetConversationKeysRequest: SwiftProtobuf.Messa
       switch fieldNumber {
       case 1: try { try decoder.decodeSingularBytesField(value: &self.conversationID) }()
       case 2: try { try decoder.decodeSingularUInt32Field(value: &self.afterEpoch) }()
+      case 3: try { try decoder.decodeSingularUInt32Field(value: &self.limit) }()
       default: break
       }
     }
@@ -3689,12 +3711,16 @@ nonisolated extension Wrinkle_V1_GetConversationKeysRequest: SwiftProtobuf.Messa
     if self.afterEpoch != 0 {
       try visitor.visitSingularUInt32Field(value: self.afterEpoch, fieldNumber: 2)
     }
+    if self.limit != 0 {
+      try visitor.visitSingularUInt32Field(value: self.limit, fieldNumber: 3)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_GetConversationKeysRequest, rhs: Wrinkle_V1_GetConversationKeysRequest) -> Bool {
     if lhs.conversationID != rhs.conversationID {return false}
     if lhs.afterEpoch != rhs.afterEpoch {return false}
+    if lhs.limit != rhs.limit {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3702,7 +3728,7 @@ nonisolated extension Wrinkle_V1_GetConversationKeysRequest: SwiftProtobuf.Messa
 
 nonisolated extension Wrinkle_V1_GetConversationKeysResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetConversationKeysResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}current_epoch\0\u{1}rotate\0\u{3}current_recipients\0\u{1}keys\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}current_epoch\0\u{1}rotate\0\u{3}current_recipients\0\u{1}keys\0\u{3}has_more\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3714,6 +3740,7 @@ nonisolated extension Wrinkle_V1_GetConversationKeysResponse: SwiftProtobuf.Mess
       case 2: try { try decoder.decodeSingularBoolField(value: &self.rotate) }()
       case 3: try { try decoder.decodeRepeatedMessageField(value: &self.currentRecipients) }()
       case 4: try { try decoder.decodeRepeatedMessageField(value: &self.keys) }()
+      case 5: try { try decoder.decodeSingularBoolField(value: &self.hasMore_p) }()
       default: break
       }
     }
@@ -3732,6 +3759,9 @@ nonisolated extension Wrinkle_V1_GetConversationKeysResponse: SwiftProtobuf.Mess
     if !self.keys.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.keys, fieldNumber: 4)
     }
+    if self.hasMore_p != false {
+      try visitor.visitSingularBoolField(value: self.hasMore_p, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -3740,6 +3770,7 @@ nonisolated extension Wrinkle_V1_GetConversationKeysResponse: SwiftProtobuf.Mess
     if lhs.rotate != rhs.rotate {return false}
     if lhs.currentRecipients != rhs.currentRecipients {return false}
     if lhs.keys != rhs.keys {return false}
+    if lhs.hasMore_p != rhs.hasMore_p {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3961,18 +3992,34 @@ nonisolated extension Wrinkle_V1_SyncResponse: SwiftProtobuf.Message, SwiftProto
 
 nonisolated extension Wrinkle_V1_ListConversationsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListConversationsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}page_token\0\u{1}limit\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    // Load everything into unknown fields
-    while try decoder.nextFieldNumber() != nil {}
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      // The use of inline closures is to circumvent an issue where the compiler
+      // allocates stack space for every case branch when no optimizations are
+      // enabled. https://github.com/apple/swift-protobuf/issues/1034
+      switch fieldNumber {
+      case 1: try { try decoder.decodeSingularBytesField(value: &self.pageToken) }()
+      case 2: try { try decoder.decodeSingularUInt32Field(value: &self.limit) }()
+      default: break
+      }
+    }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.pageToken.isEmpty {
+      try visitor.visitSingularBytesField(value: self.pageToken, fieldNumber: 1)
+    }
+    if self.limit != 0 {
+      try visitor.visitSingularUInt32Field(value: self.limit, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_ListConversationsRequest, rhs: Wrinkle_V1_ListConversationsRequest) -> Bool {
+    if lhs.pageToken != rhs.pageToken {return false}
+    if lhs.limit != rhs.limit {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -3980,7 +4027,7 @@ nonisolated extension Wrinkle_V1_ListConversationsRequest: SwiftProtobuf.Message
 
 nonisolated extension Wrinkle_V1_ListConversationsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".ListConversationsResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversations\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}conversations\0\u{3}next_page_token\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -3989,6 +4036,7 @@ nonisolated extension Wrinkle_V1_ListConversationsResponse: SwiftProtobuf.Messag
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.conversations) }()
+      case 2: try { try decoder.decodeSingularBytesField(value: &self.nextPageToken) }()
       default: break
       }
     }
@@ -3998,11 +4046,15 @@ nonisolated extension Wrinkle_V1_ListConversationsResponse: SwiftProtobuf.Messag
     if !self.conversations.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.conversations, fieldNumber: 1)
     }
+    if !self.nextPageToken.isEmpty {
+      try visitor.visitSingularBytesField(value: self.nextPageToken, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_ListConversationsResponse, rhs: Wrinkle_V1_ListConversationsResponse) -> Bool {
     if lhs.conversations != rhs.conversations {return false}
+    if lhs.nextPageToken != rhs.nextPageToken {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -4050,7 +4102,7 @@ nonisolated extension Wrinkle_V1_GetMessagesRequest: SwiftProtobuf.Message, Swif
 
 nonisolated extension Wrinkle_V1_GetMessagesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = _protobuf_package + ".GetMessagesResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}messages\0")
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}messages\0\u{3}has_more\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -4059,6 +4111,7 @@ nonisolated extension Wrinkle_V1_GetMessagesResponse: SwiftProtobuf.Message, Swi
       // enabled. https://github.com/apple/swift-protobuf/issues/1034
       switch fieldNumber {
       case 1: try { try decoder.decodeRepeatedMessageField(value: &self.messages) }()
+      case 2: try { try decoder.decodeSingularBoolField(value: &self.hasMore_p) }()
       default: break
       }
     }
@@ -4068,11 +4121,15 @@ nonisolated extension Wrinkle_V1_GetMessagesResponse: SwiftProtobuf.Message, Swi
     if !self.messages.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.messages, fieldNumber: 1)
     }
+    if self.hasMore_p != false {
+      try visitor.visitSingularBoolField(value: self.hasMore_p, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: Wrinkle_V1_GetMessagesResponse, rhs: Wrinkle_V1_GetMessagesResponse) -> Bool {
     if lhs.messages != rhs.messages {return false}
+    if lhs.hasMore_p != rhs.hasMore_p {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

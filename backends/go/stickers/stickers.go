@@ -65,7 +65,7 @@ func (s *Service) Create(ctx context.Context, userID ids.UUID, blob []byte) (*pb
 		return nil, err
 	}
 	if !uploaded {
-		return nil, apierror.FailedPrecondition("not uploaded")
+		return nil, apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_UPLOADED, "not uploaded")
 	}
 	if existing, err := s.load(ctx, []ids.UUID{blobID}); err != nil || len(existing) > 0 {
 		if err != nil {
@@ -104,7 +104,9 @@ func (s *Service) Create(ctx context.Context, userID ids.UUID, blob []byte) (*pb
 	return sticker, nil
 }
 
-func notStickerUpload() error { return apierror.FailedPrecondition("not a sticker upload of yours") }
+func notStickerUpload() error {
+	return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_NOT_YOUR_UPLOAD, "not a sticker upload of yours")
+}
 
 // markUsed takes the upload into use, unless the sweeper took it first.
 func (s *Service) markUsed(ctx context.Context, userID, blobID ids.UUID) error {

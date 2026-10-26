@@ -89,15 +89,15 @@ func (s *Service) SetReaction(ctx context.Context, userID, conversationID ids.UU
 	case msg.GetNotice() != nil:
 		return apierror.InvalidArgument("message %d is a notice", seq)
 	case msg.GetDeletedAt() != nil:
-		return apierror.FailedPrecondition("message %d is deleted", seq)
+		return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_MESSAGE_DELETED, "message %d is deleted", seq)
 	}
 	var newBody []byte
 	if sealed != nil {
 		switch {
 		case st.keyEpoch == 0 || sealed.GetEpoch() != st.keyEpoch:
-			return apierror.FailedPrecondition("stale key epoch: the current one is %d", st.keyEpoch)
+			return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_STALE_KEY_EPOCH, "stale key epoch: the current one is %d", st.keyEpoch)
 		case st.rotate:
-			return apierror.FailedPrecondition("keys must rotate: the membership changed since epoch %d", st.keyEpoch)
+			return apierror.FailedPrecondition(pb.ErrorReason_ERROR_REASON_KEYS_MUST_ROTATE, "keys must rotate: the membership changed since epoch %d", st.keyEpoch)
 		}
 		sealed = &pb.Sealed{Epoch: sealed.GetEpoch(), Nonce: sealed.GetNonce(), Ciphertext: sealed.GetCiphertext()}
 		if newBody, err = (proto.MarshalOptions{Deterministic: true}).Marshal(sealed); err != nil {

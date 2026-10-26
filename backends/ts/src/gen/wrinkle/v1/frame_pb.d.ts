@@ -16,7 +16,9 @@
 // answered out of order. Events are pushed as they are appended to the
 // user's log; a device fills gaps by calling Sync with its cursor.
 //
-// Limits: a frame is at most 64 KiB; Connect must complete within 5 seconds
+// Limits: a frame from the client is at most 64 KiB; one from the server at
+// most 1 MiB, as pages of events, messages and conversations end early to
+// stay within it; Connect must complete within 5 seconds
 // of the connection opening or of the response to its last successful
 // Register or SignIn; a connection may make 5 Register or SignIn requests,
 // not counting those refused with ERROR_CODE_INVALID_ARGUMENT, since each
@@ -695,6 +697,15 @@ export declare type Error = Message<"wrinkle.v1.Error"> & {
    * @generated from field: string message = 2;
    */
   message: string;
+
+  /**
+   * Which precondition failed, for ERROR_CODE_FAILED_PRECONDITION and
+   * ERROR_CODE_RESOURCE_EXHAUSTED; unset otherwise. A client acts on it
+   * rather than on the message.
+   *
+   * @generated from field: wrinkle.v1.ErrorReason reason = 3;
+   */
+  reason: ErrorReason;
 };
 
 /**
@@ -748,6 +759,142 @@ export declare type Pong = Message<"wrinkle.v1.Pong"> & {
  * Use `create(PongSchema)` to create a new message.
  */
 export declare const PongSchema: GenMessage<Pong>;
+
+/**
+ * @generated from enum wrinkle.v1.ErrorReason
+ */
+export enum ErrorReason {
+  /**
+   * @generated from enum value: ERROR_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Register, SignIn or Connect on a connected connection.
+   *
+   * @generated from enum value: ERROR_REASON_ALREADY_CONNECTED = 1;
+   */
+  ALREADY_CONNECTED = 1,
+
+  /**
+   * The content is sealed with an epoch other than the current one: fetch
+   * the conversation's keys and seal again.
+   *
+   * @generated from enum value: ERROR_REASON_STALE_KEY_EPOCH = 2;
+   */
+  STALE_KEY_EPOCH = 2,
+
+  /**
+   * The membership changed since the current epoch: publish the next one.
+   *
+   * @generated from enum value: ERROR_REASON_KEYS_MUST_ROTATE = 3;
+   */
+  KEYS_MUST_ROTATE = 3,
+
+  /**
+   * PublishKeys for an epoch another device made or published first.
+   *
+   * @generated from enum value: ERROR_REASON_KEY_EPOCH_TAKEN = 4;
+   */
+  KEY_EPOCH_TAKEN = 4,
+
+  /**
+   * The requesting device has no key yet: SetDeviceKey first.
+   *
+   * @generated from enum value: ERROR_REASON_DEVICE_HAS_NO_KEY = 5;
+   */
+  DEVICE_HAS_NO_KEY = 5,
+
+  /**
+   * SetDeviceKey with a key other than the device's: sign in as a new device.
+   *
+   * @generated from enum value: ERROR_REASON_DEVICE_KEY_SET = 6;
+   */
+  DEVICE_KEY_SET = 6,
+
+  /**
+   * The requesting user blocked the other user: unblock first.
+   *
+   * @generated from enum value: ERROR_REASON_BLOCKED_BY_YOU = 7;
+   */
+  BLOCKED_BY_YOU = 7,
+
+  /**
+   * The blob of an upload has not been uploaded.
+   *
+   * @generated from enum value: ERROR_REASON_NOT_UPLOADED = 8;
+   */
+  NOT_UPLOADED = 8,
+
+  /**
+   * The blob is not an upload of the user's for this purpose.
+   *
+   * @generated from enum value: ERROR_REASON_NOT_YOUR_UPLOAD = 9;
+   */
+  NOT_YOUR_UPLOAD = 9,
+
+  /**
+   * The attachment goes with another message already.
+   *
+   * @generated from enum value: ERROR_REASON_ALREADY_ATTACHED = 10;
+   */
+  ALREADY_ATTACHED = 10,
+
+  /**
+   * The group would have more members than allowed.
+   *
+   * @generated from enum value: ERROR_REASON_GROUP_FULL = 11;
+   */
+  GROUP_FULL = 11,
+
+  /**
+   * The change would leave the group without an admin.
+   *
+   * @generated from enum value: ERROR_REASON_LAST_ADMIN = 12;
+   */
+  LAST_ADMIN = 12,
+
+  /**
+   * A group request on a conversation that is not a group.
+   *
+   * @generated from enum value: ERROR_REASON_NOT_A_GROUP = 13;
+   */
+  NOT_A_GROUP = 13,
+
+  /**
+   * A group takes only the adder's contacts.
+   *
+   * @generated from enum value: ERROR_REASON_NOT_A_CONTACT = 14;
+   */
+  NOT_A_CONTACT = 14,
+
+  /**
+   * The sticker palette is full.
+   *
+   * @generated from enum value: ERROR_REASON_PALETTE_FULL = 15;
+   */
+  PALETTE_FULL = 15,
+
+  /**
+   * A reaction to a deleted message.
+   *
+   * @generated from enum value: ERROR_REASON_MESSAGE_DELETED = 16;
+   */
+  MESSAGE_DELETED = 16,
+
+  /**
+   * SignIn for an account with as many signed-in devices as allowed: sign one
+   * out first.
+   *
+   * @generated from enum value: ERROR_REASON_TOO_MANY_DEVICES = 17;
+   */
+  TOO_MANY_DEVICES = 17,
+}
+
+/**
+ * Describes the enum wrinkle.v1.ErrorReason.
+ */
+export declare const ErrorReasonSchema: GenEnum<ErrorReason>;
 
 /**
  * @generated from enum wrinkle.v1.ErrorCode

@@ -204,7 +204,7 @@ func TestBlockUser(t *testing.T) {
 	_, err = b.OpenConversation(ctx(t), a.user.GetName())
 	wantCode(t, err, fp)
 	_, err = b.SendText(ctx(t), conv, "m1", "go away")
-	wantCode(t, err, fp)
+	wantReason(t, err, fp, pb.ErrorReason_ERROR_REASON_BLOCKED_BY_YOU)
 	_, err = b.AddContact(ctx(t), a.user.GetName())
 	wantCode(t, err, fp)
 	wantCode(t, publish(t, b, conv, 2, e2ee.NewEpochKey(), a, b), fp)

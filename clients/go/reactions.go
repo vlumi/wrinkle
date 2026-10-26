@@ -41,7 +41,7 @@ func (c *Client) SetReactions(ctx context.Context, conversationID []byte, seq ui
 			return err
 		}
 		err = c.SetReaction(ctx, conversationID, seq, sealed)
-		if Code(err) == pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION && attempt == 0 {
+		if staleKeys(err) && attempt == 0 {
 			k.Invalidate(conversationID)
 			continue
 		}
