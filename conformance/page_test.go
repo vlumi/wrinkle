@@ -3,6 +3,7 @@ package conformance
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"testing"
 
 	"google.golang.org/protobuf/proto"
@@ -72,6 +73,14 @@ func TestPagesEndBeforeTheirBytes(t *testing.T) {
 	}
 	if len(resp.GetEvents()) >= int(last) || !resp.GetHasMore() || proto.Size(resp) > 2*pageBytes {
 		t.Fatalf("a sync of large events: %d events, has_more %v, %d bytes", len(resp.GetEvents()), resp.GetHasMore(), proto.Size(resp))
+	}
+
+	// Limits are unsigned: the largest is the server's maximum.
+	if _, err := b.Sync(ctx(t), 0, math.MaxUint32); err != nil {
+		t.Fatalf("sync with the largest limit: %v", err)
+	}
+	if _, err := b.GetMessagesPage(ctx(t), conv, 0, math.MaxUint32); err != nil {
+		t.Fatalf("history with the largest limit: %v", err)
 	}
 }
 
