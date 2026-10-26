@@ -21,7 +21,8 @@ use tokio::sync::{Notify, mpsc, oneshot};
 use crate::ack::{self, Acks};
 use crate::pb::backend::v1::{AckRequest, CallRequest};
 use crate::pb::v1::{
-    self as pb, ErrorCode, Frame, Request, Response as WireResponse, frame, request, response,
+    self as pb, ErrorCode, ErrorReason, Frame, Request, Response as WireResponse, frame, request,
+    response,
 };
 use crate::user_id::UserId;
 use crate::{App, BackendClient};
@@ -689,19 +690,31 @@ impl TokenBucket {
 }
 
 fn error(request_id: u64, code: ErrorCode, message: &str) -> WireResponse {
+    error_because(request_id, code, ErrorReason::Unspecified, message)
+}
+
+/// An error with the reason clients act on.
+fn error_because(
+    request_id: u64,
+    code: ErrorCode,
+    reason: ErrorReason,
+    message: &str,
+) -> WireResponse {
     WireResponse {
         request_id,
         body: Some(response::Body::Error(pb::Error {
             code: code as i32,
             message: message.to_string(),
+            reason: reason as i32,
         })),
     }
 }
 
 fn already_connected(request_id: u64) -> WireResponse {
-    error(
+    error_because(
         request_id,
         ErrorCode::FailedPrecondition,
+        ErrorReason::AlreadyConnected,
         "already connected",
     )
 }
@@ -813,6 +826,17 @@ mod tests {
 
         let too_big = tokio::time::timeout(Duration::from_secs(5), rx).await;
         assert!(matches!(too_big, Ok(Ok(true))));
+    }
+
+    #[test]
+    fn already_connected_names_its_reason() {
+        let response = already_connected(7);
+        assert_eq!(response.request_id, 7);
+        let Some(response::Body::Error(e)) = response.body else {
+            panic!("not an error: {response:?}");
+        };
+        assert_eq!(e.code(), ErrorCode::FailedPrecondition);
+        assert_eq!(e.reason(), ErrorReason::AlreadyConnected);
     }
 
     #[test]

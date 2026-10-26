@@ -252,7 +252,13 @@ defmodule Wrinkle.Socket do
   # Register or SignIn once one is.
   defp inbound({:request, %Request{body: {kind, _}} = request}, :ok, %{connect: c} = state)
        when kind in [:register, :sign_in, :connect] and c != :none do
-    refuse(request, :ERROR_CODE_FAILED_PRECONDITION, "already connected", state)
+    refuse(
+      request,
+      :ERROR_CODE_FAILED_PRECONDITION,
+      "already connected",
+      state,
+      :ERROR_REASON_ALREADY_CONNECTED
+    )
   end
 
   defp inbound({:request, %Request{body: {kind, _}} = request}, :ok, %{sign_ins: n} = state)
@@ -290,8 +296,14 @@ defmodule Wrinkle.Socket do
   defp inbound({:pong, _}, :ok, state), do: {:ok, state}
 
   # Answered at once, without the services; counted with a duration of zero.
-  defp refuse(%Request{id: id} = request, code, message, state) do
-    response = error(id, code, message)
+  defp refuse(
+         %Request{id: id} = request,
+         code,
+         message,
+         state,
+         reason \\ :ERROR_REASON_UNSPECIFIED
+       ) do
+    response = error(id, code, message, reason)
     Metrics.request(request_type(request), response_code(response), 0)
     {:push, encode({:response, response}), state}
   end
@@ -454,8 +466,9 @@ defmodule Wrinkle.Socket do
     end
   end
 
-  defp error(id, code, message) do
-    %Response{request_id: id, body: {:error, %WireError{code: code, message: message}}}
+  defp error(id, code, message, reason \\ :ERROR_REASON_UNSPECIFIED) do
+    error = %WireError{code: code, message: message, reason: reason}
+    %Response{request_id: id, body: {:error, error}}
   end
 
   defp request_type(%Request{body: {type, _}}), do: Atom.to_string(type)
