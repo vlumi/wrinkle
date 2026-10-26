@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -126,6 +127,9 @@ func run(cfg config) error {
 	senders.Wait()
 
 	waitForReceipts(ctx, stats, 10*time.Second)
+	if cfg.attachShare > 0 {
+		deleteAttached(ctx, ready)
+	}
 	for _, d := range ready {
 		d.client.Close()
 	}
@@ -217,6 +221,24 @@ func waitForReceipts(ctx context.Context, stats *stats, grace time.Duration) {
 	for time.Now().Before(deadline) && (stats.received.Load() < stats.expectedReceipts() || stats.downloading.Load() > 0) {
 		sleepCtx(ctx, 200*time.Millisecond)
 	}
+}
+
+// deleteAttached deletes the run's messages with attachments, after the
+// window, so blob storage does not grow with every run.
+func deleteAttached(ctx context.Context, devices []*device) {
+	start := time.Now()
+	var deleted, failed atomic.Int64
+	var wg sync.WaitGroup
+	for _, d := range devices {
+		wg.Go(func() {
+			n, f := d.deleteAttached(ctx)
+			deleted.Add(int64(n))
+			failed.Add(int64(f))
+		})
+	}
+	wg.Wait()
+	fmt.Fprintf(os.Stderr, "deleted %d messages with attachments in %s, %d failed\n",
+		deleted.Load(), time.Since(start).Round(time.Millisecond), failed.Load())
 }
 
 func sleepCtx(ctx context.Context, d time.Duration) {

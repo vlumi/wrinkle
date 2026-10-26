@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -43,6 +44,14 @@ type device struct {
 	attachShare float64
 	attachSize  int
 	blobAddress string
+	// The messages sent with attachments, deleted after the run.
+	attachedMu sync.Mutex
+	attached   []sentMessage
+}
+
+type sentMessage struct {
+	conversationID []byte
+	seq            uint64
 }
 
 // maxAttachmentSize keeps the encrypted blob within the 25 MiB limit.
@@ -116,13 +125,39 @@ func (d *device) send(ctx context.Context) {
 		conversationID, receivers, group = d.groupID, d.groupReceivers, true
 	}
 	d.stats.recordSent(now, receivers, group)
-	if _, err := d.client.SendContent(cctx, conversationID, id, content); err != nil {
+	msg, err := d.client.SendContent(cctx, conversationID, id, content)
+	if err != nil {
 		if d.stats.sendErrors.Add(1) <= 3 {
 			fmt.Fprintf(os.Stderr, "send from %s: %v\n", d.userName, err)
 		}
 		return
 	}
 	d.stats.recordSendRTT(now, time.Since(now))
+	if content.GetAttachments() != nil {
+		d.attachedMu.Lock()
+		d.attached = append(d.attached, sentMessage{conversationID, msg.GetSeq()})
+		d.attachedMu.Unlock()
+	}
+}
+
+// deleteAttached deletes the messages the device sent with attachments,
+// which releases their blobs to the sweeper, and returns how many it
+// deleted and how many failed.
+func (d *device) deleteAttached(ctx context.Context) (deleted, failed int) {
+	d.attachedMu.Lock()
+	defer d.attachedMu.Unlock()
+	for _, m := range d.attached {
+		cctx, cancel := context.WithTimeout(ctx, callTimeout)
+		err := d.client.DeleteMessage(cctx, m.conversationID, m.seq)
+		cancel()
+		if err != nil {
+			failed++
+			continue
+		}
+		deleted++
+	}
+	d.attached = nil
+	return deleted, failed
 }
 
 // receive drains events, opening the peers' messages and recording their
