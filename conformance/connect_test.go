@@ -78,7 +78,7 @@ func TestRequestsBeforeConnect(t *testing.T) {
 func TestConnectTwice(t *testing.T) {
 	d := newUser(t, "twice")
 	_, err := d.Connect(ctx(t), d.token)
-	wantCode(t, err, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION)
+	wantReason(t, err, pb.ErrorCode_ERROR_CODE_FAILED_PRECONDITION, pb.ErrorReason_ERROR_REASON_ALREADY_CONNECTED)
 }
 
 func TestConnectTwiceConcurrently(t *testing.T) {
