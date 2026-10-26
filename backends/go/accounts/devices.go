@@ -91,7 +91,7 @@ func (s *Service) RenameDevice(ctx context.Context, userID ids.UUID, req *pb.Ren
 		req.GetName(), userID, req.GetDeviceId()); err != nil {
 		return nil, err
 	}
-	device, err := o.addDevice(ctx, req.GetDeviceId(), false)
+	device, err := o.addDeviceName(ctx, req.GetDeviceId())
 	if err != nil {
 		return nil, err
 	}

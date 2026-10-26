@@ -19,7 +19,8 @@ import (
 // signed out also has its connections closed, even when the log had the
 // event already. A device with a key also goes, with only its id and key,
 // to everyone who encrypts for it: the user's direct partners and the
-// members of the user's groups.
+// members of the user's groups; a rename, which changes nothing they use,
+// does not.
 func (w *Worker) deliverDevice(ctx context.Context, o *userOutboxRow) error {
 	event := o.event
 	d := event.GetDevice()
@@ -35,7 +36,7 @@ func (w *Worker) deliverDevice(ctx context.Context, o *userOutboxRow) error {
 		w.publish(ctx, o.userID, &backendv1.Push{Kind: &backendv1.Push_SignedOut{
 			SignedOut: &backendv1.SignedOut{DeviceIds: []uint64{d.GetDevice().GetDeviceId()}}}})
 	}
-	if len(d.GetDevice().GetPublicKey()) == 0 {
+	if len(d.GetDevice().GetPublicKey()) == 0 || o.kind == "device_name" {
 		return nil
 	}
 	keyOnly := &pb.Event{

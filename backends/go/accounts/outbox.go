@@ -60,11 +60,21 @@ func (o *outbox) save(ctx context.Context) error {
 // addDevice writes a DeviceEvent with the device as it is now in the
 // transaction.
 func (o *outbox) addDevice(ctx context.Context, deviceID uint64, signedOut bool) (*pb.Device, error) {
+	return o.addDeviceKind(ctx, "device", deviceID, signedOut)
+}
+
+// addDeviceName writes a DeviceEvent for a change only the user's own
+// devices need to know of: a new name.
+func (o *outbox) addDeviceName(ctx context.Context, deviceID uint64) (*pb.Device, error) {
+	return o.addDeviceKind(ctx, "device_name", deviceID, false)
+}
+
+func (o *outbox) addDeviceKind(ctx context.Context, kind string, deviceID uint64, signedOut bool) (*pb.Device, error) {
 	device, err := loadDevice(ctx, o.tx, o.userID, deviceID)
 	if err != nil {
 		return nil, err
 	}
-	return device, o.add(ctx, "device", &pb.Event{
+	return device, o.add(ctx, kind, &pb.Event{
 		Body: &pb.Event_Device{Device: &pb.DeviceEvent{Device: device, SignedOut: signedOut, UserId: o.userID.Bytes()}},
 	})
 }

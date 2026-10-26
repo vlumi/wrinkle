@@ -245,6 +245,13 @@ func TestDeviceKeyEventsReachPartners(t *testing.T) {
 		t.Fatalf("own device event %v", e)
 	}
 
+	// A rename reaches only the user's own devices: the next device event
+	// Bob and Carol see is the sign-out below.
+	if _, err := a.RenameDevice(ctx(t), a2.deviceID, "renamed"); err != nil {
+		t.Fatal(err)
+	}
+	deviceEvent(t, a, a2.deviceID, func(e *pb.DeviceEvent) bool { return e.GetDevice().GetName() == "renamed" })
+
 	// Signing out: again only the device with a key.
 	if err := a.SignOutDevice(ctx(t), a3.deviceID); err != nil {
 		t.Fatal(err)
