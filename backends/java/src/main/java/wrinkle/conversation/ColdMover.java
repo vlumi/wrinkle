@@ -24,7 +24,7 @@ import wrinkle.v1.Sealed;
 
 /**
  * Moves messages older than the hot window to the cold tier, conversation by conversation, oldest
- * first on each shard. Any number may run: each move happens under the conversation's row lock.
+ * first on each shard. Any number may run: each move commits under the conversation's row lock.
  */
 public final class ColdMover {
   private static final int MOVE_PAGE = 1000;
@@ -33,6 +33,9 @@ public final class ColdMover {
   private static final LocalDateTime BEGINNING = LocalDateTime.of(1, 1, 1, 0, 0);
 
   private record Aged(Uuid conversationId, LocalDateTime sentAt) {}
+
+  /** How many messages a batch moved, and whether the conversation may have more to move. */
+  private record Moved(int n, boolean more) {}
 
   private final DataSource db;
   private final ShardPools shards;
@@ -112,69 +115,62 @@ public final class ColdMover {
       throws SQLException {
     int total = 0;
     while (true) {
-      int n = moveBatch(conversationId, cutoff);
-      total += n;
-      if (n < MOVE_BATCH || stopped.getAsBoolean()) {
+      Moved m = moveBatch(conversationId, cutoff);
+      total += m.n();
+      if (!m.more() || stopped.getAsBoolean()) {
         return total;
       }
     }
   }
 
   /**
-   * Writes the next batch to the cold tier with the conversation's row locked, then raises the
-   * watermark over it and deletes it from MySQL in the same transaction. A failure after the puts
+   * Writes the next batch to the cold tier, then, with the conversation's row locked, raises the
+   * watermark over it and deletes it from MySQL in one transaction. The puts come before the lock,
+   * so sends to the conversation never wait on the cold tier; under the lock the batch is read
+   * again, and a message deleted or reacted to meanwhile is put again. A failure after the puts
    * leaves copies of rows still in MySQL, which the next move puts again.
    */
-  private int moveBatch(Uuid conversationId, LocalDateTime cutoff) throws SQLException {
+  private Moved moveBatch(Uuid conversationId, LocalDateTime cutoff) throws SQLException {
+    long coldSeq;
+    List<Cold.Row> staged;
+    try (Connection c = db.getConnection()) {
+      coldSeq = coldSeq(c, conversationId, false);
+      staged = readBatch(c, conversationId, coldSeq, cutoff, MOVE_BATCH);
+    }
+    if (staged.isEmpty()) {
+      return new Moved(0, false);
+    }
+    cold.put(conversationId, staged);
+
     return Sql.inTransaction(
         db,
         c -> {
-          long coldSeq;
-          try (PreparedStatement ps =
-                  Sql.prepare(
-                      c,
-                      "SELECT cold_seq FROM conversation WHERE conversation_id = ? FOR UPDATE",
-                      conversationId);
-              ResultSet rs = ps.executeQuery()) {
-            if (!rs.next()) {
-              throw new SQLException("conversation " + conversationId + " missing");
-            }
-            coldSeq = rs.getLong(1);
+          if (coldSeq(c, conversationId, true) != coldSeq) {
+            // Another mover went first; read from its watermark.
+            return new Moved(0, true);
           }
-          List<Cold.Row> moved = new ArrayList<>();
-          try (PreparedStatement ps =
-                  Sql.prepare(
-                      c,
-                      "SELECT seq, sender_user_id, client_message_id, body, sent_at, outbox_id,"
-                          + " blob_ids FROM message WHERE conversation_id = ? AND seq > ? ORDER BY"
-                          + " seq LIMIT ?",
-                      conversationId,
-                      coldSeq,
-                      MOVE_BATCH);
-              ResultSet rs = ps.executeQuery()) {
-            while (rs.next()) {
-              LocalDateTime sentAt = rs.getObject(5, LocalDateTime.class);
-              if (!sentAt.isBefore(cutoff)) {
-                break;
-              }
-              moved.add(
-                  new Cold.Row(
-                      rs.getLong(1),
-                      Uuid.of(rs.getBytes(2)),
-                      rs.getString(3),
-                      rs.getBytes(4),
-                      sentAt,
-                      rs.getLong(6),
-                      rs.getBytes(7),
-                      new byte[0]));
+          int n = staged.size();
+          long upTo = staged.getLast().seq();
+          List<Cold.Row> current = readBatch(c, conversationId, coldSeq, null, n);
+          if (current.size() != n || current.getLast().seq() != upTo) {
+            throw new SQLException(
+                "batch of conversation "
+                    + conversationId
+                    + " changed from "
+                    + n
+                    + " to "
+                    + current.size()
+                    + " messages");
+          }
+          List<Cold.Row> changed = new ArrayList<>();
+          for (int i = 0; i < n; i++) {
+            if (!current.get(i).same(staged.get(i))) {
+              changed.add(current.get(i));
             }
           }
-          if (moved.isEmpty()) {
-            return 0;
+          if (!changed.isEmpty()) {
+            cold.put(conversationId, changed);
           }
-          long upTo = moved.getLast().seq();
-          moved = withReactions(c, conversationId, coldSeq, upTo, moved);
-          cold.put(conversationId, moved);
           Sql.update(
               c,
               "UPDATE conversation SET cold_seq = ? WHERE conversation_id = ?",
@@ -192,8 +188,65 @@ public final class ColdMover {
               conversationId,
               coldSeq,
               upTo);
-          return moved.size();
+          return new Moved(n, n == MOVE_BATCH);
         });
+  }
+
+  /** The conversation's watermark, its row locked when asked. */
+  private static long coldSeq(Connection c, Uuid conversationId, boolean lock) throws SQLException {
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT cold_seq FROM conversation WHERE conversation_id = ?"
+                    + (lock ? " FOR UPDATE" : ""),
+                conversationId);
+        ResultSet rs = ps.executeQuery()) {
+      if (!rs.next()) {
+        throw new SQLException("conversation " + conversationId + " missing");
+      }
+      return rs.getLong(1);
+    }
+  }
+
+  /**
+   * Up to limit messages after the watermark, in seq order, with their reactions, stopping at the
+   * first sent at or after the cutoff; a null cutoff reads them all.
+   */
+  private static List<Cold.Row> readBatch(
+      Connection c, Uuid conversationId, long coldSeq, LocalDateTime cutoff, int limit)
+      throws SQLException {
+    List<Cold.Row> batch = new ArrayList<>();
+    try (PreparedStatement ps =
+            Sql.prepare(
+                c,
+                "SELECT seq, sender_user_id, client_message_id, body, sent_at, outbox_id,"
+                    + " blob_ids FROM message WHERE conversation_id = ? AND seq > ? ORDER BY"
+                    + " seq LIMIT ?",
+                conversationId,
+                coldSeq,
+                limit);
+        ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        LocalDateTime sentAt = rs.getObject(5, LocalDateTime.class);
+        if (cutoff != null && !sentAt.isBefore(cutoff)) {
+          break;
+        }
+        batch.add(
+            new Cold.Row(
+                rs.getLong(1),
+                Uuid.of(rs.getBytes(2)),
+                rs.getString(3),
+                rs.getBytes(4),
+                sentAt,
+                rs.getLong(6),
+                rs.getBytes(7),
+                new byte[0]));
+      }
+    }
+    if (batch.isEmpty()) {
+      return batch;
+    }
+    return withReactions(c, conversationId, coldSeq, batch.getLast().seq(), batch);
   }
 
   /** The messages, sorted by seq and spanning (from, to], with their reactions in their rows. */

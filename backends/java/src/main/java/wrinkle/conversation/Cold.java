@@ -9,7 +9,9 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import javax.sql.DataSource;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
@@ -75,6 +77,18 @@ public final class Cold {
 
     Row withReactions(byte[] reactions) {
       return withBody(body, blobIds, reactions);
+    }
+
+    /** Whether the rows hold the same values, the byte arrays compared by content. */
+    boolean same(Row o) {
+      return seq == o.seq
+          && Objects.equals(sender, o.sender)
+          && Objects.equals(clientId, o.clientId)
+          && Arrays.equals(body, o.body)
+          && Objects.equals(sentAt, o.sentAt)
+          && outboxId == o.outboxId
+          && Arrays.equals(blobIds, o.blobIds)
+          && Arrays.equals(reactions, o.reactions);
     }
 
     Put put(Uuid conversationId) {
