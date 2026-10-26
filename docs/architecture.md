@@ -337,7 +337,7 @@ Each gateway keeps one HTTP/2 connection to the services balancer, which spreads
 | A conversation shard | sends and reads in its conversations fail | the shard's replica takes over (a real Vitess topology; the prototype runs one process) |
 | A user shard | Connect, Sync and fan-out to its users fail | fan-out retries the batch until the shard is back |
 
-The prototype's single Vitess process has one known weakness: it starts empty when its container restarts, and the change stream does not resume until the stack is reset ([local-network.md](local-network.md#troubleshooting)).
+The prototype's single Vitess process has one known weakness: it starts empty when its container restarts, losing the data; `make infra-up` then resets the connectors' positions so the change stream resumes on the new database ([local-network.md](local-network.md#troubleshooting)).
 
 ## Scaling
 

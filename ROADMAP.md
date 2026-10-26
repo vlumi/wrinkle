@@ -24,6 +24,7 @@ What is done, what is open and why, and the gaps that are known and accepted for
 - **TypeScript backend.** All three roles on Node 26, as a monolith or split, with batched fan-out and APNs push; in the cluster and the side-by-side setup with the others. [backends/ts](backends/ts/README.md).
 - **History in a cold tier.** Messages older than 30 days move to HBase per conversation behind a watermark; history, reactions and deletes work across it in Go, Java and TypeScript. [History and the cold tier](docs/architecture.md#history-and-the-cold-tier).
 - **Background work per shard.** The log trimmer and the history mover run each shard on its own loop, every minute by default, each shard's round leased in Valkey to one instance at a time, so services instances share the shards. [Processes](docs/architecture.md#processes).
+- **The change stream after a Vitess restart.** The test server starts an empty database, with a new server id, whenever its container restarts, which stranded Debezium's stored positions; `make infra-up` now resets them when they name a server that no longer exists, and the connectors start from the current position. [Troubleshooting](docs/local-network.md#troubleshooting).
 - **Contract clean-up.** `MessageFailedEvent`, which nothing produced, dropped; its field number and name reserved.
 - **Bounded user logs.** The user logs keep events for 30 days, and a device whose cursor is older starts again from the conversations; the history stays with them. [Connect and sync](docs/architecture.md#connect-and-sync).
 
@@ -39,7 +40,7 @@ In the order they would be done. Each item says why it comes where it does and h
 
 1. Coalesced acks (done): 0.1 ack writes per message remain in a diagnostic count at 500 messages a second, and the gateways use 16 to 23 % less CPU per message.
 2. Fewer statements per fan-out append (done): a message's copies are stored in one transaction per recipient shard with whatever else is queued for it, with multi-row statements. At 500 messages a second the fan-out's statements per message fell from about 12 to 2, and the database's from 24 to 14, in a diagnostic count. With step 1, the highest sustained rate doubled to 1000 messages a second.
-3. A plain MySQL profile of the infrastructure (`make infra-up PROFILE=mysql`; built, not yet measured): the same schema unsharded on one MySQL 8.4, a database per keyspace, with Debezium's MySQL connector reading its binlog into the same topics. The backends need no change beyond connecting as `root`: without vtgate each keyspace is one shard. Every shape and both clients pass `make ci` on it. Next, `make measure-all` on it, labeled `-mysql`, against the 2026-10-24 Vitess results: it measures Vitess's share, gives the backends headroom, and is the deployment the managed clouds offer ([docs/production.md](docs/production.md)). It also removes the stranded-offsets problem below.
+3. A plain MySQL profile of the infrastructure (`make infra-up PROFILE=mysql`; built, not yet measured): the same schema unsharded on one MySQL 8.4, a database per keyspace, with Debezium's MySQL connector reading its binlog into the same topics. The backends need no change beyond connecting as `root`: without vtgate each keyspace is one shard. Every shape and both clients pass `make ci` on it. Next, `make measure-all` on it, labeled `-mysql`, against the 2026-10-24 Vitess results: it measures Vitess's share, gives the backends headroom, and is the deployment the managed clouds offer ([docs/production.md](docs/production.md)).
 4. A real Vitess topology, vtgate and a vttablet with its own mysqld per shard, as separate processes, when the question is sharding rather than the backends.
 
 ### 2. Retention and history in cold storage
@@ -62,12 +63,11 @@ In the order they would be done. Each item says why it comes where it does and h
 6. **Go, Java and TypeScript** (done). gohbase in Go; in Java the shaded client 2.6.7 built on Hadoop 2.10, with its own user, since Hadoop's lookup of the current one fails on JDK 25 and the Hadoop 3 build replaces the JVM's DNS resolver; TypeScript through the REST server, whose scanners read forward only, which works because a conversation's seqs in HBase have no gaps. Unit tests for the key layout and the watermark rules in each; a conformance test with a hot window of 20 seconds pages history across the watermark, and reacts to and deletes cold messages, checking HBase that they moved.
 7. **Measure** GetMessages latency above and below the watermark, the mover's throughput, and the database's statements per message with the logs trimmed.
 
-### 3. Stray blobs and the Vitess restart
+### 3. Stray blobs
 
-**Why:** both leave a running stack in a state only `make infra-reset` fixes, and both are small.
+**Why:** blob storage grows with blobs nothing will delete, and the fixes are small.
 
 - **Attachment uploads that stay used.** A send releases its uploads on any failure after marking them used, but the release itself can fail, and a retried `DeleteMessage` has nothing to release, since the delete erases the blob ids from the row; in both cases the sweeper never deletes the blobs. Keep the blob ids on the tombstone and hide them in reads, so a retried delete releases them again; have the sweeper also take used uploads whose message is a tombstone. Go, Java and TypeScript.
-- **The change-data path does not survive a restart of the Vitess container.** The test server starts an empty database whenever its container restarts, and Debezium's stored offsets then point into history that no longer exists: both connectors retry forever ("failed to find a PRIMARY tablet for VStream"), and every conformance run fails at the readiness probe with "no event delivered". Fix: have `make infra-up` check the connectors' task state and, on that failure against an empty database, reset their offsets and restart them. The plain MySQL profile (item 1) has no such problem: its data and binlog survive a restart.
 - **Load-generator attachments are never deleted**, so blob storage grows with each run. Fix: have the load generator delete the messages it sent with attachments after the grace, outside the window, which releases the blobs through the normal path.
 
 ### 4. Parity

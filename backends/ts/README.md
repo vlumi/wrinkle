@@ -96,7 +96,7 @@ On 2026-10-24 at commit 7e6a395, from a fresh stack, medians of three ([2026-10-
 
 ## Gaps
 
-- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good, as in Go and Java ([ROADMAP.md](../../ROADMAP.md), "Stray blobs and the Vitess restart").
+- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good, as in Go and Java ([ROADMAP.md](../../ROADMAP.md), "Stray blobs").
 - A batch transaction has no timeout of its own: mysql2 cannot cancel a query, so a hung one stalls its shard's queue until the connection fails.
 - Split, the gateway's sends queue at 1000 messages a second while the monolith's do not; whether in the internal RPC or the services process's one thread is not established ([ROADMAP.md](../../ROADMAP.md), Parity).
 - The gateway answers a request that takes over 10 s with an error, but the work behind it goes on, and the database pool queues for a connection without a limit: past the database's limit, sends the client gave up on still run.

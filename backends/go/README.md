@@ -208,4 +208,4 @@ On 2026-10-24 at commit 7e6a395, from a fresh stack, medians of three ([shapes](
 
 - A goroutine per connection, plus the one coder/websocket keeps for timeouts, sets the idle memory; the roadmap's second Go gateway on a poller-driven library would measure the alternative.
 - Limits are per connection only; none per user or per address, so nothing slows down password guessing beyond the cost of the hash.
-- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good ([ROADMAP.md](../../ROADMAP.md), "Stray blobs and the Vitess restart").
+- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good ([ROADMAP.md](../../ROADMAP.md), "Stray blobs").

@@ -15,7 +15,7 @@ It is an experiment, not a product. Solid:
 
 Prototype:
 
-- one Vitess process rather than a topology, whose change stream does not survive a restart;
+- one Vitess process rather than a topology, which starts empty when its container restarts;
 - no limits per user or per address, and no password recovery;
 - no reporting or moderation;
 - no forward secrecy between key rotations;
@@ -119,7 +119,7 @@ Needs Docker Desktop with at least 8 GB of memory (12 GB for the cluster), mkcer
 3. `make web`: the web client, built and served over HTTPS on port 8081, together with the TLS edge on port 8443 in front of whatever serves port 8080 (`make tls-up`, which makes the certificate with mkcert if there is none yet). Devices reach the backend only through the edge: port 8080 listens on loopback, and the web server refuses to serve the network without a certificate.
 4. Open `https://localhost:8081/` on the Mac. Phones and other computers on the network open the Mac's address instead and must trust the certificate first: [docs/local-network.md](docs/local-network.md), which also covers the iOS app, push notifications and running the backends natively.
 
-Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090, and https://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer. `make ci` is the gate before every push: lint, tests, conformance against every backend. `make measure-go-mono` runs the measurement protocol for one backend, `make measure-all` for every one. `make infra-down` stops the stack and discards all data; `make infra-reset` recreates it empty, which is also the fix when the Vitess container has restarted and no event is delivered any more. Plain `make` lists every routine operation, grouped.
+Grafana is at http://localhost:3000 with a dashboard over the backend's metrics, Prometheus at http://localhost:9090, and https://localhost:8081/monitor (`make monitor`) links to every dashboard and endpoint and shows which answer. `make ci` is the gate before every push: lint, tests, conformance against every backend. `make measure-go-mono` runs the measurement protocol for one backend, `make measure-all` for every one. `make infra-down` stops the stack and discards all data; `make infra-reset` recreates it empty. A restart of the Vitess container empties its database too; `make infra-up` then restarts the change stream on the new one. Plain `make` lists every routine operation, grouped.
 
 ## Layout
 

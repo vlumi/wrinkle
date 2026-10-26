@@ -48,7 +48,7 @@ The services already refuse requests about conversations the user is not in. Mis
 - Secrets (database credentials, the production APNs key) in the platform's secret store, not in files on the host.
 - Metrics scraped from every process, alerts on error rates, latency, consumer lag and disk, logs collected, and an outside uptime check.
 - Schema changes applied as versioned migrations, compatible with the running version, not loaded at startup.
-- The prototype's Vitess test server, which starts empty when its container restarts and strands Debezium's offsets ([local-network.md](local-network.md#troubleshooting); ROADMAP.md, Open, 3. Stray blobs and the Vitess restart), replaced by a real Vitess topology or by plain MySQL as below, whose binlog survives a restart.
+- The prototype's Vitess test server, which starts empty when its container restarts ([local-network.md](local-network.md#troubleshooting)), replaced by a real Vitess topology or by plain MySQL as below, whose binlog survives a restart.
 
 ### 7. Clients
 

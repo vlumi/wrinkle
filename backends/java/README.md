@@ -207,5 +207,5 @@ On 2026-10-24 at commit 7e6a395, from a fresh stack, medians of three ([2026-10-
 
 ## Gaps
 
-- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good ([ROADMAP.md](../../ROADMAP.md), "Stray blobs and the Vitess restart").
+- A send's upload release can fail, and a retried `DeleteMessage` finds no blob ids to release; both leave uploads used for good ([ROADMAP.md](../../ROADMAP.md), "Stray blobs").
 - The JVM's live memory figure leaves out Netty's direct buffers, so compare the RSS slope.
