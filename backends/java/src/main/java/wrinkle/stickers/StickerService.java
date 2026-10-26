@@ -18,6 +18,7 @@ import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.accounts.UserOutbox;
 import wrinkle.uploads.UploadService;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.Event;
 import wrinkle.v1.PaletteEvent;
 import wrinkle.v1.Sticker;
@@ -124,6 +125,7 @@ public final class StickerService {
           if (order.size() >= MAX_PALETTE) {
             if (failWhenFull) {
               throw ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_PALETTE_FULL,
                   "the palette is full, at most " + MAX_PALETTE + " stickers");
             }
             return null;

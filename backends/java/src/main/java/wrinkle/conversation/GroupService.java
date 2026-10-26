@@ -28,6 +28,7 @@ import wrinkle.v1.Conversation;
 import wrinkle.v1.ConversationKind;
 import wrinkle.v1.CreateGroupRequest;
 import wrinkle.v1.ErrorCode;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.GroupCreated;
 import wrinkle.v1.Member;
 import wrinkle.v1.MemberLeft;
@@ -122,13 +123,16 @@ public final class GroupService {
     Set<Uuid> missing = contacts.notContacts(userId, List.copyOf(users.keySet()));
     for (Map.Entry<Uuid, String> e : users.entrySet()) {
       if (missing.contains(e.getKey())) {
-        throw ApiError.failedPrecondition("not a contact: " + e.getValue());
+        throw ApiError.failedPrecondition(
+            ErrorReason.ERROR_REASON_NOT_A_CONTACT, "not a contact: " + e.getValue());
       }
     }
   }
 
   private static ApiError tooMany() {
-    return ApiError.failedPrecondition("a group has at most " + Rows.MAX_MEMBERS + " members");
+    return ApiError.failedPrecondition(
+        ErrorReason.ERROR_REASON_GROUP_FULL,
+        "a group has at most " + Rows.MAX_MEMBERS + " members");
   }
 
   private static Header groupHeader(Connection c, Uuid conversationId, Uuid userId)
@@ -140,7 +144,9 @@ public final class GroupService {
       throws SQLException {
     Header h = Rows.header(c, conversationId, locking);
     if (!h.group()) {
-      throw ApiError.failedPrecondition("conversation " + conversationId + " is not a group");
+      throw ApiError.failedPrecondition(
+          ErrorReason.ERROR_REASON_NOT_A_GROUP,
+          "conversation " + conversationId + " is not a group");
     }
     Rows.requireMember(h, conversationId, userId);
     return h;
@@ -649,7 +655,8 @@ public final class GroupService {
             return null;
           }
           if (!admin && otherAdmins(c, conversationId, target) == 0) {
-            throw ApiError.failedPrecondition("a group keeps at least one admin");
+            throw ApiError.failedPrecondition(
+                ErrorReason.ERROR_REASON_LAST_ADMIN, "a group keeps at least one admin");
           }
           Sql.update(
               c,
@@ -682,7 +689,9 @@ public final class GroupService {
     try (Connection c = db.getConnection()) {
       Header h = Rows.header(c, conversationId, false);
       if (!h.group()) {
-        throw ApiError.failedPrecondition("conversation " + conversationId + " is not a group");
+        throw ApiError.failedPrecondition(
+            ErrorReason.ERROR_REASON_NOT_A_GROUP,
+            "conversation " + conversationId + " is not a group");
       }
       Rows.requireMember(h, conversationId, userId);
       try (PreparedStatement ps =

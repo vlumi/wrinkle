@@ -18,6 +18,7 @@ import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.v1.CreateUploadRequest;
 import wrinkle.v1.CreateUploadResponse;
+import wrinkle.v1.ErrorReason;
 
 /** Upload slots for blobs, and the checks that a blob was uploaded by the user who refers to it. */
 public final class UploadService {
@@ -95,7 +96,7 @@ public final class UploadService {
       checkAvatarRow(c, userId, blobId, "");
     }
     if (!blobs.exists(blobId)) {
-      throw ApiError.failedPrecondition("not uploaded");
+      throw ApiError.failedPrecondition(ErrorReason.ERROR_REASON_NOT_UPLOADED, "not uploaded");
     }
     return blobId;
   }
@@ -119,7 +120,8 @@ public final class UploadService {
                 blobId);
         ResultSet rs = ps.executeQuery()) {
       if (!rs.next()) {
-        throw ApiError.failedPrecondition("not an avatar upload of yours");
+        throw ApiError.failedPrecondition(
+            ErrorReason.ERROR_REASON_NOT_YOUR_UPLOAD, "not an avatar upload of yours");
       }
     }
   }
@@ -140,12 +142,13 @@ public final class UploadService {
                 blobId);
         ResultSet rs = ps.executeQuery()) {
       if (!rs.next()) {
-        throw ApiError.failedPrecondition("not a sticker upload of yours");
+        throw ApiError.failedPrecondition(
+            ErrorReason.ERROR_REASON_NOT_YOUR_UPLOAD, "not a sticker upload of yours");
       }
       mediaType = rs.getString(1);
     }
     if (!blobs.exists(blobId)) {
-      throw ApiError.failedPrecondition("not uploaded");
+      throw ApiError.failedPrecondition(ErrorReason.ERROR_REASON_NOT_UPLOADED, "not uploaded");
     }
     return mediaType;
   }
@@ -167,7 +170,8 @@ public final class UploadService {
                       blobId);
               ResultSet rs = ps.executeQuery()) {
             if (!rs.next()) {
-              throw ApiError.failedPrecondition("not a sticker upload of yours");
+              throw ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_NOT_YOUR_UPLOAD, "not a sticker upload of yours");
             }
           }
           Sql.update(
@@ -197,7 +201,7 @@ public final class UploadService {
     }
     for (Uuid blobId : blobIds) {
       if (!blobs.exists(blobId)) {
-        throw ApiError.failedPrecondition("not uploaded");
+        throw ApiError.failedPrecondition(ErrorReason.ERROR_REASON_NOT_UPLOADED, "not uploaded");
       }
     }
     Sql.inTransaction(
@@ -206,7 +210,8 @@ public final class UploadService {
           // Locking the rows again keeps the sweeper from taking them meanwhile. A used one is
           // another message's, and deleting either would release it.
           if (requireAll(c, query + " FOR UPDATE", args, blobIds.size())) {
-            throw ApiError.failedPrecondition("already attached");
+            throw ApiError.failedPrecondition(
+                ErrorReason.ERROR_REASON_ALREADY_ATTACHED, "already attached");
           }
           Object[] update = new Object[args.length + 3];
           update[0] = Timestamps.now();
@@ -236,7 +241,8 @@ public final class UploadService {
       }
     }
     if (found != want) {
-      throw ApiError.failedPrecondition("not an attachment upload of yours");
+      throw ApiError.failedPrecondition(
+          ErrorReason.ERROR_REASON_NOT_YOUR_UPLOAD, "not an attachment upload of yours");
     }
     return used;
   }

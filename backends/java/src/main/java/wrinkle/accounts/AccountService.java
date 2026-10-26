@@ -29,6 +29,7 @@ import wrinkle.v1.ConnectRequest;
 import wrinkle.v1.ConnectResponse;
 import wrinkle.v1.DeleteAccountRequest;
 import wrinkle.v1.DeviceCredentials;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.Event;
 import wrinkle.v1.ProfileEvent;
 import wrinkle.v1.RegisterRequest;
@@ -46,6 +47,9 @@ public final class AccountService {
   private static final int MIN_PASSWORD_BYTES = 8;
   private static final int MAX_PASSWORD_BYTES = 256;
   private static final String WRONG_CREDENTIALS = "wrong name or password";
+  // Bounds an account's signed-in devices, and with them what one user adds to every key epoch
+  // and device key list.
+  private static final int MAX_DEVICES = 20;
 
   // The standard icons; empty is none.
   private static final Set<String> ICONS =
@@ -274,6 +278,27 @@ public final class AccountService {
     Sql.inTransaction(
         db,
         c -> {
+          // Counted under the user's row lock, so concurrent sign-ins cannot pass it.
+          try (PreparedStatement ps =
+                  Sql.prepare(c, "SELECT 1 FROM user WHERE user_id = ? FOR UPDATE", userId);
+              ResultSet rs = ps.executeQuery()) {
+            if (!rs.next()) {
+              throw new SQLException("user " + userId + " missing");
+            }
+          }
+          try (PreparedStatement ps =
+                  Sql.prepare(
+                      c,
+                      "SELECT COUNT(*) FROM device WHERE user_id = ? AND token_hash IS NOT NULL",
+                      userId);
+              ResultSet rs = ps.executeQuery()) {
+            rs.next();
+            if (rs.getInt(1) >= MAX_DEVICES) {
+              throw ApiError.resourceExhausted(
+                  ErrorReason.ERROR_REASON_TOO_MANY_DEVICES,
+                  "at most " + MAX_DEVICES + " signed-in devices; sign one out first");
+            }
+          }
           Sql.update(
               c,
               "INSERT INTO device (user_id, device_id, name, token_hash, acked_position,"

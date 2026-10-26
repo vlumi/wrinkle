@@ -19,6 +19,7 @@ import wrinkle.accounts.AccountService;
 import wrinkle.v1.AddContactRequest;
 import wrinkle.v1.Contact;
 import wrinkle.v1.ContactState;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.User;
 
 /**
@@ -129,7 +130,8 @@ public final class ContactService {
     }
     Contacts.Pair p = contacts.pair(userId, otherId);
     if (Contacts.BLOCK.equals(p.own())) {
-      throw ApiError.failedPrecondition("unblock this user first");
+      throw ApiError.failedPrecondition(
+          ErrorReason.ERROR_REASON_BLOCKED_BY_YOU, "unblock this user first");
     }
     if (Contacts.BLOCK.equals(p.theirs())) {
       throw ApiError.permissionDenied("can't add this user");
@@ -143,7 +145,8 @@ public final class ContactService {
             }
             Contacts.Row own = Contacts.own(c, userId, otherId, true);
             if (own != null && Contacts.BLOCK.equals(own.state())) {
-              throw ApiError.failedPrecondition("unblock this user first");
+              throw ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_BLOCKED_BY_YOU, "unblock this user first");
             }
             if (own != null) {
               return null;

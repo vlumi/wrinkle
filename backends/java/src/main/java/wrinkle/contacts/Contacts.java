@@ -19,6 +19,7 @@ import wrinkle.accounts.UserOutbox;
 import wrinkle.v1.Contact;
 import wrinkle.v1.ContactEvent;
 import wrinkle.v1.ContactState;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.Event;
 import wrinkle.v1.User;
 
@@ -46,7 +47,8 @@ public final class Contacts {
   public void checkMessaging(Uuid userId, Uuid peerId) throws SQLException {
     Pair p = pair(userId, peerId);
     if (BLOCK.equals(p.own())) {
-      throw ApiError.failedPrecondition("you blocked this user");
+      throw ApiError.failedPrecondition(
+          ErrorReason.ERROR_REASON_BLOCKED_BY_YOU, "you blocked this user");
     }
     if (BLOCK.equals(p.theirs())) {
       throw ApiError.permissionDenied("can't message this user");

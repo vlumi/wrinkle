@@ -1,20 +1,31 @@
 package wrinkle;
 
 import wrinkle.v1.ErrorCode;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.Request;
 import wrinkle.v1.Response;
 
 /** An error with a contract error code. */
 public final class ApiError extends RuntimeException {
   private final ErrorCode code;
+  private final ErrorReason reason;
 
   public ApiError(ErrorCode code, String message) {
+    this(code, ErrorReason.ERROR_REASON_UNSPECIFIED, message);
+  }
+
+  public ApiError(ErrorCode code, ErrorReason reason, String message) {
     super(message, null, false, false);
     this.code = code;
+    this.reason = reason;
   }
 
   public ErrorCode code() {
     return code;
+  }
+
+  public ErrorReason reason() {
+    return reason;
   }
 
   public static ApiError invalidArgument(String message) {
@@ -33,8 +44,9 @@ public final class ApiError extends RuntimeException {
     return new ApiError(ErrorCode.ERROR_CODE_NOT_FOUND, message);
   }
 
-  public static ApiError failedPrecondition(String message) {
-    return new ApiError(ErrorCode.ERROR_CODE_FAILED_PRECONDITION, message);
+  /** Names the precondition, which clients act on. */
+  public static ApiError failedPrecondition(ErrorReason reason, String message) {
+    return new ApiError(ErrorCode.ERROR_CODE_FAILED_PRECONDITION, reason, message);
   }
 
   public static ApiError unavailable(String message) {
@@ -43,6 +55,10 @@ public final class ApiError extends RuntimeException {
 
   public static ApiError resourceExhausted(String message) {
     return new ApiError(ErrorCode.ERROR_CODE_RESOURCE_EXHAUSTED, message);
+  }
+
+  public static ApiError resourceExhausted(ErrorReason reason, String message) {
+    return new ApiError(ErrorCode.ERROR_CODE_RESOURCE_EXHAUSTED, reason, message);
   }
 
   public static ApiError alreadyExists(String message) {
@@ -56,7 +72,11 @@ public final class ApiError extends RuntimeException {
   /** The wire form of any error; internal ones keep their detail out of the response. */
   public static wrinkle.v1.Error toProto(Throwable t) {
     if (t instanceof ApiError e) {
-      return wrinkle.v1.Error.newBuilder().setCode(e.code).setMessage(e.getMessage()).build();
+      return wrinkle.v1.Error.newBuilder()
+          .setCode(e.code)
+          .setMessage(e.getMessage())
+          .setReason(e.reason)
+          .build();
     }
     return wrinkle.v1.Error.newBuilder()
         .setCode(ErrorCode.ERROR_CODE_INTERNAL)

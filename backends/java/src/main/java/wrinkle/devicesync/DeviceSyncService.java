@@ -2,12 +2,15 @@ package wrinkle.devicesync;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.InvalidProtocolBufferException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -15,6 +18,7 @@ import javax.sql.DataSource;
 import wrinkle.ApiError;
 import wrinkle.Kinds;
 import wrinkle.MessageBody;
+import wrinkle.Page;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
@@ -23,6 +27,7 @@ import wrinkle.contacts.Contacts;
 import wrinkle.conversation.ConversationService;
 import wrinkle.v1.Conversation;
 import wrinkle.v1.Event;
+import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.Message;
 import wrinkle.v1.PushService;
 import wrinkle.v1.SyncResponse;
@@ -37,13 +42,17 @@ public final class DeviceSyncService {
   private static final Pattern HEX = Pattern.compile("[0-9a-fA-F]*");
   private static final int DEFAULT_SYNC_LIMIT = 100;
   private static final int MAX_SYNC_LIMIT = 1000;
-  private static final int MAX_CONVERSATION_LIST = 200;
+  private static final int DEFAULT_CONVERSATION_PAGE = 100;
+  private static final int MAX_CONVERSATION_PAGE = 200;
+  // A page token: the last entry's updated_at in Unix microseconds, then its conversation id.
+  private static final int PAGE_TOKEN_BYTES = Long.BYTES + Uuid.LENGTH;
 
-  private static final String SELECT_CONVERSATIONS =
+  private static final String CONVERSATION_COLUMNS =
       "SELECT conversation_id, peer_user_id, peer_name, peer_icon, last_seq,"
           + " last_sender_user_id, last_client_message_id, last_body, last_sent_at, read_seq,"
-          + " peer_read_seq, peer_avatar, peer_deleted, kind, topic, member_count, member, admin"
-          + " FROM user_conversation";
+          + " peer_read_seq, peer_avatar, peer_deleted, kind, topic, member_count, member, admin";
+  private static final String SELECT_CONVERSATIONS =
+      CONVERSATION_COLUMNS + " FROM user_conversation";
 
   private final DataSource db;
   private final AccountService accounts;
@@ -110,7 +119,11 @@ public final class DeviceSyncService {
    * them.
    */
   public SyncResponse sync(Uuid userId, long cursor, int limit) throws SQLException {
-    int pageSize = limit == 0 ? DEFAULT_SYNC_LIMIT : Math.min(limit, MAX_SYNC_LIMIT);
+    // The limit is a uint32; read as unsigned, so a large one is the maximum.
+    int pageSize =
+        limit == 0
+            ? DEFAULT_SYNC_LIMIT
+            : (int) Math.min(Integer.toUnsignedLong(limit), MAX_SYNC_LIMIT);
     SyncResponse.Builder resp = SyncResponse.newBuilder().setCursor(cursor);
     try (Connection c = db.getConnection()) {
       readEvents(c, userId, cursor, pageSize, resp);
@@ -146,14 +159,18 @@ public final class DeviceSyncService {
                 cursor,
                 pageSize + 1);
         ResultSet rs = ps.executeQuery()) {
+      int size = 0;
       while (rs.next()) {
-        if (resp.getEventsCount() == pageSize) {
+        byte[] payload = rs.getBytes(1);
+        if (resp.getEventsCount() == pageSize
+            || (resp.getEventsCount() > 0 && size + payload.length > Page.MAX_BYTES)) {
           resp.setHasMore(true);
           break;
         }
+        size += payload.length;
         Event event;
         try {
-          event = Event.parseFrom(rs.getBytes(1));
+          event = Event.parseFrom(payload);
         } catch (InvalidProtocolBufferException e) {
           throw new SQLException("unmarshal event for user " + userId, e);
         }
@@ -236,15 +253,67 @@ public final class DeviceSyncService {
     }
   }
 
-  /** The user's conversations, most recently active first. */
-  public List<Conversation> listConversations(Uuid userId) throws SQLException {
-    try (Connection c = db.getConnection()) {
-      return selectConversations(
-          c,
-          SELECT_CONVERSATIONS + " WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?",
-          userId,
-          MAX_CONVERSATION_LIST);
+  /**
+   * A page of the user's conversations, most recently active first, and the token of the next page,
+   * empty after the last.
+   */
+  public ListConversationsResponse listConversations(Uuid userId, ByteString token, int limit)
+      throws SQLException {
+    int pageSize =
+        limit == 0
+            ? DEFAULT_CONVERSATION_PAGE
+            : (int) Math.min(Integer.toUnsignedLong(limit), MAX_CONVERSATION_PAGE);
+    StringBuilder sql =
+        new StringBuilder(
+            CONVERSATION_COLUMNS + ", updated_at FROM user_conversation WHERE user_id = ?");
+    List<Object> args = new ArrayList<>(List.of(userId));
+    if (!token.isEmpty()) {
+      if (token.size() != PAGE_TOKEN_BYTES) {
+        throw ApiError.invalidArgument("page_token is not one this server gave");
+      }
+      ByteBuffer b = token.asReadOnlyByteBuffer();
+      long micros = b.getLong();
+      sql.append(" AND (updated_at, conversation_id) < (?, ?)");
+      args.add(
+          LocalDateTime.ofEpochSecond(
+              Math.floorDiv(micros, 1_000_000),
+              Math.floorMod(micros, 1_000_000) * 1000,
+              ZoneOffset.UTC));
+      args.add(Uuid.parse(token.substring(Long.BYTES)));
     }
+    sql.append(" ORDER BY updated_at DESC, conversation_id DESC LIMIT ?");
+    args.add(pageSize + 1);
+    ListConversationsResponse.Builder resp = ListConversationsResponse.newBuilder();
+    try (Connection c = db.getConnection();
+        PreparedStatement ps = Sql.prepare(c, sql.toString(), args.toArray());
+        ResultSet rs = ps.executeQuery()) {
+      int size = 0;
+      LocalDateTime lastUpdated = null;
+      while (rs.next()) {
+        Conversation conversation = conversation(rs);
+        size += conversation.getSerializedSize();
+        if (resp.getConversationsCount() == pageSize
+            || (resp.getConversationsCount() > 0 && size > Page.MAX_BYTES)) {
+          Conversation last = resp.getConversations(resp.getConversationsCount() - 1);
+          resp.setNextPageToken(pageToken(lastUpdated, last.getConversationId()));
+          break;
+        }
+        resp.addConversations(conversation);
+        lastUpdated = rs.getObject(19, LocalDateTime.class);
+      }
+    }
+    return resp.build();
+  }
+
+  /** The token of the page after the entry: its updated_at in Unix microseconds, then its id. */
+  private static ByteString pageToken(LocalDateTime updatedAt, ByteString conversationId) {
+    long micros =
+        ChronoUnit.MICROS.between(LocalDateTime.ofEpochSecond(0, 0, ZoneOffset.UTC), updatedAt);
+    return ByteString.copyFrom(
+        ByteBuffer.allocate(PAGE_TOKEN_BYTES)
+            .putLong(micros)
+            .put(conversationId.asReadOnlyByteBuffer())
+            .array());
   }
 
   private static List<Conversation> selectConversations(Connection c, String sql, Object... args)

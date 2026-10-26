@@ -20,6 +20,7 @@ import wrinkle.Uuid;
 import wrinkle.accounts.Devices;
 import wrinkle.conversation.Rows.Header;
 import wrinkle.v1.Device;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.GetConversationKeysResponse;
 import wrinkle.v1.KeyRecipient;
 import wrinkle.v1.ReceivedKey;
@@ -35,6 +36,8 @@ public final class ConversationKeys {
   private static final int WRAPPED_BYTES = 60;
   // Wraps inserted per statement.
   private static final int INSERT_BATCH = 200;
+  // Keys GetConversationKeys returns at most.
+  private static final int MAX_KEY_PAGE = 100;
 
   private final DataSource db;
   private final DataSource userDb;
@@ -98,7 +101,8 @@ public final class ConversationKeys {
     }
     byte[] publicKey = publicKey(userId, deviceId);
     if (publicKey == null) {
-      throw ApiError.failedPrecondition("this device has no key");
+      throw ApiError.failedPrecondition(
+          ErrorReason.ERROR_REASON_DEVICE_HAS_NO_KEY, "this device has no key");
     }
     requireKeyedDevices(wraps);
     Sql.inTransaction(
@@ -106,7 +110,9 @@ public final class ConversationKeys {
         c -> {
           Header h = Rows.memberHeader(c, conversationId, userId, true);
           long current = h.keyEpoch();
-          ApiError notNext = ApiError.failedPrecondition("epoch is not next");
+          ApiError notNext =
+              ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_KEY_EPOCH_TAKEN, "epoch is not next");
           if (epoch == current + 1) {
             requireMembers(h, wraps);
             insert(c, conversationId, epoch, userId, deviceId, publicKey, wraps);
@@ -249,7 +255,9 @@ public final class ConversationKeys {
    * current membership.
    */
   public GetConversationKeysResponse get(
-      Uuid userId, long deviceId, Uuid conversationId, long afterEpoch) throws SQLException {
+      Uuid userId, long deviceId, Uuid conversationId, long afterEpoch, long limit)
+      throws SQLException {
+    int pageSize = limit == 0 || limit > MAX_KEY_PAGE ? MAX_KEY_PAGE : (int) limit;
     try (Connection c = db.getConnection()) {
       Header h = Rows.header(c, conversationId, false);
       boolean current;
@@ -296,13 +304,18 @@ public final class ConversationKeys {
                   c,
                   "SELECT epoch, sender_user_id, sender_device_id, sender_public_key, wrapped FROM"
                       + " conversation_key WHERE conversation_id = ? AND recipient_user_id = ? AND"
-                      + " recipient_device_id = ? AND epoch > ? ORDER BY epoch",
+                      + " recipient_device_id = ? AND epoch > ? ORDER BY epoch LIMIT ?",
                   conversationId,
                   userId,
                   deviceId,
-                  afterEpoch);
+                  afterEpoch,
+                  pageSize + 1);
           ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
+          if (resp.getKeysCount() == pageSize) {
+            resp.setHasMore(true);
+            break;
+          }
           resp.addKeys(
               ReceivedKey.newBuilder()
                   .setEpoch((int) rs.getLong(1))

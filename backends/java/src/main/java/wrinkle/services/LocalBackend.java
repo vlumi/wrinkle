@@ -24,14 +24,13 @@ import wrinkle.v1.CreateGroupResponse;
 import wrinkle.v1.CreateStickerResponse;
 import wrinkle.v1.DeleteAccountResponse;
 import wrinkle.v1.DeleteMessageResponse;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.GetDeviceKeysResponse;
 import wrinkle.v1.GetMembersResponse;
-import wrinkle.v1.GetMessagesResponse;
 import wrinkle.v1.GetPaletteResponse;
 import wrinkle.v1.GetStickersResponse;
 import wrinkle.v1.LeaveGroupResponse;
 import wrinkle.v1.ListContactsResponse;
-import wrinkle.v1.ListConversationsResponse;
 import wrinkle.v1.ListDevicesResponse;
 import wrinkle.v1.MarkReadResponse;
 import wrinkle.v1.MoveStickerResponse;
@@ -121,7 +120,8 @@ public final class LocalBackend implements Backend {
     switch (req.getBodyCase()) {
       case REGISTER, SIGN_IN, CONNECT -> {
         if (userId != null) {
-          throw ApiError.failedPrecondition("already connected");
+          throw ApiError.failedPrecondition(
+              ErrorReason.ERROR_REASON_ALREADY_CONNECTED, "already connected");
         }
         return signIn(req, resp);
       }
@@ -240,7 +240,8 @@ public final class LocalBackend implements Backend {
                 userId,
                 deviceId,
                 conversationId(r.getConversationId()),
-                Integer.toUnsignedLong(r.getAfterEpoch())));
+                Integer.toUnsignedLong(r.getAfterEpoch()),
+                Integer.toUnsignedLong(r.getLimit())));
       }
       case DELETE_MESSAGE -> {
         var r = req.getDeleteMessage();
@@ -265,18 +266,15 @@ public final class LocalBackend implements Backend {
           resp.setSync(users.sync(userId, req.getSync().getCursor(), req.getSync().getLimit()));
       case LIST_CONVERSATIONS ->
           resp.setListConversations(
-              ListConversationsResponse.newBuilder()
-                  .addAllConversations(users.listConversations(userId)));
+              users.listConversations(
+                  userId,
+                  req.getListConversations().getPageToken(),
+                  req.getListConversations().getLimit()));
       case GET_MESSAGES -> {
         var r = req.getGetMessages();
         yield resp.setGetMessages(
-            GetMessagesResponse.newBuilder()
-                .addAllMessages(
-                    conversations.messages(
-                        userId,
-                        conversationId(r.getConversationId()),
-                        r.getBeforeSeq(),
-                        r.getLimit())));
+            conversations.messages(
+                userId, conversationId(r.getConversationId()), r.getBeforeSeq(), r.getLimit()));
       }
       case REGISTER_PUSH_TOKEN -> {
         var r = req.getRegisterPushToken();

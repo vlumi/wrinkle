@@ -21,6 +21,7 @@ import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.v1.Device;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.UserDevices;
 
 /**
@@ -136,7 +137,8 @@ public final class Devices {
           }
           if (stored != null) {
             if (!publicKey.equals(ByteString.copyFrom(stored))) {
-              throw ApiError.failedPrecondition("this device has a different key");
+              throw ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_DEVICE_KEY_SET, "this device has a different key");
             }
             return null;
           }

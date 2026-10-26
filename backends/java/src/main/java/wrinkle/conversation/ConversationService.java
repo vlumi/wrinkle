@@ -23,13 +23,16 @@ import wrinkle.ApiError;
 import wrinkle.Ids;
 import wrinkle.Kinds;
 import wrinkle.MessageBody;
+import wrinkle.Page;
 import wrinkle.Sql;
 import wrinkle.Timestamps;
 import wrinkle.Uuid;
 import wrinkle.contacts.Contacts;
 import wrinkle.conversation.Rows.Header;
 import wrinkle.uploads.UploadService;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.Event;
+import wrinkle.v1.GetMessagesResponse;
 import wrinkle.v1.Message;
 import wrinkle.v1.MessageDeletedEvent;
 import wrinkle.v1.Reaction;
@@ -240,10 +243,12 @@ public final class ConversationService {
             return stored;
           }
           if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
-            throw ApiError.failedPrecondition("stale key epoch");
+            throw ApiError.failedPrecondition(
+                ErrorReason.ERROR_REASON_STALE_KEY_EPOCH, "stale key epoch");
           }
           if (h.rotate()) {
-            throw ApiError.failedPrecondition("keys must rotate");
+            throw ApiError.failedPrecondition(
+                ErrorReason.ERROR_REASON_KEYS_MUST_ROTATE, "keys must rotate");
           }
           LocalDateTime sentAt = Timestamps.now();
           long seq = h.lastSeq() + 1;
@@ -457,14 +462,17 @@ public final class ConversationService {
             throw ApiError.invalidArgument("a notice cannot be reacted to");
           }
           if (msg.hasDeletedAt()) {
-            throw ApiError.failedPrecondition("message " + seq + " was deleted");
+            throw ApiError.failedPrecondition(
+                ErrorReason.ERROR_REASON_MESSAGE_DELETED, "message " + seq + " was deleted");
           }
           if (sealed != null) {
             if (h.keyEpoch() == 0 || Integer.toUnsignedLong(sealed.getEpoch()) != h.keyEpoch()) {
-              throw ApiError.failedPrecondition("stale key epoch");
+              throw ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_STALE_KEY_EPOCH, "stale key epoch");
             }
             if (h.rotate()) {
-              throw ApiError.failedPrecondition("keys must rotate");
+              throw ApiError.failedPrecondition(
+                  ErrorReason.ERROR_REASON_KEYS_MUST_ROTATE, "keys must rotate");
             }
           }
           byte[] previous = null;
@@ -690,20 +698,42 @@ public final class ConversationService {
    * read: from the notice that added them on, and up to the one that removed them. The newer ones
    * are in MySQL; the page goes on in the cold tier below the watermark.
    */
-  public List<Message> messages(Uuid userId, Uuid conversationId, long beforeSeq, int limit)
+  public GetMessagesResponse messages(Uuid userId, Uuid conversationId, long beforeSeq, int limit)
       throws SQLException {
     long before = beforeSeq == 0 ? Long.MAX_VALUE : beforeSeq;
-    int pageSize = limit == 0 ? DEFAULT_PAGE_SIZE : Math.min(limit, MAX_PAGE_SIZE);
+    // The limit is a uint32; read as unsigned, so a large one is the maximum.
+    int pageSize =
+        limit == 0
+            ? DEFAULT_PAGE_SIZE
+            : (int) Math.min(Integer.toUnsignedLong(limit), MAX_PAGE_SIZE);
     try (Connection c = db.getConnection()) {
       Rows.header(c, conversationId, false);
       Readable r = readable(c, conversationId, userId);
       while (true) {
         List<Message> page = messages(c, conversationId, r, before, pageSize);
         if (page != null) {
-          return page;
+          page = bounded(page);
+          // Seqs are dense from the first the user may read, so whether anything is older shows
+          // from the lowest returned.
+          return GetMessagesResponse.newBuilder()
+              .addAllMessages(page)
+              .setHasMore(!page.isEmpty() && page.getLast().getSeq() > Math.max(r.from(), 1))
+              .build();
         }
       }
     }
+  }
+
+  /** The newest messages of the page within the page's bytes, at least one. */
+  static List<Message> bounded(List<Message> page) {
+    int size = 0;
+    for (int i = 0; i < page.size(); i++) {
+      size += page.get(i).getSerializedSize();
+      if (i > 0 && size > Page.MAX_BYTES) {
+        return page.subList(0, i);
+      }
+    }
+    return page;
   }
 
   /**

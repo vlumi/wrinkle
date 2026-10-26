@@ -20,6 +20,7 @@ import wrinkle.Metrics;
 import wrinkle.Uuid;
 import wrinkle.services.Backend;
 import wrinkle.v1.ErrorCode;
+import wrinkle.v1.ErrorReason;
 import wrinkle.v1.Frame;
 import wrinkle.v1.Pong;
 import wrinkle.v1.Request;
@@ -397,7 +398,10 @@ final class Conn {
         };
     Identity id = identity();
     if (beforeConnect && id != null) {
-      return ApiError.response(req, ApiError.failedPrecondition("already connected"));
+      return ApiError.response(
+          req,
+          ApiError.failedPrecondition(
+              ErrorReason.ERROR_REASON_ALREADY_CONNECTED, "already connected"));
     }
     if (!beforeConnect && id == null) {
       return ApiError.response(req, ApiError.unauthenticated("connect first"));
@@ -422,7 +426,10 @@ final class Conn {
       }
       CompletableFuture<Void> subscribed = attached(connectedAs, resp.getConnect().getDeviceId());
       if (subscribed == null) {
-        return ApiError.response(req, ApiError.failedPrecondition("already connected"));
+        return ApiError.response(
+            req,
+            ApiError.failedPrecondition(
+                ErrorReason.ERROR_REASON_ALREADY_CONNECTED, "already connected"));
       }
       // Pushes that follow the response must not be missed.
       try {
