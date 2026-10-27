@@ -122,6 +122,10 @@ func run(cfg config) error {
 	start = time.Now()
 	prepareKeys(ctx, ready, stats)
 	fmt.Fprintf(os.Stderr, "published conversation keys in %s, %d failed\n", time.Since(start).Round(time.Millisecond), stats.connectErrors.Load())
+	// With fewer devices the run would measure another load than asked.
+	if n := stats.connectErrors.Load(); n > 0 {
+		return fmt.Errorf("%d failures setting up the devices; not measuring", n)
+	}
 	for _, d := range ready {
 		go d.receive(ctx)
 	}
