@@ -35,3 +35,14 @@ not_a_number x
 		t.Fatalf("got %+v, want %+v", s, want)
 	}
 }
+
+func TestParseMetricsMoverBeforeItMoves(t *testing.T) {
+	s := parseMetrics(strings.NewReader(`wrinkle_shard_work_total{job="log_trim"} 9
+wrinkle_shard_round_duration_seconds_sum{job="history_move"} 0.5
+wrinkle_shard_rounds_total{job="history_move",shard="-80",result="ok"} 1
+`))
+	want := sample{ok: true, moveSeconds: 0.5, moveRounds: map[string]float64{"-80": 1}, mover: true}
+	if !reflect.DeepEqual(s, want) {
+		t.Fatalf("got %+v, want %+v", s, want)
+	}
+}

@@ -93,16 +93,19 @@ func parseMetrics(r io.Reader) sample {
 			s.live += v
 		case "wrinkle_connections":
 			s.connections += v
+		// The mover's work has no sample until it first moves something;
+		// its rounds show it is there.
 		case "wrinkle_shard_work_total":
 			if strings.Contains(line, `job="history_move"`) {
 				s.moved, s.mover = v, true
 			}
 		case "wrinkle_shard_round_duration_seconds_sum":
 			if strings.Contains(line, `job="history_move"`) {
-				s.moveSeconds = v
+				s.moveSeconds, s.mover = v, true
 			}
 		case "wrinkle_shard_rounds_total":
 			if strings.Contains(line, `job="history_move"`) {
+				s.mover = true
 				if s.moveRounds == nil {
 					s.moveRounds = map[string]float64{}
 				}
