@@ -218,6 +218,12 @@ func (h *historyStats) read(ctx context.Context, c filled, stats *stats) {
 	defer h.mu.Unlock()
 	if err != nil || len(msgs) != historyPage {
 		h.errors++
+		if h.errors <= 3 {
+			if err == nil {
+				err = fmt.Errorf("%d messages of %d", len(msgs), historyPage)
+			}
+			fmt.Fprintf(os.Stderr, "history before %d from %s: %v\n", before, c.device.userName, err)
+		}
 		return
 	}
 	*into = append(*into, took)
