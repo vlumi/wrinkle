@@ -13,6 +13,9 @@ import { decodeBlobIds, decodeBody } from "./state.ts";
 const table = "message";
 const family = "m";
 const requestTimeout = 5_000;
+// Operations in flight to the REST server. Its Jetty has 100 threads, and
+// past them, as the mover and many readers at once took it, it spins.
+const maxInFlight = 32;
 
 /** A message row as the cold tier keeps it: the columns of the message table and the message's reactions. */
 export interface ColdMessage {
@@ -121,9 +124,24 @@ interface RestRow {
 /** Every write puts a whole row, so a write can be repeated. */
 export class Cold {
   private readonly url: string;
+  private inFlight = 0;
+  private readonly waiting: (() => void)[] = [];
 
   constructor(url: string) {
     this.url = url.replace(/\/+$/, "");
+  }
+
+  private async limited<T>(fn: () => Promise<T>): Promise<T> {
+    if (this.inFlight >= maxInFlight) await new Promise<void>((resolve) => this.waiting.push(resolve));
+    else this.inFlight++;
+    try {
+      return await fn();
+    } finally {
+      // A waiter takes the slot over.
+      const next = this.waiting.shift();
+      if (next) next();
+      else this.inFlight--;
+    }
   }
 
   /** Writes the conversation's messages. */
@@ -134,15 +152,17 @@ export class Cold {
       Cell: Object.entries(cellsOf(m)).map(([q, v]) => ({ column: b64(`${family}:${q}`), $: b64(v) })),
     }));
     try {
-      // The row in the path is ignored; the body names them.
-      const res = await fetch(`${this.url}/${table}/fakerow`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ Row }),
-        signal: AbortSignal.timeout(requestTimeout),
+      await this.limited(async () => {
+        // The row in the path is ignored; the body names them.
+        const res = await fetch(`${this.url}/${table}/fakerow`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ Row }),
+          signal: AbortSignal.timeout(requestTimeout),
+        });
+        const text = await res.text();
+        if (!res.ok) throw new Error(`${res.status} ${text}`);
       });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`${res.status} ${text}`);
     } catch (err) {
       throw coldUnavailable("put", err);
     }
@@ -173,7 +193,7 @@ export class Cold {
     const observe = coldReadDuration.startTimer({ kind });
     let rows;
     try {
-      rows = await this.scanRows(start, end);
+      rows = await this.limited(() => this.scanRows(start, end));
     } catch (err) {
       throw coldUnavailable(kind === "message" ? "get" : "scan", err);
     } finally {
