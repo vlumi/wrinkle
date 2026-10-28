@@ -143,3 +143,13 @@ A dated log of how Wrinkle got to where it is: the phases, the questions settled
 - Docker Desktop publishes a LoadBalancer or NodePort Service on every interface of the Mac, which would put plaintext in front of the network. The balancer takes host ports on the Kubernetes node instead, which only containers reach, and a Compose container forwards loopback 8080 to them, so only the TLS edge faces the network, as before.
 - Image ids change with every build, even an unchanged one, since the build's provenance carries a time, so tagging by id rolled every pod on every run. Tags are a digest of the image's layers and settings instead.
 - The conformance tests against the mixed pool, the first run of them against more than one language at once, found the TypeScript services reading a sticker's time to the millisecond where Go and Java read the microsecond; fixed.
+
+## 2026-10-28
+
+**Vitess against plain MySQL** ([results](results/2026-10-28-mysql.md)), four shapes in one session at 00203cb. On MySQL the p99 below the limit is about half of Vitess's in every language, and the CPU per message 8 to 21 % lower; on Vitess, Go, Java and the Rust gateway no longer held 1000 messages a second, which they did on 2026-10-24, with the paths under load unchanged in between: at its edge, Vitess moves by seconds between sessions. On MySQL 1000 held in 9 runs of 12 and 2000 in three; the rest stalled for 5 to 9 s in the services' writes, which is the next thing to explain. The history series ran for the first time: a cold page costs Go and Java 1 to 3 ms more than a hot one.
+
+Getting there took two nights and four fixes, each found by a run that measured something other than it meant to:
+
+- The gateways had come to refuse a sixth sign-in on one connection, and the load generator signed in three seconds' worth on each, so a sixth of its devices never connected. It now takes a new connection in time, and refuses to measure if any device fails to set up.
+- The mover's work counter has no sample until it first moves something, so the load generator, and the protocol for the split shapes, took the mover for absent and read history while it was still moving what the earlier series left. They now find it by its rounds, or by the services' metrics.
+- Those reads, on the TypeScript backend, took HBase's REST server past its 100 threads, where its selector spins on four cores and every scan fails; the TypeScript backend now sends it at most 32 operations at once.
