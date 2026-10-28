@@ -68,12 +68,13 @@ run() {
   sleep 2
 }
 
-# run_history picks the mover's metrics once the backend is up.
+# run_history picks the mover's metrics once the backend is up: those of
+# the services process, which runs it, when split.
 run_history() {
   infra/reset-fanout.sh
   start_backend "$@"
   sleep 3
-  if curl -sf http://localhost:8090/metrics | grep -q '^wrinkle_shard_work_total{job="history_move"'; then
+  if curl -sf http://localhost:8090/metrics >/dev/null; then
     mover=http://localhost:8090/metrics
   fi
   bin/loadgen --out "$out" --label "$LABEL" --commit "$commit" --mover-metrics "$mover" "${LOADGEN_ARGS[@]}"
