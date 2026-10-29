@@ -346,7 +346,7 @@ The prototype's single Vitess process has one known weakness: it starts empty wh
 - **Writes** scale with shards. A send is one transaction on one conversation shard; its fan-out is one transaction per participant on their user shards.
 - **Fan-out** scales with Kafka partitions, keyed by conversation, so different conversations proceed in parallel and each stays in order.
 - **Background work** scales with shards: each shard's trim and move runs on its own, and the services instances share the shards through the leases.
-- **The database** is where a laptop runs out first: at about 1000 messages a second the single Vitess process limits every backend; plain MySQL in its place halves the latency below the limit and, in a first check, held 2000 ([results](results/2026-10-28-mysql.md); [ROADMAP.md](../ROADMAP.md), "Database ceiling").
+- **The database** is where a laptop runs out first: at about 1000 messages a second the single Vitess process limits every backend; plain MySQL in its place, with the same durability, more than halves the latency below the limit and held 2000 in every shape ([results](results/2026-10-29-mysql.md); [ROADMAP.md](../ROADMAP.md), "Database ceiling").
 
 Where the prototype departs from the design it was sized on, push routing through a channel per user and frequent acks, is listed in [capacity.md](capacity.md).
 
