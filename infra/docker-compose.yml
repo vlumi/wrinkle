@@ -47,13 +47,18 @@ services:
       default:
         aliases: [db]
     # Row-based binlog with full images for Debezium's MySQL connector; the
-    # pool and connection limit as in the Vitess profile's mysqld.
+    # pool, connection limit and durability as in the Vitess profile's mysqld
+    # (vttestserver's test-suite.cnf): no fsync per commit, which on Docker
+    # Desktop's disk stalled every write for seconds at each checkpoint.
     command:
       - --port=15003
       - --server-id=1
       - --log-bin=binlog
       - --binlog-format=ROW
       - --binlog-row-image=FULL
+      - --innodb-flush-log-at-trx-commit=0
+      - --sync-binlog=0
+      - --innodb-doublewrite=OFF
       - --gtid-mode=ON
       - --enforce-gtid-consistency=ON
       - --innodb-buffer-pool-size=512M
