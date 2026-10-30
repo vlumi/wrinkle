@@ -19,4 +19,7 @@
   <property><name>hbase.regionserver.info.port</name><value>16030</value></property>
   <property><name>hbase.master.hostname</name><value>hbase.localhost</value></property>
   <property><name>hbase.regionserver.hostname</name><value>hbase.localhost</value></property>
+  <!-- The REST server's client: a thread per operation in flight, 256 by
+       default, which took it past its memory; the backends send at most 32. -->
+  <property><name>hbase.hconnection.threads.max</name><value>32</value></property>
 </configuration>

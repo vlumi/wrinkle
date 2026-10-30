@@ -118,6 +118,8 @@ services:
     command: ["hbase", "rest", "start", "-p", "8086", "--infoport", "8087"]
     environment:
       HBASE_HEAPSIZE: 192m
+      # Two of glibc's malloc arenas instead of up to eight per core.
+      MALLOC_ARENA_MAX: "2"
     ports:
       - "127.0.0.1:8086:8086"
     depends_on:
@@ -128,10 +130,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 60
+    # Under reads it holds about 600 MB: its heap, 90 MB of the JVM's own
+    # and about 220 MB in malloc. No swap: in 384 MB with swap the JVM paged
+    # its heap and every cold read waited on the disk.
+    memswap_limit: 768M
     deploy:
       resources:
         limits:
-          memory: 384M
+          memory: 768M
 
   kafka:
     image: apache/kafka:4.3.1
