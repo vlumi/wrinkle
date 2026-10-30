@@ -157,3 +157,7 @@ Getting there took two nights and four fixes, each found by a run that measured 
 ## 2026-10-29
 
 **Vitess against MySQL with the same durability** ([results](results/2026-10-29-mysql.md)), the session of the day before again at eebebab, after the MySQL profile took the test server's settings. On MySQL every shape held 2000 messages a second in all three runs, with a p99 of 181 to 290 ms at the median, while on Vitess Go, Java and the Rust gateway failed at 1000 as before: on a laptop the limit is Vitess's test server, not MySQL and not the languages, and comparisons above 1000 messages a second now need the MySQL profile. Below the limit MySQL's p99 is 70 to 85 ms against Vitess's 164 to 197. The TypeScript backend's cold reads through HBase's REST server slowed over each stack's runs, and in the last run on Vitess two thirds of them failed.
+
+## 2026-10-30
+
+**The TypeScript backend's slow cold reads were swap** ([explained](results/2026-10-29-mysql.md#the-typescript-backends-cold-reads-explained-2026-10-30)). HBase's REST server, in a 384 MB cap that Docker doubles with swap, needed more under reads, mostly for its HBase client's 200 threads and malloc, and paged its heap: the cold reads took 49 to 78 ms at the median and up to 631 ms at p99. Without swap it was killed at the first reads. With its client at 32 threads, the backend's own limit, and 768 MB without swap, they take 34 ms, with a p99 of 51 to 112 ms.
