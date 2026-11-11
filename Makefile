@@ -1,13 +1,15 @@
-# Wrinkle: routine operations. `make` lists them; `make ci` is the gate before
-# every push to main.
+# Wrinkle: routine operations. `make` lists them; `make ci` is the local CI,
+# of which hosted CI runs `make ci-linux` and `make ci-macos` on every pull
+# request.
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 COMPOSE := docker compose -f infra/docker-compose.yml
 export PATH := $(shell go env GOPATH 2>/dev/null)/bin:$(HOME)/.mix/escripts:/opt/homebrew/opt/rustup/bin:$(PATH)
-# The Java backend needs JDK 25; Gradle and its launcher find it here.
-export JAVA_HOME := $(shell /usr/libexec/java_home -v 25 2>/dev/null)
+# The Java backend needs JDK 25; Gradle and its launcher find it here. Off
+# macOS, JAVA_HOME from the environment stands.
+export JAVA_HOME := $(or $(shell /usr/libexec/java_home -v 25 2>/dev/null),$(JAVA_HOME))
 
 GO_BACKEND := $(CURDIR)/bin/wrinkle
 JAVA_BACKEND := $(CURDIR)/backends/java/build/install/wrinkle/bin/wrinkle
@@ -217,13 +219,20 @@ build-loadgen:  ## Load generator (bin/loadgen)
 
 ##@ Check (make ci runs all of it)
 
-.PHONY: ci ci-images lint format test conformance smoke check-invariants web-test ios-test
+# Every linter but the iOS client's, which needs a Mac.
+LINTS := proto-lint go-lint java-lint elixir-lint rust-lint ts-lint web-lint shell-lint docker-lint infra-lint
+
+.PHONY: ci ci-linux ci-macos ci-images lint format test conformance smoke check-invariants web-test ios-test
 ci: lint proto-check test build-ios smoke conformance web-test ios-test  ## The local CI: lint, unit tests, builds, conformance, client tests
+
+ci-linux: $(LINTS) proto-check test smoke conformance web-test  ## Hosted CI on Linux: make ci without the iOS client
+
+ci-macos: ios-lint build-ios ios-unit  ## Hosted CI on macOS, where there is no Docker: the iOS client's lint, build and the tests that need no backend
 
 ci-images:  ## Build every image, the cluster's and the stack's, as before a push that touches a Dockerfile or a backend's build (not in make ci)
 	docker compose -f infra/docker-compose.yml -f infra/cluster.yml --profile vitess --profile mysql build
 
-lint:  proto-lint go-lint java-lint elixir-lint rust-lint ts-lint web-lint ios-lint shell-lint docker-lint infra-lint  ## Formatting checks and linters for everything
+lint: $(LINTS) ios-lint  ## Formatting checks and linters for everything
 
 format:  ## Rewrite sources with each language's formatter
 	buf format -w
@@ -331,7 +340,7 @@ clean:  ## Remove build output (not dependencies, not the stack)
 
 # Parts the targets above are made of.
 
-.PHONY: proto-lint go-lint go-test java-lint java-test elixir-deps elixir-lint elixir-test rust-lint rust-test ts-deps ts-lint ts-test web-deps web-lint web-unit ios-lint shell-lint docker-lint infra-lint
+.PHONY: proto-lint go-lint go-test java-lint java-test elixir-deps elixir-lint elixir-test rust-lint rust-test ts-deps ts-lint ts-test web-deps web-lint web-unit ios-lint ios-unit shell-lint docker-lint infra-lint
 proto-lint:
 	buf lint
 	buf format --diff --exit-code
@@ -396,6 +405,10 @@ web-unit: web-deps
 ios-lint:
 	cd clients/ios && swiftlint lint --strict --quiet
 	cd clients/ios && swift format lint --strict --recursive --configuration .swift-format $(IOS_SWIFT)
+
+# The backend tests skip themselves when nothing serves :8080.
+ios-unit:
+	clients/ios/Scripts/test.sh
 
 shell-lint:
 	shellcheck $(SH_FILES)
