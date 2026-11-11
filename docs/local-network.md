@@ -4,7 +4,7 @@ Run the stack and the backends on a Mac, then connect to them from phones and ot
 
 ## The path
 
-Before the first run: install Docker Desktop and give it at least 8 GB of memory, 12 GB for the cluster (Settings, Resources): the stack's memory caps in `infra/docker-compose.yml` add up to about 6.4 GB, and the cluster adds nine backend containers by default, without caps; `brew install git mkcert`; clone the repository (while it is private, the Mac needs an SSH key or token that GitHub accepts); and keep the Mac awake (System Settings, Energy, "Prevent automatic sleeping when the display is off"). The generated code is committed, so the code generators (`make tools`) are not needed to run anything. Then, top to bottom:
+Before the first run: install Docker Desktop and give it at least 8 GB of memory, 12 GB for the cluster (Settings, Resources): the stack's memory caps in `infra/docker-compose.yml` add up to about 6.4 GB, and the cluster adds nine backend containers by default, without caps; `brew install git mkcert`; clone the repository; and keep the Mac awake (System Settings, Energy, "Prevent automatic sleeping when the display is off"). The generated code is committed, so the code generators (`make tools`) are not needed to run anything. Then, top to bottom:
 
 1. `mkcert -install`, once: makes a local certificate authority and trusts it on this Mac; asks for your password.
 2. `make certs`: a certificate for this Mac's names and addresses, into `infra/certs`; again when the LAN address changes.
