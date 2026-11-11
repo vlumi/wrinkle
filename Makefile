@@ -380,7 +380,7 @@ rust-test:
 # a changed lockfile runs it.
 ts-deps: backends/ts/node_modules/.package-lock.json
 backends/ts/node_modules/.package-lock.json: backends/ts/package-lock.json
-	$(NPM_TS) ci --no-audit --no-fund --silent
+	backends/ts/deps.sh
 
 ts-lint: ts-deps
 	$(NPM_TS) run --silent typecheck
