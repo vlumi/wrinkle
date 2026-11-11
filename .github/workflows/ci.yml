@@ -1,0 +1,169 @@
+# Hosted CI: what make ci runs locally, split by what each runner can do.
+# Linux has Docker, so it runs everything but the iOS client; macOS has
+# Xcode but no Docker, so it runs the iOS client without a backend. Both
+# jobs are required for a merge to main, and are skipped, which counts as
+# passing, when only Markdown changed.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUF_VERSION: 1.73.0
+  PROTOC_GEN_GO_VERSION: 1.36.12
+  PROTOC_GEN_GO_GRPC_VERSION: 1.6.2
+  PROTOC_GEN_SWIFT_VERSION: 1.39.0
+  PROTOC_GEN_ELIXIR_VERSION: 0.17.1
+  GOLANGCI_LINT_VERSION: 2.15.0
+  SHELLCHECK_VERSION: 0.11.0
+  SHFMT_VERSION: 3.14.1
+  HADOLINT_VERSION: 2.15.1
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # Anything but Markdown is code; so is a range that cannot be read.
+          if files=$(git diff --name-only "$BASE...$HEAD" 2>/dev/null) && ! grep -qv '\.md$' <<<"$files"; then
+            echo "code=false" >>"$GITHUB_OUTPUT"
+          else
+            echo "code=true" >>"$GITHUB_OUTPUT"
+          fi
+
+  linux:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CHROME: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.work
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: "29"
+          elixir-version: "1.20"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "26"
+          cache: npm
+          cache-dependency-path: |
+            clients/web/package-lock.json
+            backends/ts/package-lock.json
+      - name: Caches (tools, TypeScript, Rust and Elixir dependencies)
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/tools
+            backends/ts/node_modules
+            backends/rust/target
+            ~/.cargo/registry
+            ~/.cargo/git
+            backends/elixir/deps
+            backends/elixir/_build
+          key: linux-${{ hashFiles('.github/workflows/ci.yml', 'backends/ts/package-lock.json', 'backends/rust/Cargo.lock', 'backends/elixir/mix.lock') }}
+          restore-keys: linux-
+      - name: Tools
+        run: |
+          set -euo pipefail
+          bin=$HOME/tools/bin
+          mkdir -p "$bin"
+          echo "$bin" >>"$GITHUB_PATH"
+          have() { [ -x "$bin/$1" ] && [ "$(cat "$bin/$1.version" 2>/dev/null)" = "$2" ]; }
+          got() { chmod +x "$bin/$1" && echo "$2" >"$bin/$1.version"; }
+          have buf "$BUF_VERSION" || {
+            curl -sSfL -o "$bin/buf" "https://github.com/bufbuild/buf/releases/download/v$BUF_VERSION/buf-Linux-x86_64"
+            got buf "$BUF_VERSION"
+          }
+          have hadolint "$HADOLINT_VERSION" || {
+            curl -sSfL -o "$bin/hadolint" "https://github.com/hadolint/hadolint/releases/download/v$HADOLINT_VERSION/hadolint-linux-x86_64"
+            got hadolint "$HADOLINT_VERSION"
+          }
+          have shellcheck "$SHELLCHECK_VERSION" || {
+            curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/v$SHELLCHECK_VERSION/shellcheck-v$SHELLCHECK_VERSION.linux.x86_64.tar.xz" |
+              tar -xJ -C "$bin" --strip-components 1 "shellcheck-v$SHELLCHECK_VERSION/shellcheck"
+            got shellcheck "$SHELLCHECK_VERSION"
+          }
+          have golangci-lint "$GOLANGCI_LINT_VERSION" || {
+            curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/v$GOLANGCI_LINT_VERSION/golangci-lint-$GOLANGCI_LINT_VERSION-linux-amd64.tar.gz" |
+              tar -xz -C "$bin" --strip-components 1 "golangci-lint-$GOLANGCI_LINT_VERSION-linux-amd64/golangci-lint"
+            got golangci-lint "$GOLANGCI_LINT_VERSION"
+          }
+          have shfmt "$SHFMT_VERSION" || {
+            GOBIN=$bin go install "mvdan.cc/sh/v3/cmd/shfmt@v$SHFMT_VERSION"
+            got shfmt "$SHFMT_VERSION"
+          }
+          have protoc-gen-go "$PROTOC_GEN_GO_VERSION" || {
+            GOBIN=$bin go install "google.golang.org/protobuf/cmd/protoc-gen-go@v$PROTOC_GEN_GO_VERSION"
+            got protoc-gen-go "$PROTOC_GEN_GO_VERSION"
+          }
+          have protoc-gen-go-grpc "$PROTOC_GEN_GO_GRPC_VERSION" || {
+            GOBIN=$bin go install "google.golang.org/grpc/cmd/protoc-gen-go-grpc@v$PROTOC_GEN_GO_GRPC_VERSION"
+            got protoc-gen-go-grpc "$PROTOC_GEN_GO_GRPC_VERSION"
+          }
+          # No Linux release of the Swift generator: built with the runner's Swift.
+          have protoc-gen-swift "$PROTOC_GEN_SWIFT_VERSION" || {
+            src=$(mktemp -d)
+            git clone -q --depth 1 --branch "$PROTOC_GEN_SWIFT_VERSION" https://github.com/apple/swift-protobuf.git "$src"
+            swift build -c release --product protoc-gen-swift --package-path "$src"
+            cp "$src/.build/release/protoc-gen-swift" "$bin/"
+            got protoc-gen-swift "$PROTOC_GEN_SWIFT_VERSION"
+          }
+          mix local.hex --force
+          mix local.rebar --force
+          mix escript.install hex protobuf "$PROTOC_GEN_ELIXIR_VERSION" --force
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt --no-self-update
+          sudo apt-get install -y -q lsof >/dev/null
+          # As on macOS, where every name under localhost is loopback: HBase
+          # advertises its region server by this name.
+          echo "127.0.0.1 hbase.localhost" | sudo tee -a /etc/hosts >/dev/null
+          # make ts-deps reinstalls when the lockfile is newer than the
+          # installed tree, and the checkout has just written the lockfile.
+          if [ -f backends/ts/node_modules/.package-lock.json ]; then
+            touch backends/ts/node_modules/.package-lock.json
+          fi
+      - run: make ci-linux
+      - name: The stack's state and logs
+        if: failure()
+        run: |
+          docker compose -f infra/docker-compose.yml ps -a || true
+          docker compose -f infra/docker-compose.yml logs --tail 80 || true
+
+  ios:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - run: brew install xcodegen swiftlint
+      - run: make ci-macos
